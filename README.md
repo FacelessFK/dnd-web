@@ -69,6 +69,56 @@ Default local URLs:
 - Web: `http://localhost:3000`
 - Server: `http://localhost:2567`
 
+## Manual Validation
+
+From the repo root, start the server:
+
+```bash
+pnpm --filter @dnd/server dev
+```
+
+Create a session:
+
+```bash
+curl -X POST http://127.0.0.1:2567/api/session/command \
+  -H 'content-type: application/json' \
+  -d '{
+    "commandId": "create-1",
+    "type": "create_session",
+    "actor": {
+      "participantId": "dm-001",
+      "displayName": "Dungeon Master",
+      "role": "dm"
+    },
+    "payload": {}
+  }'
+```
+
+Subscribe to authoritative session updates with the returned `sessionId`:
+
+```bash
+curl -N "http://127.0.0.1:2567/api/sessions/<SESSION_ID>/stream?participantId=dm-001"
+```
+
+Join from another terminal:
+
+```bash
+curl -X POST http://127.0.0.1:2567/api/session/command \
+  -H 'content-type: application/json' \
+  -d '{
+    "commandId": "join-1",
+    "type": "join_session",
+    "actor": {
+      "participantId": "player-001",
+      "displayName": "Player One",
+      "role": "player"
+    },
+    "payload": {
+      "sessionId": "<SESSION_ID>"
+    }
+  }'
+```
+
 ## Available Scripts
 
 - `pnpm dev` runs the web and server apps in parallel

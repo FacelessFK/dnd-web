@@ -29,6 +29,12 @@ importers:
 
   apps/server:
     dependencies:
+      '@dnd/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@dnd/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -82,6 +88,9 @@ importers:
 
   packages/protocol:
     dependencies:
+      '@dnd/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^3.24.1
         version: 3.25.76
