@@ -3,8 +3,11 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type {
   CreateSessionCommand,
   JoinSessionCommand,
+  MovementStateUpdate,
+  MovementStateUpdateReason,
   ReconnectSessionCommand,
   SessionErrorCode,
+  SessionStreamEvent,
   SessionStateUpdate,
   SessionStateUpdateReason,
 } from '@dnd/protocol';
@@ -13,7 +16,9 @@ import type {
   Participant,
   ParticipantId,
   ParticipantRole,
+  SceneEntityFootprint,
   SceneId,
+  ScenePosition,
   Session,
   SessionId,
   SessionSnapshot,
@@ -24,7 +29,7 @@ type ParticipantCreationCommand = CreateSessionCommand | JoinSessionCommand;
 type SessionSubscriber = {
   connectionId: string;
   close: () => void;
-  send: (update: SessionStateUpdate) => void;
+  send: (update: SessionStreamEvent) => void;
 };
 
 type SessionRoomState = {
@@ -241,6 +246,40 @@ export class InMemorySessionStore {
     return this.clone(room.snapshot);
   }
 
+  publishMovementStateUpdate(params: {
+    sessionId: SessionId;
+    activeSceneId: SceneId;
+    participantId: ParticipantId;
+    characterId: CharacterId;
+    position: ScenePosition;
+    footprint: SceneEntityFootprint;
+    reason: MovementStateUpdateReason;
+  }): MovementStateUpdate {
+    const room = this.requireRoom(params.sessionId);
+
+    if (room.snapshot.session.activeSceneId !== params.activeSceneId) {
+      throw new SessionStoreError(
+        'internal_server_error',
+        `Cannot publish movement for scene "${params.activeSceneId}" because session "${params.sessionId}" is currently active on "${room.snapshot.session.activeSceneId ?? 'none'}".`,
+      );
+    }
+
+    const update: MovementStateUpdate = {
+      type: 'movement_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      activeSceneId: params.activeSceneId,
+      participantId: params.participantId,
+      characterId: params.characterId,
+      position: structuredClone(params.position),
+      footprint: structuredClone(params.footprint),
+    };
+
+    this.broadcast(room, update);
+
+    return this.clone(update);
+  }
+
   private applyMutation(
     room: SessionRoomState,
     reason: Exclude<SessionStateUpdateReason, 'initial_sync'>,
@@ -252,9 +291,9 @@ export class InMemorySessionStore {
     this.broadcast(room, this.buildUpdate(room, reason));
   }
 
-  private broadcast(room: SessionRoomState, update: SessionStateUpdate): void {
+  private broadcast(room: SessionRoomState, update: SessionStreamEvent): void {
     for (const subscriber of room.subscribers.values()) {
-      subscriber.send(update);
+      subscriber.send(this.clone(update));
     }
   }
 

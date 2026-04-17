@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { MovementStateUpdate, SessionStreamEvent } from '@dnd/protocol';
 import {
   calculateAbilityModifier,
   calculatePassivePerception,
@@ -265,6 +266,14 @@ function placeEntity(
       },
     },
   });
+}
+
+function getMovementUpdates(
+  updates: SessionStreamEvent[],
+): MovementStateUpdate[] {
+  return updates.filter(
+    (update): update is MovementStateUpdate => update.type === 'movement_state',
+  );
 }
 
 test('derived stat calculations follow the baseline 5e progression', () => {
@@ -835,6 +844,54 @@ test('placing an assigned character into the active scene sets authoritative pos
   });
 });
 
+test('placing an assigned character broadcasts an authoritative movement update to connected participants', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const dmUpdates: SessionStreamEvent[] = [];
+  const playerUpdates: SessionStreamEvent[] = [];
+
+  joinPlayer(runtime, session.sessionId);
+  const character = assignPlayerCharacter(runtime, session.sessionId);
+  const scene = activateScene(runtime, session.sessionId);
+
+  runtime.connectParticipant(session.sessionId, 'dm-001', {
+    connectionId: 'dm-movement-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      dmUpdates.push(update);
+    },
+  });
+  runtime.connectParticipant(session.sessionId, 'player-001', {
+    connectionId: 'player-movement-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      playerUpdates.push(update);
+    },
+  });
+
+  const placedCharacter = placeAssignedCharacter(runtime, session.sessionId, {
+    x: 1,
+    y: 2,
+  });
+
+  const dmMovementUpdate = getMovementUpdates(dmUpdates).at(-1);
+  const playerMovementUpdate = getMovementUpdates(playerUpdates).at(-1);
+
+  assert.deepEqual(dmMovementUpdate, playerMovementUpdate);
+  assert.equal(dmMovementUpdate?.reason, 'character_placed');
+  assert.equal(dmMovementUpdate?.activeSceneId, scene.id);
+  assert.equal(dmMovementUpdate?.participantId, 'player-001');
+  assert.equal(dmMovementUpdate?.characterId, character.character.id);
+  assert.deepEqual(dmMovementUpdate?.position, {
+    x: placedCharacter.overlay.position?.x,
+    y: placedCharacter.overlay.position?.y,
+  });
+  assert.deepEqual(
+    dmMovementUpdate?.footprint,
+    placedCharacter.overlay.footprint,
+  );
+});
+
 test('movement updates a placed character within the active scene when the destination is legal', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);
@@ -865,6 +922,72 @@ test('movement updates a placed character within the active scene when the desti
 
   assert.equal(movedCharacter.overlay.position?.x, 2);
   assert.equal(movedCharacter.overlay.position?.y, 0);
+});
+
+test('movement broadcasts an authoritative update that matches stored overlay position', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const receivedUpdates: SessionStreamEvent[] = [];
+
+  joinPlayer(runtime, session.sessionId);
+  const assignedCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  const scene = activateScene(runtime, session.sessionId);
+
+  runtime.connectParticipant(session.sessionId, 'dm-001', {
+    connectionId: 'dm-move-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      receivedUpdates.push(update);
+    },
+  });
+
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  const movedCharacter = runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-broadcast',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 3,
+        y: 0,
+      },
+    },
+  });
+
+  const movementUpdate = getMovementUpdates(receivedUpdates).at(-1);
+  const storedCharacter = runtime.getCharacter({
+    commandId: 'get-character-after-move',
+    type: 'get_character',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: assignedCharacter.character.id,
+    },
+  });
+
+  assert.equal(movementUpdate?.reason, 'character_moved');
+  assert.equal(movementUpdate?.activeSceneId, scene.id);
+  assert.equal(movementUpdate?.participantId, 'player-001');
+  assert.equal(movementUpdate?.characterId, assignedCharacter.character.id);
+  assert.deepEqual(movementUpdate?.position, {
+    x: movedCharacter.overlay.position?.x,
+    y: movedCharacter.overlay.position?.y,
+  });
+  assert.deepEqual(storedCharacter.overlay.position, {
+    sceneId: scene.id,
+    x: movementUpdate?.position.x,
+    y: movementUpdate?.position.y,
+  });
 });
 
 test('movement out of bounds is rejected', () => {
@@ -944,6 +1067,63 @@ test('movement into blocking occupancy is rejected', () => {
       error instanceof MovementRuntimeError &&
       error.code === 'movement_destination_blocked',
   );
+});
+
+test('invalid movement does not emit movement updates', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const receivedUpdates: SessionStreamEvent[] = [];
+  const scene = activateScene(runtime, session.sessionId);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+
+  runtime.connectParticipant(session.sessionId, 'dm-001', {
+    connectionId: 'dm-invalid-move-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      receivedUpdates.push(update);
+    },
+  });
+
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+  placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 1,
+      y: 0,
+    },
+    blocksMovement: true,
+  });
+
+  const movementUpdateCount = getMovementUpdates(receivedUpdates).length;
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-no-broadcast-on-failure',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 1,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_destination_blocked',
+  );
+
+  assert.equal(getMovementUpdates(receivedUpdates).length, movementUpdateCount);
 });
 
 test('movement without an active scene is rejected', () => {

@@ -16,6 +16,7 @@ import type {
   GetCharacterCommand,
   JoinSessionCommand,
   MoveCharacterInActiveSceneCommand,
+  MovementStateUpdateReason,
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
   ReconnectSessionCommand,
@@ -31,7 +32,9 @@ import type {
   ParticipantId,
   RulesProfile,
   Scene,
+  SceneId,
   SessionSnapshot,
+  SessionId,
 } from '@dnd/shared';
 
 import {
@@ -403,6 +406,13 @@ export class InMemoryGameRuntime {
         position: command.payload.position,
       }),
     );
+    this.publishMovementStateUpdate({
+      sessionId: snapshot.session.id,
+      activeSceneId,
+      participantId: participant.id,
+      record: updatedRecord,
+      reason: 'character_placed',
+    });
 
     return this.buildCharacterResource(
       updatedRecord,
@@ -474,6 +484,13 @@ export class InMemoryGameRuntime {
         position: command.payload.position,
       }),
     );
+    this.publishMovementStateUpdate({
+      sessionId: snapshot.session.id,
+      activeSceneId,
+      participantId: participant.id,
+      record: updatedRecord,
+      reason: 'character_moved',
+    });
 
     return this.buildCharacterResource(
       updatedRecord,
@@ -680,6 +697,36 @@ export class InMemoryGameRuntime {
     }
 
     return record;
+  }
+
+  private publishMovementStateUpdate(params: {
+    sessionId: SessionId;
+    activeSceneId: SceneId;
+    participantId: ParticipantId;
+    record: StoredCharacterRecord;
+    reason: MovementStateUpdateReason;
+  }): void {
+    const position = params.record.overlay.position;
+
+    if (!position || position.sceneId !== params.activeSceneId) {
+      throw new CharacterStoreError(
+        'internal_server_error',
+        `Character "${params.record.character.id}" is missing an authoritative active-scene position for movement propagation.`,
+      );
+    }
+
+    this.sessions.publishMovementStateUpdate({
+      sessionId: params.sessionId,
+      activeSceneId: params.activeSceneId,
+      participantId: params.participantId,
+      characterId: params.record.character.id,
+      position: {
+        x: position.x,
+        y: position.y,
+      },
+      footprint: params.record.overlay.footprint,
+      reason: params.reason,
+    });
   }
 
   private getResolvedSessionCharacterRecords(

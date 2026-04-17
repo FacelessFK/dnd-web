@@ -1,13 +1,15 @@
 import { z } from 'zod';
 
 import {
+  characterIdSchema,
   commandIdSchema,
   participantIdSchema,
+  sceneIdSchema,
   sessionIdSchema,
 } from './common.js';
 import { characterResourceSchema } from './character.js';
 import { commandErrorSchema } from './errors.js';
-import { scenePositionSchema } from './scene.js';
+import { sceneEntityFootprintSchema, scenePositionSchema } from './scene.js';
 
 const movementActorSchema = z.object({
   participantId: participantIdSchema,
@@ -55,6 +57,22 @@ export const movementCommandResponseSchema = z.union([
   movementCommandErrorSchema,
 ]);
 
+export const movementStateUpdateReasonSchema = z.enum([
+  'character_moved',
+  'character_placed',
+]);
+
+export const movementStateUpdateSchema = z.object({
+  type: z.literal('movement_state'),
+  reason: movementStateUpdateReasonSchema,
+  sessionId: sessionIdSchema,
+  activeSceneId: sceneIdSchema,
+  participantId: participantIdSchema,
+  characterId: characterIdSchema,
+  position: scenePositionSchema,
+  footprint: sceneEntityFootprintSchema,
+});
+
 export type PlaceCharacterInActiveSceneCommand = z.infer<
   typeof placeCharacterInActiveSceneCommandSchema
 >;
@@ -69,3 +87,7 @@ export type MovementCommandError = z.infer<typeof movementCommandErrorSchema>;
 export type MovementCommandResponse = z.infer<
   typeof movementCommandResponseSchema
 >;
+export type MovementStateUpdateReason = z.infer<
+  typeof movementStateUpdateReasonSchema
+>;
+export type MovementStateUpdate = z.infer<typeof movementStateUpdateSchema>;

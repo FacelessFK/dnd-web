@@ -5,3 +5,4 @@ export * from './session.js';
 export * from './character.js';
 export * from './scene.js';
 export * from './movement.js';
+export * from './stream.js';

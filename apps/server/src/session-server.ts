@@ -22,6 +22,7 @@ import {
   sessionCommandErrorSchema,
   sessionCommandSuccessSchema,
   sessionIdSchema,
+  sessionStreamEventSchema,
   type CharacterAssignmentSuccess,
   type CharacterCommandError,
   type CharacterCommandSuccess,
@@ -33,7 +34,7 @@ import {
   type SceneCommandSuccess,
   type SessionCommandError,
   type SessionCommandSuccess,
-  type SessionStateUpdate,
+  type SessionStreamEvent,
 } from '@dnd/protocol';
 
 import { CharacterStoreError } from './character-store.js';
@@ -489,7 +490,7 @@ function handleStreamRequest(
     close: () => {
       response.end();
     },
-    send: (update: SessionStateUpdate) => {
+    send: (update: SessionStreamEvent) => {
       const eventPayload = serializeSseEvent(update);
 
       if (!streamStarted) {
@@ -699,8 +700,10 @@ function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   );
 }
 
-function serializeSseEvent(update: SessionStateUpdate): string {
-  return `event: ${update.type}\ndata: ${JSON.stringify(update)}\n\n`;
+function serializeSseEvent(update: SessionStreamEvent): string {
+  const payload = sessionStreamEventSchema.parse(update);
+
+  return `event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
 function setCorsHeaders(response: ServerResponse): void {

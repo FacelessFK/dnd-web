@@ -6,7 +6,8 @@ import {
   clientCommandSchema,
   movementCommandSchema,
   sceneCommandSchema,
-  type SessionStateUpdate,
+  sessionStreamEventSchema,
+  type SessionStreamEvent,
 } from '@dnd/protocol';
 
 import { InMemorySessionStore } from './session-store.js';
@@ -318,7 +319,7 @@ test('connected subscribers receive synchronized session state updates', () => {
       rulesProfileId: 'dnd5e-2024-core',
     },
   });
-  const receivedUpdates: SessionStateUpdate[] = [];
+  const receivedUpdates: SessionStreamEvent[] = [];
 
   store.connectParticipant(created.sessionId, 'dm-001', {
     connectionId: 'dm-connection-1',
@@ -344,13 +345,40 @@ test('connected subscribers receive synchronized session state updates', () => {
   const latestUpdate = receivedUpdates.at(-1);
 
   assert.ok(latestUpdate);
-  assert.equal(latestUpdate?.reason, 'participant_joined');
-  assert.equal(latestUpdate?.state.participants.length, 2);
+  assert.equal(latestUpdate?.type, 'session_state');
+
+  if (!latestUpdate || latestUpdate.type !== 'session_state') {
+    return;
+  }
+
+  assert.equal(latestUpdate.reason, 'participant_joined');
+  assert.equal(latestUpdate.state.participants.length, 2);
   assert.equal(
-    latestUpdate?.state.participants.find(
+    latestUpdate.state.participants.find(
       (participant) => participant.id === 'player-001',
     )?.connectionStatus,
     'disconnected',
   );
-  assert.equal(latestUpdate?.revision, 3);
+  assert.equal(latestUpdate.revision, 3);
+});
+
+test('movement session-stream updates are validated as a narrow realtime payload', () => {
+  const result = sessionStreamEventSchema.safeParse({
+    type: 'movement_state',
+    reason: 'character_moved',
+    sessionId: 'ABC123',
+    activeSceneId: 'scene_11111111-1111-4111-8111-111111111111',
+    participantId: 'player-001',
+    characterId: 'char_11111111-1111-4111-8111-111111111111',
+    position: {
+      x: 2,
+      y: 3,
+    },
+    footprint: {
+      width: 1,
+      height: 1,
+    },
+  });
+
+  assert.equal(result.success, true);
 });
