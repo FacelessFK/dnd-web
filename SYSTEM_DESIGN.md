@@ -399,6 +399,21 @@ Derived numbers should not all be stored as canonical truth.The server should re
 - attack entries
 - current movement budget
 
+### Derived Stats
+
+The system must support derived stat calculation from base character data.
+
+Examples:
+
+- ability modifiers
+- proficiency bonus
+- initiative modifier
+- passive perception
+- spell save DC
+- attack bonuses
+
+Derived values should not be stored as primary data where possible, but computed from canonical values.
+
 ---
 
 ## 9. 🎲 Dice, Audit & Override Model
@@ -790,3 +805,21 @@ That means:
 - the **DM** protects interpretation
 - the **rules engine** automates only what is deterministic enough to trust
 - the **client** makes all of that playable, clear, and fast
+
+### Asset Management System
+
+The architecture should allow for a future asset system that manages:
+
+- map tiles
+- tokens
+- environmental objects
+- UI/gameplay icons
+
+Considerations:
+
+- separation between asset definitions and usage
+- support for reusable asset libraries
+- potential for remote storage/CDN
+- mapping assets to scene entities
+
+This system is not part of MVP, but the architecture should not block its future implementation.

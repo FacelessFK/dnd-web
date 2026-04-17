@@ -602,6 +602,25 @@ Prepare the MVP for broader use.
 - bottlenecks are known and monitored
 - the system is ready for limited real-world testing
 
+## Phase 13 – Asset System & Character Tools
+
+### Goal
+
+Introduce asset management and character creation utilities.
+
+### Scope
+
+- asset library system
+- token and tile management
+- reusable asset definitions
+- character builder tools
+- ability score generation (point buy, etc.)
+- derived stat preview tools
+
+### Notes
+
+This phase focuses on usability and content creation, not core runtime mechanics.
+
 ---
 
 ## 6. Milestone Summary

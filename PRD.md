@@ -257,6 +257,34 @@ The MVP is successful when:
 - AI-assisted DM tools
 - Asset marketplace
 
+### Asset System
+
+The platform will require an asset management system to support:
+
+- map tiles
+- tokens (players, monsters)
+- props (objects, environment)
+- icons and UI assets
+
+The system should eventually support:
+
+- reusable asset libraries
+- DM-controlled asset placement
+- potential user-uploaded assets
+
+This is not part of the MVP, but must be considered in long-term product design.
+
+### Character Builder & Ability Tools
+
+Future versions should include tools to assist character creation and management, such as:
+
+- ability score generation (point-buy, standard array, etc.)
+- ability modifier calculations
+- derived stat previews (initiative, passive perception, spell DC)
+
+For MVP, only derived stat calculation needed for gameplay will be implemented.
+Full character creation tools are out of scope.
+
 ---
 
 ## 12. 📌 Open Questions
