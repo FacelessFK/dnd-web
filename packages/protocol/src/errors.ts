@@ -6,6 +6,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'internal_server_error',
   'invalid_character_id',
   'invalid_command',
+  'invalid_character_state',
   'invalid_participant_session_association',
   'invalid_role_assumption',
   'invalid_session_id',

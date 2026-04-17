@@ -249,6 +249,20 @@ async function handleCharacterCommandRequest(
         sendJson(response, 200, success, characterCommandSuccessSchema);
         return;
       }
+      case 'update_character':
+      case 'finalize_character': {
+        const data =
+          command.type === 'update_character'
+            ? runtime.updateCharacter(command)
+            : runtime.finalizeCharacter(command);
+        const success: CharacterCommandSuccess = {
+          ok: true,
+          data,
+        };
+
+        sendJson(response, 200, success, characterCommandSuccessSchema);
+        return;
+      }
       case 'assign_character_to_participant': {
         const success: CharacterAssignmentSuccess = {
           ok: true,
@@ -490,6 +504,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
       return 404;
     case 'duplicate_join':
     case 'invalid_participant_session_association':
+    case 'invalid_character_state':
       return 409;
     case 'internal_server_error':
       return 500;

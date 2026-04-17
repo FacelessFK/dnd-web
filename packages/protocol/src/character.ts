@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { visibilityStates } from '@dnd/shared';
+import { characterStatuses, visibilityStates } from '@dnd/shared';
 
 import {
   characterIdSchema,
@@ -16,6 +16,7 @@ import { rulesConfigValueSchema, rulesProfileSchema } from './rules-profile.js';
 import { sessionSnapshotSchema } from './session.js';
 
 export const visibilityStateSchema = z.enum(visibilityStates);
+export const characterStatusSchema = z.enum(characterStatuses);
 export const abilityScoreSchema = z.number().int().min(1).max(30);
 
 export const abilityScoresSchema = z.object({
@@ -69,9 +70,23 @@ export const characterInputSchema = z.object({
   meta: z.record(rulesConfigValueSchema).optional(),
 });
 
+export const characterUpdateInputSchema = z.object({
+  name: characterNameSchema,
+  className: z.string().trim().min(1).max(64),
+  speciesOrRace: speciesOrRaceSchema,
+  background: z.string().trim().min(1).max(64),
+  abilities: abilityScoresSchema,
+  hp: hitPointsSchema,
+  armorClass: z.number().int().min(0).max(99),
+  speed: z.number().int().min(0).max(200),
+  notes: z.string().trim().max(4000).nullable().optional(),
+  meta: z.record(rulesConfigValueSchema).optional(),
+});
+
 export const characterSchema = z.object({
   id: characterIdSchema,
   ownerParticipantId: participantIdSchema,
+  status: characterStatusSchema,
   name: characterNameSchema,
   rulesProfileId: rulesProfileIdSchema,
   level: levelSchema,
@@ -154,6 +169,27 @@ export const getCharacterCommandSchema = z.object({
   }),
 });
 
+export const updateCharacterCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('update_character'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    characterId: characterIdSchema,
+    character: characterUpdateInputSchema,
+  }),
+});
+
+export const finalizeCharacterCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('finalize_character'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    characterId: characterIdSchema,
+  }),
+});
+
 export const assignCharacterToParticipantCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('assign_character_to_participant'),
@@ -168,6 +204,8 @@ export const assignCharacterToParticipantCommandSchema = z.object({
 export const characterCommandSchema = z.discriminatedUnion('type', [
   createCharacterCommandSchema,
   getCharacterCommandSchema,
+  updateCharacterCommandSchema,
+  finalizeCharacterCommandSchema,
   assignCharacterToParticipantCommandSchema,
 ]);
 
@@ -196,6 +234,7 @@ export const characterCommandResponseSchema = z.union([
 
 export type Character = z.infer<typeof characterSchema>;
 export type CharacterInput = z.infer<typeof characterInputSchema>;
+export type CharacterUpdateInput = z.infer<typeof characterUpdateInputSchema>;
 export type EncounterOverlay = z.infer<typeof encounterOverlaySchema>;
 export type DerivedCharacterStats = z.infer<typeof derivedCharacterStatsSchema>;
 export type CharacterResource = z.infer<typeof characterResourceSchema>;
@@ -203,6 +242,12 @@ export type CreateCharacterCommand = z.infer<
   typeof createCharacterCommandSchema
 >;
 export type GetCharacterCommand = z.infer<typeof getCharacterCommandSchema>;
+export type UpdateCharacterCommand = z.infer<
+  typeof updateCharacterCommandSchema
+>;
+export type FinalizeCharacterCommand = z.infer<
+  typeof finalizeCharacterCommandSchema
+>;
 export type AssignCharacterToParticipantCommand = z.infer<
   typeof assignCharacterToParticipantCommandSchema
 >;

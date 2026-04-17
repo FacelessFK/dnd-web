@@ -7,6 +7,7 @@ export const rulesStrictnessLevels = [
   'assistive_raw',
   'dm_led',
 ] as const;
+export const characterStatuses = ['draft', 'ready'] as const;
 export const visibilityStates = ['visible', 'hidden', 'obscured'] as const;
 
 export type SessionId = string;
@@ -19,6 +20,7 @@ export type ConnectionStatus = (typeof connectionStatuses)[number];
 export type SessionStatus = (typeof sessionStatuses)[number];
 export type BaseRuleset = (typeof baseRulesets)[number];
 export type RulesStrictnessLevel = (typeof rulesStrictnessLevels)[number];
+export type CharacterStatus = (typeof characterStatuses)[number];
 export type VisibilityState = (typeof visibilityStates)[number];
 export type RulesConfigValue = string | number | boolean | null;
 export type CharacterMeta = Record<string, RulesConfigValue>;
@@ -77,6 +79,7 @@ export interface CharacterHitPoints {
 export interface Character {
   id: CharacterId;
   ownerParticipantId: ParticipantId;
+  status: CharacterStatus;
   name: string;
   rulesProfileId: RulesProfileId;
   level: number;

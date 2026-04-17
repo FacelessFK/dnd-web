@@ -1,24 +1,16 @@
-import { randomUUID } from 'node:crypto';
-
-import type { CharacterInput, SessionErrorCode } from '@dnd/protocol';
-import type {
-  Character,
-  CharacterId,
-  EncounterOverlay,
-  ParticipantId,
-  RulesProfileId,
-} from '@dnd/shared';
+import type { SessionErrorCode } from '@dnd/protocol';
+import type { Character, CharacterId, EncounterOverlay } from '@dnd/shared';
 
 export type StoredCharacterRecord = {
   character: Character;
   overlay: EncounterOverlay;
 };
 
-type CreateCharacterParams = {
-  ownerParticipantId: ParticipantId;
-  rulesProfileId: RulesProfileId;
-  character: CharacterInput;
-};
+export interface CharacterRepository {
+  createCharacter(record: StoredCharacterRecord): StoredCharacterRecord;
+  getCharacter(characterId: CharacterId): StoredCharacterRecord;
+  saveCharacter(record: StoredCharacterRecord): StoredCharacterRecord;
+}
 
 export class CharacterStoreError extends Error {
   constructor(
@@ -30,41 +22,11 @@ export class CharacterStoreError extends Error {
   }
 }
 
-export class InMemoryCharacterStore {
+export class InMemoryCharacterStore implements CharacterRepository {
   private readonly characters = new Map<CharacterId, StoredCharacterRecord>();
 
-  createCharacter(params: CreateCharacterParams): StoredCharacterRecord {
-    const now = this.now();
-    const characterId = this.createCharacterId();
-    const character: Character = {
-      id: characterId,
-      ownerParticipantId: params.ownerParticipantId,
-      name: params.character.name,
-      rulesProfileId: params.rulesProfileId,
-      level: params.character.level,
-      className: params.character.className,
-      speciesOrRace: params.character.speciesOrRace,
-      background: params.character.background,
-      abilities: structuredClone(params.character.abilities),
-      hp: structuredClone(params.character.hp),
-      armorClass: params.character.armorClass,
-      speed: params.character.speed,
-      notes: params.character.notes ?? null,
-      meta: structuredClone(params.character.meta ?? {}),
-      createdAt: now,
-      updatedAt: now,
-    };
-    const overlay: EncounterOverlay = {
-      characterId,
-      position: null,
-      activeConditions: [],
-      concentration: null,
-      turnUsage: null,
-      currentVisibility: 'visible',
-    };
-    const record = { character, overlay };
-
-    this.characters.set(characterId, record);
+  createCharacter(record: StoredCharacterRecord): StoredCharacterRecord {
+    this.characters.set(record.character.id, this.clone(record));
 
     return this.clone(record);
   }
@@ -82,12 +44,17 @@ export class InMemoryCharacterStore {
     return this.clone(record);
   }
 
-  private createCharacterId(): CharacterId {
-    return `char_${randomUUID()}`;
-  }
+  saveCharacter(record: StoredCharacterRecord): StoredCharacterRecord {
+    if (!this.characters.has(record.character.id)) {
+      throw new CharacterStoreError(
+        'character_not_found',
+        `Character "${record.character.id}" does not exist.`,
+      );
+    }
 
-  private now(): string {
-    return new Date().toISOString();
+    this.characters.set(record.character.id, this.clone(record));
+
+    return this.clone(record);
   }
 
   private clone<T>(value: T): T {

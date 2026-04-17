@@ -1,16 +1,25 @@
+import { randomUUID } from 'node:crypto';
+
 import { deriveCharacterStats } from '@dnd/rules';
 import type {
   AssignCharacterToParticipantCommand,
   CharacterAssignmentSuccess,
+  CharacterInput,
   CharacterResource,
+  CharacterUpdateInput,
   CreateCharacterCommand,
   CreateSessionCommand,
+  FinalizeCharacterCommand,
   GetCharacterCommand,
   JoinSessionCommand,
   ReconnectSessionCommand,
+  UpdateCharacterCommand,
 } from '@dnd/protocol';
 import type {
+  Character,
   CharacterId,
+  CharacterMeta,
+  EncounterOverlay,
   Participant,
   ParticipantId,
   RulesProfile,
@@ -18,6 +27,7 @@ import type {
 } from '@dnd/shared';
 
 import {
+  CharacterRepository,
   CharacterStoreError,
   InMemoryCharacterStore,
   type StoredCharacterRecord,
@@ -38,7 +48,7 @@ export class InMemoryGameRuntime {
   constructor(
     readonly sessions = new InMemorySessionStore(),
     readonly rulesProfiles = new InMemoryRulesProfileStore(),
-    readonly characters = new InMemoryCharacterStore(),
+    readonly characters: CharacterRepository = new InMemoryCharacterStore(),
   ) {}
 
   createSession(command: CreateSessionCommand) {
@@ -95,16 +105,18 @@ export class InMemoryGameRuntime {
       command.payload.ownerParticipantId,
     );
 
-    this.assertActorCanManageParticipant(actor, ownerParticipant);
+    this.assertActorCanEditCharacter(actor, ownerParticipant);
 
     const rulesProfile = this.rulesProfiles.getRulesProfile(
       snapshot.session.rulesProfileId,
     );
-    const record = this.characters.createCharacter({
-      ownerParticipantId: ownerParticipant.id,
-      rulesProfileId: rulesProfile.id,
-      character: command.payload.character,
-    });
+    const record = this.characters.createCharacter(
+      this.createDraftCharacterRecord({
+        ownerParticipantId: ownerParticipant.id,
+        rulesProfileId: rulesProfile.id,
+        character: command.payload.character,
+      }),
+    );
 
     return this.buildCharacterResource(record, rulesProfile);
   }
@@ -121,6 +133,72 @@ export class InMemoryGameRuntime {
     return this.buildCharacterResource(
       record,
       this.rulesProfiles.getRulesProfile(record.character.rulesProfileId),
+    );
+  }
+
+  updateCharacter(command: UpdateCharacterCommand): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const record = this.characters.getCharacter(command.payload.characterId);
+    const ownerParticipant = this.requireParticipant(
+      snapshot,
+      record.character.ownerParticipantId,
+    );
+
+    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
+    this.assertActorCanEditCharacter(actor, ownerParticipant);
+
+    const updatedRecord = this.characters.saveCharacter(
+      this.withUpdatedCharacterDetails(record, command.payload.character),
+    );
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
+  }
+
+  finalizeCharacter(command: FinalizeCharacterCommand): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const record = this.characters.getCharacter(command.payload.characterId);
+    const ownerParticipant = this.requireParticipant(
+      snapshot,
+      record.character.ownerParticipantId,
+    );
+
+    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
+    this.assertActorCanEditCharacter(actor, ownerParticipant);
+    this.assertCharacterCanBeFinalized(record.character);
+
+    const finalizedRecord = this.characters.saveCharacter({
+      character: {
+        ...record.character,
+        status: 'ready',
+        updatedAt: this.now(),
+      },
+      overlay: record.overlay,
+    });
+
+    return this.buildCharacterResource(
+      finalizedRecord,
+      this.rulesProfiles.getRulesProfile(
+        finalizedRecord.character.rulesProfileId,
+      ),
     );
   }
 
@@ -141,7 +219,7 @@ export class InMemoryGameRuntime {
     );
     const record = this.characters.getCharacter(command.payload.characterId);
 
-    this.assertActorCanManageParticipant(actor, participant);
+    this.assertActorCanEditCharacter(actor, participant);
     this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
 
     if (record.character.ownerParticipantId !== participant.id) {
@@ -181,6 +259,99 @@ export class InMemoryGameRuntime {
     };
   }
 
+  private createDraftCharacterRecord(params: {
+    ownerParticipantId: ParticipantId;
+    rulesProfileId: string;
+    character: CharacterInput;
+  }): StoredCharacterRecord {
+    const now = this.now();
+    const characterId = this.createCharacterId();
+    const character: Character = {
+      id: characterId,
+      ownerParticipantId: params.ownerParticipantId,
+      status: 'draft',
+      name: params.character.name,
+      rulesProfileId: params.rulesProfileId,
+      level: params.character.level,
+      className: params.character.className,
+      speciesOrRace: params.character.speciesOrRace,
+      background: params.character.background,
+      abilities: structuredClone(params.character.abilities),
+      hp: structuredClone(params.character.hp),
+      armorClass: params.character.armorClass,
+      speed: params.character.speed,
+      notes: params.character.notes ?? null,
+      meta: structuredClone(params.character.meta ?? {}),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return {
+      character,
+      overlay: this.createEncounterOverlay(characterId),
+    };
+  }
+
+  private withUpdatedCharacterDetails(
+    record: StoredCharacterRecord,
+    characterUpdate: CharacterUpdateInput,
+  ): StoredCharacterRecord {
+    return {
+      character: {
+        ...record.character,
+        status: 'draft',
+        name: characterUpdate.name,
+        className: characterUpdate.className,
+        speciesOrRace: characterUpdate.speciesOrRace,
+        background: characterUpdate.background,
+        abilities: structuredClone(characterUpdate.abilities),
+        hp: structuredClone(characterUpdate.hp),
+        armorClass: characterUpdate.armorClass,
+        speed: characterUpdate.speed,
+        notes: characterUpdate.notes ?? null,
+        meta: structuredClone(characterUpdate.meta ?? ({} as CharacterMeta)),
+        updatedAt: this.now(),
+      },
+      overlay: record.overlay,
+    };
+  }
+
+  private createEncounterOverlay(characterId: CharacterId): EncounterOverlay {
+    return {
+      characterId,
+      position: null,
+      activeConditions: [],
+      concentration: null,
+      turnUsage: null,
+      currentVisibility: 'visible',
+    };
+  }
+
+  private assertCharacterCanBeFinalized(character: Character): void {
+    if (character.status !== 'draft') {
+      throw new CharacterStoreError(
+        'invalid_character_state',
+        `Character "${character.id}" is already marked "${character.status}".`,
+      );
+    }
+
+    if (
+      !character.name.trim() ||
+      !character.rulesProfileId.trim() ||
+      !character.className.trim() ||
+      character.level < 1 ||
+      character.level > 20 ||
+      character.hp.max < 1 ||
+      character.hp.current < 0 ||
+      character.hp.current > character.hp.max
+    ) {
+      throw new CharacterStoreError(
+        'invalid_character_state',
+        `Character "${character.id}" does not satisfy the minimum readiness rules.`,
+      );
+    }
+  }
+
   private requireParticipant(
     snapshot: SessionSnapshot,
     participantId: ParticipantId,
@@ -199,7 +370,7 @@ export class InMemoryGameRuntime {
     return participant;
   }
 
-  private assertActorCanManageParticipant(
+  private assertActorCanEditCharacter(
     actor: Participant,
     participant: Participant,
   ): void {
@@ -209,7 +380,7 @@ export class InMemoryGameRuntime {
 
     throw new CharacterStoreError(
       'invalid_participant_session_association',
-      `Participant "${actor.id}" cannot manage character state for "${participant.id}".`,
+      `Participant "${actor.id}" cannot edit character state for "${participant.id}".`,
     );
   }
 
@@ -235,5 +406,13 @@ export class InMemoryGameRuntime {
         `Character "${characterId}" was created for rules profile "${record.character.rulesProfileId}" and cannot be used in session "${snapshot.session.id}".`,
       );
     }
+  }
+
+  private createCharacterId(): CharacterId {
+    return `char_${randomUUID()}`;
+  }
+
+  private now(): string {
+    return new Date().toISOString();
   }
 }

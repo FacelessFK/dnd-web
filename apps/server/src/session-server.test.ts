@@ -174,6 +174,53 @@ test('invalid character IDs are rejected for character retrieval', () => {
   assert.deepEqual(result.error.issues[0]?.path, ['payload', 'characterId']);
 });
 
+test('invalid update payloads are rejected for character updates', () => {
+  const result = characterCommandSchema.safeParse({
+    commandId: 'update-character-invalid',
+    type: 'update_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      characterId: 'char_11111111-1111-4111-8111-111111111111',
+      character: {
+        name: '',
+        className: 'Wizard',
+        speciesOrRace: 'Elf',
+        background: 'Sage',
+        abilities: {
+          str: 8,
+          dex: 14,
+          con: 12,
+          int: 16,
+          wis: 10,
+          cha: 8,
+        },
+        hp: {
+          max: 8,
+          current: 8,
+          temp: 0,
+        },
+        armorClass: 12,
+        speed: 30,
+      },
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, [
+    'payload',
+    'character',
+    'name',
+  ]);
+});
+
 test('connected subscribers receive synchronized session state updates', () => {
   const store = new InMemorySessionStore();
   const created = store.createSession({

@@ -99,6 +99,50 @@ function createPlayerCharacter(
   });
 }
 
+function updateCharacterAs(
+  runtime: InMemoryGameRuntime,
+  actorParticipantId: string,
+  sessionId: string,
+  characterId: string,
+) {
+  return runtime.updateCharacter({
+    commandId: `update-character-${actorParticipantId}`,
+    type: 'update_character',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      characterId,
+      character: {
+        name: 'Aria Stormborn',
+        className: 'Wizard',
+        speciesOrRace: 'High Elf',
+        background: 'Scholar',
+        abilities: {
+          str: 8,
+          dex: 14,
+          con: 14,
+          int: 17,
+          wis: 12,
+          cha: 10,
+        },
+        hp: {
+          max: 27,
+          current: 27,
+          temp: 0,
+        },
+        armorClass: 14,
+        speed: 30,
+        notes: 'Updated in the lifecycle slice.',
+        meta: {
+          focus: 'orb',
+        },
+      },
+    },
+  });
+}
+
 test('derived stat calculations follow the baseline 5e progression', () => {
   assert.equal(calculateAbilityModifier(8), -1);
   assert.equal(calculateAbilityModifier(14), 2);
@@ -145,7 +189,7 @@ test('sessions reject unknown rules profile references', () => {
   );
 });
 
-test('create character returns a rules-aware resource with derived stats', () => {
+test('create character starts as a draft resource with derived stats', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);
 
@@ -156,6 +200,7 @@ test('create character returns a rules-aware resource with derived stats', () =>
   assert.match(resource.character.id, /^char_[a-f0-9-]{36}$/);
   assert.equal(resource.character.ownerParticipantId, 'player-001');
   assert.equal(resource.character.rulesProfileId, 'dnd5e-2024-core');
+  assert.equal(resource.character.status, 'draft');
   assert.equal(resource.derived.proficiencyBonus, 3);
   assert.equal(resource.derived.initiativeModifier, 2);
   assert.equal(resource.derived.passivePerception, 11);
@@ -184,7 +229,159 @@ test('get character returns the stored canonical character resource', () => {
 
   assert.equal(fetchedCharacter.character.id, createdCharacter.character.id);
   assert.equal(fetchedCharacter.character.name, 'Aria');
+  assert.equal(fetchedCharacter.character.status, 'draft');
   assert.equal(fetchedCharacter.rulesProfile.id, 'dnd5e-2024-core');
+});
+
+test('player can edit their own character', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  const updatedCharacter = updateCharacterAs(
+    runtime,
+    'player-001',
+    session.sessionId,
+    createdCharacter.character.id,
+  );
+
+  assert.equal(updatedCharacter.character.name, 'Aria Stormborn');
+  assert.equal(updatedCharacter.character.background, 'Scholar');
+  assert.equal(updatedCharacter.character.status, 'draft');
+  assert.equal(updatedCharacter.character.meta.focus, 'orb');
+});
+
+test('dm can edit a participant character in the same session', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  const updatedCharacter = updateCharacterAs(
+    runtime,
+    'dm-001',
+    session.sessionId,
+    createdCharacter.character.id,
+  );
+
+  assert.equal(updatedCharacter.character.name, 'Aria Stormborn');
+  assert.equal(updatedCharacter.character.abilities.int, 17);
+});
+
+test('players cannot edit another participant character', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  joinSecondPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      updateCharacterAs(
+        runtime,
+        'player-002',
+        session.sessionId,
+        createdCharacter.character.id,
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('finalizing a valid draft marks it ready', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  const finalizedCharacter = runtime.finalizeCharacter({
+    commandId: 'finalize-character-1',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: createdCharacter.character.id,
+    },
+  });
+
+  assert.equal(finalizedCharacter.character.status, 'ready');
+});
+
+test('finalizing an already-ready character is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-1',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: createdCharacter.character.id,
+    },
+  });
+
+  assert.throws(
+    () => {
+      runtime.finalizeCharacter({
+        commandId: 'finalize-character-2',
+        type: 'finalize_character',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          characterId: createdCharacter.character.id,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_character_state',
+  );
+});
+
+test('editing a ready character reopens it as a draft', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const createdCharacter = createPlayerCharacter(runtime, session.sessionId);
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-1',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: createdCharacter.character.id,
+    },
+  });
+
+  const updatedCharacter = updateCharacterAs(
+    runtime,
+    'player-001',
+    session.sessionId,
+    createdCharacter.character.id,
+  );
+
+  assert.equal(updatedCharacter.character.status, 'draft');
 });
 
 test('assigning a character links it to the participant and broadcasts session state', () => {
