@@ -40,22 +40,7 @@ export const moveCharacterInActiveSceneCommandSchema = z.object({
   }),
 });
 
-export const movementCommandSchema = z.discriminatedUnion('type', [
-  placeCharacterInActiveSceneCommandSchema,
-  moveCharacterInActiveSceneCommandSchema,
-]);
-
-export const movementCommandSuccessSchema = z.object({
-  ok: z.literal(true),
-  data: characterResourceSchema,
-});
-
 export const movementCommandErrorSchema = commandErrorSchema;
-
-export const movementCommandResponseSchema = z.union([
-  movementCommandSuccessSchema,
-  movementCommandErrorSchema,
-]);
 
 export const movementStateUpdateReasonSchema = z.enum([
   'character_moved',
@@ -73,15 +58,69 @@ export const movementStateUpdateSchema = z.object({
   footprint: sceneEntityFootprintSchema,
 });
 
+export const activeScenePlacementSchema = z.object({
+  characterId: characterIdSchema,
+  participantId: participantIdSchema,
+  position: scenePositionSchema,
+  footprint: sceneEntityFootprintSchema,
+});
+
+export const activeSceneStateSchema = z.object({
+  sessionId: sessionIdSchema,
+  activeSceneId: sceneIdSchema,
+  placedCharacters: z.array(activeScenePlacementSchema),
+});
+
+export const getActiveSceneStateCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('get_active_scene_state'),
+  actor: movementActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+  }),
+});
+
 export type PlaceCharacterInActiveSceneCommand = z.infer<
   typeof placeCharacterInActiveSceneCommandSchema
 >;
 export type MoveCharacterInActiveSceneCommand = z.infer<
   typeof moveCharacterInActiveSceneCommandSchema
 >;
+export const movementCommandSchema = z.discriminatedUnion('type', [
+  placeCharacterInActiveSceneCommandSchema,
+  moveCharacterInActiveSceneCommandSchema,
+  getActiveSceneStateCommandSchema,
+]);
+
+export const activeSceneStateCommandSuccessSchema = z.object({
+  ok: z.literal(true),
+  data: activeSceneStateSchema,
+});
+
+export const movementCommandSuccessSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    data: characterResourceSchema,
+  }),
+  activeSceneStateCommandSuccessSchema,
+]);
+
+export const movementCommandResponseSchema = z.union([
+  movementCommandSuccessSchema,
+  movementCommandErrorSchema,
+]);
+
+export type ActiveScenePlacement = z.infer<typeof activeScenePlacementSchema>;
+export type ActiveSceneState = z.infer<typeof activeSceneStateSchema>;
+export type GetActiveSceneStateCommand = z.infer<
+  typeof getActiveSceneStateCommandSchema
+>;
 export type MovementCommand = z.infer<typeof movementCommandSchema>;
 export type MovementCommandSuccess = z.infer<
   typeof movementCommandSuccessSchema
+>;
+export type ActiveSceneStateCommandSuccess = z.infer<
+  typeof activeSceneStateCommandSuccessSchema
 >;
 export type MovementCommandError = z.infer<typeof movementCommandErrorSchema>;
 export type MovementCommandResponse = z.infer<

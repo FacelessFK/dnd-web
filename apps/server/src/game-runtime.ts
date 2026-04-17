@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { deriveCharacterStats } from '@dnd/rules';
+import { deriveCharacterStats, doesOccupancyFitWithinGrid } from '@dnd/rules';
 import type {
+  ActiveSceneState,
   AssignCharacterToParticipantCommand,
   ActivateSceneForSessionCommand,
   CharacterAssignmentSuccess,
@@ -12,6 +13,7 @@ import type {
   CreateSceneCommand,
   CreateSessionCommand,
   FinalizeCharacterCommand,
+  GetActiveSceneStateCommand,
   GetSceneCommand,
   GetCharacterCommand,
   JoinSessionCommand,
@@ -498,6 +500,75 @@ export class InMemoryGameRuntime {
         updatedRecord.character.rulesProfileId,
       ),
     );
+  }
+
+  getActiveSceneState(command: GetActiveSceneStateCommand): ActiveSceneState {
+    return this.getActiveSceneStateForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+  }
+
+  getActiveSceneStateForParticipant(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+  ): ActiveSceneState {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      sessionId,
+      participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    return {
+      sessionId: snapshot.session.id,
+      activeSceneId,
+      placedCharacters: snapshot.participants.flatMap((participant) => {
+        if (!participant.characterId) {
+          return [];
+        }
+
+        const record = this.requireAssignedCharacterRecord(
+          snapshot,
+          participant,
+        );
+        const position = record.overlay.position;
+
+        if (!position || position.sceneId !== activeSceneId) {
+          return [];
+        }
+
+        if (
+          !doesOccupancyFitWithinGrid(scene.grid, {
+            position: {
+              x: position.x,
+              y: position.y,
+            },
+            footprint: record.overlay.footprint,
+          })
+        ) {
+          throw new CharacterStoreError(
+            'internal_server_error',
+            `Character "${record.character.id}" has an invalid stored active-scene placement in scene "${activeSceneId}".`,
+          );
+        }
+
+        return [
+          {
+            characterId: record.character.id,
+            participantId: participant.id,
+            position: {
+              x: position.x,
+              y: position.y,
+            },
+            footprint: structuredClone(record.overlay.footprint),
+          },
+        ];
+      }),
+    };
   }
 
   getDefaultRulesProfileId(): string {

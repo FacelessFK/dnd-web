@@ -276,6 +276,23 @@ function getMovementUpdates(
   );
 }
 
+function getActiveSceneState(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.getActiveSceneState({
+    commandId: `get-active-scene-state-${actorParticipantId}`,
+    type: 'get_active_scene_state',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
 test('derived stat calculations follow the baseline 5e progression', () => {
   assert.equal(calculateAbilityModifier(8), -1);
   assert.equal(calculateAbilityModifier(14), 2);
@@ -990,6 +1007,153 @@ test('movement broadcasts an authoritative update that matches stored overlay po
   });
 });
 
+test('active-scene placement snapshot reads the authoritative placed characters for the active scene', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const assignedCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  const scene = activateScene(runtime, session.sessionId);
+
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 1,
+    y: 2,
+  });
+
+  const activeSceneState = getActiveSceneState(
+    runtime,
+    session.sessionId,
+    'dm-001',
+  );
+
+  assert.equal(activeSceneState.sessionId, session.sessionId);
+  assert.equal(activeSceneState.activeSceneId, scene.id);
+  assert.deepEqual(activeSceneState.placedCharacters, [
+    {
+      characterId: assignedCharacter.character.id,
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 2,
+      },
+      footprint: {
+        width: 1,
+        height: 1,
+      },
+    },
+  ]);
+});
+
+test('active-scene placement snapshot reflects authoritative overlay positions after movement', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const assignedCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  const movedCharacter = runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-before-snapshot',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 2,
+        y: 1,
+      },
+    },
+  });
+  const activeSceneState = getActiveSceneState(runtime, session.sessionId);
+
+  assert.deepEqual(activeSceneState.placedCharacters, [
+    {
+      characterId: assignedCharacter.character.id,
+      participantId: 'player-001',
+      position: {
+        x: movedCharacter.overlay.position!.x,
+        y: movedCharacter.overlay.position!.y,
+      },
+      footprint: movedCharacter.overlay.footprint,
+    },
+  ]);
+});
+
+test('reconnected participants can recover the current active-scene placement snapshot with an explicit read', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const assignedCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  runtime.connectParticipant(session.sessionId, 'player-001', {
+    connectionId: 'player-read-connection-1',
+    close: () => undefined,
+    send: () => undefined,
+  });
+  runtime.disconnectParticipant(
+    session.sessionId,
+    'player-001',
+    'player-read-connection-1',
+  );
+  runtime.reconnectSession({
+    commandId: 'reconnect-before-active-scene-read',
+    type: 'reconnect_session',
+    actor: {
+      participantId: 'player-001',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-before-reconnect-read',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 3,
+        y: 0,
+      },
+    },
+  });
+
+  const activeSceneState = getActiveSceneState(runtime, session.sessionId);
+
+  assert.deepEqual(activeSceneState.placedCharacters, [
+    {
+      characterId: assignedCharacter.character.id,
+      participantId: 'player-001',
+      position: {
+        x: 3,
+        y: 0,
+      },
+      footprint: {
+        width: 1,
+        height: 1,
+      },
+    },
+  ]);
+});
+
 test('movement out of bounds is rejected', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);
@@ -1156,6 +1320,22 @@ test('movement without an active scene is rejected', () => {
   );
 });
 
+test('active-scene placement snapshot without an active scene is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      getActiveSceneState(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError && error.code === 'no_active_scene',
+  );
+});
+
 test('movement without an assigned character is rejected', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);
@@ -1252,5 +1432,85 @@ test('movement beyond the character speed allowance is rejected', () => {
     (error: unknown) =>
       error instanceof MovementRuntimeError &&
       error.code === 'movement_exceeds_allowance',
+  );
+});
+
+test('active-scene placement snapshot fails explicitly when stored placement is impossible', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const assignedCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  const scene = activateScene(runtime, session.sessionId);
+
+  const brokenRecord = runtime.characters.getCharacter(
+    assignedCharacter.character.id,
+  );
+
+  runtime.characters.saveCharacter({
+    character: brokenRecord.character,
+    overlay: {
+      ...brokenRecord.overlay,
+      position: {
+        sceneId: scene.id,
+        x: 99,
+        y: 99,
+      },
+    },
+  });
+
+  assert.throws(
+    () => {
+      getActiveSceneState(runtime, session.sessionId, 'dm-001');
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'internal_server_error',
+  );
+});
+
+test('active-scene placement snapshot rejects a broken cross-session active scene reference', () => {
+  const runtime = new InMemoryGameRuntime();
+  const firstSession = createSession(runtime);
+  const secondSession = runtime.createSession({
+    commandId: 'create-session-for-foreign-active-scene',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-002',
+      displayName: 'Second Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+  const foreignScene = runtime.createScene({
+    commandId: 'create-foreign-scene-for-read-consistency',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-002',
+    },
+    payload: {
+      sessionId: secondSession.sessionId,
+      scene: {
+        name: 'Foreign Snapshot Scene',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  runtime.sessions.activateScene(firstSession.sessionId, foreignScene.id);
+
+  assert.throws(
+    () => {
+      getActiveSceneState(runtime, firstSession.sessionId, 'dm-001');
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_scene_session_association',
   );
 });

@@ -417,11 +417,22 @@ async function handleMovementCommandRequest(
 
   try {
     const command = commandResult.data;
-    const data =
-      command.type === 'place_character_in_active_scene'
-        ? runtime.placeCharacterInActiveScene(command)
-        : runtime.moveCharacterInActiveScene(command);
-    const success: MovementCommandSuccess = {
+    let data: MovementCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'place_character_in_active_scene':
+        data = runtime.placeCharacterInActiveScene(command);
+        break;
+      case 'move_character_in_active_scene':
+        data = runtime.moveCharacterInActiveScene(command);
+        break;
+      case 'get_active_scene_state':
+        data = runtime.getActiveSceneState(command);
+        break;
+      default:
+        throw new Error('Unsupported movement command type.');
+    }
+    const success = {
       ok: true,
       data,
     };

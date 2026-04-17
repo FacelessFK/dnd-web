@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  activeSceneStateCommandSuccessSchema,
   characterCommandSchema,
   clientCommandSchema,
   movementCommandSchema,
@@ -305,6 +306,21 @@ test('invalid movement target positions are rejected for movement commands', () 
   assert.deepEqual(result.error.issues[0]?.path, ['payload', 'position', 'x']);
 });
 
+test('active-scene state read commands are accepted by movement command validation', () => {
+  const result = movementCommandSchema.safeParse({
+    commandId: 'get-active-scene-state-1',
+    type: 'get_active_scene_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
 test('connected subscribers receive synchronized session state updates', () => {
   const store = new InMemorySessionStore();
   const created = store.createSession({
@@ -377,6 +393,32 @@ test('movement session-stream updates are validated as a narrow realtime payload
     footprint: {
       width: 1,
       height: 1,
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('active-scene state success payloads are validated as a narrow read model', () => {
+  const result = activeSceneStateCommandSuccessSchema.safeParse({
+    ok: true,
+    data: {
+      sessionId: 'ABC123',
+      activeSceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      placedCharacters: [
+        {
+          characterId: 'char_11111111-1111-4111-8111-111111111111',
+          participantId: 'player-001',
+          position: {
+            x: 2,
+            y: 3,
+          },
+          footprint: {
+            width: 1,
+            height: 1,
+          },
+        },
+      ],
     },
   });
 
