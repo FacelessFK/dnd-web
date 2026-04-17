@@ -9,11 +9,19 @@ export const rulesStrictnessLevels = [
 ] as const;
 export const characterStatuses = ['draft', 'ready'] as const;
 export const visibilityStates = ['visible', 'hidden', 'obscured'] as const;
+export const sceneEntityTypes = [
+  'player_spawn',
+  'monster',
+  'object',
+  'terrain',
+] as const;
 
 export type SessionId = string;
 export type ParticipantId = string;
 export type CharacterId = string;
 export type RulesProfileId = string;
+export type SceneId = string;
+export type SceneEntityId = string;
 export type SessionStateRevision = number;
 export type ParticipantRole = (typeof participantRoles)[number];
 export type ConnectionStatus = (typeof connectionStatuses)[number];
@@ -22,8 +30,10 @@ export type BaseRuleset = (typeof baseRulesets)[number];
 export type RulesStrictnessLevel = (typeof rulesStrictnessLevels)[number];
 export type CharacterStatus = (typeof characterStatuses)[number];
 export type VisibilityState = (typeof visibilityStates)[number];
+export type SceneEntityType = (typeof sceneEntityTypes)[number];
 export type RulesConfigValue = string | number | boolean | null;
 export type CharacterMeta = Record<string, RulesConfigValue>;
+export type SceneEntityMeta = Record<string, RulesConfigValue>;
 
 export interface RulesProfile {
   id: RulesProfileId;
@@ -50,7 +60,7 @@ export interface Session {
   dmParticipantId: ParticipantId;
   playerParticipantIds: ParticipantId[];
   rulesProfileId: RulesProfileId;
-  activeSceneId: string | null;
+  activeSceneId: SceneId | null;
   createdAt: string;
   updatedAt: string;
   revision: SessionStateRevision;
@@ -98,7 +108,7 @@ export interface Character {
 }
 
 export interface EncounterPosition {
-  sceneId: string | null;
+  sceneId: SceneId | null;
   x: number;
   y: number;
 }
@@ -138,4 +148,42 @@ export interface DerivedCharacterStats {
   initiativeModifier: number;
   passivePerception: number;
   spellSaveDc: number | null;
+}
+
+export interface GridDefinition {
+  cellSizeFeet: number;
+  width: number;
+  height: number;
+}
+
+export interface ScenePosition {
+  x: number;
+  y: number;
+}
+
+export interface SceneEntityFootprint {
+  width: number;
+  height: number;
+}
+
+export interface SceneEntity {
+  id: SceneEntityId;
+  type: SceneEntityType;
+  name: string;
+  position: ScenePosition;
+  footprint: SceneEntityFootprint;
+  blocksMovement: boolean;
+  blocksVision: boolean;
+  hidden: boolean;
+  meta: SceneEntityMeta;
+}
+
+export interface Scene {
+  id: SceneId;
+  sessionId: SessionId;
+  name: string;
+  grid: GridDefinition;
+  entities: SceneEntity[];
+  createdAt: string;
+  updatedAt: string;
 }

@@ -12,6 +12,10 @@ import {
   characterCommandSuccessSchema,
   clientCommandSchema,
   participantIdSchema,
+  sceneActivationSuccessSchema,
+  sceneCommandErrorSchema,
+  sceneCommandSchema,
+  sceneCommandSuccessSchema,
   sessionCommandErrorSchema,
   sessionCommandSuccessSchema,
   sessionIdSchema,
@@ -19,6 +23,9 @@ import {
   type CharacterCommandError,
   type CharacterCommandSuccess,
   type RuntimeErrorCode,
+  type SceneActivationSuccess,
+  type SceneCommandError,
+  type SceneCommandSuccess,
   type SessionCommandError,
   type SessionCommandSuccess,
   type SessionStateUpdate,
@@ -27,6 +34,7 @@ import {
 import { CharacterStoreError } from './character-store.js';
 import { createConnectionId, InMemoryGameRuntime } from './game-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
+import { SceneStoreError } from './scene-store.js';
 import { SessionStoreError } from './session-store.js';
 
 const corsHeaders = {
@@ -38,6 +46,7 @@ const corsHeaders = {
 type RuntimeStoreError =
   | CharacterStoreError
   | RulesProfileStoreError
+  | SceneStoreError
   | SessionStoreError;
 
 export function createSessionServer(runtime = new InMemoryGameRuntime()): {
@@ -78,8 +87,8 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-2',
-      status: 'rules-and-character-foundation-ready',
+      phase: 'phase-3',
+      status: 'scene-runtime-foundation-ready',
     });
     return;
   }
@@ -91,6 +100,11 @@ async function handleRequest(
 
   if (request.method === 'POST' && url.pathname === '/api/characters/command') {
     await handleCharacterCommandRequest(request, response, runtime);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/scenes/command') {
+    await handleSceneCommandRequest(request, response, runtime);
     return;
   }
 
@@ -280,6 +294,80 @@ async function handleCharacterCommandRequest(
   }
 }
 
+async function handleSceneCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: InMemoryGameRuntime,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message: 'Request body must be valid JSON.',
+      },
+    } satisfies SceneCommandError);
+    return;
+  }
+
+  const commandResult = sceneCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies SceneCommandError);
+    return;
+  }
+
+  try {
+    const command = commandResult.data;
+
+    switch (command.type) {
+      case 'create_scene':
+      case 'get_scene':
+      case 'place_entity_in_scene': {
+        const scene =
+          command.type === 'create_scene'
+            ? runtime.createScene(command)
+            : command.type === 'get_scene'
+              ? runtime.getScene(command)
+              : runtime.placeEntityInScene(command);
+        const success: SceneCommandSuccess = {
+          ok: true,
+          data: {
+            scene,
+          },
+        };
+
+        sendJson(response, 200, success, sceneCommandSuccessSchema);
+        return;
+      }
+      case 'activate_scene_for_session': {
+        const success: SceneActivationSuccess = {
+          ok: true,
+          data: runtime.activateSceneForSession(command),
+        };
+
+        sendJson(response, 200, success, sceneActivationSuccessSchema);
+        return;
+      }
+      default:
+        throw new Error('Unsupported scene command type.');
+    }
+  } catch (error) {
+    handleRuntimeError(response, error, sceneCommandErrorSchema);
+  }
+}
+
 function handleStreamRequest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -402,6 +490,7 @@ function handleRuntimeError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
 ): void {
   if (response.headersSent || response.writableEnded) {
@@ -433,6 +522,7 @@ function handleUnexpectedError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
 ): void {
   if (response.headersSent || response.writableEnded) {
@@ -500,17 +590,24 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'character_not_found':
     case 'participant_not_found':
     case 'rules_profile_not_found':
+    case 'scene_not_found':
     case 'session_not_found':
       return 404;
     case 'duplicate_join':
     case 'invalid_participant_session_association':
+    case 'invalid_scene_session_association':
     case 'invalid_character_state':
+    case 'scene_entity_overlap':
       return 409;
     case 'internal_server_error':
       return 500;
     case 'invalid_command':
     case 'invalid_character_id':
+    case 'invalid_entity_position':
+    case 'invalid_grid_size':
+    case 'invalid_scene_id':
     case 'invalid_session_id':
+    case 'scene_entity_out_of_bounds':
       return 400;
     case 'invalid_role_assumption':
       return 403;
@@ -521,6 +618,7 @@ function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
     error instanceof CharacterStoreError ||
     error instanceof RulesProfileStoreError ||
+    error instanceof SceneStoreError ||
     error instanceof SessionStoreError
   );
 }

@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   characterCommandSchema,
   clientCommandSchema,
+  sceneCommandSchema,
   type SessionStateUpdate,
 } from '@dnd/protocol';
 
@@ -172,6 +173,61 @@ test('invalid character IDs are rejected for character retrieval', () => {
   }
 
   assert.deepEqual(result.error.issues[0]?.path, ['payload', 'characterId']);
+});
+
+test('invalid scene IDs are rejected for scene retrieval', () => {
+  const result = sceneCommandSchema.safeParse({
+    commandId: 'get-scene-invalid-id',
+    type: 'get_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      sceneId: 'scene-one',
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, ['payload', 'sceneId']);
+});
+
+test('invalid grid sizes are rejected for scene creation', () => {
+  const result = sceneCommandSchema.safeParse({
+    commandId: 'create-scene-invalid-grid',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      scene: {
+        name: 'Broken Grid',
+        grid: {
+          width: 0,
+          height: 8,
+        },
+      },
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, [
+    'payload',
+    'scene',
+    'grid',
+    'width',
+  ]);
 });
 
 test('invalid update payloads are rejected for character updates', () => {

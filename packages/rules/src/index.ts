@@ -2,6 +2,10 @@ import type {
   AbilityScores,
   Character,
   DerivedCharacterStats,
+  GridDefinition,
+  SceneEntity,
+  SceneEntityFootprint,
+  ScenePosition,
 } from '@dnd/shared';
 
 export function calculateAbilityModifier(score: number): number {
@@ -69,4 +73,42 @@ export function deriveCharacterStats(
     passivePerception: calculatePassivePerception(character.abilities),
     spellSaveDc: null,
   };
+}
+
+export function isGridDefinitionValid(grid: GridDefinition): boolean {
+  return (
+    Number.isInteger(grid.cellSizeFeet) &&
+    grid.cellSizeFeet > 0 &&
+    Number.isInteger(grid.width) &&
+    grid.width > 0 &&
+    Number.isInteger(grid.height) &&
+    grid.height > 0
+  );
+}
+
+export function doesSceneEntityFitWithinGrid(
+  grid: GridDefinition,
+  position: ScenePosition,
+  footprint: SceneEntityFootprint,
+): boolean {
+  return (
+    position.x >= 0 &&
+    position.y >= 0 &&
+    footprint.width >= 1 &&
+    footprint.height >= 1 &&
+    position.x + footprint.width <= grid.width &&
+    position.y + footprint.height <= grid.height
+  );
+}
+
+export function doSceneEntitiesOverlap(
+  left: Pick<SceneEntity, 'position' | 'footprint'>,
+  right: Pick<SceneEntity, 'position' | 'footprint'>,
+): boolean {
+  return !(
+    left.position.x + left.footprint.width <= right.position.x ||
+    right.position.x + right.footprint.width <= left.position.x ||
+    left.position.y + left.footprint.height <= right.position.y ||
+    right.position.y + right.footprint.height <= left.position.y
+  );
 }

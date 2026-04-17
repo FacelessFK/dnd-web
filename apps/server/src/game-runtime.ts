@@ -3,16 +3,21 @@ import { randomUUID } from 'node:crypto';
 import { deriveCharacterStats } from '@dnd/rules';
 import type {
   AssignCharacterToParticipantCommand,
+  ActivateSceneForSessionCommand,
   CharacterAssignmentSuccess,
   CharacterInput,
   CharacterResource,
   CharacterUpdateInput,
   CreateCharacterCommand,
+  CreateSceneCommand,
   CreateSessionCommand,
   FinalizeCharacterCommand,
+  GetSceneCommand,
   GetCharacterCommand,
   JoinSessionCommand,
+  PlaceEntityInSceneCommand,
   ReconnectSessionCommand,
+  SceneActivationSuccess,
   UpdateCharacterCommand,
 } from '@dnd/protocol';
 import type {
@@ -23,6 +28,7 @@ import type {
   Participant,
   ParticipantId,
   RulesProfile,
+  Scene,
   SessionSnapshot,
 } from '@dnd/shared';
 
@@ -37,6 +43,18 @@ import {
   InMemoryRulesProfileStore,
 } from './rules-profile-store.js';
 import {
+  InMemorySceneStore,
+  SceneRepository,
+  SceneStoreError,
+} from './scene-store.js';
+import {
+  assertGridDefinitionIsValid,
+  assertSceneBelongsToSession,
+  assertSceneEntityPlacement,
+  createSceneEntity,
+  createSceneRecord,
+} from './scene-runtime.js';
+import {
   createConnectionId,
   InMemorySessionStore,
   SessionStoreError,
@@ -49,6 +67,7 @@ export class InMemoryGameRuntime {
     readonly sessions = new InMemorySessionStore(),
     readonly rulesProfiles = new InMemoryRulesProfileStore(),
     readonly characters: CharacterRepository = new InMemoryCharacterStore(),
+    readonly scenes: SceneRepository = new InMemorySceneStore(),
   ) {}
 
   createSession(command: CreateSessionCommand) {
@@ -243,6 +262,85 @@ export class InMemoryGameRuntime {
     };
   }
 
+  createScene(command: CreateSceneCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'create scenes');
+    assertGridDefinitionIsValid(command.payload.scene.grid);
+
+    return this.scenes.createScene(
+      createSceneRecord(snapshot.session.id, command.payload.scene),
+    );
+  }
+
+  getScene(command: GetSceneCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    assertSceneBelongsToSession(snapshot, scene);
+
+    return scene;
+  }
+
+  activateSceneForSession(
+    command: ActivateSceneForSessionCommand,
+  ): SceneActivationSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'activate scenes');
+    assertSceneBelongsToSession(snapshot, scene);
+
+    return {
+      sessionId: snapshot.session.id,
+      sceneId: scene.id,
+      state: this.sessions.activateScene(snapshot.session.id, scene.id),
+    };
+  }
+
+  placeEntityInScene(command: PlaceEntityInSceneCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'place scene entities');
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    const entity = createSceneEntity(command.payload.entity);
+
+    assertSceneEntityPlacement(scene, entity);
+
+    return this.scenes.saveScene({
+      ...scene,
+      entities: [...scene.entities, entity],
+      updatedAt: this.now(),
+    });
+  }
+
   getDefaultRulesProfileId(): string {
     return DEFAULT_RULES_PROFILE_ID;
   }
@@ -381,6 +479,17 @@ export class InMemoryGameRuntime {
     throw new CharacterStoreError(
       'invalid_participant_session_association',
       `Participant "${actor.id}" cannot edit character state for "${participant.id}".`,
+    );
+  }
+
+  private assertActorIsDm(actor: Participant, action: string): void {
+    if (actor.role === 'dm') {
+      return;
+    }
+
+    throw new SceneStoreError(
+      'invalid_role_assumption',
+      `Participant "${actor.id}" must be the DM to ${action}.`,
     );
   }
 

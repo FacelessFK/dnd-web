@@ -13,6 +13,7 @@ import type {
   Participant,
   ParticipantId,
   ParticipantRole,
+  SceneId,
   Session,
   SessionId,
   SessionSnapshot,
@@ -221,6 +222,20 @@ export class InMemorySessionStore {
 
     this.applyMutation(room, 'participant_character_assigned', () => {
       participant.characterId = characterId;
+    });
+
+    return this.clone(room.snapshot);
+  }
+
+  activateScene(sessionId: SessionId, sceneId: SceneId): SessionSnapshot {
+    const room = this.requireRoom(sessionId);
+
+    if (room.snapshot.session.activeSceneId === sceneId) {
+      return this.clone(room.snapshot);
+    }
+
+    this.applyMutation(room, 'active_scene_changed', () => {
+      room.snapshot.session.activeSceneId = sceneId;
     });
 
     return this.clone(room.snapshot);

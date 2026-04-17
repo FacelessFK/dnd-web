@@ -184,3 +184,29 @@ test('returned state snapshots do not allow client-side mutation of server truth
   assert.deepEqual(snapshot.session.playerParticipantIds, []);
   assert.equal(snapshot.participants[0]?.displayName, 'Dungeon Master');
 });
+
+test('activating a scene updates the session snapshot and broadcasts a revision', () => {
+  const store = new InMemorySessionStore();
+  const created = store.createSession(createSessionCommand());
+  const updates: string[] = [];
+
+  store.connectParticipant(created.sessionId, 'dm-001', {
+    connectionId: 'dm-connection-scene-1',
+    close: () => undefined,
+    send: (update) => {
+      updates.push(update.reason);
+    },
+  });
+
+  const snapshot = store.activateScene(
+    created.sessionId,
+    'scene_11111111-1111-4111-8111-111111111111',
+  );
+
+  assert.equal(
+    snapshot.session.activeSceneId,
+    'scene_11111111-1111-4111-8111-111111111111',
+  );
+  assert.equal(snapshot.session.revision, 3);
+  assert.equal(updates.at(-1), 'active_scene_changed');
+});

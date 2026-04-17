@@ -10,6 +10,7 @@ import {
 import { CharacterStoreError } from './character-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
+import { SceneStoreError } from './scene-store.js';
 
 function createSession(runtime: InMemoryGameRuntime) {
   return runtime.createSession({
@@ -138,6 +139,66 @@ function updateCharacterAs(
         meta: {
           focus: 'orb',
         },
+      },
+    },
+  });
+}
+
+function createScene(runtime: InMemoryGameRuntime, sessionId: string) {
+  return runtime.createScene({
+    commandId: 'create-scene-1',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      scene: {
+        name: 'Ruined Chapel',
+        grid: {
+          width: 10,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+}
+
+function placeEntity(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['placeEntityInScene']
+    >[0]['payload']['entity']
+  > = {},
+) {
+  return runtime.placeEntityInScene({
+    commandId: 'place-entity-1',
+    type: 'place_entity_in_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entity: {
+        type: 'object',
+        name: 'Stone Pillar',
+        position: {
+          x: 2,
+          y: 2,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: true,
+        blocksVision: true,
+        hidden: false,
+        ...overrides,
       },
     },
   });
@@ -499,5 +560,192 @@ test('players cannot create characters for other participants', () => {
     (error: unknown) =>
       error instanceof CharacterStoreError &&
       error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('scene creation returns an empty scene that session participants can retrieve', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  const scene = createScene(runtime, session.sessionId);
+  const fetchedScene = runtime.getScene({
+    commandId: 'get-scene-1',
+    type: 'get_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: scene.id,
+    },
+  });
+
+  assert.match(scene.id, /^scene_[a-f0-9-]{36}$/);
+  assert.equal(scene.sessionId, session.sessionId);
+  assert.equal(scene.entities.length, 0);
+  assert.equal(fetchedScene.name, 'Ruined Chapel');
+});
+
+test('activating a scene updates the authoritative session snapshot and broadcasts the revision', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const updates: string[] = [];
+
+  runtime.connectParticipant(session.sessionId, 'dm-001', {
+    connectionId: 'dm-scene-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      updates.push(update.reason);
+    },
+  });
+
+  const scene = createScene(runtime, session.sessionId);
+  const activation = runtime.activateSceneForSession({
+    commandId: 'activate-scene-1',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: scene.id,
+    },
+  });
+
+  assert.equal(activation.sceneId, scene.id);
+  assert.equal(activation.state.session.activeSceneId, scene.id);
+  assert.equal(updates.at(-1), 'active_scene_changed');
+});
+
+test('placing an entity stores it on the authoritative scene', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = createScene(runtime, session.sessionId);
+
+  const updatedScene = placeEntity(runtime, session.sessionId, scene.id);
+  const fetchedScene = runtime.getScene({
+    commandId: 'get-scene-after-place-1',
+    type: 'get_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: scene.id,
+    },
+  });
+
+  assert.equal(updatedScene.entities.length, 1);
+  assert.match(updatedScene.entities[0]!.id, /^scene_entity_[a-f0-9-]{36}$/);
+  assert.equal(fetchedScene.entities[0]?.name, 'Stone Pillar');
+});
+
+test('out-of-bounds entity placement is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = createScene(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      placeEntity(runtime, session.sessionId, scene.id, {
+        position: {
+          x: 9,
+          y: 7,
+        },
+        footprint: {
+          width: 2,
+          height: 2,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'scene_entity_out_of_bounds',
+  );
+});
+
+test('overlapping entity placement is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = createScene(runtime, session.sessionId);
+
+  placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 1,
+      y: 1,
+    },
+    footprint: {
+      width: 2,
+      height: 2,
+    },
+  });
+
+  assert.throws(
+    () => {
+      placeEntity(runtime, session.sessionId, scene.id, {
+        position: {
+          x: 2,
+          y: 2,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+});
+
+test('activating a scene from another session is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const firstSession = createSession(runtime);
+  const secondSession = runtime.createSession({
+    commandId: 'create-session-2',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-002',
+      displayName: 'Second Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+  const secondScene = runtime.createScene({
+    commandId: 'create-scene-foreign',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-002',
+    },
+    payload: {
+      sessionId: secondSession.sessionId,
+      scene: {
+        name: 'Foreign Hall',
+        grid: {
+          width: 6,
+          height: 6,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  assert.throws(
+    () => {
+      runtime.activateSceneForSession({
+        commandId: 'activate-scene-invalid-session',
+        type: 'activate_scene_for_session',
+        actor: {
+          participantId: 'dm-001',
+        },
+        payload: {
+          sessionId: firstSession.sessionId,
+          sceneId: secondScene.id,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_scene_session_association',
   );
 });

@@ -7,11 +7,18 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_character_id',
   'invalid_command',
   'invalid_character_state',
+  'invalid_entity_position',
+  'invalid_grid_size',
   'invalid_participant_session_association',
   'invalid_role_assumption',
+  'invalid_scene_id',
+  'invalid_scene_session_association',
   'invalid_session_id',
   'participant_not_found',
   'rules_profile_not_found',
+  'scene_entity_out_of_bounds',
+  'scene_entity_overlap',
+  'scene_not_found',
   'session_not_found',
 ]);
 

@@ -9,6 +9,7 @@ import {
   levelSchema,
   participantIdSchema,
   rulesProfileIdSchema,
+  sceneIdSchema,
   sessionIdSchema,
 } from './common.js';
 import { commandErrorSchema } from './errors.js';
@@ -104,7 +105,7 @@ export const characterSchema = z.object({
 });
 
 export const encounterPositionSchema = z.object({
-  sceneId: z.string().nullable(),
+  sceneId: sceneIdSchema.nullable(),
   x: z.number().int(),
   y: z.number().int(),
 });

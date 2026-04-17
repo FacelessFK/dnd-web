@@ -13,6 +13,7 @@ import {
   participantIdSchema,
   revisionSchema,
   rulesProfileIdSchema,
+  sceneIdSchema,
   sessionIdSchema,
 } from './common.js';
 import { commandErrorSchema } from './errors.js';
@@ -37,7 +38,7 @@ export const sessionSchema = z.object({
   dmParticipantId: participantIdSchema,
   playerParticipantIds: z.array(participantIdSchema),
   rulesProfileId: rulesProfileIdSchema,
-  activeSceneId: z.string().nullable(),
+  activeSceneId: sceneIdSchema.nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   revision: revisionSchema,
@@ -111,6 +112,7 @@ export const sessionCommandResponseSchema = z.union([
 ]);
 
 export const sessionStateUpdateReasonSchema = z.enum([
+  'active_scene_changed',
   'initial_sync',
   'participant_character_assigned',
   'participant_connected',
