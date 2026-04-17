@@ -32,6 +32,9 @@ importers:
       '@dnd/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@dnd/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       '@dnd/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -95,7 +98,11 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
 
-  packages/rules: {}
+  packages/rules:
+    dependencies:
+      '@dnd/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/shared: {}
 

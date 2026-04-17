@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@dnd/protocol": "workspace:*",
+    "@dnd/rules": "workspace:*",
     "@dnd/shared": "workspace:*",
     "dotenv": "^16.4.7"
   },

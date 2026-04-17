@@ -9,6 +9,7 @@ import type {
   SessionStateUpdateReason,
 } from '@dnd/protocol';
 import type {
+  CharacterId,
   Participant,
   ParticipantId,
   ParticipantRole,
@@ -63,7 +64,7 @@ export class InMemorySessionStore {
       status: 'lobby',
       dmParticipantId: dm.id,
       playerParticipantIds: [],
-      rulesProfileId: command.payload.rulesProfileId ?? null,
+      rulesProfileId: command.payload.rulesProfileId,
       activeSceneId: null,
       createdAt: now,
       updatedAt: now,
@@ -204,6 +205,25 @@ export class InMemorySessionStore {
       participant.connectionStatus = 'disconnected';
       participant.lastSeenAt = this.now();
     });
+  }
+
+  assignCharacterToParticipant(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    characterId: CharacterId,
+  ): SessionSnapshot {
+    const room = this.requireRoom(sessionId);
+    const participant = this.requireParticipant(room.snapshot, participantId);
+
+    if (participant.characterId === characterId) {
+      return this.clone(room.snapshot);
+    }
+
+    this.applyMutation(room, 'participant_character_assigned', () => {
+      participant.characterId = characterId;
+    });
+
+    return this.clone(room.snapshot);
   }
 
   private applyMutation(

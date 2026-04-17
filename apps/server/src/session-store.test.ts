@@ -20,7 +20,9 @@ function createSessionCommand(
       displayName: 'Dungeon Master',
       role: 'dm',
     },
-    payload: {},
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
     ...overrides,
   };
 }
