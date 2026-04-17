@@ -11,6 +11,9 @@ import {
   characterCommandSchema,
   characterCommandSuccessSchema,
   clientCommandSchema,
+  movementCommandErrorSchema,
+  movementCommandSchema,
+  movementCommandSuccessSchema,
   participantIdSchema,
   sceneActivationSuccessSchema,
   sceneCommandErrorSchema,
@@ -22,6 +25,8 @@ import {
   type CharacterAssignmentSuccess,
   type CharacterCommandError,
   type CharacterCommandSuccess,
+  type MovementCommandError,
+  type MovementCommandSuccess,
   type RuntimeErrorCode,
   type SceneActivationSuccess,
   type SceneCommandError,
@@ -33,6 +38,7 @@ import {
 
 import { CharacterStoreError } from './character-store.js';
 import { createConnectionId, InMemoryGameRuntime } from './game-runtime.js';
+import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
 import { SessionStoreError } from './session-store.js';
@@ -45,6 +51,7 @@ const corsHeaders = {
 
 type RuntimeStoreError =
   | CharacterStoreError
+  | MovementRuntimeError
   | RulesProfileStoreError
   | SceneStoreError
   | SessionStoreError;
@@ -87,8 +94,8 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-3',
-      status: 'scene-runtime-foundation-ready',
+      phase: 'phase-4',
+      status: 'movement-foundation-ready',
     });
     return;
   }
@@ -105,6 +112,11 @@ async function handleRequest(
 
   if (request.method === 'POST' && url.pathname === '/api/scenes/command') {
     await handleSceneCommandRequest(request, response, runtime);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/movement/command') {
+    await handleMovementCommandRequest(request, response, runtime);
     return;
   }
 
@@ -368,6 +380,57 @@ async function handleSceneCommandRequest(
   }
 }
 
+async function handleMovementCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: InMemoryGameRuntime,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message: 'Request body must be valid JSON.',
+      },
+    } satisfies MovementCommandError);
+    return;
+  }
+
+  const commandResult = movementCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies MovementCommandError);
+    return;
+  }
+
+  try {
+    const command = commandResult.data;
+    const data =
+      command.type === 'place_character_in_active_scene'
+        ? runtime.placeCharacterInActiveScene(command)
+        : runtime.moveCharacterInActiveScene(command);
+    const success: MovementCommandSuccess = {
+      ok: true,
+      data,
+    };
+
+    sendJson(response, 200, success, movementCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, movementCommandErrorSchema);
+  }
+}
+
 function handleStreamRequest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -490,6 +553,7 @@ function handleRuntimeError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
 ): void {
@@ -522,6 +586,7 @@ function handleUnexpectedError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
 ): void {
@@ -593,12 +658,20 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'scene_not_found':
     case 'session_not_found':
       return 404;
+    // These errors mean the current authoritative session/scene state cannot
+    // satisfy the request as issued, even if the command shape itself is valid.
+    case 'character_not_placed':
     case 'duplicate_join':
     case 'invalid_participant_session_association':
     case 'invalid_scene_session_association':
     case 'invalid_character_state':
+    case 'movement_destination_blocked':
+    case 'no_active_scene':
+    case 'no_assigned_character':
     case 'scene_entity_overlap':
       return 409;
+    // These errors mean the request target itself is invalid for the current
+    // validated constraints.
     case 'internal_server_error':
       return 500;
     case 'invalid_command':
@@ -607,6 +680,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'invalid_grid_size':
     case 'invalid_scene_id':
     case 'invalid_session_id':
+    case 'movement_exceeds_allowance':
+    case 'movement_out_of_bounds':
     case 'scene_entity_out_of_bounds':
       return 400;
     case 'invalid_role_assumption':
@@ -617,6 +692,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
 function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
     error instanceof CharacterStoreError ||
+    error instanceof MovementRuntimeError ||
     error instanceof RulesProfileStoreError ||
     error instanceof SceneStoreError ||
     error instanceof SessionStoreError

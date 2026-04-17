@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const runtimeErrorCodeSchema = z.enum([
   'character_not_found',
+  'character_not_placed',
   'duplicate_join',
   'internal_server_error',
   'invalid_character_id',
@@ -14,6 +15,11 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_scene_id',
   'invalid_scene_session_association',
   'invalid_session_id',
+  'movement_destination_blocked',
+  'movement_exceeds_allowance',
+  'movement_out_of_bounds',
+  'no_active_scene',
+  'no_assigned_character',
   'participant_not_found',
   'rules_profile_not_found',
   'scene_entity_out_of_bounds',

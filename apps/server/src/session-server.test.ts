@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   characterCommandSchema,
   clientCommandSchema,
+  movementCommandSchema,
   sceneCommandSchema,
   type SessionStateUpdate,
 } from '@dnd/protocol';
@@ -275,6 +276,32 @@ test('invalid update payloads are rejected for character updates', () => {
     'character',
     'name',
   ]);
+});
+
+test('invalid movement target positions are rejected for movement commands', () => {
+  const result = movementCommandSchema.safeParse({
+    commandId: 'move-character-invalid-target',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      participantId: 'player-001',
+      position: {
+        x: -1,
+        y: 0,
+      },
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, ['payload', 'position', 'x']);
 });
 
 test('connected subscribers receive synchronized session state updates', () => {

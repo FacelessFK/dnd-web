@@ -46,6 +46,10 @@ function createStoredCharacterRecord(): StoredCharacterRecord {
     },
     overlay: {
       characterId: 'char_11111111-1111-4111-8111-111111111111',
+      footprint: {
+        width: 1,
+        height: 1,
+      },
       position: null,
       activeConditions: [],
       concentration: null,

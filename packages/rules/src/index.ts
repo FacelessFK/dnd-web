@@ -8,6 +8,11 @@ import type {
   ScenePosition,
 } from '@dnd/shared';
 
+export type OccupancyShape = {
+  position: ScenePosition;
+  footprint: SceneEntityFootprint;
+};
+
 export function calculateAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
@@ -91,13 +96,20 @@ export function doesSceneEntityFitWithinGrid(
   position: ScenePosition,
   footprint: SceneEntityFootprint,
 ): boolean {
+  return doesOccupancyFitWithinGrid(grid, { position, footprint });
+}
+
+export function doesOccupancyFitWithinGrid(
+  grid: GridDefinition,
+  occupancy: OccupancyShape,
+): boolean {
   return (
-    position.x >= 0 &&
-    position.y >= 0 &&
-    footprint.width >= 1 &&
-    footprint.height >= 1 &&
-    position.x + footprint.width <= grid.width &&
-    position.y + footprint.height <= grid.height
+    occupancy.position.x >= 0 &&
+    occupancy.position.y >= 0 &&
+    occupancy.footprint.width >= 1 &&
+    occupancy.footprint.height >= 1 &&
+    occupancy.position.x + occupancy.footprint.width <= grid.width &&
+    occupancy.position.y + occupancy.footprint.height <= grid.height
   );
 }
 
@@ -105,10 +117,45 @@ export function doSceneEntitiesOverlap(
   left: Pick<SceneEntity, 'position' | 'footprint'>,
   right: Pick<SceneEntity, 'position' | 'footprint'>,
 ): boolean {
+  return doOccupanciesOverlap(left, right);
+}
+
+export function doOccupanciesOverlap(
+  left: OccupancyShape,
+  right: OccupancyShape,
+): boolean {
   return !(
     left.position.x + left.footprint.width <= right.position.x ||
     right.position.x + right.footprint.width <= left.position.x ||
     left.position.y + left.footprint.height <= right.position.y ||
     right.position.y + right.footprint.height <= left.position.y
   );
+}
+
+export function doesDestinationOverlapBlockingOccupancy(
+  destination: OccupancyShape,
+  blockingOccupancies: OccupancyShape[],
+): boolean {
+  return blockingOccupancies.some((occupancy) =>
+    doOccupanciesOverlap(destination, occupancy),
+  );
+}
+
+// Until diagonal/path policies are tied to the rules profile, movement cost
+// uses Manhattan grid distance as the narrow authoritative baseline.
+export function calculateGridDistance(
+  origin: ScenePosition,
+  destination: ScenePosition,
+): number {
+  return (
+    Math.abs(destination.x - origin.x) + Math.abs(destination.y - origin.y)
+  );
+}
+
+export function calculateMovementDistanceFeet(
+  origin: ScenePosition,
+  destination: ScenePosition,
+  cellSizeFeet: number,
+): number {
+  return calculateGridDistance(origin, destination) * cellSizeFeet;
 }

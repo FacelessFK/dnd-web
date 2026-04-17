@@ -14,6 +14,7 @@ import {
 } from './common.js';
 import { commandErrorSchema } from './errors.js';
 import { rulesConfigValueSchema, rulesProfileSchema } from './rules-profile.js';
+import { sceneEntityFootprintSchema } from './scene.js';
 import { sessionSnapshotSchema } from './session.js';
 
 export const visibilityStateSchema = z.enum(visibilityStates);
@@ -123,6 +124,7 @@ export const turnUsageSchema = z.object({
 
 export const encounterOverlaySchema = z.object({
   characterId: characterIdSchema,
+  footprint: sceneEntityFootprintSchema,
   position: encounterPositionSchema.nullable(),
   activeConditions: z.array(z.string().trim().min(1)),
   concentration: concentrationStateSchema.nullable(),

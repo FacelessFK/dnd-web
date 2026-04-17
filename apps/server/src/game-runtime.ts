@@ -15,7 +15,9 @@ import type {
   GetSceneCommand,
   GetCharacterCommand,
   JoinSessionCommand,
+  MoveCharacterInActiveSceneCommand,
   PlaceEntityInSceneCommand,
+  PlaceCharacterInActiveSceneCommand,
   ReconnectSessionCommand,
   SceneActivationSuccess,
   UpdateCharacterCommand,
@@ -54,6 +56,16 @@ import {
   createSceneEntity,
   createSceneRecord,
 } from './scene-runtime.js';
+import {
+  assertCharacterCanBeSpawnedInActiveScene,
+  assertCharacterDestinationAvailable,
+  assertMovementWithinAllowance,
+  buildMovementBlockingOccupancies,
+  requireActiveSceneId,
+  requireAssignedCharacterId,
+  requireCharacterPlacedInActiveScene,
+  withCharacterPlacedInScene,
+} from './movement-runtime.js';
 import {
   createConnectionId,
   InMemorySessionStore,
@@ -341,6 +353,136 @@ export class InMemoryGameRuntime {
     });
   }
 
+  placeCharacterInActiveScene(
+    command: PlaceCharacterInActiveSceneCommand,
+  ): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const participant = this.requireParticipant(
+      snapshot,
+      command.payload.participantId,
+    );
+
+    this.assertActorCanEditCharacter(actor, participant);
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+    const allCharacterRecords =
+      this.getResolvedSessionCharacterRecords(snapshot);
+
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+    assertCharacterCanBeSpawnedInActiveScene(
+      record,
+      activeSceneId,
+      command.payload.position,
+    );
+    assertCharacterDestinationAvailable({
+      scene,
+      footprint: record.overlay.footprint,
+      targetPosition: command.payload.position,
+      blockingOccupancies: buildMovementBlockingOccupancies({
+        scene,
+        characterRecords: allCharacterRecords,
+        excludedCharacterId: record.character.id,
+      }),
+      characterId: record.character.id,
+    });
+
+    const updatedRecord = this.characters.saveCharacter(
+      withCharacterPlacedInScene({
+        record,
+        sceneId: activeSceneId,
+        position: command.payload.position,
+      }),
+    );
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
+  }
+
+  moveCharacterInActiveScene(
+    command: MoveCharacterInActiveSceneCommand,
+  ): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const participant = this.requireParticipant(
+      snapshot,
+      command.payload.participantId,
+    );
+
+    this.assertActorCanEditCharacter(actor, participant);
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+    const allCharacterRecords =
+      this.getResolvedSessionCharacterRecords(snapshot);
+
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    const currentPosition = requireCharacterPlacedInActiveScene(
+      record,
+      activeSceneId,
+    );
+
+    assertMovementWithinAllowance({
+      origin: {
+        x: currentPosition.x,
+        y: currentPosition.y,
+      },
+      target: command.payload.position,
+      speedFeet: record.character.speed,
+      cellSizeFeet: scene.grid.cellSizeFeet,
+      characterId: record.character.id,
+    });
+
+    assertCharacterDestinationAvailable({
+      scene,
+      footprint: record.overlay.footprint,
+      targetPosition: command.payload.position,
+      blockingOccupancies: buildMovementBlockingOccupancies({
+        scene,
+        characterRecords: allCharacterRecords,
+        excludedCharacterId: record.character.id,
+      }),
+      characterId: record.character.id,
+    });
+
+    const updatedRecord = this.characters.saveCharacter(
+      withCharacterPlacedInScene({
+        record,
+        sceneId: activeSceneId,
+        position: command.payload.position,
+      }),
+    );
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
+  }
+
   getDefaultRulesProfileId(): string {
     return DEFAULT_RULES_PROFILE_ID;
   }
@@ -417,6 +559,10 @@ export class InMemoryGameRuntime {
   private createEncounterOverlay(characterId: CharacterId): EncounterOverlay {
     return {
       characterId,
+      footprint: {
+        width: 1,
+        height: 1,
+      },
       position: null,
       activeConditions: [],
       concentration: null,
@@ -515,6 +661,41 @@ export class InMemoryGameRuntime {
         `Character "${characterId}" was created for rules profile "${record.character.rulesProfileId}" and cannot be used in session "${snapshot.session.id}".`,
       );
     }
+  }
+
+  private requireAssignedCharacterRecord(
+    snapshot: SessionSnapshot,
+    participant: Participant,
+  ): StoredCharacterRecord {
+    const characterId = requireAssignedCharacterId(participant);
+    const record = this.characters.getCharacter(characterId);
+
+    this.assertCharacterBelongsToSession(snapshot, characterId, record);
+
+    if (record.character.ownerParticipantId !== participant.id) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Character "${characterId}" belongs to participant "${record.character.ownerParticipantId}" and cannot be controlled by "${participant.id}".`,
+      );
+    }
+
+    return record;
+  }
+
+  private getResolvedSessionCharacterRecords(
+    snapshot: SessionSnapshot,
+  ): StoredCharacterRecord[] {
+    return snapshot.participants.flatMap((participant) => {
+      if (!participant.characterId) {
+        return [];
+      }
+
+      // Session state currently treats assigned character IDs as an
+      // authoritative runtime invariant. If one no longer resolves from
+      // storage, the runtime is inconsistent and the repository error should
+      // surface instead of being silently ignored.
+      return [this.characters.getCharacter(participant.characterId)];
+    });
   }
 
   private createCharacterId(): CharacterId {

@@ -126,6 +126,7 @@ export interface ConcentrationState {
 
 export interface EncounterOverlay {
   characterId: CharacterId;
+  footprint: SceneEntityFootprint;
   position: EncounterPosition | null;
   activeConditions: string[];
   concentration: ConcentrationState | null;

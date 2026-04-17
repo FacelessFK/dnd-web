@@ -9,6 +9,7 @@ import {
 
 import { CharacterStoreError } from './character-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
+import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
 
@@ -161,6 +162,68 @@ function createScene(runtime: InMemoryGameRuntime, sessionId: string) {
           cellSizeFeet: 5,
         },
       },
+    },
+  });
+}
+
+function activateScene(runtime: InMemoryGameRuntime, sessionId: string) {
+  const scene = createScene(runtime, sessionId);
+
+  runtime.activateSceneForSession({
+    commandId: 'activate-scene-helper',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId: scene.id,
+    },
+  });
+
+  return scene;
+}
+
+function assignPlayerCharacter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+) {
+  const character = createPlayerCharacter(runtime, sessionId);
+
+  runtime.assignCharacterToParticipant({
+    commandId: 'assign-character-helper',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: character.character.id,
+    },
+  });
+
+  return character;
+}
+
+function placeAssignedCharacter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  position = {
+    x: 0,
+    y: 0,
+  },
+) {
+  return runtime.placeCharacterInActiveScene({
+    commandId: 'place-character-helper',
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position,
     },
   });
 }
@@ -747,5 +810,267 @@ test('activating a scene from another session is rejected', () => {
     (error: unknown) =>
       error instanceof SceneStoreError &&
       error.code === 'invalid_scene_session_association',
+  );
+});
+
+test('placing an assigned character into the active scene sets authoritative position', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  const scene = activateScene(runtime, session.sessionId);
+
+  const placedCharacter = placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  assert.equal(placedCharacter.overlay.position?.sceneId, scene.id);
+  assert.equal(placedCharacter.overlay.position?.x, 0);
+  assert.equal(placedCharacter.overlay.position?.y, 0);
+  assert.deepEqual(placedCharacter.overlay.footprint, {
+    width: 1,
+    height: 1,
+  });
+});
+
+test('movement updates a placed character within the active scene when the destination is legal', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  const movedCharacter = runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-valid',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 2,
+        y: 0,
+      },
+    },
+  });
+
+  assert.equal(movedCharacter.overlay.position?.x, 2);
+  assert.equal(movedCharacter.overlay.position?.y, 0);
+});
+
+test('movement out of bounds is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 9,
+    y: 0,
+  });
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-out-of-bounds',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 10,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_out_of_bounds',
+  );
+});
+
+test('movement into blocking occupancy is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = activateScene(runtime, session.sessionId);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+  placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 1,
+      y: 0,
+    },
+    blocksMovement: true,
+  });
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-blocked',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 1,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_destination_blocked',
+  );
+});
+
+test('movement without an active scene is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-no-active-scene',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 1,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError && error.code === 'no_active_scene',
+  );
+});
+
+test('movement without an assigned character is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-no-assigned',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 1,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'no_assigned_character',
+  );
+});
+
+test('movement when the character has not been placed is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-not-placed',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 1,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'character_not_placed',
+  );
+});
+
+test('movement beyond the character speed allowance is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-too-far',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 7,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_exceeds_allowance',
   );
 });
