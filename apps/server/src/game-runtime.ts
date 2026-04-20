@@ -117,6 +117,25 @@ import {
 
 export { createConnectionId };
 
+type AttackContext = {
+  sessionId: SessionId;
+  encounter: Encounter;
+  attackerParticipant: Participant;
+  attackerRecord: StoredCharacterRecord;
+  targetParticipant: Participant;
+  targetRecord: StoredCharacterRecord;
+};
+
+type ResolvedAttack = {
+  updatedEncounter: Encounter;
+  roll: CombatEvent['roll'];
+  hit: boolean;
+  damage: number;
+  targetArmorClass: number;
+  targetHp: CombatEvent['targetHp'];
+  nextTargetRecord: StoredCharacterRecord | null;
+};
+
 export class InMemoryGameRuntime {
   constructor(
     readonly sessions = new InMemorySessionStore(),
@@ -691,126 +710,10 @@ export class InMemoryGameRuntime {
   }
 
   attack(command: AttackCommand): Encounter {
-    const snapshot = this.sessions.getSessionSnapshotForParticipant(
-      command.payload.sessionId,
-      command.actor.participantId,
-    );
-    const actor = this.requireParticipant(
-      snapshot,
-      command.actor.participantId,
-    );
-    const activeSceneId = requireActiveSceneId(snapshot);
-    const encounter = this.getEncounterStateForParticipant(
-      snapshot.session.id,
-      actor.id,
-    );
-    const attackerEncounterParticipant = assertEncounterTurnActor(
-      encounter,
-      actor.id,
-    );
-    const attackerParticipant = this.requireParticipant(
-      snapshot,
-      attackerEncounterParticipant.participantId,
-    );
-    const attackerRecord = this.requireAssignedCharacterRecord(
-      snapshot,
-      attackerParticipant,
-    );
-    const targetParticipant = this.requireParticipant(
-      snapshot,
-      command.payload.targetParticipantId,
-    );
+    const context = this.resolveAttackContext(command);
+    const resolution = this.resolveAttack(context);
 
-    if (targetParticipant.id === attackerParticipant.id) {
-      throw new EncounterRuntimeError(
-        'self_target_not_allowed',
-        `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
-      );
-    }
-
-    if (
-      attackerRecord.character.id !== attackerEncounterParticipant.characterId
-    ) {
-      throw new CharacterStoreError(
-        'internal_server_error',
-        `Encounter "${encounter.id}" resolved attacker character "${attackerEncounterParticipant.characterId}", but session state loaded assigned character "${attackerRecord.character.id}".`,
-      );
-    }
-
-    const targetRecord = this.requireAssignedCharacterRecord(
-      snapshot,
-      targetParticipant,
-    );
-    const targetEncounterParticipant = encounter.participants.find(
-      (participant) => participant.participantId === targetParticipant.id,
-    );
-
-    if (
-      !targetEncounterParticipant ||
-      targetEncounterParticipant.characterId !== targetRecord.character.id
-    ) {
-      throw new EncounterRuntimeError(
-        'invalid_attack_target',
-        `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
-      );
-    }
-
-    const targetPosition = targetRecord.overlay.position;
-
-    if (!targetPosition || targetPosition.sceneId !== activeSceneId) {
-      throw new EncounterRuntimeError(
-        'invalid_attack_target',
-        `Participant "${targetParticipant.id}" does not have a valid active-scene attack target in scene "${activeSceneId}".`,
-      );
-    }
-
-    const d20 = rollD20(this.d20Roller);
-    const modifier = calculateAttackModifier(attackerRecord.character);
-    const total = calculateAttackTotal(d20, modifier);
-    const hit = isAttackHit(total, targetRecord.character.armorClass);
-    const damage = hit ? 1 : 0;
-    const previousTargetHp = targetRecord.character.hp.current;
-    const currentTargetHp = hit
-      ? applyFixedDamage(previousTargetHp, damage)
-      : previousTargetHp;
-    const updatedEncounter = markEncounterActionUsed(encounter);
-
-    if (hit && currentTargetHp !== previousTargetHp) {
-      this.characters.saveCharacter(
-        this.withUpdatedCharacterHitPoints(targetRecord, currentTargetHp),
-      );
-    }
-
-    const savedEncounter = this.saveAndPublishEncounter({
-      sessionId: snapshot.session.id,
-      encounter: updatedEncounter,
-      reason: 'action_used',
-    });
-
-    this.publishCombatEvent({
-      type: 'combat_event',
-      reason: 'attack_resolved',
-      sessionId: snapshot.session.id,
-      encounterId: savedEncounter.id,
-      attackerParticipantId: attackerParticipant.id,
-      attackerCharacterId: attackerRecord.character.id,
-      targetParticipantId: targetParticipant.id,
-      targetCharacterId: targetRecord.character.id,
-      roll: {
-        d20,
-        modifier,
-        total,
-      },
-      targetArmorClass: targetRecord.character.armorClass,
-      hit,
-      damage,
-      targetHp: {
-        previous: previousTargetHp,
-        current: currentTargetHp,
-      },
-    });
-
-    return savedEncounter;
+    return this.persistResolvedAttack(context, resolution);
   }
 
   advanceTurn(command: AdvanceTurnCommand): Encounter {
@@ -1018,6 +921,175 @@ export class InMemoryGameRuntime {
         updatedAt: this.now(),
       },
       overlay: record.overlay,
+    };
+  }
+
+  private resolveAttackContext(command: AttackCommand): AttackContext {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const encounter = this.getEncounterStateForParticipant(
+      snapshot.session.id,
+      actor.id,
+    );
+    const attackerEncounterParticipant = assertEncounterTurnActor(
+      encounter,
+      actor.id,
+    );
+    const attackerParticipant = this.requireParticipant(
+      snapshot,
+      attackerEncounterParticipant.participantId,
+    );
+    const attackerRecord = this.requireAssignedCharacterRecord(
+      snapshot,
+      attackerParticipant,
+    );
+    const targetParticipant = this.requireParticipant(
+      snapshot,
+      command.payload.targetParticipantId,
+    );
+
+    if (targetParticipant.id === attackerParticipant.id) {
+      throw new EncounterRuntimeError(
+        'self_target_not_allowed',
+        `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
+      );
+    }
+
+    if (
+      attackerRecord.character.id !== attackerEncounterParticipant.characterId
+    ) {
+      throw new CharacterStoreError(
+        'internal_server_error',
+        `Encounter "${encounter.id}" resolved attacker character "${attackerEncounterParticipant.characterId}", but session state loaded assigned character "${attackerRecord.character.id}".`,
+      );
+    }
+
+    const targetRecord = this.requireAssignedCharacterRecord(
+      snapshot,
+      targetParticipant,
+    );
+    const targetEncounterParticipant = encounter.participants.find(
+      (participant) => participant.participantId === targetParticipant.id,
+    );
+
+    if (
+      !targetEncounterParticipant ||
+      targetEncounterParticipant.characterId !== targetRecord.character.id
+    ) {
+      throw new EncounterRuntimeError(
+        'invalid_attack_target',
+        `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
+      );
+    }
+
+    const targetPosition = targetRecord.overlay.position;
+
+    if (!targetPosition || targetPosition.sceneId !== activeSceneId) {
+      throw new EncounterRuntimeError(
+        'invalid_attack_target',
+        `Participant "${targetParticipant.id}" does not have a valid active-scene attack target in scene "${activeSceneId}".`,
+      );
+    }
+
+    return {
+      sessionId: snapshot.session.id,
+      encounter,
+      attackerParticipant,
+      attackerRecord,
+      targetParticipant,
+      targetRecord,
+    };
+  }
+
+  private resolveAttack(context: AttackContext): ResolvedAttack {
+    const d20 = rollD20(this.d20Roller);
+    const modifier = calculateAttackModifier(context.attackerRecord.character);
+    const total = calculateAttackTotal(d20, modifier);
+    const hit = isAttackHit(total, context.targetRecord.character.armorClass);
+    const damage = hit ? 1 : 0;
+    const previousTargetHp = context.targetRecord.character.hp.current;
+    const currentTargetHp = hit
+      ? applyFixedDamage(previousTargetHp, damage)
+      : previousTargetHp;
+
+    return {
+      updatedEncounter: markEncounterActionUsed(context.encounter),
+      roll: {
+        d20,
+        modifier,
+        total,
+      },
+      hit,
+      damage,
+      targetArmorClass: context.targetRecord.character.armorClass,
+      targetHp: {
+        previous: previousTargetHp,
+        current: currentTargetHp,
+      },
+      nextTargetRecord:
+        hit && currentTargetHp !== previousTargetHp
+          ? this.withUpdatedCharacterHitPoints(
+              context.targetRecord,
+              currentTargetHp,
+            )
+          : null,
+    };
+  }
+
+  private persistResolvedAttack(
+    context: AttackContext,
+    resolution: ResolvedAttack,
+  ): Encounter {
+    // The current in-memory slice has no transactional boundary across
+    // character and encounter repositories. Keep the multi-write sequence and
+    // both emissions centralized here so a later persistence slice can replace
+    // this with a real transaction without changing the public attack flow.
+    if (resolution.nextTargetRecord) {
+      this.characters.saveCharacter(resolution.nextTargetRecord);
+    }
+
+    const savedEncounter = this.saveAndPublishEncounter({
+      sessionId: context.sessionId,
+      encounter: resolution.updatedEncounter,
+      reason: 'action_used',
+    });
+
+    // Emit `encounter_state` first so clients observe the authoritative action
+    // consumption before the resolved attack payload. These remain separate
+    // authoritative updates and must not be merged client-side.
+    this.publishCombatEvent(
+      this.buildResolvedAttackCombatEvent(context, resolution, savedEncounter),
+    );
+
+    return savedEncounter;
+  }
+
+  private buildResolvedAttackCombatEvent(
+    context: AttackContext,
+    resolution: ResolvedAttack,
+    encounter: Encounter,
+  ): CombatEvent {
+    return {
+      type: 'combat_event',
+      reason: 'attack_resolved',
+      sessionId: context.sessionId,
+      encounterId: encounter.id,
+      attackerParticipantId: context.attackerParticipant.id,
+      attackerCharacterId: context.attackerRecord.character.id,
+      targetParticipantId: context.targetParticipant.id,
+      targetCharacterId: context.targetRecord.character.id,
+      roll: resolution.roll,
+      targetArmorClass: resolution.targetArmorClass,
+      hit: resolution.hit,
+      damage: resolution.damage,
+      targetHp: resolution.targetHp,
     };
   }
 

@@ -1998,6 +1998,7 @@ test('current turn owner can resolve an attack that consumes action, applies fix
   const updates = subscribeToSession(runtime, session.sessionId);
 
   startEncounter(runtime, session.sessionId);
+  const totalEventCountBeforeAttack = updates.length;
   const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
   const combatEventCountBeforeAttack = getCombatEvents(updates).length;
 
@@ -2005,6 +2006,7 @@ test('current turn owner can resolve an attack that consumes action, applies fix
   const targetRecord = runtime.characters.getCharacter(
     secondCharacter.character.id,
   );
+  const newEvents = updates.slice(totalEventCountBeforeAttack);
   const encounterUpdates = getEncounterUpdates(updates).slice(
     encounterUpdateCountBeforeAttack,
   );
@@ -2020,6 +2022,10 @@ test('current turn owner can resolve an attack that consumes action, applies fix
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
   assert.equal(targetRecord.character.hp.current, 33);
+  assert.deepEqual(
+    newEvents.map((event) => event.type),
+    ['encounter_state', 'combat_event'],
+  );
   assert.equal(encounterUpdates.length, 1);
   assert.equal(combatEvents.length, 1);
   assert.ok(encounterUpdate);
