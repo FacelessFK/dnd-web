@@ -152,7 +152,6 @@ export interface EncounterOverlay {
   position: EncounterPosition | null;
   activeConditions: string[];
   concentration: ConcentrationState | null;
-  turnUsage: TurnUsage | null;
   currentVisibility: VisibilityState;
 }
 

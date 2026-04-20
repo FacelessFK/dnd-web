@@ -13,6 +13,6 @@ server.listen(port, host, () => {
     `[server] Phase 5 runtime slice listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Authoritative sessions, character movement, and encounter turn foundations are enabled.',
+    '[server] Authoritative sessions, encounter turns, turn-usage mutations, and movement foundations are enabled.',
   );
 });

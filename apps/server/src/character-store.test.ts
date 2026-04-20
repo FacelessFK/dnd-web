@@ -53,7 +53,6 @@ function createStoredCharacterRecord(): StoredCharacterRecord {
       position: null,
       activeConditions: [],
       concentration: null,
-      turnUsage: null,
       currentVisibility: 'visible',
     },
   };

@@ -105,7 +105,7 @@ async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-5',
-      status: 'encounter-foundation-ready',
+      status: 'turn-usage-foundation-ready',
     });
     return;
   }
@@ -505,6 +505,15 @@ async function handleEncounterCommandRequest(
       case 'advance_turn':
         encounter = runtime.advanceTurn(command);
         break;
+      case 'use_action':
+        encounter = runtime.useAction(command);
+        break;
+      case 'use_bonus_action':
+        encounter = runtime.useBonusAction(command);
+        break;
+      case 'record_movement_usage':
+        encounter = runtime.recordMovementUsage(command);
+        break;
       default:
         throw new Error('Unsupported encounter command type.');
     }
@@ -756,14 +765,18 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'character_not_placed':
     case 'duplicate_join':
     case 'encounter_already_active':
+    case 'action_already_used':
+    case 'bonus_action_already_used':
     case 'invalid_encounter_participant':
     case 'invalid_encounter_session_association':
+    case 'invalid_turn_actor':
     case 'invalid_participant_session_association':
     case 'invalid_scene_session_association':
     case 'invalid_character_state':
     case 'invalid_scene_encounter_association':
     case 'invalid_turn_advance':
     case 'movement_destination_blocked':
+    case 'movement_usage_exceeds_allowance':
     case 'no_active_encounter':
     case 'no_active_scene':
     case 'no_assigned_character':
@@ -777,6 +790,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'invalid_character_id':
     case 'invalid_entity_position':
     case 'invalid_grid_size':
+    case 'invalid_movement_usage_amount':
     case 'invalid_scene_id':
     case 'invalid_session_id':
     case 'movement_exceeds_allowance':

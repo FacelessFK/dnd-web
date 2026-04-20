@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 export const runtimeErrorCodeSchema = z.enum([
+  'action_already_used',
+  'bonus_action_already_used',
   'character_not_found',
   'character_not_placed',
   'duplicate_join',
@@ -13,15 +15,18 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_encounter_session_association',
   'invalid_entity_position',
   'invalid_grid_size',
+  'invalid_movement_usage_amount',
   'invalid_participant_session_association',
   'invalid_role_assumption',
   'invalid_scene_id',
   'invalid_scene_encounter_association',
   'invalid_scene_session_association',
   'invalid_session_id',
+  'invalid_turn_actor',
   'invalid_turn_advance',
   'movement_destination_blocked',
   'movement_exceeds_allowance',
+  'movement_usage_exceeds_allowance',
   'movement_out_of_bounds',
   'no_active_encounter',
   'no_active_scene',

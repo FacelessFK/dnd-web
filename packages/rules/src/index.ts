@@ -3,6 +3,7 @@ import type {
   Character,
   DerivedCharacterStats,
   GridDefinition,
+  TurnUsage,
   SceneEntity,
   SceneEntityFootprint,
   ScenePosition,
@@ -215,4 +216,67 @@ export function getNextTurnState(params: {
     roundNumber: wrapped ? params.roundNumber + 1 : params.roundNumber,
     wrapped,
   };
+}
+
+export function getCurrentTurnParticipant<T>(
+  participants: T[],
+  currentTurnIndex: number,
+): T | null {
+  if (
+    !Number.isInteger(currentTurnIndex) ||
+    currentTurnIndex < 0 ||
+    currentTurnIndex >= participants.length
+  ) {
+    return null;
+  }
+
+  return participants[currentTurnIndex] ?? null;
+}
+
+export function markActionUsed(turnUsage: TurnUsage): TurnUsage | null {
+  if (turnUsage.actionUsed) {
+    return null;
+  }
+
+  return {
+    ...turnUsage,
+    actionUsed: true,
+  };
+}
+
+export function markBonusActionUsed(turnUsage: TurnUsage): TurnUsage | null {
+  if (turnUsage.bonusActionUsed) {
+    return null;
+  }
+
+  return {
+    ...turnUsage,
+    bonusActionUsed: true,
+  };
+}
+
+export function getUpdatedMovementUsage(params: {
+  currentMovementUsed: number;
+  additionalMovementFeet: number;
+  movementAllowanceFeet: number;
+}): number | null {
+  if (
+    !Number.isInteger(params.currentMovementUsed) ||
+    !Number.isInteger(params.additionalMovementFeet) ||
+    !Number.isInteger(params.movementAllowanceFeet) ||
+    params.currentMovementUsed < 0 ||
+    params.additionalMovementFeet < 1 ||
+    params.movementAllowanceFeet < 0
+  ) {
+    return null;
+  }
+
+  const updatedMovementUsage =
+    params.currentMovementUsed + params.additionalMovementFeet;
+
+  if (updatedMovementUsage > params.movementAllowanceFeet) {
+    return null;
+  }
+
+  return updatedMovementUsage;
 }

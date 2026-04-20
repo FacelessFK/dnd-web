@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  getCurrentTurnParticipant,
+  getUpdatedMovementUsage,
   getNextTurnState,
+  markActionUsed,
+  markBonusActionUsed,
   sortEncounterParticipantsByInitiative,
 } from '@dnd/rules';
 import type { SessionErrorCode } from '@dnd/protocol';
@@ -149,10 +153,115 @@ export function advanceEncounterTurn(encounter: Encounter): Encounter {
   };
 }
 
+export function requireCurrentEncounterParticipant(
+  encounter: Encounter,
+): EncounterParticipant {
+  const participant = getCurrentTurnParticipant(
+    encounter.participants,
+    encounter.currentTurnIndex,
+  );
+
+  if (participant) {
+    return participant;
+  }
+
+  throw new EncounterRuntimeError(
+    'invalid_turn_advance',
+    `Encounter "${encounter.id}" has an invalid current turn index "${encounter.currentTurnIndex}".`,
+  );
+}
+
+export function assertEncounterTurnActor(
+  encounter: Encounter,
+  actorParticipantId: ParticipantId,
+): EncounterParticipant {
+  const currentTurnParticipant = requireCurrentEncounterParticipant(encounter);
+
+  if (currentTurnParticipant.participantId === actorParticipantId) {
+    return currentTurnParticipant;
+  }
+
+  throw new EncounterRuntimeError(
+    'invalid_turn_actor',
+    `Participant "${actorParticipantId}" is not the current turn owner for encounter "${encounter.id}".`,
+  );
+}
+
+export function markEncounterActionUsed(encounter: Encounter): Encounter {
+  const updatedTurnUsage = markActionUsed(encounter.currentTurnUsage);
+
+  if (updatedTurnUsage) {
+    return withUpdatedTurnUsage(encounter, updatedTurnUsage);
+  }
+
+  throw new EncounterRuntimeError(
+    'action_already_used',
+    `Encounter "${encounter.id}" has already spent its action for the current turn.`,
+  );
+}
+
+export function markEncounterBonusActionUsed(encounter: Encounter): Encounter {
+  const updatedTurnUsage = markBonusActionUsed(encounter.currentTurnUsage);
+
+  if (updatedTurnUsage) {
+    return withUpdatedTurnUsage(encounter, updatedTurnUsage);
+  }
+
+  throw new EncounterRuntimeError(
+    'bonus_action_already_used',
+    `Encounter "${encounter.id}" has already spent its bonus action for the current turn.`,
+  );
+}
+
+export function recordEncounterMovementUsage(params: {
+  encounter: Encounter;
+  additionalMovementFeet: number;
+  movementAllowanceFeet: number;
+}): Encounter {
+  if (
+    !Number.isInteger(params.additionalMovementFeet) ||
+    params.additionalMovementFeet < 1
+  ) {
+    throw new EncounterRuntimeError(
+      'invalid_movement_usage_amount',
+      'Movement usage increments must be positive whole feet.',
+    );
+  }
+
+  const updatedMovementUsage = getUpdatedMovementUsage({
+    currentMovementUsed: params.encounter.currentTurnUsage.movementUsed,
+    additionalMovementFeet: params.additionalMovementFeet,
+    movementAllowanceFeet: params.movementAllowanceFeet,
+  });
+
+  if (updatedMovementUsage != null) {
+    return withUpdatedTurnUsage(params.encounter, {
+      ...params.encounter.currentTurnUsage,
+      movementUsed: updatedMovementUsage,
+    });
+  }
+
+  throw new EncounterRuntimeError(
+    'movement_usage_exceeds_allowance',
+    `Encounter "${params.encounter.id}" cannot spend ${params.additionalMovementFeet} more feet of movement without exceeding the current turn allowance.`,
+  );
+}
+
 function createEncounterId(): EncounterId {
   return `encounter_${randomUUID()}`;
 }
 
 function createTimestamp(): string {
   return new Date().toISOString();
+}
+
+function withUpdatedTurnUsage(
+  encounter: Encounter,
+  currentTurnUsage: Encounter['currentTurnUsage'],
+): Encounter {
+  return {
+    ...encounter,
+    currentTurnUsage,
+    updatedAt: createTimestamp(),
+  };
 }

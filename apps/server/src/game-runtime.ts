@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-import { deriveCharacterStats, doesOccupancyFitWithinGrid } from '@dnd/rules';
+import {
+  calculateMovementDistanceFeet,
+  deriveCharacterStats,
+  doesOccupancyFitWithinGrid,
+} from '@dnd/rules';
 import type {
   ActiveSceneState,
   AdvanceTurnCommand,
@@ -23,10 +27,13 @@ import type {
   MovementStateUpdateReason,
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
+  RecordMovementUsageCommand,
   ReconnectSessionCommand,
   SceneActivationSuccess,
   StartEncounterCommand,
   UpdateCharacterCommand,
+  UseActionCommand,
+  UseBonusActionCommand,
 } from '@dnd/protocol';
 import type {
   Character,
@@ -59,8 +66,14 @@ import {
   assertEncounterBelongsToSession,
   assertEncounterParticipantsArePlaced,
   assertEncounterSceneIsActive,
+  assertEncounterTurnActor,
   assertSceneBelongsToEncounter,
   createEncounterRecord,
+  EncounterRuntimeError,
+  markEncounterActionUsed,
+  markEncounterBonusActionUsed,
+  recordEncounterMovementUsage,
+  requireCurrentEncounterParticipant,
 } from './encounter-runtime.js';
 import {
   DEFAULT_RULES_PROFILE_ID,
@@ -426,6 +439,7 @@ export class InMemoryGameRuntime {
         position: command.payload.position,
       }),
     );
+
     this.publishMovementStateUpdate({
       sessionId: snapshot.session.id,
       activeSceneId,
@@ -473,6 +487,14 @@ export class InMemoryGameRuntime {
       record,
       activeSceneId,
     );
+    const movementCostFeet = calculateMovementDistanceFeet(
+      {
+        x: currentPosition.x,
+        y: currentPosition.y,
+      },
+      command.payload.position,
+      scene.grid.cellSizeFeet,
+    );
 
     assertMovementWithinAllowance({
       origin: {
@@ -484,6 +506,38 @@ export class InMemoryGameRuntime {
       cellSizeFeet: scene.grid.cellSizeFeet,
       characterId: record.character.id,
     });
+
+    const encounter = this.findActiveEncounterForParticipant(
+      snapshot.session.id,
+      actor.id,
+    );
+
+    let updatedEncounter: Encounter | null = null;
+
+    if (encounter) {
+      const currentTurnParticipant = assertEncounterTurnActor(
+        encounter,
+        actor.id,
+      );
+
+      if (
+        currentTurnParticipant.participantId !== participant.id ||
+        currentTurnParticipant.characterId !== record.character.id
+      ) {
+        throw new EncounterRuntimeError(
+          'invalid_turn_actor',
+          `Participant "${actor.id}" cannot move character "${record.character.id}" because it is not the current turn owner in encounter "${encounter.id}".`,
+        );
+      }
+
+      if (movementCostFeet > 0) {
+        updatedEncounter = recordEncounterMovementUsage({
+          encounter,
+          additionalMovementFeet: movementCostFeet,
+          movementAllowanceFeet: record.character.speed,
+        });
+      }
+    }
 
     assertCharacterDestinationAvailable({
       scene,
@@ -504,6 +558,11 @@ export class InMemoryGameRuntime {
         position: command.payload.position,
       }),
     );
+
+    if (updatedEncounter) {
+      this.encounters.saveEncounter(updatedEncounter);
+    }
+
     this.publishMovementStateUpdate({
       sessionId: snapshot.session.id,
       activeSceneId,
@@ -563,6 +622,42 @@ export class InMemoryGameRuntime {
     return this.getEncounterStateForParticipant(
       command.payload.sessionId,
       command.actor.participantId,
+    );
+  }
+
+  useAction(command: UseActionCommand): Encounter {
+    const { encounter } = this.getCurrentTurnMutationContext(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+
+    return this.encounters.saveEncounter(markEncounterActionUsed(encounter));
+  }
+
+  useBonusAction(command: UseBonusActionCommand): Encounter {
+    const { encounter } = this.getCurrentTurnMutationContext(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+
+    return this.encounters.saveEncounter(
+      markEncounterBonusActionUsed(encounter),
+    );
+  }
+
+  recordMovementUsage(command: RecordMovementUsageCommand): Encounter {
+    const { encounter, currentTurnCharacterRecord } =
+      this.getCurrentTurnMutationContext(
+        command.payload.sessionId,
+        command.actor.participantId,
+      );
+
+    return this.encounters.saveEncounter(
+      recordEncounterMovementUsage({
+        encounter,
+        additionalMovementFeet: command.payload.amountFeet,
+        movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
+      }),
     );
   }
 
@@ -677,6 +772,7 @@ export class InMemoryGameRuntime {
         (placement) => placement.participantId,
       ),
     );
+    requireCurrentEncounterParticipant(encounter);
 
     return encounter;
   }
@@ -764,7 +860,6 @@ export class InMemoryGameRuntime {
       position: null,
       activeConditions: [],
       concentration: null,
-      turnUsage: null,
       currentVisibility: 'visible',
     };
   }
@@ -924,6 +1019,63 @@ export class InMemoryGameRuntime {
       // surface instead of being silently ignored.
       return [this.characters.getCharacter(participant.characterId)];
     });
+  }
+
+  private findActiveEncounterForParticipant(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+  ): Encounter | null {
+    const encounter = this.encounters.findEncounterBySession(sessionId);
+
+    if (!encounter) {
+      return null;
+    }
+
+    return this.getEncounterStateForParticipant(sessionId, participantId);
+  }
+
+  private getCurrentTurnMutationContext(
+    sessionId: SessionId,
+    actorParticipantId: ParticipantId,
+  ): {
+    encounter: Encounter;
+    currentTurnCharacterRecord: StoredCharacterRecord;
+  } {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      sessionId,
+      actorParticipantId,
+    );
+    const encounter = this.getEncounterStateForParticipant(
+      sessionId,
+      actorParticipantId,
+    );
+    const currentTurnParticipant = assertEncounterTurnActor(
+      encounter,
+      actorParticipantId,
+    );
+    const currentTurnSessionParticipant = this.requireParticipant(
+      snapshot,
+      currentTurnParticipant.participantId,
+    );
+    const currentTurnCharacterRecord = this.requireAssignedCharacterRecord(
+      snapshot,
+      currentTurnSessionParticipant,
+    );
+
+    if (
+      currentTurnCharacterRecord.character.id !==
+      currentTurnParticipant.characterId
+    ) {
+      throw new CharacterStoreError(
+        'internal_server_error',
+        `Encounter "${encounter.id}" resolved current turn character "${currentTurnParticipant.characterId}", but session state loaded assigned character "${currentTurnCharacterRecord.character.id}".`,
+      );
+    }
+
+    return {
+      encounter,
+      currentTurnCharacterRecord,
+    };
   }
 
   private buildEncounterParticipantsFromActiveScene(

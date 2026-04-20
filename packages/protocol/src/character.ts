@@ -128,7 +128,6 @@ export const encounterOverlaySchema = z.object({
   position: encounterPositionSchema.nullable(),
   activeConditions: z.array(z.string().trim().min(1)),
   concentration: concentrationStateSchema.nullable(),
-  turnUsage: turnUsageSchema.nullable(),
   currentVisibility: visibilityStateSchema,
 });
 

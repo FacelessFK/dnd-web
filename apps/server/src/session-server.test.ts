@@ -354,10 +354,66 @@ test('encounter commands are accepted for narrow start/read/advance validation',
       sessionId: 'ABC123',
     },
   });
+  const useActionResult = encounterCommandSchema.safeParse({
+    commandId: 'use-action-1',
+    type: 'use_action',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+  const useBonusActionResult = encounterCommandSchema.safeParse({
+    commandId: 'use-bonus-action-1',
+    type: 'use_bonus_action',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+  const recordMovementUsageResult = encounterCommandSchema.safeParse({
+    commandId: 'record-movement-usage-1',
+    type: 'record_movement_usage',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      amountFeet: 10,
+    },
+  });
 
   assert.equal(startResult.success, true);
   assert.equal(readResult.success, true);
   assert.equal(advanceResult.success, true);
+  assert.equal(useActionResult.success, true);
+  assert.equal(useBonusActionResult.success, true);
+  assert.equal(recordMovementUsageResult.success, true);
+});
+
+test('invalid encounter movement-usage payloads are rejected during command validation', () => {
+  const result = encounterCommandSchema.safeParse({
+    commandId: 'record-movement-usage-invalid',
+    type: 'record_movement_usage',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      amountFeet: 0,
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, ['payload', 'amountFeet']);
 });
 
 test('encounter success payloads are validated as authoritative turn-order responses', () => {

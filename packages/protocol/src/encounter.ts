@@ -65,10 +65,43 @@ export const advanceTurnCommandSchema = z.object({
   }),
 });
 
+const movementUsageAmountSchema = z.number().int().min(1).max(999);
+
+export const useActionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('use_action'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+  }),
+});
+
+export const useBonusActionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('use_bonus_action'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+  }),
+});
+
+export const recordMovementUsageCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('record_movement_usage'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    amountFeet: movementUsageAmountSchema,
+  }),
+});
+
 export const encounterCommandSchema = z.discriminatedUnion('type', [
   startEncounterCommandSchema,
   getEncounterStateCommandSchema,
   advanceTurnCommandSchema,
+  useActionCommandSchema,
+  useBonusActionCommandSchema,
+  recordMovementUsageCommandSchema,
 ]);
 
 export const encounterCommandSuccessSchema = z.object({
@@ -92,6 +125,11 @@ export type GetEncounterStateCommand = z.infer<
   typeof getEncounterStateCommandSchema
 >;
 export type AdvanceTurnCommand = z.infer<typeof advanceTurnCommandSchema>;
+export type UseActionCommand = z.infer<typeof useActionCommandSchema>;
+export type UseBonusActionCommand = z.infer<typeof useBonusActionCommandSchema>;
+export type RecordMovementUsageCommand = z.infer<
+  typeof recordMovementUsageCommandSchema
+>;
 export type EncounterCommand = z.infer<typeof encounterCommandSchema>;
 export type EncounterCommandSuccess = z.infer<
   typeof encounterCommandSuccessSchema

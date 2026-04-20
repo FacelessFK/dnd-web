@@ -9,6 +9,7 @@ import {
 } from '@dnd/rules';
 
 import { CharacterStoreError } from './character-store.js';
+import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
@@ -431,6 +432,59 @@ function advanceTurn(
     },
     payload: {
       sessionId,
+    },
+  });
+}
+
+function useAction(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.useAction({
+    commandId: `use-action-${actorParticipantId}`,
+    type: 'use_action',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
+function useBonusAction(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.useBonusAction({
+    commandId: `use-bonus-action-${actorParticipantId}`,
+    type: 'use_bonus_action',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
+function recordMovementUsage(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  amountFeet: number,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.recordMovementUsage({
+    commandId: `record-movement-usage-${actorParticipantId}`,
+    type: 'record_movement_usage',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      amountFeet,
     },
   });
 }
@@ -1739,20 +1793,200 @@ test('get encounter state returns the authoritative runtime encounter for sessio
   assert.deepEqual(fetchedEncounter, startedEncounter);
 });
 
-test('advance turn moves to the next participant and resets current turn usage', () => {
+test('active turn participant can use their action exactly once per turn', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
-  const encounter = startEncounter(runtime, session.sessionId);
+  startEncounter(runtime, session.sessionId);
 
-  runtime.encounters.saveEncounter({
-    ...encounter,
-    currentTurnUsage: {
-      actionUsed: true,
-      bonusActionUsed: true,
-      reactionUsed: true,
-      movementUsed: 15,
+  const updatedEncounter = useAction(runtime, session.sessionId);
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(updatedEncounter.currentTurnUsage.bonusActionUsed, false);
+});
+
+test('non-active participants cannot use current-turn actions', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_turn_actor',
+  );
+});
+
+test('actions cannot be used twice in the same turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+  useAction(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'action_already_used',
+  );
+});
+
+test('bonus actions cannot be used twice in the same turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+  useBonusAction(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      useBonusAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'bonus_action_already_used',
+  );
+});
+
+test('movement usage can be recorded against the current turn allowance', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updatedEncounter = recordMovementUsage(runtime, session.sessionId, 10);
+
+  assert.equal(updatedEncounter.currentTurnUsage.movementUsed, 10);
+});
+
+test('invalid movement usage is rejected for negative or excessive values', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      recordMovementUsage(runtime, session.sessionId, -5);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_movement_usage_amount',
+  );
+
+  assert.throws(
+    () => {
+      recordMovementUsage(runtime, session.sessionId, 35);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'movement_usage_exceeds_allowance',
+  );
+});
+
+test('encounter-aware movement spends authoritative movement usage for the current turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, scene, firstCharacter } =
+    setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  const movedCharacter = runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-during-encounter',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 2,
+      },
     },
   });
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(movedCharacter.overlay.position?.sceneId, scene.id);
+  assert.equal(movedCharacter.character.id, firstCharacter.character.id);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+});
+
+test('non-active participants cannot move during another participant turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-out-of-turn',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-002',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-002',
+          position: {
+            x: 3,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_turn_actor',
+  );
+});
+
+test('encounter movement spending rejects legal destinations that exceed remaining turn budget', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+  recordMovementUsage(runtime, session.sessionId, 25);
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-character-over-remaining-budget',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 0,
+            y: 2,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'movement_usage_exceeds_allowance',
+  );
+});
+
+test('advance turn resets turn usage after real action and movement mutations', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+  useAction(runtime, session.sessionId);
+  recordMovementUsage(runtime, session.sessionId, 15);
 
   const advancedEncounter = advanceTurn(runtime, session.sessionId);
 
@@ -1829,6 +2063,15 @@ test('reading or advancing encounter state without an active encounter is reject
   assert.throws(
     () => {
       advanceTurn(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId);
     },
     (error: unknown) =>
       error instanceof EncounterStoreError &&
