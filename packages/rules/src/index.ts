@@ -167,6 +167,42 @@ export function calculateMovementDistanceFeet(
   return calculateGridDistance(origin, destination) * cellSizeFeet;
 }
 
+export function rollD20(
+  roller: () => number = () => Math.floor(Math.random() * 20) + 1,
+): number {
+  const result = roller();
+
+  if (Number.isInteger(result) && result >= 1 && result <= 20) {
+    return result;
+  }
+
+  throw new RangeError('D20 roller must return an integer from 1 to 20.');
+}
+
+export function calculateAttackModifier(
+  character: Pick<Character, 'abilities' | 'level'>,
+): number {
+  return (
+    calculateAbilityModifier(character.abilities.str) +
+    calculateProficiencyBonus(character.level)
+  );
+}
+
+export function calculateAttackTotal(d20: number, modifier: number): number {
+  return d20 + modifier;
+}
+
+export function isAttackHit(
+  attackTotal: number,
+  targetArmorClass: number,
+): boolean {
+  return attackTotal >= targetArmorClass;
+}
+
+export function applyFixedDamage(currentHp: number, damage: number): number {
+  return Math.max(0, currentHp - damage);
+}
+
 export function sortEncounterParticipantsByInitiative<
   T extends InitiativeOrderEntry,
 >(participants: T[]): T[] {

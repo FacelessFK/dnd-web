@@ -104,8 +104,8 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-5',
-      status: 'turn-usage-foundation-ready',
+      phase: 'phase-6',
+      status: 'attack-foundation-ready',
     });
     return;
   }
@@ -514,6 +514,9 @@ async function handleEncounterCommandRequest(
       case 'record_movement_usage':
         encounter = runtime.recordMovementUsage(command);
         break;
+      case 'attack':
+        encounter = runtime.attack(command);
+        break;
       default:
         throw new Error('Unsupported encounter command type.');
     }
@@ -768,6 +771,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'action_already_used':
     case 'bonus_action_already_used':
     case 'invalid_encounter_participant':
+    case 'invalid_attack_target':
     case 'invalid_encounter_session_association':
     case 'invalid_turn_actor':
     case 'invalid_participant_session_association':
@@ -780,6 +784,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'no_active_encounter':
     case 'no_active_scene':
     case 'no_assigned_character':
+    case 'self_target_not_allowed':
     case 'scene_entity_overlap':
       return 409;
     // These errors mean the request target itself is invalid for the current

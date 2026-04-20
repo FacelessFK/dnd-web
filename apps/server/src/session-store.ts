@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 
 import type {
+  CombatEvent,
   CreateSessionCommand,
   EncounterStateUpdate,
   JoinSessionCommand,
@@ -282,6 +283,12 @@ export class InMemorySessionStore {
   }
 
   publishEncounterStateUpdate(update: EncounterStateUpdate): void {
+    const room = this.requireRoom(update.sessionId);
+
+    this.broadcast(room, update);
+  }
+
+  publishCombatEvent(update: CombatEvent): void {
     const room = this.requireRoom(update.sessionId);
 
     this.broadcast(room, update);

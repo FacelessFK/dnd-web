@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type {
+  CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
   SessionStreamEvent,
@@ -19,6 +20,17 @@ import { InMemoryGameRuntime } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
+
+function createRuntimeWithAttackRoll(d20: number) {
+  return new InMemoryGameRuntime(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => d20,
+  );
+}
 
 function createSession(runtime: InMemoryGameRuntime) {
   return runtime.createSession({
@@ -75,8 +87,13 @@ function createPlayerCharacter(
 function createSecondPlayerCharacter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['createCharacter']
+    >[0]['payload']['character']
+  > = {},
 ) {
-  return createCharacterForParticipant(runtime, sessionId, 'player-002', {
+  const defaultCharacter = {
     name: 'Borin',
     className: 'Fighter',
     speciesOrRace: 'Dwarf',
@@ -99,6 +116,14 @@ function createSecondPlayerCharacter(
     meta: {
       favoredWeapon: 'warhammer',
     },
+  };
+
+  return createCharacterForParticipant(runtime, sessionId, 'player-002', {
+    ...defaultCharacter,
+    ...overrides,
+    abilities: overrides.abilities ?? defaultCharacter.abilities,
+    hp: overrides.hp ?? defaultCharacter.hp,
+    meta: overrides.meta ?? defaultCharacter.meta,
   });
 }
 
@@ -256,8 +281,13 @@ function assignPlayerCharacter(
 function assignSecondPlayerCharacter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['createCharacter']
+    >[0]['payload']['character']
+  > = {},
 ) {
-  const character = createSecondPlayerCharacter(runtime, sessionId);
+  const character = createSecondPlayerCharacter(runtime, sessionId, overrides);
 
   assignCharacter(runtime, sessionId, 'player-002', character.character.id);
 
@@ -378,6 +408,12 @@ function getEncounterUpdates(
   return updates.filter(
     (update): update is EncounterStateUpdate =>
       update.type === 'encounter_state',
+  );
+}
+
+function getCombatEvents(updates: SessionStreamEvent[]): CombatEvent[] {
+  return updates.filter(
+    (update): update is CombatEvent => update.type === 'combat_event',
   );
 }
 
@@ -516,6 +552,25 @@ function recordMovementUsage(
     payload: {
       sessionId,
       amountFeet,
+    },
+  });
+}
+
+function attack(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  targetParticipantId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.attack({
+    commandId: `attack-${actorParticipantId}-${targetParticipantId}`,
+    type: 'attack',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      targetParticipantId,
     },
   });
 }
@@ -1935,6 +1990,260 @@ test('movement usage can be recorded against the current turn allowance', () => 
   assert.ok(streamUpdate);
   assert.equal(streamUpdate?.reason, 'movement_used');
   assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
+});
+
+test('current turn owner can resolve an attack that consumes action, applies fixed damage, and emits encounter and combat events', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session, secondCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  const updatedEncounter = attack(runtime, session.sessionId, 'player-002');
+  const targetRecord = runtime.characters.getCharacter(
+    secondCharacter.character.id,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBeforeAttack,
+  );
+  const combatEvents = getCombatEvents(updates).slice(
+    combatEventCountBeforeAttack,
+  );
+  const encounterUpdate = encounterUpdates.find(
+    (update) => update.reason === 'action_used',
+  );
+  const combatEvent = combatEvents.find(
+    (event) => event.reason === 'attack_resolved',
+  );
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(targetRecord.character.hp.current, 33);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(combatEvents.length, 1);
+  assert.ok(encounterUpdate);
+  assert.ok(combatEvent);
+  assert.deepEqual(encounterUpdate?.encounter, updatedEncounter);
+  assert.equal(combatEvent?.attackerParticipantId, 'player-001');
+  assert.equal(combatEvent?.targetParticipantId, 'player-002');
+  assert.equal(combatEvent?.targetCharacterId, secondCharacter.character.id);
+  assert.deepEqual(combatEvent?.roll, {
+    d20: 20,
+    modifier: 2,
+    total: 22,
+  });
+  assert.equal(combatEvent?.targetArmorClass, 16);
+  assert.equal(combatEvent?.hit, true);
+  assert.equal(combatEvent?.damage, 1);
+  assert.deepEqual(combatEvent?.targetHp, {
+    previous: 34,
+    current: 33,
+  });
+});
+
+test('a miss still consumes action and emits a combat event without changing target HP', () => {
+  const runtime = createRuntimeWithAttackRoll(1);
+  const { session, secondCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  const updatedEncounter = attack(runtime, session.sessionId, 'player-002');
+  const targetRecord = runtime.characters.getCharacter(
+    secondCharacter.character.id,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBeforeAttack,
+  );
+  const combatEvents = getCombatEvents(updates).slice(
+    combatEventCountBeforeAttack,
+  );
+  const combatEvent = combatEvents.find(
+    (event) => event.reason === 'attack_resolved',
+  );
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(targetRecord.character.hp.current, 34);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(combatEvents.length, 1);
+  assert.ok(combatEvent);
+  assert.deepEqual(combatEvent?.roll, {
+    d20: 1,
+    modifier: 2,
+    total: 3,
+  });
+  assert.equal(combatEvent?.hit, false);
+  assert.equal(combatEvent?.damage, 0);
+  assert.deepEqual(combatEvent?.targetHp, {
+    previous: 34,
+    current: 34,
+  });
+});
+
+test('attack damage never reduces target HP below zero', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  joinSecondPlayer(runtime, session.sessionId);
+
+  assignPlayerCharacter(runtime, session.sessionId);
+  const lowHpTarget = assignSecondPlayerCharacter(runtime, session.sessionId, {
+    hp: {
+      max: 34,
+      current: 1,
+      temp: 0,
+    },
+  });
+  activateScene(runtime, session.sessionId);
+
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+  placeAssignedCharacterForParticipant(
+    runtime,
+    session.sessionId,
+    'player-002',
+    {
+      x: 2,
+      y: 0,
+    },
+  );
+
+  startEncounter(runtime, session.sessionId);
+  attack(runtime, session.sessionId, 'player-002');
+
+  const targetRecord = runtime.characters.getCharacter(
+    lowHpTarget.character.id,
+  );
+
+  assert.equal(targetRecord.character.hp.current, 0);
+});
+
+test('non-current participants cannot attack during another participant turn', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-001', 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_turn_actor',
+  );
+});
+
+test('self-targeted attacks are rejected', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-001');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'self_target_not_allowed',
+  );
+});
+
+test('attack targets that are not encounter participants are rejected', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+  runtime.joinSession({
+    commandId: 'join-session-3',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-003',
+      displayName: 'Player Three',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+  const thirdCharacter = createCharacterForParticipant(
+    runtime,
+    session.sessionId,
+    'player-003',
+    {
+      name: 'Kara',
+      className: 'Rogue',
+      speciesOrRace: 'Human',
+      background: 'Scout',
+      abilities: {
+        str: 10,
+        dex: 16,
+        con: 12,
+        int: 12,
+        wis: 12,
+        cha: 10,
+      },
+      hp: {
+        max: 24,
+        current: 24,
+        temp: 0,
+      },
+      armorClass: 14,
+      notes: 'Late arrival to the encounter.',
+      meta: {
+        specialty: 'stealth',
+      },
+    },
+  );
+
+  assignCharacter(
+    runtime,
+    session.sessionId,
+    'player-003',
+    thirdCharacter.character.id,
+  );
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-003');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_attack_target',
+  );
+});
+
+test('failed attack commands emit neither combat_event nor encounter_state updates', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  useAction(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'action_already_used',
+  );
+
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeAttack,
+  );
+  assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
 });
 
 test('invalid movement usage is rejected for negative or excessive values', () => {

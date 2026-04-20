@@ -385,6 +385,17 @@ test('encounter commands are accepted for narrow start/read/advance validation',
       amountFeet: 10,
     },
   });
+  const attackResult = encounterCommandSchema.safeParse({
+    commandId: 'attack-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      targetParticipantId: 'player-002',
+    },
+  });
 
   assert.equal(startResult.success, true);
   assert.equal(readResult.success, true);
@@ -392,6 +403,7 @@ test('encounter commands are accepted for narrow start/read/advance validation',
   assert.equal(useActionResult.success, true);
   assert.equal(useBonusActionResult.success, true);
   assert.equal(recordMovementUsageResult.success, true);
+  assert.equal(attackResult.success, true);
 });
 
 test('invalid encounter movement-usage payloads are rejected during command validation', () => {
@@ -554,6 +566,33 @@ test('encounter session-stream updates are validated as authoritative realtime p
       },
       createdAt: '2025-01-01T00:00:00.000Z',
       updatedAt: '2025-01-01T00:01:00.000Z',
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('combat session-stream updates are validated as authoritative attack payloads', () => {
+  const result = sessionStreamEventSchema.safeParse({
+    type: 'combat_event',
+    reason: 'attack_resolved',
+    sessionId: 'ABC123',
+    encounterId: 'encounter_11111111-1111-4111-8111-111111111111',
+    attackerParticipantId: 'player-001',
+    attackerCharacterId: 'char_11111111-1111-4111-8111-111111111111',
+    targetParticipantId: 'player-002',
+    targetCharacterId: 'char_22222222-2222-4222-8222-222222222222',
+    roll: {
+      d20: 14,
+      modifier: 2,
+      total: 16,
+    },
+    targetArmorClass: 16,
+    hit: true,
+    damage: 1,
+    targetHp: {
+      previous: 10,
+      current: 9,
     },
   });
 

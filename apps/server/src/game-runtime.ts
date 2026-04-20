@@ -1,12 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  applyFixedDamage,
+  calculateAttackModifier,
+  calculateAttackTotal,
   calculateMovementDistanceFeet,
   deriveCharacterStats,
   doesOccupancyFitWithinGrid,
+  isAttackHit,
+  rollD20,
 } from '@dnd/rules';
 import type {
   ActiveSceneState,
+  AttackCommand,
   AdvanceTurnCommand,
   AssignCharacterToParticipantCommand,
   ActivateSceneForSessionCommand,
@@ -14,6 +20,7 @@ import type {
   CharacterInput,
   CharacterResource,
   CharacterUpdateInput,
+  CombatEvent,
   CreateCharacterCommand,
   CreateSceneCommand,
   CreateSessionCommand,
@@ -117,6 +124,7 @@ export class InMemoryGameRuntime {
     readonly characters: CharacterRepository = new InMemoryCharacterStore(),
     readonly scenes: SceneRepository = new InMemorySceneStore(),
     readonly encounters: EncounterRepository = new InMemoryEncounterStore(),
+    readonly d20Roller: () => number = () => rollD20(),
   ) {}
 
   createSession(command: CreateSessionCommand) {
@@ -682,6 +690,129 @@ export class InMemoryGameRuntime {
     });
   }
 
+  attack(command: AttackCommand): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const encounter = this.getEncounterStateForParticipant(
+      snapshot.session.id,
+      actor.id,
+    );
+    const attackerEncounterParticipant = assertEncounterTurnActor(
+      encounter,
+      actor.id,
+    );
+    const attackerParticipant = this.requireParticipant(
+      snapshot,
+      attackerEncounterParticipant.participantId,
+    );
+    const attackerRecord = this.requireAssignedCharacterRecord(
+      snapshot,
+      attackerParticipant,
+    );
+    const targetParticipant = this.requireParticipant(
+      snapshot,
+      command.payload.targetParticipantId,
+    );
+
+    if (targetParticipant.id === attackerParticipant.id) {
+      throw new EncounterRuntimeError(
+        'self_target_not_allowed',
+        `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
+      );
+    }
+
+    if (
+      attackerRecord.character.id !== attackerEncounterParticipant.characterId
+    ) {
+      throw new CharacterStoreError(
+        'internal_server_error',
+        `Encounter "${encounter.id}" resolved attacker character "${attackerEncounterParticipant.characterId}", but session state loaded assigned character "${attackerRecord.character.id}".`,
+      );
+    }
+
+    const targetRecord = this.requireAssignedCharacterRecord(
+      snapshot,
+      targetParticipant,
+    );
+    const targetEncounterParticipant = encounter.participants.find(
+      (participant) => participant.participantId === targetParticipant.id,
+    );
+
+    if (
+      !targetEncounterParticipant ||
+      targetEncounterParticipant.characterId !== targetRecord.character.id
+    ) {
+      throw new EncounterRuntimeError(
+        'invalid_attack_target',
+        `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
+      );
+    }
+
+    const targetPosition = targetRecord.overlay.position;
+
+    if (!targetPosition || targetPosition.sceneId !== activeSceneId) {
+      throw new EncounterRuntimeError(
+        'invalid_attack_target',
+        `Participant "${targetParticipant.id}" does not have a valid active-scene attack target in scene "${activeSceneId}".`,
+      );
+    }
+
+    const d20 = rollD20(this.d20Roller);
+    const modifier = calculateAttackModifier(attackerRecord.character);
+    const total = calculateAttackTotal(d20, modifier);
+    const hit = isAttackHit(total, targetRecord.character.armorClass);
+    const damage = hit ? 1 : 0;
+    const previousTargetHp = targetRecord.character.hp.current;
+    const currentTargetHp = hit
+      ? applyFixedDamage(previousTargetHp, damage)
+      : previousTargetHp;
+    const updatedEncounter = markEncounterActionUsed(encounter);
+
+    if (hit && currentTargetHp !== previousTargetHp) {
+      this.characters.saveCharacter(
+        this.withUpdatedCharacterHitPoints(targetRecord, currentTargetHp),
+      );
+    }
+
+    const savedEncounter = this.saveAndPublishEncounter({
+      sessionId: snapshot.session.id,
+      encounter: updatedEncounter,
+      reason: 'action_used',
+    });
+
+    this.publishCombatEvent({
+      type: 'combat_event',
+      reason: 'attack_resolved',
+      sessionId: snapshot.session.id,
+      encounterId: savedEncounter.id,
+      attackerParticipantId: attackerParticipant.id,
+      attackerCharacterId: attackerRecord.character.id,
+      targetParticipantId: targetParticipant.id,
+      targetCharacterId: targetRecord.character.id,
+      roll: {
+        d20,
+        modifier,
+        total,
+      },
+      targetArmorClass: targetRecord.character.armorClass,
+      hit,
+      damage,
+      targetHp: {
+        previous: previousTargetHp,
+        current: currentTargetHp,
+      },
+    });
+
+    return savedEncounter;
+  }
+
   advanceTurn(command: AdvanceTurnCommand): Encounter {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
@@ -873,6 +1004,23 @@ export class InMemoryGameRuntime {
     };
   }
 
+  private withUpdatedCharacterHitPoints(
+    record: StoredCharacterRecord,
+    currentHp: number,
+  ): StoredCharacterRecord {
+    return {
+      character: {
+        ...record.character,
+        hp: {
+          ...record.character.hp,
+          current: currentHp,
+        },
+        updatedAt: this.now(),
+      },
+      overlay: record.overlay,
+    };
+  }
+
   private createEncounterOverlay(characterId: CharacterId): EncounterOverlay {
     return {
       characterId,
@@ -1039,6 +1187,10 @@ export class InMemoryGameRuntime {
       sessionId: params.sessionId,
       encounter: params.encounter,
     });
+  }
+
+  private publishCombatEvent(update: CombatEvent): void {
+    this.sessions.publishCombatEvent(update);
   }
 
   private saveAndPublishEncounter(params: {

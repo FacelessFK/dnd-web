@@ -110,6 +110,16 @@ export const recordMovementUsageCommandSchema = z.object({
   }),
 });
 
+export const attackCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('attack'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    targetParticipantId: participantIdSchema,
+  }),
+});
+
 export const encounterCommandSchema = z.discriminatedUnion('type', [
   startEncounterCommandSchema,
   getEncounterStateCommandSchema,
@@ -117,6 +127,7 @@ export const encounterCommandSchema = z.discriminatedUnion('type', [
   useActionCommandSchema,
   useBonusActionCommandSchema,
   recordMovementUsageCommandSchema,
+  attackCommandSchema,
 ]);
 
 export const encounterCommandSuccessSchema = z.object({
@@ -149,6 +160,7 @@ export type UseBonusActionCommand = z.infer<typeof useBonusActionCommandSchema>;
 export type RecordMovementUsageCommand = z.infer<
   typeof recordMovementUsageCommandSchema
 >;
+export type AttackCommand = z.infer<typeof attackCommandSchema>;
 export type EncounterCommand = z.infer<typeof encounterCommandSchema>;
 export type EncounterCommandSuccess = z.infer<
   typeof encounterCommandSuccessSchema

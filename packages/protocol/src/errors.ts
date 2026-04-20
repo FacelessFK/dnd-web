@@ -8,6 +8,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'duplicate_join',
   'encounter_already_active',
   'internal_server_error',
+  'invalid_attack_target',
   'invalid_character_id',
   'invalid_command',
   'invalid_character_state',
@@ -36,6 +37,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'scene_entity_out_of_bounds',
   'scene_entity_overlap',
   'scene_not_found',
+  'self_target_not_allowed',
   'session_not_found',
 ]);
 
