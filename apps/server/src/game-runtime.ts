@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { deriveCharacterStats, doesOccupancyFitWithinGrid } from '@dnd/rules';
 import type {
   ActiveSceneState,
+  AdvanceTurnCommand,
   AssignCharacterToParticipantCommand,
   ActivateSceneForSessionCommand,
   CharacterAssignmentSuccess,
@@ -13,6 +14,7 @@ import type {
   CreateSceneCommand,
   CreateSessionCommand,
   FinalizeCharacterCommand,
+  GetEncounterStateCommand,
   GetActiveSceneStateCommand,
   GetSceneCommand,
   GetCharacterCommand,
@@ -23,12 +25,15 @@ import type {
   PlaceCharacterInActiveSceneCommand,
   ReconnectSessionCommand,
   SceneActivationSuccess,
+  StartEncounterCommand,
   UpdateCharacterCommand,
 } from '@dnd/protocol';
 import type {
   Character,
   CharacterId,
   CharacterMeta,
+  Encounter,
+  EncounterParticipant,
   EncounterOverlay,
   Participant,
   ParticipantId,
@@ -45,6 +50,18 @@ import {
   InMemoryCharacterStore,
   type StoredCharacterRecord,
 } from './character-store.js';
+import {
+  EncounterRepository,
+  InMemoryEncounterStore,
+} from './encounter-store.js';
+import {
+  advanceEncounterTurn,
+  assertEncounterBelongsToSession,
+  assertEncounterParticipantsArePlaced,
+  assertEncounterSceneIsActive,
+  assertSceneBelongsToEncounter,
+  createEncounterRecord,
+} from './encounter-runtime.js';
 import {
   DEFAULT_RULES_PROFILE_ID,
   InMemoryRulesProfileStore,
@@ -85,6 +102,7 @@ export class InMemoryGameRuntime {
     readonly rulesProfiles = new InMemoryRulesProfileStore(),
     readonly characters: CharacterRepository = new InMemoryCharacterStore(),
     readonly scenes: SceneRepository = new InMemorySceneStore(),
+    readonly encounters: EncounterRepository = new InMemoryEncounterStore(),
   ) {}
 
   createSession(command: CreateSessionCommand) {
@@ -509,6 +527,64 @@ export class InMemoryGameRuntime {
     );
   }
 
+  startEncounter(command: StartEncounterCommand): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const activeSceneState = this.getActiveSceneStateForParticipant(
+      snapshot.session.id,
+      actor.id,
+    );
+
+    this.assertActorIsDm(actor, 'start encounters');
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    return this.encounters.createEncounter(
+      createEncounterRecord({
+        sessionId: snapshot.session.id,
+        sceneId: activeSceneId,
+        participants: this.buildEncounterParticipantsFromActiveScene(
+          snapshot,
+          activeSceneState,
+        ),
+      }),
+    );
+  }
+
+  getEncounterState(command: GetEncounterStateCommand): Encounter {
+    return this.getEncounterStateForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+  }
+
+  advanceTurn(command: AdvanceTurnCommand): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'advance encounter turns');
+
+    return this.encounters.saveEncounter(
+      advanceEncounterTurn(
+        this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      ),
+    );
+  }
+
   getActiveSceneStateForParticipant(
     sessionId: SessionId,
     participantId: ParticipantId,
@@ -569,6 +645,40 @@ export class InMemoryGameRuntime {
         ];
       }),
     };
+  }
+
+  getEncounterStateForParticipant(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+  ): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      sessionId,
+      participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const encounter = this.encounters.getEncounterBySession(
+      snapshot.session.id,
+    );
+
+    assertEncounterBelongsToSession(encounter, snapshot.session.id);
+    assertSceneBelongsToSession(snapshot, scene);
+    assertSceneBelongsToEncounter(encounter, scene);
+    assertEncounterSceneIsActive(encounter, activeSceneId);
+
+    const activeSceneState = this.getActiveSceneStateForParticipant(
+      snapshot.session.id,
+      participantId,
+    );
+
+    assertEncounterParticipantsArePlaced(
+      encounter,
+      activeSceneState.placedCharacters.map(
+        (placement) => placement.participantId,
+      ),
+    );
+
+    return encounter;
   }
 
   getDefaultRulesProfileId(): string {
@@ -813,6 +923,32 @@ export class InMemoryGameRuntime {
       // storage, the runtime is inconsistent and the repository error should
       // surface instead of being silently ignored.
       return [this.characters.getCharacter(participant.characterId)];
+    });
+  }
+
+  private buildEncounterParticipantsFromActiveScene(
+    snapshot: SessionSnapshot,
+    activeSceneState: ActiveSceneState,
+  ): EncounterParticipant[] {
+    return activeSceneState.placedCharacters.map((placement) => {
+      const participant = this.requireParticipant(
+        snapshot,
+        placement.participantId,
+      );
+      const record = this.requireAssignedCharacterRecord(snapshot, participant);
+
+      if (record.character.id !== placement.characterId) {
+        throw new CharacterStoreError(
+          'internal_server_error',
+          `Active-scene placement for participant "${participant.id}" resolved character "${placement.characterId}", but assigned character "${record.character.id}" was loaded from storage.`,
+        );
+      }
+
+      return {
+        characterId: record.character.id,
+        participantId: participant.id,
+        initiative: deriveCharacterStats(record.character).initiativeModifier,
+      };
     });
   }
 

@@ -6,6 +6,7 @@ export const rulesProfileIdPattern = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 export const characterIdPattern = /^char_[a-f0-9-]{36}$/;
 export const sceneIdPattern = /^scene_[a-f0-9-]{36}$/;
 export const sceneEntityIdPattern = /^scene_entity_[a-f0-9-]{36}$/;
+export const encounterIdPattern = /^encounter_[a-f0-9-]{36}$/;
 
 export const sessionIdSchema = z
   .string()
@@ -50,6 +51,14 @@ export const sceneEntityIdSchema = z
   .regex(
     sceneEntityIdPattern,
     'Scene entity ID must be a server-generated ID like "scene_entity_<uuid>".',
+  );
+
+export const encounterIdSchema = z
+  .string()
+  .trim()
+  .regex(
+    encounterIdPattern,
+    'Encounter ID must be a server-generated ID like "encounter_<uuid>".',
   );
 
 export const displayNameSchema = z.string().trim().min(1).max(48);

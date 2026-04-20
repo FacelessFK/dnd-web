@@ -5,6 +5,8 @@ import {
   activeSceneStateCommandSuccessSchema,
   characterCommandSchema,
   clientCommandSchema,
+  encounterCommandSchema,
+  encounterCommandSuccessSchema,
   movementCommandSchema,
   sceneCommandSchema,
   sessionStreamEventSchema,
@@ -315,6 +317,76 @@ test('active-scene state read commands are accepted by movement command validati
     },
     payload: {
       sessionId: 'ABC123',
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('encounter commands are accepted for narrow start/read/advance validation', () => {
+  const startResult = encounterCommandSchema.safeParse({
+    commandId: 'start-encounter-1',
+    type: 'start_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+  const readResult = encounterCommandSchema.safeParse({
+    commandId: 'get-encounter-state-1',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+  const advanceResult = encounterCommandSchema.safeParse({
+    commandId: 'advance-turn-1',
+    type: 'advance_turn',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+
+  assert.equal(startResult.success, true);
+  assert.equal(readResult.success, true);
+  assert.equal(advanceResult.success, true);
+});
+
+test('encounter success payloads are validated as authoritative turn-order responses', () => {
+  const result = encounterCommandSuccessSchema.safeParse({
+    ok: true,
+    data: {
+      encounter: {
+        id: 'encounter_11111111-1111-4111-8111-111111111111',
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        status: 'active',
+        participants: [
+          {
+            characterId: 'char_11111111-1111-4111-8111-111111111111',
+            participantId: 'player-001',
+            initiative: 2,
+          },
+        ],
+        currentTurnIndex: 0,
+        roundNumber: 1,
+        currentTurnUsage: {
+          actionUsed: false,
+          bonusActionUsed: false,
+          reactionUsed: false,
+          movementUsed: 0,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
     },
   });
 

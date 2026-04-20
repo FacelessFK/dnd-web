@@ -11,6 +11,9 @@ import {
   characterCommandSchema,
   characterCommandSuccessSchema,
   clientCommandSchema,
+  encounterCommandErrorSchema,
+  encounterCommandSchema,
+  encounterCommandSuccessSchema,
   movementCommandErrorSchema,
   movementCommandSchema,
   movementCommandSuccessSchema,
@@ -26,6 +29,8 @@ import {
   type CharacterAssignmentSuccess,
   type CharacterCommandError,
   type CharacterCommandSuccess,
+  type EncounterCommandError,
+  type EncounterCommandSuccess,
   type MovementCommandError,
   type MovementCommandSuccess,
   type RuntimeErrorCode,
@@ -38,6 +43,8 @@ import {
 } from '@dnd/protocol';
 
 import { CharacterStoreError } from './character-store.js';
+import { EncounterRuntimeError } from './encounter-runtime.js';
+import { EncounterStoreError } from './encounter-store.js';
 import { createConnectionId, InMemoryGameRuntime } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
@@ -52,6 +59,8 @@ const corsHeaders = {
 
 type RuntimeStoreError =
   | CharacterStoreError
+  | EncounterRuntimeError
+  | EncounterStoreError
   | MovementRuntimeError
   | RulesProfileStoreError
   | SceneStoreError
@@ -95,8 +104,8 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-4',
-      status: 'movement-foundation-ready',
+      phase: 'phase-5',
+      status: 'encounter-foundation-ready',
     });
     return;
   }
@@ -118,6 +127,11 @@ async function handleRequest(
 
   if (request.method === 'POST' && url.pathname === '/api/movement/command') {
     await handleMovementCommandRequest(request, response, runtime);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/encounters/command') {
+    await handleEncounterCommandRequest(request, response, runtime);
     return;
   }
 
@@ -443,6 +457,71 @@ async function handleMovementCommandRequest(
   }
 }
 
+async function handleEncounterCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: InMemoryGameRuntime,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message: 'Request body must be valid JSON.',
+      },
+    } satisfies EncounterCommandError);
+    return;
+  }
+
+  const commandResult = encounterCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies EncounterCommandError);
+    return;
+  }
+
+  try {
+    const command = commandResult.data;
+    let encounter: EncounterCommandSuccess['data']['encounter'];
+
+    switch (command.type) {
+      case 'start_encounter':
+        encounter = runtime.startEncounter(command);
+        break;
+      case 'get_encounter_state':
+        encounter = runtime.getEncounterState(command);
+        break;
+      case 'advance_turn':
+        encounter = runtime.advanceTurn(command);
+        break;
+      default:
+        throw new Error('Unsupported encounter command type.');
+    }
+
+    const success: EncounterCommandSuccess = {
+      ok: true,
+      data: {
+        encounter,
+      },
+    };
+
+    sendJson(response, 200, success, encounterCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, encounterCommandErrorSchema);
+  }
+}
+
 function handleStreamRequest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -565,6 +644,7 @@ function handleRuntimeError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
@@ -598,6 +678,7 @@ function handleUnexpectedError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
     | typeof sessionCommandErrorSchema,
@@ -674,10 +755,16 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     // satisfy the request as issued, even if the command shape itself is valid.
     case 'character_not_placed':
     case 'duplicate_join':
+    case 'encounter_already_active':
+    case 'invalid_encounter_participant':
+    case 'invalid_encounter_session_association':
     case 'invalid_participant_session_association':
     case 'invalid_scene_session_association':
     case 'invalid_character_state':
+    case 'invalid_scene_encounter_association':
+    case 'invalid_turn_advance':
     case 'movement_destination_blocked':
+    case 'no_active_encounter':
     case 'no_active_scene':
     case 'no_assigned_character':
     case 'scene_entity_overlap':
@@ -704,6 +791,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
 function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
     error instanceof CharacterStoreError ||
+    error instanceof EncounterRuntimeError ||
+    error instanceof EncounterStoreError ||
     error instanceof MovementRuntimeError ||
     error instanceof RulesProfileStoreError ||
     error instanceof SceneStoreError ||

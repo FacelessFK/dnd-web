@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 2 runtime slice listening on http://${host}:${port}`,
+    `[server] Phase 5 runtime slice listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Authoritative sessions, rules profiles, and character foundations are enabled.',
+    '[server] Authoritative sessions, character movement, and encounter turn foundations are enabled.',
   );
 });

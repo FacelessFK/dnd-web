@@ -9,6 +9,7 @@ import {
 } from '@dnd/rules';
 
 import { CharacterStoreError } from './character-store.js';
+import { EncounterStoreError } from './encounter-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
@@ -63,40 +64,91 @@ function createPlayerCharacter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
 ) {
+  return createCharacterForParticipant(runtime, sessionId, 'player-001');
+}
+
+function createSecondPlayerCharacter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+) {
+  return createCharacterForParticipant(runtime, sessionId, 'player-002', {
+    name: 'Borin',
+    className: 'Fighter',
+    speciesOrRace: 'Dwarf',
+    background: 'Guard',
+    abilities: {
+      str: 16,
+      dex: 12,
+      con: 14,
+      int: 10,
+      wis: 10,
+      cha: 8,
+    },
+    hp: {
+      max: 34,
+      current: 34,
+      temp: 0,
+    },
+    armorClass: 16,
+    notes: 'A shield-bearing frontline guard.',
+    meta: {
+      favoredWeapon: 'warhammer',
+    },
+  });
+}
+
+function createCharacterForParticipant(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['createCharacter']
+    >[0]['payload']['character']
+  > = {},
+) {
+  const defaultCharacter = {
+    name: 'Aria',
+    level: 5,
+    className: 'Wizard',
+    speciesOrRace: 'Elf',
+    background: 'Sage',
+    abilities: {
+      str: 8,
+      dex: 14,
+      con: 13,
+      int: 16,
+      wis: 12,
+      cha: 10,
+    },
+    hp: {
+      max: 26,
+      current: 26,
+      temp: 0,
+    },
+    armorClass: 13,
+    speed: 30,
+    notes: 'A careful scholar.',
+    meta: {
+      spellcastingFocus: 'crystal',
+    },
+  };
+
   return runtime.createCharacter({
-    commandId: 'create-character-1',
+    commandId: `create-character-${participantId}`,
     type: 'create_character',
     actor: {
-      participantId: 'player-001',
+      participantId,
     },
     payload: {
       sessionId,
-      ownerParticipantId: 'player-001',
+      ownerParticipantId: participantId,
       character: {
-        name: 'Aria',
-        level: 5,
-        className: 'Wizard',
-        speciesOrRace: 'Elf',
-        background: 'Sage',
-        abilities: {
-          str: 8,
-          dex: 14,
-          con: 13,
-          int: 16,
-          wis: 12,
-          cha: 10,
-        },
-        hp: {
-          max: 26,
-          current: 26,
-          temp: 0,
-        },
-        armorClass: 13,
-        speed: 30,
-        notes: 'A careful scholar.',
-        meta: {
-          spellcastingFocus: 'crystal',
-        },
+        ...defaultCharacter,
+        ...overrides,
+        abilities: overrides.abilities ?? defaultCharacter.abilities,
+        hp: overrides.hp ?? defaultCharacter.hp,
+        meta: overrides.meta ?? defaultCharacter.meta,
       },
     },
   });
@@ -191,20 +243,41 @@ function assignPlayerCharacter(
 ) {
   const character = createPlayerCharacter(runtime, sessionId);
 
-  runtime.assignCharacterToParticipant({
-    commandId: 'assign-character-helper',
+  assignCharacter(runtime, sessionId, 'player-001', character.character.id);
+
+  return character;
+}
+
+function assignSecondPlayerCharacter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+) {
+  const character = createSecondPlayerCharacter(runtime, sessionId);
+
+  assignCharacter(runtime, sessionId, 'player-002', character.character.id);
+
+  return character;
+}
+
+function assignCharacter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  characterId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.assignCharacterToParticipant({
+    commandId: `assign-character-${participantId}`,
     type: 'assign_character_to_participant',
     actor: {
-      participantId: 'dm-001',
+      participantId: actorParticipantId,
     },
     payload: {
       sessionId,
-      participantId: 'player-001',
-      characterId: character.character.id,
+      participantId,
+      characterId,
     },
   });
-
-  return character;
 }
 
 function placeAssignedCharacter(
@@ -215,15 +288,33 @@ function placeAssignedCharacter(
     y: 0,
   },
 ) {
+  return placeAssignedCharacterForParticipant(
+    runtime,
+    sessionId,
+    'player-001',
+    position,
+  );
+}
+
+function placeAssignedCharacterForParticipant(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  position = {
+    x: 0,
+    y: 0,
+  },
+  actorParticipantId = participantId,
+) {
   return runtime.placeCharacterInActiveScene({
-    commandId: 'place-character-helper',
+    commandId: `place-character-${participantId}`,
     type: 'place_character_in_active_scene',
     actor: {
-      participantId: 'player-001',
+      participantId: actorParticipantId,
     },
     payload: {
       sessionId,
-      participantId: 'player-001',
+      participantId,
       position,
     },
   });
@@ -291,6 +382,92 @@ function getActiveSceneState(
       sessionId,
     },
   });
+}
+
+function startEncounter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.startEncounter({
+    commandId: `start-encounter-${actorParticipantId}`,
+    type: 'start_encounter',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
+function getEncounterState(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.getEncounterState({
+    commandId: `get-encounter-state-${actorParticipantId}`,
+    type: 'get_encounter_state',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
+function advanceTurn(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.advanceTurn({
+    commandId: `advance-turn-${actorParticipantId}`,
+    type: 'advance_turn',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
+function setupEncounterParticipants(runtime: InMemoryGameRuntime) {
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  joinSecondPlayer(runtime, session.sessionId);
+
+  const firstCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  const secondCharacter = assignSecondPlayerCharacter(
+    runtime,
+    session.sessionId,
+  );
+  const scene = activateScene(runtime, session.sessionId);
+
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+  placeAssignedCharacterForParticipant(
+    runtime,
+    session.sessionId,
+    'player-002',
+    {
+      x: 2,
+      y: 0,
+    },
+  );
+
+  return {
+    session,
+    scene,
+    firstCharacter,
+    secondCharacter,
+  };
 }
 
 test('derived stat calculations follow the baseline 5e progression', () => {
@@ -1512,5 +1689,149 @@ test('active-scene placement snapshot rejects a broken cross-session active scen
     (error: unknown) =>
       error instanceof SceneStoreError &&
       error.code === 'invalid_scene_session_association',
+  );
+});
+
+test('starting an encounter derives deterministic participants from placed characters in the active scene', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, scene, firstCharacter, secondCharacter } =
+    setupEncounterParticipants(runtime);
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.match(encounter.id, /^encounter_[a-f0-9-]{36}$/);
+  assert.equal(encounter.sessionId, session.sessionId);
+  assert.equal(encounter.sceneId, scene.id);
+  assert.equal(encounter.status, 'active');
+  assert.equal(encounter.currentTurnIndex, 0);
+  assert.equal(encounter.roundNumber, 1);
+  assert.deepEqual(encounter.currentTurnUsage, {
+    actionUsed: false,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 0,
+  });
+  assert.deepEqual(encounter.participants, [
+    {
+      characterId: firstCharacter.character.id,
+      participantId: 'player-001',
+      initiative: 2,
+    },
+    {
+      characterId: secondCharacter.character.id,
+      participantId: 'player-002',
+      initiative: 1,
+    },
+  ]);
+});
+
+test('get encounter state returns the authoritative runtime encounter for session members', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const startedEncounter = startEncounter(runtime, session.sessionId);
+
+  const fetchedEncounter = getEncounterState(
+    runtime,
+    session.sessionId,
+    'player-001',
+  );
+
+  assert.deepEqual(fetchedEncounter, startedEncounter);
+});
+
+test('advance turn moves to the next participant and resets current turn usage', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  runtime.encounters.saveEncounter({
+    ...encounter,
+    currentTurnUsage: {
+      actionUsed: true,
+      bonusActionUsed: true,
+      reactionUsed: true,
+      movementUsed: 15,
+    },
+  });
+
+  const advancedEncounter = advanceTurn(runtime, session.sessionId);
+
+  assert.equal(advancedEncounter.currentTurnIndex, 1);
+  assert.equal(advancedEncounter.roundNumber, 1);
+  assert.deepEqual(advancedEncounter.currentTurnUsage, {
+    actionUsed: false,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 0,
+  });
+});
+
+test('advancing turn wraps to the first participant and increments the round number', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  const secondTurn = advanceTurn(runtime, session.sessionId);
+  const wrappedTurn = advanceTurn(runtime, session.sessionId);
+
+  assert.equal(secondTurn.currentTurnIndex, 1);
+  assert.equal(secondTurn.roundNumber, 1);
+  assert.equal(wrappedTurn.currentTurnIndex, 0);
+  assert.equal(wrappedTurn.roundNumber, 2);
+});
+
+test('starting an encounter without an active scene is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      startEncounter(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError && error.code === 'no_active_scene',
+  );
+});
+
+test('starting a duplicate active encounter for a session is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      startEncounter(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'encounter_already_active',
+  );
+});
+
+test('reading or advancing encounter state without an active encounter is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      getEncounterState(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+
+  assert.throws(
+    () => {
+      advanceTurn(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
   );
 });

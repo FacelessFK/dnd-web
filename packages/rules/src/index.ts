@@ -13,6 +13,12 @@ export type OccupancyShape = {
   footprint: SceneEntityFootprint;
 };
 
+export type InitiativeOrderEntry = {
+  initiative: number;
+  participantId: string;
+  characterId: string;
+};
+
 export function calculateAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
@@ -158,4 +164,55 @@ export function calculateMovementDistanceFeet(
   cellSizeFeet: number,
 ): number {
   return calculateGridDistance(origin, destination) * cellSizeFeet;
+}
+
+export function sortEncounterParticipantsByInitiative<
+  T extends InitiativeOrderEntry,
+>(participants: T[]): T[] {
+  return [...participants].sort((left, right) => {
+    if (right.initiative !== left.initiative) {
+      return right.initiative - left.initiative;
+    }
+
+    const participantOrder = left.participantId.localeCompare(
+      right.participantId,
+    );
+
+    if (participantOrder !== 0) {
+      return participantOrder;
+    }
+
+    return left.characterId.localeCompare(right.characterId);
+  });
+}
+
+export function getNextTurnState(params: {
+  currentTurnIndex: number;
+  participantCount: number;
+  roundNumber: number;
+}): {
+  currentTurnIndex: number;
+  roundNumber: number;
+  wrapped: boolean;
+} | null {
+  if (
+    !Number.isInteger(params.currentTurnIndex) ||
+    !Number.isInteger(params.participantCount) ||
+    !Number.isInteger(params.roundNumber) ||
+    params.participantCount < 1 ||
+    params.roundNumber < 1 ||
+    params.currentTurnIndex < 0 ||
+    params.currentTurnIndex >= params.participantCount
+  ) {
+    return null;
+  }
+
+  const nextTurnIndex = (params.currentTurnIndex + 1) % params.participantCount;
+  const wrapped = nextTurnIndex === 0;
+
+  return {
+    currentTurnIndex: nextTurnIndex,
+    roundNumber: wrapped ? params.roundNumber + 1 : params.roundNumber,
+    wrapped,
+  };
 }

@@ -8,6 +8,7 @@ export const rulesStrictnessLevels = [
   'dm_led',
 ] as const;
 export const characterStatuses = ['draft', 'ready'] as const;
+export const encounterStatuses = ['active'] as const;
 export const visibilityStates = ['visible', 'hidden', 'obscured'] as const;
 export const sceneEntityTypes = [
   'player_spawn',
@@ -22,6 +23,7 @@ export type CharacterId = string;
 export type RulesProfileId = string;
 export type SceneId = string;
 export type SceneEntityId = string;
+export type EncounterId = string;
 export type SessionStateRevision = number;
 export type ParticipantRole = (typeof participantRoles)[number];
 export type ConnectionStatus = (typeof connectionStatuses)[number];
@@ -29,6 +31,7 @@ export type SessionStatus = (typeof sessionStatuses)[number];
 export type BaseRuleset = (typeof baseRulesets)[number];
 export type RulesStrictnessLevel = (typeof rulesStrictnessLevels)[number];
 export type CharacterStatus = (typeof characterStatuses)[number];
+export type EncounterStatus = (typeof encounterStatuses)[number];
 export type VisibilityState = (typeof visibilityStates)[number];
 export type SceneEntityType = (typeof sceneEntityTypes)[number];
 export type RulesConfigValue = string | number | boolean | null;
@@ -118,6 +121,25 @@ export interface TurnUsage {
   bonusActionUsed: boolean;
   reactionUsed: boolean;
   movementUsed: number;
+}
+
+export interface EncounterParticipant {
+  characterId: CharacterId;
+  participantId: ParticipantId;
+  initiative: number;
+}
+
+export interface Encounter {
+  id: EncounterId;
+  sessionId: SessionId;
+  sceneId: SceneId;
+  status: EncounterStatus;
+  participants: EncounterParticipant[];
+  currentTurnIndex: number;
+  roundNumber: number;
+  currentTurnUsage: TurnUsage;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ConcentrationState {
