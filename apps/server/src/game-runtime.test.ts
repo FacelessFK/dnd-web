@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { MovementStateUpdate, SessionStreamEvent } from '@dnd/protocol';
+import type {
+  EncounterStateUpdate,
+  MovementStateUpdate,
+  SessionStreamEvent,
+} from '@dnd/protocol';
 import {
   calculateAbilityModifier,
   calculatePassivePerception,
@@ -366,6 +370,33 @@ function getMovementUpdates(
   return updates.filter(
     (update): update is MovementStateUpdate => update.type === 'movement_state',
   );
+}
+
+function getEncounterUpdates(
+  updates: SessionStreamEvent[],
+): EncounterStateUpdate[] {
+  return updates.filter(
+    (update): update is EncounterStateUpdate =>
+      update.type === 'encounter_state',
+  );
+}
+
+function subscribeToSession(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId = 'dm-001',
+) {
+  const updates: SessionStreamEvent[] = [];
+
+  runtime.connectParticipant(sessionId, participantId, {
+    connectionId: `${participantId}-stream-connection`,
+    close: () => undefined,
+    send: (update) => {
+      updates.push(update);
+    },
+  });
+
+  return updates;
 }
 
 function getActiveSceneState(
@@ -1793,15 +1824,34 @@ test('get encounter state returns the authoritative runtime encounter for sessio
   assert.deepEqual(fetchedEncounter, startedEncounter);
 });
 
+test('starting an encounter emits an authoritative encounter_state stream update', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  const encounter = startEncounter(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
+
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'encounter_started');
+  assert.deepEqual(streamUpdate?.encounter, encounter);
+});
+
 test('active turn participant can use their action exactly once per turn', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
   startEncounter(runtime, session.sessionId);
 
   const updatedEncounter = useAction(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
   assert.equal(updatedEncounter.currentTurnUsage.bonusActionUsed, false);
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'action_used');
+  assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
 });
 
 test('non-active participants cannot use current-turn actions', () => {
@@ -1854,15 +1904,37 @@ test('bonus actions cannot be used twice in the same turn', () => {
   );
 });
 
+test('active turn participant emits encounter_state when using a bonus action', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updatedEncounter = useBonusAction(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
+
+  assert.equal(updatedEncounter.currentTurnUsage.bonusActionUsed, true);
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, false);
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'bonus_action_used');
+  assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
+});
+
 test('movement usage can be recorded against the current turn allowance', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
 
   startEncounter(runtime, session.sessionId);
 
   const updatedEncounter = recordMovementUsage(runtime, session.sessionId, 10);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
 
   assert.equal(updatedEncounter.currentTurnUsage.movementUsed, 10);
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'movement_used');
+  assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
 });
 
 test('invalid movement usage is rejected for negative or excessive values', () => {
@@ -1890,12 +1962,15 @@ test('invalid movement usage is rejected for negative or excessive values', () =
   );
 });
 
-test('encounter-aware movement spends authoritative movement usage for the current turn', () => {
+test('encounter-aware movement emits independent encounter_state and movement_state updates', () => {
   const runtime = new InMemoryGameRuntime();
   const { session, scene, firstCharacter } =
     setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
 
   startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeMove = getEncounterUpdates(updates).length;
+  const movementUpdateCountBeforeMove = getMovementUpdates(updates).length;
 
   const movedCharacter = runtime.moveCharacterInActiveScene({
     commandId: 'move-character-during-encounter',
@@ -1913,10 +1988,95 @@ test('encounter-aware movement spends authoritative movement usage for the curre
     },
   });
   const encounter = getEncounterState(runtime, session.sessionId);
+  const encounterStreamUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBeforeMove,
+  );
+  const movementStreamUpdates = getMovementUpdates(updates).slice(
+    movementUpdateCountBeforeMove,
+  );
+  const encounterStreamUpdate = encounterStreamUpdates.find(
+    (update) => update.reason === 'movement_used',
+  );
+  const movementStreamUpdate = movementStreamUpdates.find(
+    (update) => update.reason === 'character_moved',
+  );
 
   assert.equal(movedCharacter.overlay.position?.sceneId, scene.id);
   assert.equal(movedCharacter.character.id, firstCharacter.character.id);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.equal(encounterStreamUpdates.length, 1);
+  assert.equal(movementStreamUpdates.length, 1);
+  assert.ok(encounterStreamUpdate);
+  assert.ok(movementStreamUpdate);
+  assert.equal(encounterStreamUpdate?.reason, 'movement_used');
+  assert.deepEqual(encounterStreamUpdate?.encounter, encounter);
+  assert.equal(movementStreamUpdate?.participantId, 'player-001');
+  assert.equal(movementStreamUpdate?.characterId, firstCharacter.character.id);
+  assert.equal(movementStreamUpdate?.activeSceneId, scene.id);
+  assert.deepEqual(movementStreamUpdate?.position, {
+    x: 0,
+    y: 2,
+  });
+  assert.deepEqual(movementStreamUpdate?.footprint, {
+    width: 1,
+    height: 1,
+  });
+});
+
+test('zero-cost encounter movement emits only movement_state and leaves encounter usage unchanged', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, scene, firstCharacter } =
+    setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeMove = getEncounterUpdates(updates).length;
+  const movementUpdateCountBeforeMove = getMovementUpdates(updates).length;
+
+  const movedCharacter = runtime.moveCharacterInActiveScene({
+    commandId: 'move-character-no-op-position',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 0,
+      },
+    },
+  });
+  const encounter = getEncounterState(runtime, session.sessionId);
+  const encounterStreamUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBeforeMove,
+  );
+  const movementStreamUpdates = getMovementUpdates(updates).slice(
+    movementUpdateCountBeforeMove,
+  );
+  const movementStreamUpdate = movementStreamUpdates.find(
+    (update) => update.reason === 'character_moved',
+  );
+
+  assert.equal(movedCharacter.overlay.position?.sceneId, scene.id);
+  assert.equal(movedCharacter.character.id, firstCharacter.character.id);
+  assert.deepEqual(movedCharacter.overlay.position, {
+    sceneId: scene.id,
+    x: 0,
+    y: 0,
+  });
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+  assert.equal(encounterStreamUpdates.length, 0);
+  assert.equal(movementStreamUpdates.length, 1);
+  assert.ok(movementStreamUpdate);
+  assert.equal(movementStreamUpdate?.participantId, 'player-001');
+  assert.equal(movementStreamUpdate?.characterId, firstCharacter.character.id);
+  assert.equal(movementStreamUpdate?.activeSceneId, scene.id);
+  assert.deepEqual(movementStreamUpdate?.position, {
+    x: 0,
+    y: 0,
+  });
 });
 
 test('non-active participants cannot move during another participant turn', () => {
@@ -1983,12 +2143,14 @@ test('encounter movement spending rejects legal destinations that exceed remaini
 test('advance turn resets turn usage after real action and movement mutations', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
 
   startEncounter(runtime, session.sessionId);
   useAction(runtime, session.sessionId);
   recordMovementUsage(runtime, session.sessionId, 15);
 
   const advancedEncounter = advanceTurn(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
 
   assert.equal(advancedEncounter.currentTurnIndex, 1);
   assert.equal(advancedEncounter.roundNumber, 1);
@@ -1998,6 +2160,9 @@ test('advance turn resets turn usage after real action and movement mutations', 
     reactionUsed: false,
     movementUsed: 0,
   });
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'turn_advanced');
+  assert.deepEqual(streamUpdate?.encounter, advancedEncounter);
 });
 
 test('advancing turn wraps to the first participant and increments the round number', () => {
@@ -2077,4 +2242,68 @@ test('reading or advancing encounter state without an active encounter is reject
       error instanceof EncounterStoreError &&
       error.code === 'no_active_encounter',
   );
+});
+
+test('failed invalid-turn encounter mutations do not emit encounter_state updates', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_turn_actor',
+  );
+
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('failed duplicate action usage does not emit an encounter_state update', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  useAction(runtime, session.sessionId);
+
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'action_already_used',
+  );
+
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('failed excessive movement usage does not emit an encounter_state update', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      recordMovementUsage(runtime, session.sessionId, 35);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'movement_usage_exceeds_allowance',
+  );
+
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
 });

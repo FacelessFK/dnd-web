@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 
 import type {
   CreateSessionCommand,
+  EncounterStateUpdate,
   JoinSessionCommand,
   MovementStateUpdate,
   MovementStateUpdateReason,
@@ -278,6 +279,12 @@ export class InMemorySessionStore {
     this.broadcast(room, update);
 
     return this.clone(update);
+  }
+
+  publishEncounterStateUpdate(update: EncounterStateUpdate): void {
+    const room = this.requireRoom(update.sessionId);
+
+    this.broadcast(room, update);
   }
 
   private applyMutation(

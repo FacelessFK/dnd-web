@@ -17,6 +17,7 @@ import type {
   CreateCharacterCommand,
   CreateSceneCommand,
   CreateSessionCommand,
+  EncounterStateUpdateReason,
   FinalizeCharacterCommand,
   GetEncounterStateCommand,
   GetActiveSceneStateCommand,
@@ -530,6 +531,9 @@ export class InMemoryGameRuntime {
         );
       }
 
+      // Zero-cost movement is an encounter no-op: it still republishes the
+      // authoritative movement position if requested, but it does not spend
+      // movement or emit `encounter_state`.
       if (movementCostFeet > 0) {
         updatedEncounter = recordEncounterMovementUsage({
           encounter,
@@ -560,9 +564,16 @@ export class InMemoryGameRuntime {
     );
 
     if (updatedEncounter) {
-      this.encounters.saveEncounter(updatedEncounter);
+      this.saveAndPublishEncounter({
+        sessionId: snapshot.session.id,
+        encounter: updatedEncounter,
+        reason: 'movement_used',
+      });
     }
 
+    // NOTE:
+    // `movement_state` and `encounter_state` are emitted independently.
+    // Clients must treat them as separate authoritative updates.
     this.publishMovementStateUpdate({
       sessionId: snapshot.session.id,
       activeSceneId,
@@ -606,8 +617,9 @@ export class InMemoryGameRuntime {
     assertSceneBelongsToSession(snapshot, scene);
     assertGridDefinitionIsValid(scene.grid);
 
-    return this.encounters.createEncounter(
-      createEncounterRecord({
+    return this.saveAndPublishEncounter({
+      sessionId: snapshot.session.id,
+      encounter: createEncounterRecord({
         sessionId: snapshot.session.id,
         sceneId: activeSceneId,
         participants: this.buildEncounterParticipantsFromActiveScene(
@@ -615,7 +627,8 @@ export class InMemoryGameRuntime {
           activeSceneState,
         ),
       }),
-    );
+      reason: 'encounter_started',
+    });
   }
 
   getEncounterState(command: GetEncounterStateCommand): Encounter {
@@ -631,7 +644,11 @@ export class InMemoryGameRuntime {
       command.actor.participantId,
     );
 
-    return this.encounters.saveEncounter(markEncounterActionUsed(encounter));
+    return this.saveAndPublishEncounter({
+      sessionId: command.payload.sessionId,
+      encounter: markEncounterActionUsed(encounter),
+      reason: 'action_used',
+    });
   }
 
   useBonusAction(command: UseBonusActionCommand): Encounter {
@@ -640,9 +657,11 @@ export class InMemoryGameRuntime {
       command.actor.participantId,
     );
 
-    return this.encounters.saveEncounter(
-      markEncounterBonusActionUsed(encounter),
-    );
+    return this.saveAndPublishEncounter({
+      sessionId: command.payload.sessionId,
+      encounter: markEncounterBonusActionUsed(encounter),
+      reason: 'bonus_action_used',
+    });
   }
 
   recordMovementUsage(command: RecordMovementUsageCommand): Encounter {
@@ -652,13 +671,15 @@ export class InMemoryGameRuntime {
         command.actor.participantId,
       );
 
-    return this.encounters.saveEncounter(
-      recordEncounterMovementUsage({
+    return this.saveAndPublishEncounter({
+      sessionId: command.payload.sessionId,
+      encounter: recordEncounterMovementUsage({
         encounter,
         additionalMovementFeet: command.payload.amountFeet,
         movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
       }),
-    );
+      reason: 'movement_used',
+    });
   }
 
   advanceTurn(command: AdvanceTurnCommand): Encounter {
@@ -673,11 +694,13 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'advance encounter turns');
 
-    return this.encounters.saveEncounter(
-      advanceEncounterTurn(
+    return this.saveAndPublishEncounter({
+      sessionId: snapshot.session.id,
+      encounter: advanceEncounterTurn(
         this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
       ),
-    );
+      reason: 'turn_advanced',
+    });
   }
 
   getActiveSceneStateForParticipant(
@@ -1003,6 +1026,38 @@ export class InMemoryGameRuntime {
       footprint: params.record.overlay.footprint,
       reason: params.reason,
     });
+  }
+
+  private publishEncounterStateUpdate(params: {
+    sessionId: SessionId;
+    encounter: Encounter;
+    reason: EncounterStateUpdateReason;
+  }): void {
+    this.sessions.publishEncounterStateUpdate({
+      type: 'encounter_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      encounter: params.encounter,
+    });
+  }
+
+  private saveAndPublishEncounter(params: {
+    encounter: Encounter;
+    sessionId: SessionId;
+    reason: EncounterStateUpdateReason;
+  }): Encounter {
+    const savedEncounter =
+      params.reason === 'encounter_started'
+        ? this.encounters.createEncounter(params.encounter)
+        : this.encounters.saveEncounter(params.encounter);
+
+    this.publishEncounterStateUpdate({
+      sessionId: params.sessionId,
+      encounter: savedEncounter,
+      reason: params.reason,
+    });
+
+    return savedEncounter;
   }
 
   private getResolvedSessionCharacterRecords(

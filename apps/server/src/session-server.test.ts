@@ -527,6 +527,39 @@ test('movement session-stream updates are validated as a narrow realtime payload
   assert.equal(result.success, true);
 });
 
+test('encounter session-stream updates are validated as authoritative realtime payloads', () => {
+  const result = sessionStreamEventSchema.safeParse({
+    type: 'encounter_state',
+    reason: 'turn_advanced',
+    sessionId: 'ABC123',
+    encounter: {
+      id: 'encounter_11111111-1111-4111-8111-111111111111',
+      sessionId: 'ABC123',
+      sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      status: 'active',
+      participants: [
+        {
+          characterId: 'char_11111111-1111-4111-8111-111111111111',
+          participantId: 'player-001',
+          initiative: 2,
+        },
+      ],
+      currentTurnIndex: 0,
+      roundNumber: 2,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 0,
+      },
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:01:00.000Z',
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
 test('active-scene state success payloads are validated as a narrow read model', () => {
   const result = activeSceneStateCommandSuccessSchema.safeParse({
     ok: true,

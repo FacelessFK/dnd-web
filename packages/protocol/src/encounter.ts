@@ -38,6 +38,21 @@ export const encounterSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+export const encounterStateUpdateReasonSchema = z.enum([
+  'encounter_started',
+  'turn_advanced',
+  'action_used',
+  'bonus_action_used',
+  'movement_used',
+]);
+
+export const encounterStateUpdateSchema = z.object({
+  type: z.literal('encounter_state'),
+  reason: encounterStateUpdateReasonSchema,
+  sessionId: sessionIdSchema,
+  encounter: encounterSchema,
+});
+
 export const startEncounterCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('start_encounter'),
@@ -120,6 +135,10 @@ export const encounterCommandResponseSchema = z.union([
 
 export type EncounterParticipant = z.infer<typeof encounterParticipantSchema>;
 export type Encounter = z.infer<typeof encounterSchema>;
+export type EncounterStateUpdateReason = z.infer<
+  typeof encounterStateUpdateReasonSchema
+>;
+export type EncounterStateUpdate = z.infer<typeof encounterStateUpdateSchema>;
 export type StartEncounterCommand = z.infer<typeof startEncounterCommandSchema>;
 export type GetEncounterStateCommand = z.infer<
   typeof getEncounterStateCommandSchema
