@@ -769,6 +769,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'duplicate_join':
     case 'encounter_already_active':
     case 'action_already_used':
+    case 'attack_target_downed':
+    case 'attack_target_out_of_reach':
     case 'bonus_action_already_used':
     case 'invalid_encounter_participant':
     case 'invalid_attack_target':

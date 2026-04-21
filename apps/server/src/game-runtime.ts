@@ -8,6 +8,7 @@ import {
   deriveCharacterStats,
   doesOccupancyFitWithinGrid,
   isAttackHit,
+  isWithinBaselineMeleeReach,
   rollD20,
 } from '@dnd/rules';
 import type {
@@ -55,6 +56,7 @@ import type {
   RulesProfile,
   Scene,
   SceneId,
+  ScenePosition,
   SessionSnapshot,
   SessionId,
 } from '@dnd/shared';
@@ -119,11 +121,14 @@ export { createConnectionId };
 
 type AttackContext = {
   sessionId: SessionId;
+  activeSceneId: SceneId;
   encounter: Encounter;
   attackerParticipant: Participant;
   attackerRecord: StoredCharacterRecord;
+  attackerPosition: ScenePosition;
   targetParticipant: Participant;
   targetRecord: StoredCharacterRecord;
+  targetPosition: ScenePosition;
 };
 
 type ResolvedAttack = {
@@ -934,6 +939,7 @@ export class InMemoryGameRuntime {
       command.actor.participantId,
     );
     const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
     const encounter = this.getEncounterStateForParticipant(
       snapshot.session.id,
       actor.id,
@@ -989,26 +995,54 @@ export class InMemoryGameRuntime {
       );
     }
 
-    const targetPosition = targetRecord.overlay.position;
+    const attackerPosition = this.requireAttackPlacement({
+      record: attackerRecord,
+      activeSceneId,
+      participantId: attackerParticipant.id,
+      role: 'attacker',
+    });
+    const targetPosition = this.requireAttackPlacement({
+      record: targetRecord,
+      activeSceneId,
+      participantId: targetParticipant.id,
+      role: 'target',
+    });
 
-    if (!targetPosition || targetPosition.sceneId !== activeSceneId) {
+    if (targetRecord.character.hp.current === 0) {
       throw new EncounterRuntimeError(
-        'invalid_attack_target',
-        `Participant "${targetParticipant.id}" does not have a valid active-scene attack target in scene "${activeSceneId}".`,
+        'attack_target_downed',
+        `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
+      );
+    }
+
+    if (
+      !isWithinBaselineMeleeReach({
+        attackerPosition,
+        targetPosition,
+        cellSizeFeet: scene.grid.cellSizeFeet,
+      })
+    ) {
+      throw new EncounterRuntimeError(
+        'attack_target_out_of_reach',
+        `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
       );
     }
 
     return {
       sessionId: snapshot.session.id,
+      activeSceneId,
       encounter,
       attackerParticipant,
       attackerRecord,
+      attackerPosition,
       targetParticipant,
       targetRecord,
+      targetPosition,
     };
   }
 
   private resolveAttack(context: AttackContext): ResolvedAttack {
+    const updatedEncounter = markEncounterActionUsed(context.encounter);
     const d20 = rollD20(this.d20Roller);
     const modifier = calculateAttackModifier(context.attackerRecord.character);
     const total = calculateAttackTotal(d20, modifier);
@@ -1020,7 +1054,7 @@ export class InMemoryGameRuntime {
       : previousTargetHp;
 
     return {
-      updatedEncounter: markEncounterActionUsed(context.encounter),
+      updatedEncounter,
       roll: {
         d20,
         modifier,
@@ -1091,6 +1125,32 @@ export class InMemoryGameRuntime {
       damage: resolution.damage,
       targetHp: resolution.targetHp,
     };
+  }
+
+  private requireAttackPlacement(params: {
+    record: StoredCharacterRecord;
+    activeSceneId: SceneId;
+    participantId: ParticipantId;
+    role: 'attacker' | 'target';
+  }): ScenePosition {
+    const position = params.record.overlay.position;
+
+    if (position && position.sceneId === params.activeSceneId) {
+      return {
+        x: position.x,
+        y: position.y,
+      };
+    }
+
+    const code =
+      params.role === 'attacker'
+        ? 'character_not_placed'
+        : 'invalid_attack_target';
+
+    throw new EncounterRuntimeError(
+      code,
+      `Attack ${params.role} participant "${params.participantId}" does not have a valid active-scene placement in scene "${params.activeSceneId}".`,
+    );
   }
 
   private createEncounterOverlay(characterId: CharacterId): EncounterOverlay {

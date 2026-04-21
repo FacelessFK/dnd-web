@@ -20,6 +20,8 @@ export type InitiativeOrderEntry = {
   characterId: string;
 };
 
+export const BASELINE_MELEE_REACH_FEET = 5;
+
 export function calculateAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
@@ -201,6 +203,33 @@ export function isAttackHit(
 
 export function applyFixedDamage(currentHp: number, damage: number): number {
   return Math.max(0, currentHp - damage);
+}
+
+// Phase 6 uses a temporary melee-only baseline: one Manhattan grid step on a
+// standard 5-foot grid. This intentionally ignores weapons, size, diagonals,
+// cover, and ranged attacks until those systems exist explicitly.
+export function isWithinBaselineMeleeReach(params: {
+  attackerPosition: ScenePosition;
+  targetPosition: ScenePosition;
+  cellSizeFeet: number;
+  reachFeet?: number;
+}): boolean {
+  if (
+    !Number.isInteger(params.cellSizeFeet) ||
+    params.cellSizeFeet < 1 ||
+    (params.reachFeet != null &&
+      (!Number.isInteger(params.reachFeet) || params.reachFeet < 1))
+  ) {
+    return false;
+  }
+
+  return (
+    calculateMovementDistanceFeet(
+      params.attackerPosition,
+      params.targetPosition,
+      params.cellSizeFeet,
+    ) <= (params.reachFeet ?? BASELINE_MELEE_REACH_FEET)
+  );
 }
 
 export function sortEncounterParticipantsByInitiative<

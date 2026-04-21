@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const runtimeErrorCodeSchema = z.enum([
   'action_already_used',
+  'attack_target_downed',
+  'attack_target_out_of_reach',
   'bonus_action_already_used',
   'character_not_found',
   'character_not_placed',

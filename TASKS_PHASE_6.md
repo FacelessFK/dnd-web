@@ -1,102 +1,48 @@
-# Phase 6 — Slice 1: Attack Action (Foundation)
+# Phase 6 — Combat Foundation
 
 ## Goal
 
-Implement the **first real combat action: attack**
+Introduce narrow, server-authoritative combat actions without expanding into full
+weapon, spell, condition, death-save, or persistence systems.
 
----
+## Completed
 
-## Scope
+### Slice 1 — Attack Action Foundation
 
-Add a new encounter command:
+- Added the `attack` encounter command.
+- Added server-side attack roll resolution using `1d20 + attackModifier`.
+- Used fixed hit damage of `1` for the temporary foundation.
+- Applied target HP changes through the character repository boundary.
+- Consumed the current turn action on successful attack resolution.
+- Added `combat_event` SSE propagation after successful attack resolution.
+- Preserved encounter realtime propagation with `encounter_state`.
 
-```ts
-attack;
-```
+### Slice 2 — Attack Legality Pass
 
----
+- Ensured deterministic attack legality failures happen before consuming the d20
+  roller.
+- Rejected attacks when the actor is not the current turn owner.
+- Rejected attacks when the current turn action is already spent.
+- Rejected attacks against downed targets at `0` HP.
+- Added a temporary melee-only 5-foot Manhattan reach baseline.
+- Required attacker and target to be placed in the active scene.
+- Preserved SSE semantics: successful attacks emit `encounter_state` first, then
+  `combat_event`; failed attacks emit neither.
 
-## Behavior
+## Remaining Phase 6 Candidates
 
-When current turn player attacks:
-
-1. validate turn ownership
-2. validate target exists in encounter
-3. roll attack (server-side)
-4. determine hit/miss
-5. apply damage if hit
-6. update target HP
-7. emit BOTH:
-   - encounter_state (turn usage change)
-   - NEW: combat_event
-
----
-
-## New Concepts
-
-### 1. combat_event (NEW SSE)
-
-```ts
-type: 'combat_event';
-```
-
-Payload includes:
-
-- attackerId
-- targetId
-- roll
-- hit/miss
-- damage
-
----
-
-## Rules (simple for now)
-
-- d20 + attack modifier
-- compare vs armorClass
-- damage = fixed (no dice yet)
-
----
+- Add a narrow combat read model if clients need current target HP snapshots
+  outside `combat_event`.
+- Add explicit combat log/history only when product requirements need it.
+- Add weapon/ranged/spell attack slices later, each as separate narrow work.
+- Add death/dying semantics later; current HP only clamps at `0`.
+- Add persistence/transaction work in a later storage-focused phase.
 
 ## Constraints
 
-- only current turn owner can attack
-- consumes ACTION
-- cannot attack twice
-
----
-
-## Files to modify
-
-- protocol:
-  - encounter.ts
-  - NEW: combat.ts
-- runtime:
-  - encounter-runtime.ts
-  - game-runtime.ts
-- rules:
-  - attack resolution helpers
-
----
-
-## Acceptance Criteria
-
-- attack works end-to-end
-- state updated correctly
-- SSE events emitted
-- tests cover:
-  - hit
-  - miss
-  - invalid turn
-  - double attack
-
----
-
-## Important
-
-Keep it SIMPLE.
-
-No spells
-No conditions
-No reactions
-No advantage/disadvantage
+- No spells yet.
+- No ranged attacks yet.
+- No weapon or inventory model yet.
+- No damage dice expansion yet.
+- No condition, death-save, or reaction systems yet.
+- No database persistence in Phase 6 foundation slices.

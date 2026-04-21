@@ -32,6 +32,17 @@ function createRuntimeWithAttackRoll(d20: number) {
   );
 }
 
+function createRuntimeWithAttackRoller(roller: () => number) {
+  return new InMemoryGameRuntime(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    roller,
+  );
+}
+
 function createSession(runtime: InMemoryGameRuntime) {
   return runtime.createSession({
     commandId: 'create-session-1',
@@ -575,7 +586,20 @@ function attack(
   });
 }
 
-function setupEncounterParticipants(runtime: InMemoryGameRuntime) {
+function setupEncounterParticipants(
+  runtime: InMemoryGameRuntime,
+  options: {
+    secondPosition?: {
+      x: number;
+      y: number;
+    };
+    secondCharacterOverrides?: Partial<
+      Parameters<
+        InMemoryGameRuntime['createCharacter']
+      >[0]['payload']['character']
+    >;
+  } = {},
+) {
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -585,6 +609,7 @@ function setupEncounterParticipants(runtime: InMemoryGameRuntime) {
   const secondCharacter = assignSecondPlayerCharacter(
     runtime,
     session.sessionId,
+    options.secondCharacterOverrides,
   );
   const scene = activateScene(runtime, session.sessionId);
 
@@ -596,8 +621,8 @@ function setupEncounterParticipants(runtime: InMemoryGameRuntime) {
     runtime,
     session.sessionId,
     'player-002',
-    {
-      x: 2,
+    options.secondPosition ?? {
+      x: 1,
       y: 0,
     },
   );
@@ -2115,7 +2140,7 @@ test('attack damage never reduces target HP below zero', () => {
     session.sessionId,
     'player-002',
     {
-      x: 2,
+      x: 1,
       y: 0,
     },
   );
@@ -2130,8 +2155,12 @@ test('attack damage never reduces target HP below zero', () => {
   assert.equal(targetRecord.character.hp.current, 0);
 });
 
-test('non-current participants cannot attack during another participant turn', () => {
-  const runtime = createRuntimeWithAttackRoll(20);
+test('non-current participants cannot attack and do not consume attack RNG', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2144,6 +2173,7 @@ test('non-current participants cannot attack during another participant turn', (
       error instanceof EncounterRuntimeError &&
       error.code === 'invalid_turn_actor',
   );
+  assert.equal(rollCount, 0);
 });
 
 test('self-targeted attacks are rejected', () => {
@@ -2163,7 +2193,11 @@ test('self-targeted attacks are rejected', () => {
 });
 
 test('attack targets that are not encounter participants are rejected', () => {
-  const runtime = createRuntimeWithAttackRoll(20);
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2224,10 +2258,87 @@ test('attack targets that are not encounter participants are rejected', () => {
       error instanceof EncounterRuntimeError &&
       error.code === 'invalid_attack_target',
   );
+  assert.equal(rollCount, 0);
 });
 
-test('failed attack commands emit neither combat_event nor encounter_state updates', () => {
-  const runtime = createRuntimeWithAttackRoll(20);
+test('attacks against downed targets are rejected before rolling or emitting stream updates', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
+  const { session } = setupEncounterParticipants(runtime, {
+    secondCharacterOverrides: {
+      hp: {
+        max: 34,
+        current: 0,
+        temp: 0,
+      },
+    },
+  });
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'attack_target_downed',
+  );
+
+  assert.equal(rollCount, 0);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeAttack,
+  );
+  assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
+});
+
+test('out-of-reach melee attack targets are rejected before rolling', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
+  const { session } = setupEncounterParticipants(runtime, {
+    secondPosition: {
+      x: 2,
+      y: 0,
+    },
+  });
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'attack_target_out_of_reach',
+  );
+  assert.equal(rollCount, 0);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeAttack,
+  );
+  assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
+});
+
+test('failed attack commands emit neither combat_event nor encounter_state updates and do not consume attack RNG', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -2245,6 +2356,7 @@ test('failed attack commands emit neither combat_event nor encounter_state updat
       error.code === 'action_already_used',
   );
 
+  assert.equal(rollCount, 0);
   assert.equal(
     getEncounterUpdates(updates).length,
     encounterUpdateCountBeforeAttack,
