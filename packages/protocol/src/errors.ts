@@ -7,6 +7,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'bonus_action_already_used',
   'character_not_found',
   'character_not_placed',
+  'command_id_conflict',
   'duplicate_join',
   'encounter_already_active',
   'internal_server_error',

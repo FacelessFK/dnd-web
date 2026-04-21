@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import type { IncomingHttpHeaders } from 'node:http';
+import { Readable } from 'node:stream';
 import test from 'node:test';
 
 import {
   activeSceneStateCommandSuccessSchema,
+  type EncounterCommandResponse,
   characterCommandSchema,
   clientCommandSchema,
   encounterCommandSchema,
@@ -13,7 +16,359 @@ import {
   type SessionStreamEvent,
 } from '@dnd/protocol';
 
+import { InMemoryCommandIdempotencyStore } from './command-idempotency-store.js';
+import { InMemoryGameRuntime } from './game-runtime.js';
+import { handleRequest } from './session-server.js';
 import { InMemorySessionStore } from './session-store.js';
+
+type JsonResponse<T> = {
+  body: T;
+  status: number;
+};
+
+async function postJson<TResponse>(
+  runtime: InMemoryGameRuntime,
+  idempotency: InMemoryCommandIdempotencyStore,
+  path: string,
+  body: unknown,
+): Promise<JsonResponse<TResponse>> {
+  const request = Readable.from([JSON.stringify(body)]) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+  };
+  const response = createMockResponse();
+
+  request.headers = {
+    'content-type': 'application/json',
+    host: '127.0.0.1',
+  };
+  request.method = 'POST';
+  request.url = path;
+
+  await handleRequest(
+    request as never,
+    response as never,
+    runtime,
+    idempotency,
+  );
+
+  return {
+    status: response.statusCode,
+    body: JSON.parse(response.body) as TResponse,
+  };
+}
+
+function createMockResponse() {
+  return {
+    body: '',
+    headers: new Map<string, string | number | readonly string[]>(),
+    headersSent: false,
+    statusCode: 200,
+    writableEnded: false,
+    end(chunk?: unknown) {
+      if (chunk != null) {
+        this.body += String(chunk);
+      }
+
+      this.writableEnded = true;
+      return this;
+    },
+    setHeader(name: string, value: string | number | readonly string[]) {
+      this.headers.set(name.toLowerCase(), value);
+      return this;
+    },
+    write(chunk: unknown) {
+      this.body += String(chunk);
+      return true;
+    },
+    writeHead(
+      statusCode: number,
+      headers?: Record<string, string | number | readonly string[]>,
+    ) {
+      this.statusCode = statusCode;
+      this.headersSent = true;
+
+      if (headers) {
+        for (const [name, value] of Object.entries(headers)) {
+          this.setHeader(name, value);
+        }
+      }
+
+      return this;
+    },
+  };
+}
+
+function subscribeToSessionEvents(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+) {
+  const updates: SessionStreamEvent[] = [];
+
+  runtime.connectParticipant(sessionId, 'dm-001', {
+    connectionId: `test-dm-stream-${sessionId}`,
+    close: () => undefined,
+    send: (update) => {
+      updates.push(update);
+    },
+  });
+
+  return updates;
+}
+
+function getEncounterUpdates(updates: SessionStreamEvent[]) {
+  return updates.filter((update) => update.type === 'encounter_state');
+}
+
+function getCombatEvents(updates: SessionStreamEvent[]) {
+  return updates.filter((update) => update.type === 'combat_event');
+}
+
+function setupEncounterForIdempotency(runtime: InMemoryGameRuntime) {
+  const session = runtime.createSession({
+    commandId: 'setup-create-session',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+
+  runtime.joinSession({
+    commandId: 'setup-join-player-1',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-001',
+      displayName: 'Player One',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+  runtime.joinSession({
+    commandId: 'setup-join-player-2',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-002',
+      displayName: 'Player Two',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  const firstCharacter = createCharacterForIdempotency(
+    runtime,
+    session.sessionId,
+    'player-001',
+    {
+      name: 'Aria',
+      armorClass: 13,
+      abilities: {
+        str: 8,
+        dex: 14,
+        con: 13,
+        int: 16,
+        wis: 12,
+        cha: 10,
+      },
+      hp: {
+        max: 26,
+        current: 26,
+        temp: 0,
+      },
+    },
+  );
+  const secondCharacter = createCharacterForIdempotency(
+    runtime,
+    session.sessionId,
+    'player-002',
+    {
+      name: 'Borin',
+      armorClass: 16,
+      abilities: {
+        str: 16,
+        dex: 12,
+        con: 14,
+        int: 10,
+        wis: 10,
+        cha: 8,
+      },
+      hp: {
+        max: 34,
+        current: 34,
+        temp: 0,
+      },
+    },
+  );
+
+  assignCharacterForIdempotency(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+  );
+  assignCharacterForIdempotency(
+    runtime,
+    session.sessionId,
+    'player-002',
+    secondCharacter.character.id,
+  );
+
+  const scene = runtime.createScene({
+    commandId: 'setup-create-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Reliability Test Arena',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  runtime.activateSceneForSession({
+    commandId: 'setup-activate-scene',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: scene.id,
+    },
+  });
+  placeCharacterForIdempotency(runtime, session.sessionId, 'player-001', {
+    x: 0,
+    y: 0,
+  });
+  placeCharacterForIdempotency(runtime, session.sessionId, 'player-002', {
+    x: 1,
+    y: 0,
+  });
+
+  runtime.startEncounter({
+    commandId: 'setup-start-encounter',
+    type: 'start_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  return {
+    firstCharacterId: firstCharacter.character.id,
+    secondCharacterId: secondCharacter.character.id,
+    sessionId: session.sessionId,
+  };
+}
+
+function createCharacterForIdempotency(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  overrides: {
+    abilities: {
+      cha: number;
+      con: number;
+      dex: number;
+      int: number;
+      str: number;
+      wis: number;
+    };
+    armorClass: number;
+    hp: {
+      current: number;
+      max: number;
+      temp: number;
+    };
+    name: string;
+  },
+) {
+  return runtime.createCharacter({
+    commandId: `setup-create-character-${participantId}`,
+    type: 'create_character',
+    actor: {
+      participantId,
+    },
+    payload: {
+      sessionId,
+      ownerParticipantId: participantId,
+      character: {
+        name: overrides.name,
+        level: 5,
+        className: 'Fighter',
+        speciesOrRace: 'Human',
+        background: 'Soldier',
+        abilities: overrides.abilities,
+        hp: overrides.hp,
+        armorClass: overrides.armorClass,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+}
+
+function assignCharacterForIdempotency(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  characterId: string,
+) {
+  runtime.assignCharacterToParticipant({
+    commandId: `setup-assign-character-${participantId}`,
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId,
+      characterId,
+    },
+  });
+}
+
+function placeCharacterForIdempotency(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  position: {
+    x: number;
+    y: number;
+  },
+) {
+  runtime.placeCharacterInActiveScene({
+    commandId: `setup-place-character-${participantId}`,
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId,
+    },
+    payload: {
+      sessionId,
+      participantId,
+      position,
+    },
+  });
+}
 
 test('invalid session IDs are rejected by command validation', () => {
   const result = clientCommandSchema.safeParse({
@@ -470,6 +825,224 @@ test('encounter success payloads are validated as authoritative turn-order respo
   });
 
   assert.equal(result.success, true);
+});
+
+test('duplicate mutating encounter commands return cached success without duplicate SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-use-action-1',
+    type: 'use_action',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  };
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const first = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+  );
+  const second = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'action_used');
+});
+
+test('duplicate attack commands do not reroll, double damage, or duplicate SSE', async () => {
+  let rollCount = 0;
+  const runtime = new InMemoryGameRuntime(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => {
+      rollCount += 1;
+      return 20;
+    },
+  );
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { secondCharacterId, sessionId } =
+    setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-attack-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      targetParticipantId: 'player-002',
+    },
+  };
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const combatEventsBefore = getCombatEvents(updates).length;
+  const first = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+  );
+  const second = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+  );
+  const target = runtime.characters.getCharacter(secondCharacterId);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(rollCount, 1);
+  assert.equal(target.character.hp.current, 33);
+  assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
+  assert.equal(getCombatEvents(updates).length - combatEventsBefore, 1);
+});
+
+test('command ID conflicts are rejected without runtime mutation or SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const firstCommand = {
+    commandId: 'conflicting-record-movement-1',
+    type: 'record_movement_usage',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      amountFeet: 5,
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      sessionId,
+      amountFeet: 10,
+    },
+  };
+  const first = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    firstCommand,
+  );
+  const encounterUpdatesBeforeConflict = getEncounterUpdates(updates).length;
+  const conflict = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    conflictingCommand,
+  );
+  const encounter = runtime.getEncounterState({
+    commandId: 'read-after-conflict',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.equal(encounter.currentTurnUsage.movementUsed, 5);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdatesBeforeConflict,
+  );
+});
+
+test('read commands are not cached as idempotent mutations', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+
+  const readCommand = {
+    commandId: 'repeat-read-encounter-1',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  };
+  const firstRead = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    readCommand,
+  );
+
+  await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    {
+      commandId: 'mutate-between-repeat-reads',
+      type: 'use_action',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  const secondRead = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    readCommand,
+  );
+
+  assert.equal(firstRead.status, 200);
+  assert.equal(secondRead.status, 200);
+  assert.equal(firstRead.body.ok, true);
+  assert.equal(secondRead.body.ok, true);
+  if (!firstRead.body.ok || !secondRead.body.ok) {
+    return;
+  }
+  assert.equal(
+    firstRead.body.data.encounter.currentTurnUsage.actionUsed,
+    false,
+  );
+  assert.equal(
+    secondRead.body.data.encounter.currentTurnUsage.actionUsed,
+    true,
+  );
 });
 
 test('connected subscribers receive synchronized session state updates', () => {

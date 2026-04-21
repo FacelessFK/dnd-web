@@ -45,6 +45,7 @@ rules automation, frontend features, or persistence.
 
 ### Slice 1 — Command Idempotency Baseline
 
+- Status: completed.
 - Define which command IDs are tracked.
 - Define the minimum response behavior for duplicate commands.
 - Prevent duplicate side effects for selected mutating commands.
@@ -80,26 +81,28 @@ rules automation, frontend features, or persistence.
 
 ## Slice 1 Detailed Task List
 
-- Inventory existing commands and classify them as mutating or read-only.
-- Choose a narrow initial set of mutating commands for idempotency protection.
-- Define in-memory command tracking ownership and lifetime.
-- Define duplicate command behavior, including whether to return the original
-  response or reject duplicates explicitly.
-- Ensure duplicate commands do not create duplicate sessions, participants,
-  characters, scenes, movements, encounters, attacks, or turn-usage mutations
-  for the selected baseline.
-- Keep command tracking server-owned and scoped clearly.
-- Add explicit error codes only if the existing runtime error surface is too
-  vague.
-- Document that idempotency is in-memory only and does not survive server
-  restart yet.
-- Add focused tests for duplicate command behavior.
+- Mutating commands are protected at the server command-handler boundary.
+- Read commands are intentionally not cached.
+- Idempotency keys are scoped by command family, command type, command ID, actor
+  participant ID, and session ID when present.
+- Successful command responses are cached in memory and returned for exact
+  duplicate retries.
+- Failed command responses are not cached.
+- Reusing the same idempotency key with a different parsed command fingerprint
+  returns `command_id_conflict`.
+- Duplicate successful retries do not call runtime mutation paths again and do
+  not emit duplicate SSE events.
+- The implementation is process-local and does not survive server restart.
+- No durable command log, event sourcing, database table, Redis, or
+  multi-process coordination was added.
 
 ## Acceptance Criteria
 
 - Phase 8 improves runtime reliability without expanding gameplay.
 - Slice 1 defines and implements an in-memory idempotency baseline.
 - Duplicate selected mutating commands do not apply duplicate side effects.
+- Duplicate successful mutating commands return the cached success response.
+- Command ID conflicts fail safely with no runtime mutation or SSE emission.
 - Reconnect expectations are documented before adding broader reconnect logic.
 - SSE event semantics are documented clearly enough for future client work.
 - Current in-memory limitations are explicit.
@@ -109,7 +112,6 @@ rules automation, frontend features, or persistence.
 
 ## Tests To Add Later
 
-- Duplicate selected command IDs do not duplicate side effects.
 - Duplicate create/join/session commands behave according to the chosen
   idempotency policy.
 - Duplicate movement commands do not double-spend movement usage.

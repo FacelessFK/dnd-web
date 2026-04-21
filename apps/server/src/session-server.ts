@@ -43,6 +43,12 @@ import {
 } from '@dnd/protocol';
 
 import { CharacterStoreError } from './character-store.js';
+import {
+  CommandIdempotencyError,
+  InMemoryCommandIdempotencyStore,
+  type CommandIdempotencyCategory,
+  type CommandIdempotencyStore,
+} from './command-idempotency-store.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import { createConnectionId, InMemoryGameRuntime } from './game-runtime.js';
@@ -59,6 +65,7 @@ const corsHeaders = {
 
 type RuntimeStoreError =
   | CharacterStoreError
+  | CommandIdempotencyError
   | EncounterRuntimeError
   | EncounterStoreError
   | MovementRuntimeError
@@ -66,30 +73,36 @@ type RuntimeStoreError =
   | SceneStoreError
   | SessionStoreError;
 
-export function createSessionServer(runtime = new InMemoryGameRuntime()): {
+export function createSessionServer(
+  runtime = new InMemoryGameRuntime(),
+  idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
+): {
+  idempotency: CommandIdempotencyStore;
   server: Server;
   runtime: InMemoryGameRuntime;
   store: InMemoryGameRuntime['sessions'];
 } {
   const server = createServer(async (request, response) => {
     try {
-      await handleRequest(request, response, runtime);
+      await handleRequest(request, response, runtime, idempotency);
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
     }
   });
 
   return {
+    idempotency,
     server,
     runtime,
     store: runtime.sessions,
   };
 }
 
-async function handleRequest(
+export async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -111,27 +124,37 @@ async function handleRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/api/session/command') {
-    await handleSessionCommandRequest(request, response, runtime);
+    await handleSessionCommandRequest(request, response, runtime, idempotency);
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/characters/command') {
-    await handleCharacterCommandRequest(request, response, runtime);
+    await handleCharacterCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+    );
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/scenes/command') {
-    await handleSceneCommandRequest(request, response, runtime);
+    await handleSceneCommandRequest(request, response, runtime, idempotency);
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/movement/command') {
-    await handleMovementCommandRequest(request, response, runtime);
+    await handleMovementCommandRequest(request, response, runtime, idempotency);
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/encounters/command') {
-    await handleEncounterCommandRequest(request, response, runtime);
+    await handleEncounterCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+    );
     return;
   }
 
@@ -174,6 +197,7 @@ async function handleSessionCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
 
@@ -206,6 +230,16 @@ async function handleSessionCommandRequest(
 
   try {
     const command = commandResult.data;
+    const cachedSuccess = idempotency.getCachedSuccess<SessionCommandSuccess>({
+      category: 'session',
+      command,
+    });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, sessionCommandSuccessSchema);
+      return;
+    }
+
     let result;
 
     switch (command.type) {
@@ -232,6 +266,11 @@ async function handleSessionCommandRequest(
       },
     };
 
+    idempotency.cacheSuccess({
+      category: 'session',
+      command,
+      response: success,
+    });
     sendJson(response, 200, success, sessionCommandSuccessSchema);
   } catch (error) {
     handleRuntimeError(response, error, sessionCommandErrorSchema);
@@ -242,6 +281,7 @@ async function handleCharacterCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
 
@@ -274,6 +314,21 @@ async function handleCharacterCommandRequest(
 
   try {
     const command = commandResult.data;
+    const idempotencyCategory: CommandIdempotencyCategory | null =
+      command.type === 'get_character' ? null : 'character';
+    const cachedSuccess = idempotencyCategory
+      ? idempotency.getCachedSuccess<
+          CharacterAssignmentSuccess | CharacterCommandSuccess
+        >({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendCharacterSuccess(response, command.type, cachedSuccess);
+      return;
+    }
 
     switch (command.type) {
       case 'create_character':
@@ -287,7 +342,14 @@ async function handleCharacterCommandRequest(
           data,
         };
 
-        sendJson(response, 200, success, characterCommandSuccessSchema);
+        if (idempotencyCategory) {
+          idempotency.cacheSuccess({
+            category: idempotencyCategory,
+            command,
+            response: success,
+          });
+        }
+        sendCharacterSuccess(response, command.type, success);
         return;
       }
       case 'update_character':
@@ -301,7 +363,12 @@ async function handleCharacterCommandRequest(
           data,
         };
 
-        sendJson(response, 200, success, characterCommandSuccessSchema);
+        idempotency.cacheSuccess({
+          category: 'character',
+          command,
+          response: success,
+        });
+        sendCharacterSuccess(response, command.type, success);
         return;
       }
       case 'assign_character_to_participant': {
@@ -310,7 +377,12 @@ async function handleCharacterCommandRequest(
           data: runtime.assignCharacterToParticipant(command),
         };
 
-        sendJson(response, 200, success, characterAssignmentSuccessSchema);
+        idempotency.cacheSuccess({
+          category: 'character',
+          command,
+          response: success,
+        });
+        sendCharacterSuccess(response, command.type, success);
         return;
       }
       default:
@@ -325,6 +397,7 @@ async function handleSceneCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
 
@@ -357,6 +430,21 @@ async function handleSceneCommandRequest(
 
   try {
     const command = commandResult.data;
+    const idempotencyCategory: CommandIdempotencyCategory | null =
+      command.type === 'get_scene' ? null : 'scene';
+    const cachedSuccess = idempotencyCategory
+      ? idempotency.getCachedSuccess<
+          SceneActivationSuccess | SceneCommandSuccess
+        >({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendSceneSuccess(response, command.type, cachedSuccess);
+      return;
+    }
 
     switch (command.type) {
       case 'create_scene':
@@ -375,7 +463,14 @@ async function handleSceneCommandRequest(
           },
         };
 
-        sendJson(response, 200, success, sceneCommandSuccessSchema);
+        if (idempotencyCategory) {
+          idempotency.cacheSuccess({
+            category: idempotencyCategory,
+            command,
+            response: success,
+          });
+        }
+        sendSceneSuccess(response, command.type, success);
         return;
       }
       case 'activate_scene_for_session': {
@@ -384,7 +479,12 @@ async function handleSceneCommandRequest(
           data: runtime.activateSceneForSession(command),
         };
 
-        sendJson(response, 200, success, sceneActivationSuccessSchema);
+        idempotency.cacheSuccess({
+          category: 'scene',
+          command,
+          response: success,
+        });
+        sendSceneSuccess(response, command.type, success);
         return;
       }
       default:
@@ -399,6 +499,7 @@ async function handleMovementCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
 
@@ -431,6 +532,20 @@ async function handleMovementCommandRequest(
 
   try {
     const command = commandResult.data;
+    const idempotencyCategory: CommandIdempotencyCategory | null =
+      command.type === 'get_active_scene_state' ? null : 'movement';
+    const cachedSuccess = idempotencyCategory
+      ? idempotency.getCachedSuccess<MovementCommandSuccess>({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, movementCommandSuccessSchema);
+      return;
+    }
+
     let data: MovementCommandSuccess['data'];
 
     switch (command.type) {
@@ -451,6 +566,13 @@ async function handleMovementCommandRequest(
       data,
     };
 
+    if (idempotencyCategory) {
+      idempotency.cacheSuccess({
+        category: idempotencyCategory,
+        command,
+        response: success,
+      });
+    }
     sendJson(response, 200, success, movementCommandSuccessSchema);
   } catch (error) {
     handleRuntimeError(response, error, movementCommandErrorSchema);
@@ -461,6 +583,7 @@ async function handleEncounterCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
   runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
 
@@ -493,6 +616,20 @@ async function handleEncounterCommandRequest(
 
   try {
     const command = commandResult.data;
+    const idempotencyCategory: CommandIdempotencyCategory | null =
+      command.type === 'get_encounter_state' ? null : 'encounter';
+    const cachedSuccess = idempotencyCategory
+      ? idempotency.getCachedSuccess<EncounterCommandSuccess>({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, encounterCommandSuccessSchema);
+      return;
+    }
+
     let encounter: EncounterCommandSuccess['data']['encounter'];
 
     switch (command.type) {
@@ -531,6 +668,13 @@ async function handleEncounterCommandRequest(
       },
     };
 
+    if (idempotencyCategory) {
+      idempotency.cacheSuccess({
+        category: idempotencyCategory,
+        command,
+        response: success,
+      });
+    }
     sendJson(response, 200, success, encounterCommandSuccessSchema);
   } catch (error) {
     handleRuntimeError(response, error, encounterCommandErrorSchema);
@@ -718,6 +862,32 @@ function handleUnexpectedError(
   );
 }
 
+function sendCharacterSuccess(
+  response: ServerResponse,
+  commandType: string,
+  payload: CharacterAssignmentSuccess | CharacterCommandSuccess,
+): void {
+  if (commandType === 'assign_character_to_participant') {
+    sendJson(response, 200, payload, characterAssignmentSuccessSchema);
+    return;
+  }
+
+  sendJson(response, 200, payload, characterCommandSuccessSchema);
+}
+
+function sendSceneSuccess(
+  response: ServerResponse,
+  commandType: string,
+  payload: SceneActivationSuccess | SceneCommandSuccess,
+): void {
+  if (commandType === 'activate_scene_for_session') {
+    sendJson(response, 200, payload, sceneActivationSuccessSchema);
+    return;
+  }
+
+  sendJson(response, 200, payload, sceneCommandSuccessSchema);
+}
+
 function sendJson(
   response: ServerResponse,
   statusCode: number,
@@ -769,6 +939,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     // These errors mean the current authoritative session/scene state cannot
     // satisfy the request as issued, even if the command shape itself is valid.
     case 'character_not_placed':
+    case 'command_id_conflict':
     case 'duplicate_join':
     case 'encounter_already_active':
     case 'action_already_used':
@@ -817,6 +988,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
 function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
     error instanceof CharacterStoreError ||
+    error instanceof CommandIdempotencyError ||
     error instanceof EncounterRuntimeError ||
     error instanceof EncounterStoreError ||
     error instanceof MovementRuntimeError ||
