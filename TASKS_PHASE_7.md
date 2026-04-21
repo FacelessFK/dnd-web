@@ -41,6 +41,7 @@ death-save, and reaction work without implementing those systems fully.
 
 ### Slice 1 — Downed / Unconscious State Baseline
 
+- Status: completed.
 - Define how a character at 0 HP participates in encounter state.
 - Prevent downed current-turn actors from attacking.
 - Decide the narrow turn behavior for downed actors, such as DM-controlled turn
@@ -72,19 +73,19 @@ death-save, and reaction work without implementing those systems fully.
 
 ## Slice 1 Detailed Task List
 
-- Define the MVP meaning of "downed" or "unconscious" for Phase 7.
-- Decide whether downed state is derived from `character.hp.current === 0` or
-  represented as minimal encounter runtime state.
-- Add narrow protocol/read-model fields only if clients cannot infer current
-  behavior safely from existing payloads.
-- Prevent a downed current-turn actor from using `attack`.
-- Consider whether `use_action`, `use_bonus_action`, and
-  `record_movement_usage` should reject downed actors in this slice.
-- Decide how turn advancement handles downed actors without adding death saves.
-- Keep target-at-0 rejection from Phase 6 intact.
-- Preserve existing `encounter_state` and `combat_event` SSE semantics.
-- Add explicit runtime errors only if current error codes are too vague.
-- Document temporary decisions clearly in code comments and this task file.
+- Downed/unconscious state is derived from `character.hp.current === 0`.
+- No canonical `downed` or `unconscious` character field was added.
+- No condition engine or death-save state was added.
+- Downed current-turn actors cannot use `attack`.
+- Downed current-turn actors cannot use `use_action`, `use_bonus_action`, or
+  `record_movement_usage`.
+- Downed current-turn actors cannot move during an active encounter.
+- DM-controlled `advance_turn` remains allowed when the current turn actor is
+  downed.
+- Target-at-0 rejection from Phase 6 remains intact.
+- Existing `encounter_state`, `movement_state`, and `combat_event` payload
+  shapes remain unchanged.
+- The explicit `turn_actor_downed` runtime error represents this state.
 
 ## Acceptance Criteria
 
@@ -100,13 +101,10 @@ death-save, and reaction work without implementing those systems fully.
 
 ## Tests To Add Later
 
-- Downed current-turn actor cannot attack.
-- Downed actor rejection happens before RNG is consumed.
-- Downed actor attack failure emits no `encounter_state` or `combat_event`.
-- Valid conscious attacker can still attack a valid conscious target.
-- Turn advancement remains deterministic when the current actor is downed.
-- Any newly restricted turn usage command rejects downed actors consistently.
-- Protocol schemas validate any new downed-state read model if one is added.
+- Death-save behavior once death saves become an explicit future slice.
+- Condition read-model behavior if a minimal condition model is introduced.
+- Recovery or stabilization behavior if a future phase defines it.
+- Protocol schemas for any future downed-state read model if one is added.
 
 ## Phase Exit Checklist
 

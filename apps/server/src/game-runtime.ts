@@ -8,6 +8,7 @@ import {
   deriveCharacterStats,
   doesOccupancyFitWithinGrid,
   isAttackHit,
+  isCharacterDowned,
   isWithinBaselineMeleeReach,
   rollD20,
 } from '@dnd/rules';
@@ -563,6 +564,8 @@ export class InMemoryGameRuntime {
         );
       }
 
+      this.assertCurrentTurnActorIsConscious(encounter, record);
+
       // Zero-cost movement is an encounter no-op: it still republishes the
       // authoritative movement position if requested, but it does not spend
       // movement or emit `encounter_state`.
@@ -977,6 +980,8 @@ export class InMemoryGameRuntime {
       );
     }
 
+    this.assertCurrentTurnActorIsConscious(encounter, attackerRecord);
+
     const targetRecord = this.requireAssignedCharacterRecord(
       snapshot,
       targetParticipant,
@@ -1008,7 +1013,7 @@ export class InMemoryGameRuntime {
       role: 'target',
     });
 
-    if (targetRecord.character.hp.current === 0) {
+    if (isCharacterDowned(targetRecord.character)) {
       throw new EncounterRuntimeError(
         'attack_target_downed',
         `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
@@ -1150,6 +1155,20 @@ export class InMemoryGameRuntime {
     throw new EncounterRuntimeError(
       code,
       `Attack ${params.role} participant "${params.participantId}" does not have a valid active-scene placement in scene "${params.activeSceneId}".`,
+    );
+  }
+
+  private assertCurrentTurnActorIsConscious(
+    encounter: Encounter,
+    record: StoredCharacterRecord,
+  ): void {
+    if (!isCharacterDowned(record.character)) {
+      return;
+    }
+
+    throw new EncounterRuntimeError(
+      'turn_actor_downed',
+      `Current turn character "${record.character.id}" is at 0 HP and cannot perform turn-bound combat actions in encounter "${encounter.id}".`,
     );
   }
 
@@ -1410,6 +1429,11 @@ export class InMemoryGameRuntime {
         `Encounter "${encounter.id}" resolved current turn character "${currentTurnParticipant.characterId}", but session state loaded assigned character "${currentTurnCharacterRecord.character.id}".`,
       );
     }
+
+    this.assertCurrentTurnActorIsConscious(
+      encounter,
+      currentTurnCharacterRecord,
+    );
 
     return {
       encounter,

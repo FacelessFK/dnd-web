@@ -788,6 +788,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'no_assigned_character':
     case 'self_target_not_allowed':
     case 'scene_entity_overlap':
+    case 'turn_actor_downed':
       return 409;
     // These errors mean the request target itself is invalid for the current
     // validated constraints.

@@ -91,8 +91,18 @@ function joinSecondPlayer(runtime: InMemoryGameRuntime, sessionId: string) {
 function createPlayerCharacter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['createCharacter']
+    >[0]['payload']['character']
+  > = {},
 ) {
-  return createCharacterForParticipant(runtime, sessionId, 'player-001');
+  return createCharacterForParticipant(
+    runtime,
+    sessionId,
+    'player-001',
+    overrides,
+  );
 }
 
 function createSecondPlayerCharacter(
@@ -281,8 +291,13 @@ function activateScene(runtime: InMemoryGameRuntime, sessionId: string) {
 function assignPlayerCharacter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['createCharacter']
+    >[0]['payload']['character']
+  > = {},
 ) {
-  const character = createPlayerCharacter(runtime, sessionId);
+  const character = createPlayerCharacter(runtime, sessionId, overrides);
 
   assignCharacter(runtime, sessionId, 'player-001', character.character.id);
 
@@ -589,6 +604,11 @@ function attack(
 function setupEncounterParticipants(
   runtime: InMemoryGameRuntime,
   options: {
+    firstCharacterOverrides?: Partial<
+      Parameters<
+        InMemoryGameRuntime['createCharacter']
+      >[0]['payload']['character']
+    >;
     secondPosition?: {
       x: number;
       y: number;
@@ -605,7 +625,11 @@ function setupEncounterParticipants(
   joinPlayer(runtime, session.sessionId);
   joinSecondPlayer(runtime, session.sessionId);
 
-  const firstCharacter = assignPlayerCharacter(runtime, session.sessionId);
+  const firstCharacter = assignPlayerCharacter(
+    runtime,
+    session.sessionId,
+    options.firstCharacterOverrides,
+  );
   const secondCharacter = assignSecondPlayerCharacter(
     runtime,
     session.sessionId,
@@ -633,6 +657,18 @@ function setupEncounterParticipants(
     firstCharacter,
     secondCharacter,
   };
+}
+
+function setupDownedCurrentTurnActor(runtime: InMemoryGameRuntime) {
+  return setupEncounterParticipants(runtime, {
+    firstCharacterOverrides: {
+      hp: {
+        max: 26,
+        current: 0,
+        temp: 0,
+      },
+    },
+  });
 }
 
 test('derived stat calculations follow the baseline 5e progression', () => {
@@ -2017,6 +2053,75 @@ test('movement usage can be recorded against the current turn allowance', () => 
   assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
 });
 
+test('downed current-turn actors cannot use their action', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(encounter.currentTurnUsage.actionUsed, false);
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('downed current-turn actors cannot use their bonus action', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useBonusAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(encounter.currentTurnUsage.bonusActionUsed, false);
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('downed current-turn actors cannot record movement usage', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      recordMovementUsage(runtime, session.sessionId, 5);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
 test('current turn owner can resolve an attack that consumes action, applies fixed damage, and emits encounter and combat events', () => {
   const runtime = createRuntimeWithAttackRoll(20);
   const { session, secondCharacter } = setupEncounterParticipants(runtime);
@@ -2299,6 +2404,48 @@ test('attacks against downed targets are rejected before rolling or emitting str
   assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
 });
 
+test('downed current-turn actors cannot attack before rolling or emitting stream updates', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
+  const { session, firstCharacter, secondCharacter } =
+    setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  assert.throws(
+    () => {
+      attack(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+  const attackerRecord = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+  const targetRecord = runtime.characters.getCharacter(
+    secondCharacter.character.id,
+  );
+
+  assert.equal(rollCount, 0);
+  assert.equal(attackerRecord.character.hp.current, 0);
+  assert.equal(targetRecord.character.hp.current, 34);
+  assert.equal(encounter.currentTurnUsage.actionUsed, false);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeAttack,
+  );
+  assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
+});
+
 test('out-of-reach melee attack targets are rejected before rolling', () => {
   let rollCount = 0;
   const runtime = createRuntimeWithAttackRoller(() => {
@@ -2506,6 +2653,58 @@ test('zero-cost encounter movement emits only movement_state and leaves encounte
   });
 });
 
+test('downed current-turn actors cannot move during an active encounter', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, scene, firstCharacter } =
+    setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeMove = getEncounterUpdates(updates).length;
+  const movementUpdateCountBeforeMove = getMovementUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-downed-character-during-encounter',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 0,
+            y: 1,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+  const record = runtime.characters.getCharacter(firstCharacter.character.id);
+
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+  assert.deepEqual(record.overlay.position, {
+    sceneId: scene.id,
+    x: 0,
+    y: 0,
+  });
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeMove,
+  );
+  assert.equal(
+    getMovementUpdates(updates).length,
+    movementUpdateCountBeforeMove,
+  );
+});
+
 test('non-active participants cannot move during another participant turn', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
@@ -2575,6 +2774,29 @@ test('advance turn resets turn usage after real action and movement mutations', 
   startEncounter(runtime, session.sessionId);
   useAction(runtime, session.sessionId);
   recordMovementUsage(runtime, session.sessionId, 15);
+
+  const advancedEncounter = advanceTurn(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
+
+  assert.equal(advancedEncounter.currentTurnIndex, 1);
+  assert.equal(advancedEncounter.roundNumber, 1);
+  assert.deepEqual(advancedEncounter.currentTurnUsage, {
+    actionUsed: false,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 0,
+  });
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'turn_advanced');
+  assert.deepEqual(streamUpdate?.encounter, advancedEncounter);
+});
+
+test('dm can advance past a downed current-turn actor', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
 
   const advancedEncounter = advanceTurn(runtime, session.sessionId);
   const streamUpdate = getEncounterUpdates(updates).at(-1);

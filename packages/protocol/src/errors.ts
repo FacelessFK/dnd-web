@@ -41,6 +41,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'scene_not_found',
   'self_target_not_allowed',
   'session_not_found',
+  'turn_actor_downed',
 ]);
 
 export const sessionErrorCodeSchema = runtimeErrorCodeSchema;

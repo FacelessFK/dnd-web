@@ -205,6 +205,13 @@ export function applyFixedDamage(currentHp: number, damage: number): number {
   return Math.max(0, currentHp - damage);
 }
 
+// Phase 7 derives downed/unconscious state from HP only. Do not add a
+// canonical condition/status field until death saves or a condition engine
+// exists as a dedicated slice.
+export function isCharacterDowned(character: Pick<Character, 'hp'>): boolean {
+  return character.hp.current === 0;
+}
+
 // Phase 6 uses a temporary melee-only baseline: one Manhattan grid step on a
 // standard 5-foot grid. This intentionally ignores weapons, size, diagonals,
 // cover, and ranged attacks until those systems exist explicitly.
