@@ -37,7 +37,7 @@ death-save, and reaction work without implementing those systems fully.
 - No full combat log/history persistence.
 - No advanced rules automation.
 
-## Suggested Slice Breakdown
+## Completed Slice Breakdown
 
 ### Slice 1 — Downed / Unconscious State Baseline
 
@@ -60,20 +60,26 @@ death-save, and reaction work without implementing those systems fully.
 - Did not add opportunity attacks, reaction triggers, reaction prompts,
   interrupts, spells, conditions, frontend work, or persistence.
 
-### Slice 3 — Basic Condition Model Foundation
+### Slice 3 — Combat State Foundation Exit Pass
 
-- Introduce a minimal condition representation only if Slice 1 exposes a clear
-  need.
-- Keep condition effects narrow and explicit.
-- Avoid full rules automation for conditions.
-- Preserve separation between canonical character data and encounter/runtime
-  state.
+- Status: completed.
+- Reviewed downed actor gating, reaction usage state, current-turn mutation
+  path reuse, error mapping, SSE semantics, tests, and task tracking.
+- Confirmed Phase 7 remains intentionally narrow.
+- Confirmed opportunity attacks are deferred because they require out-of-turn
+  reaction semantics, movement-triggered reaction windows, target legality
+  checks, event ordering decisions, and reaction consumption timing.
+- Confirmed full condition engines, death saves, recovery rules, weapons,
+  ranged attacks, spells, frontend work, and persistence are deferred.
 
-### Slice 4 — Opportunity Attack Foundation
+## Deferred Future Slices
 
-- Add only after reaction usage exists.
-- Keep opportunity attack validation narrow and movement-triggered.
-- Avoid broad reaction systems, weapon rules, or tactical automation.
+- Basic condition model foundation, only when concrete gameplay flows require
+  condition data.
+- Opportunity attack foundation, only after reaction timing and trigger
+  semantics are explicitly designed.
+- Death-save and recovery rules, only as a dedicated future combat-state slice.
+- Weapon, ranged attack, and spell attack work, each as separate narrow slices.
 
 ## Slice 1 Detailed Task List
 
@@ -104,6 +110,16 @@ death-save, and reaction work without implementing those systems fully.
 - Keep this as reaction usage state only; no opportunity attack resolution,
   reaction triggers, interrupts, prompts, spells, or conditions.
 
+## Slice 3 Exit Pass Notes
+
+- No opportunity attacks were implemented.
+- No reaction triggers, reaction windows, or out-of-turn reaction handling were
+  implemented.
+- No full condition engine or death-save behavior was implemented.
+- Existing SSE payload shapes remain unchanged.
+- Future combat expansion should happen through separate narrow slices with
+  explicit validation and tests.
+
 ## Acceptance Criteria
 
 - The project has a clear, documented baseline for characters at 0 HP.
@@ -133,6 +149,7 @@ death-save, and reaction work without implementing those systems fully.
 - Any condition model introduced in Phase 7 remains minimal and explicit.
 - Reaction usage exists only as state/usage foundation.
 - Opportunity attack work is isolated to a dedicated later slice.
+- Phase 7 exit pass is documented.
 - No full death saves, weapon system, spells, ranged attacks, combat log
   persistence, or frontend work has slipped into Phase 7.
 - All implementation slices pass `pnpm lint`, `pnpm test`, `pnpm typecheck`,
