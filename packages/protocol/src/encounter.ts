@@ -43,6 +43,7 @@ export const encounterStateUpdateReasonSchema = z.enum([
   'turn_advanced',
   'action_used',
   'bonus_action_used',
+  'reaction_used',
   'movement_used',
 ]);
 
@@ -100,6 +101,15 @@ export const useBonusActionCommandSchema = z.object({
   }),
 });
 
+export const useReactionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('use_reaction'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+  }),
+});
+
 export const recordMovementUsageCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('record_movement_usage'),
@@ -126,6 +136,7 @@ export const encounterCommandSchema = z.discriminatedUnion('type', [
   advanceTurnCommandSchema,
   useActionCommandSchema,
   useBonusActionCommandSchema,
+  useReactionCommandSchema,
   recordMovementUsageCommandSchema,
   attackCommandSchema,
 ]);
@@ -157,6 +168,7 @@ export type GetEncounterStateCommand = z.infer<
 export type AdvanceTurnCommand = z.infer<typeof advanceTurnCommandSchema>;
 export type UseActionCommand = z.infer<typeof useActionCommandSchema>;
 export type UseBonusActionCommand = z.infer<typeof useBonusActionCommandSchema>;
+export type UseReactionCommand = z.infer<typeof useReactionCommandSchema>;
 export type RecordMovementUsageCommand = z.infer<
   typeof recordMovementUsageCommandSchema
 >;

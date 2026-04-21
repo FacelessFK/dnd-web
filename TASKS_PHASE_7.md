@@ -26,7 +26,7 @@ death-save, and reaction work without implementing those systems fully.
 
 - No full death-save system.
 - No full condition engine.
-- No reactions beyond a future usage foundation slice.
+- No reactions beyond the narrow usage foundation.
 - No opportunity attack resolution in early Phase 7.
 - No spells or spell attacks.
 - No weapon, inventory, or equipment system.
@@ -49,7 +49,18 @@ death-save, and reaction work without implementing those systems fully.
 - Keep downed state derived from HP where practical.
 - Avoid death saves, recovery rules, and full condition modeling.
 
-### Slice 2 — Basic Condition Model Foundation
+### Slice 2 — Reaction Usage Foundation
+
+- Status: completed.
+- Added only the current-turn `use_reaction` command.
+- Marked `currentTurnUsage.reactionUsed` as server-owned encounter state.
+- Rejected duplicate reaction usage with `reaction_already_used`.
+- Reused current-turn ownership and downed actor gating.
+- Emitted `encounter_state` with reason `reaction_used` on success.
+- Did not add opportunity attacks, reaction triggers, reaction prompts,
+  interrupts, spells, conditions, frontend work, or persistence.
+
+### Slice 3 — Basic Condition Model Foundation
 
 - Introduce a minimal condition representation only if Slice 1 exposes a clear
   need.
@@ -57,13 +68,6 @@ death-save, and reaction work without implementing those systems fully.
 - Avoid full rules automation for conditions.
 - Preserve separation between canonical character data and encounter/runtime
   state.
-
-### Slice 3 — Reaction Usage Foundation
-
-- Add only the usage/state foundation for reactions.
-- Keep reaction state server-owned and encounter-scoped.
-- Do not implement opportunity attack resolution yet.
-- Do not add reaction triggers or broad event automation.
 
 ### Slice 4 — Opportunity Attack Foundation
 
@@ -87,10 +91,24 @@ death-save, and reaction work without implementing those systems fully.
   shapes remain unchanged.
 - The explicit `turn_actor_downed` runtime error represents this state.
 
+## Slice 2 Detailed Task List
+
+- Add the `use_reaction` encounter command.
+- Allow only the current turn actor to mark their reaction as used.
+- Set `currentTurnUsage.reactionUsed = true` on success.
+- Reject duplicate reaction usage with `reaction_already_used`.
+- Reuse the existing downed actor gate so downed current-turn actors cannot use
+  reactions.
+- Emit `encounter_state` with reason `reaction_used` on success.
+- Emit no SSE events on failed reaction usage.
+- Keep this as reaction usage state only; no opportunity attack resolution,
+  reaction triggers, interrupts, prompts, spells, or conditions.
+
 ## Acceptance Criteria
 
 - The project has a clear, documented baseline for characters at 0 HP.
 - Downed characters cannot perform newly restricted turn-bound actions.
+- Reaction usage is explicit, server-owned, and current-turn scoped.
 - Attack behavior remains deterministic and validates legality before RNG.
 - Existing attack success behavior remains unchanged for valid, conscious
   attackers and targets.
@@ -104,13 +122,16 @@ death-save, and reaction work without implementing those systems fully.
 - Death-save behavior once death saves become an explicit future slice.
 - Condition read-model behavior if a minimal condition model is introduced.
 - Recovery or stabilization behavior if a future phase defines it.
+- Reaction trigger behavior once reactions become more than usage state.
+- Opportunity attack behavior once reaction trigger semantics are explicit.
 - Protocol schemas for any future downed-state read model if one is added.
 
 ## Phase Exit Checklist
 
 - Slice 1 downed/unconscious baseline is implemented and tested.
+- Slice 2 reaction usage foundation is implemented and tested.
 - Any condition model introduced in Phase 7 remains minimal and explicit.
-- Reaction usage exists only as state/usage foundation if implemented.
+- Reaction usage exists only as state/usage foundation.
 - Opportunity attack work is isolated to a dedicated later slice.
 - No full death saves, weapon system, spells, ranged attacks, combat log
   persistence, or frontend work has slipped into Phase 7.

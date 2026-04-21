@@ -44,6 +44,7 @@ import type {
   UpdateCharacterCommand,
   UseActionCommand,
   UseBonusActionCommand,
+  UseReactionCommand,
 } from '@dnd/protocol';
 import type {
   Character,
@@ -83,6 +84,7 @@ import {
   EncounterRuntimeError,
   markEncounterActionUsed,
   markEncounterBonusActionUsed,
+  markEncounterReactionUsed,
   recordEncounterMovementUsage,
   requireCurrentEncounterParticipant,
 } from './encounter-runtime.js';
@@ -696,6 +698,19 @@ export class InMemoryGameRuntime {
       sessionId: command.payload.sessionId,
       encounter: markEncounterBonusActionUsed(encounter),
       reason: 'bonus_action_used',
+    });
+  }
+
+  useReaction(command: UseReactionCommand): Encounter {
+    const { encounter } = this.getCurrentTurnMutationContext(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+
+    return this.saveAndPublishEncounter({
+      sessionId: command.payload.sessionId,
+      encounter: markEncounterReactionUsed(encounter),
+      reason: 'reaction_used',
     });
   }
 

@@ -511,6 +511,9 @@ async function handleEncounterCommandRequest(
       case 'use_bonus_action':
         encounter = runtime.useBonusAction(command);
         break;
+      case 'use_reaction':
+        encounter = runtime.useReaction(command);
+        break;
       case 'record_movement_usage':
         encounter = runtime.recordMovementUsage(command);
         break;
@@ -786,6 +789,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'no_active_encounter':
     case 'no_active_scene':
     case 'no_assigned_character':
+    case 'reaction_already_used':
     case 'self_target_not_allowed':
     case 'scene_entity_overlap':
     case 'turn_actor_downed':

@@ -327,6 +327,17 @@ export function markBonusActionUsed(turnUsage: TurnUsage): TurnUsage | null {
   };
 }
 
+export function markReactionUsed(turnUsage: TurnUsage): TurnUsage | null {
+  if (turnUsage.reactionUsed) {
+    return null;
+  }
+
+  return {
+    ...turnUsage,
+    reactionUsed: true,
+  };
+}
+
 export function getUpdatedMovementUsage(params: {
   currentMovementUsed: number;
   additionalMovementFeet: number;

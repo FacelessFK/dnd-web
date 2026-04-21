@@ -374,6 +374,16 @@ test('encounter commands are accepted for narrow start/read/advance validation',
       sessionId: 'ABC123',
     },
   });
+  const useReactionResult = encounterCommandSchema.safeParse({
+    commandId: 'use-reaction-1',
+    type: 'use_reaction',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
   const recordMovementUsageResult = encounterCommandSchema.safeParse({
     commandId: 'record-movement-usage-1',
     type: 'record_movement_usage',
@@ -402,6 +412,7 @@ test('encounter commands are accepted for narrow start/read/advance validation',
   assert.equal(advanceResult.success, true);
   assert.equal(useActionResult.success, true);
   assert.equal(useBonusActionResult.success, true);
+  assert.equal(useReactionResult.success, true);
   assert.equal(recordMovementUsageResult.success, true);
   assert.equal(attackResult.success, true);
 });

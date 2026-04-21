@@ -563,6 +563,23 @@ function useBonusAction(
   });
 }
 
+function useReaction(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.useReaction({
+    commandId: `use-reaction-${actorParticipantId}`,
+    type: 'use_reaction',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
 function recordMovementUsage(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -2037,6 +2054,61 @@ test('active turn participant emits encounter_state when using a bonus action', 
   assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
 });
 
+test('active turn participant can use their reaction exactly once per turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updatedEncounter = useReaction(runtime, session.sessionId);
+  const streamUpdate = getEncounterUpdates(updates).at(-1);
+
+  assert.equal(updatedEncounter.currentTurnUsage.reactionUsed, true);
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, false);
+  assert.equal(updatedEncounter.currentTurnUsage.bonusActionUsed, false);
+  assert.ok(streamUpdate);
+  assert.equal(streamUpdate?.reason, 'reaction_used');
+  assert.deepEqual(streamUpdate?.encounter, updatedEncounter);
+});
+
+test('reactions cannot be used twice in the same turn', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  useReaction(runtime, session.sessionId);
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useReaction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'reaction_already_used',
+  );
+
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('non-active participants cannot use current-turn reactions', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      useReaction(runtime, session.sessionId, 'player-002');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_turn_actor',
+  );
+});
+
 test('movement usage can be recorded against the current turn allowance', () => {
   const runtime = new InMemoryGameRuntime();
   const { session } = setupEncounterParticipants(runtime);
@@ -2096,6 +2168,29 @@ test('downed current-turn actors cannot use their bonus action', () => {
   const encounter = getEncounterState(runtime, session.sessionId);
 
   assert.equal(encounter.currentTurnUsage.bonusActionUsed, false);
+  assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('downed current-turn actors cannot use their reaction', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupDownedCurrentTurnActor(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const updateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  assert.throws(
+    () => {
+      useReaction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(encounter.currentTurnUsage.reactionUsed, false);
   assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
 });
 

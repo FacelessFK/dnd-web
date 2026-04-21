@@ -6,6 +6,7 @@ import {
   getNextTurnState,
   markActionUsed,
   markBonusActionUsed,
+  markReactionUsed,
   sortEncounterParticipantsByInitiative,
 } from '@dnd/rules';
 import type { SessionErrorCode } from '@dnd/protocol';
@@ -210,6 +211,19 @@ export function markEncounterBonusActionUsed(encounter: Encounter): Encounter {
   throw new EncounterRuntimeError(
     'bonus_action_already_used',
     `Encounter "${encounter.id}" has already spent its bonus action for the current turn.`,
+  );
+}
+
+export function markEncounterReactionUsed(encounter: Encounter): Encounter {
+  const updatedTurnUsage = markReactionUsed(encounter.currentTurnUsage);
+
+  if (updatedTurnUsage) {
+    return withUpdatedTurnUsage(encounter, updatedTurnUsage);
+  }
+
+  throw new EncounterRuntimeError(
+    'reaction_already_used',
+    `Encounter "${encounter.id}" has already spent its reaction for the current turn.`,
   );
 }
 

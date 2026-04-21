@@ -35,6 +35,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'no_active_scene',
   'no_assigned_character',
   'participant_not_found',
+  'reaction_already_used',
   'rules_profile_not_found',
   'scene_entity_out_of_bounds',
   'scene_entity_overlap',
