@@ -29,12 +29,22 @@ weapon, spell, condition, death-save, or persistence systems.
 - Preserved SSE semantics: successful attacks emit `encounter_state` first, then
   `combat_event`; failed attacks emit neither.
 
+### Slice 3 — Combat Foundation Exit Pass
+
+- Reviewed the attack command flow, legality ordering, action consumption, HP
+  mutation, SSE ordering, failed-attack event silence, error mapping, and tests.
+- Confirmed the Phase 6 foundation remains intentionally narrow and does not
+  include weapons, ranged attacks, spells, damage dice, conditions, reactions,
+  death saves, combat logs, frontend work, or persistence changes.
+- Closed Phase 6 as a foundation milestone; future combat behavior should land
+  in dedicated narrow slices or later phases.
+
 ## Remaining Phase 6 Candidates
 
 - Add a narrow combat read model if clients need current target HP snapshots
   outside `combat_event`.
 - Add explicit combat log/history only when product requirements need it.
-- Add weapon/ranged/spell attack slices later, each as separate narrow work.
+- Add weapon, ranged, or spell attack slices later, each as separate narrow work.
 - Add death/dying semantics later; current HP only clamps at `0`.
 - Add persistence/transaction work in a later storage-focused phase.
 
