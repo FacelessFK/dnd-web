@@ -212,6 +212,106 @@ test('activating a scene updates the session snapshot and broadcasts a revision'
   assert.equal(updates.at(-1), 'active_scene_changed');
 });
 
+test('session revisions track session snapshots, not movement encounter or combat broadcasts', () => {
+  const store = new InMemorySessionStore();
+  const created = store.createSession(createSessionCommand());
+  const receivedUpdates: SessionStreamEvent[] = [];
+  const sceneId = 'scene_11111111-1111-4111-8111-111111111111';
+  const characterId = 'char_11111111-1111-4111-8111-111111111111';
+  const encounterId = 'encounter_11111111-1111-4111-8111-111111111111';
+
+  store.connectParticipant(created.sessionId, 'dm-001', {
+    connectionId: 'dm-connection-revision-1',
+    close: () => undefined,
+    send: (update) => {
+      receivedUpdates.push(update);
+    },
+  });
+  store.activateScene(created.sessionId, sceneId);
+  store.assignCharacterToParticipant(created.sessionId, 'dm-001', characterId);
+
+  const revisionAfterSessionMutations = store.getSessionSnapshot(
+    created.sessionId,
+  ).session.revision;
+
+  assert.equal(revisionAfterSessionMutations, 4);
+
+  store.publishMovementStateUpdate({
+    sessionId: created.sessionId,
+    activeSceneId: sceneId,
+    participantId: 'dm-001',
+    characterId,
+    position: {
+      x: 0,
+      y: 0,
+    },
+    footprint: {
+      width: 1,
+      height: 1,
+    },
+    reason: 'character_placed',
+  });
+  store.publishEncounterStateUpdate({
+    type: 'encounter_state',
+    reason: 'encounter_started',
+    sessionId: created.sessionId,
+    encounter: {
+      id: encounterId,
+      sessionId: created.sessionId,
+      sceneId,
+      status: 'active',
+      participants: [
+        {
+          characterId,
+          participantId: 'dm-001',
+          initiative: 1,
+        },
+      ],
+      currentTurnIndex: 0,
+      roundNumber: 1,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 0,
+      },
+      createdAt: '2025-01-01T00:00:00.000Z',
+      updatedAt: '2025-01-01T00:00:00.000Z',
+    },
+  });
+  store.publishCombatEvent({
+    type: 'combat_event',
+    reason: 'attack_resolved',
+    sessionId: created.sessionId,
+    encounterId,
+    attackerParticipantId: 'dm-001',
+    attackerCharacterId: characterId,
+    targetParticipantId: 'dm-001',
+    targetCharacterId: characterId,
+    roll: {
+      d20: 12,
+      modifier: 3,
+      total: 15,
+    },
+    targetArmorClass: 13,
+    hit: true,
+    damage: 1,
+    targetHp: {
+      previous: 2,
+      current: 1,
+    },
+  });
+
+  assert.equal(
+    store.getSessionSnapshot(created.sessionId).session.revision,
+    revisionAfterSessionMutations,
+  );
+  assert.deepEqual(
+    receivedUpdates.slice(-3).map((update) => update.type),
+    ['movement_state', 'encounter_state', 'combat_event'],
+  );
+});
+
 test('movement updates are rejected when they do not match the active scene', () => {
   const store = new InMemorySessionStore();
   const created = store.createSession(createSessionCommand());

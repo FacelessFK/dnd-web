@@ -65,6 +65,7 @@ rules automation, frontend features, or persistence.
 
 ### Slice 3 — Event / Revision Semantics Review
 
+- Status: completed.
 - Clarify which state mutations increment session revision.
 - Clarify which SSE events are authoritative snapshots.
 - Clarify which SSE events are transient action/result notifications.
@@ -112,6 +113,41 @@ rules automation, frontend features, or persistence.
   SSE event replay.
 - Full replay belongs to a future persistence/event-log phase.
 
+## Slice 3 Detailed Task List
+
+- Snapshot-style SSE events:
+  - `session_state` carries a full current session snapshot and session
+    revision.
+  - `encounter_state` carries a full current encounter snapshot, but it does
+    not imply a session revision change.
+- Live partial/transient SSE events:
+  - `movement_state` is a live authoritative movement delta/partial position
+    update, not a durable full-scene snapshot.
+  - `combat_event` is a transient combat result notification and is not
+    replayed after reconnect.
+- Read-model recovery after reconnect:
+  - use `reconnect_session` or session snapshot reads for session/participant
+    state,
+  - use `get_active_scene_state` for current active-scene placements,
+  - use `get_encounter_state` for current turn/encounter state,
+  - use `get_character` for current character sheet and HP state.
+- Current session revision increments:
+  - participant join,
+  - SSE presence connect/disconnect transitions,
+  - character assignment,
+  - active scene activation.
+- Current session revision does not increment for:
+  - `reconnect_session` by itself,
+  - `movement_state` broadcasts,
+  - `encounter_state` broadcasts,
+  - `combat_event` broadcasts.
+- Known limitations remain explicit:
+  - no missed-event replay,
+  - no durable event log,
+  - no global monotonic event sequence,
+  - no reconnect catch-up by event cursor,
+  - no transactionally persisted multi-store mutations yet.
+
 ## Acceptance Criteria
 
 - Phase 8 improves runtime reliability without expanding gameplay.
@@ -123,6 +159,7 @@ rules automation, frontend features, or persistence.
 - Reconnecting participants can recover session, active-scene, encounter, and
   character HP state through existing snapshots/read models.
 - SSE event semantics are documented clearly enough for future client work.
+- Session revision semantics are documented and covered by narrow tests.
 - Current in-memory limitations are explicit.
 - Multi-store transaction risks are documented before persistence work begins.
 - Each implementation slice passes `pnpm lint`, `pnpm test`,
