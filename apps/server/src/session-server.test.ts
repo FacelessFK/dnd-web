@@ -10,6 +10,7 @@ import {
   dmCommandSchema,
   type DmCommandResponse,
   type EncounterCommandResponse,
+  type MovementStateUpdate,
   type MovementCommandResponse,
   type SessionCommandResponse,
   characterCommandSchema,
@@ -137,6 +138,14 @@ function getCharacterStateUpdates(
   return updates.filter(
     (update): update is CharacterStateUpdate =>
       update.type === 'character_state',
+  );
+}
+
+function getMovementUpdates(
+  updates: SessionStreamEvent[],
+): MovementStateUpdate[] {
+  return updates.filter(
+    (update): update is MovementStateUpdate => update.type === 'movement_state',
   );
 }
 
@@ -788,7 +797,7 @@ test('encounter commands are accepted for narrow start/read/advance validation',
 });
 
 test('dm commands are accepted for narrow HP override validation', () => {
-  const result = dmCommandSchema.safeParse({
+  const hpResult = dmCommandSchema.safeParse({
     commandId: 'dm-set-hp-1',
     type: 'dm_set_character_current_hp',
     actor: {
@@ -801,8 +810,25 @@ test('dm commands are accepted for narrow HP override validation', () => {
       currentHp: 12,
     },
   });
+  const repositionResult = dmCommandSchema.safeParse({
+    commandId: 'dm-reposition-1',
+    type: 'dm_reposition_character_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      participantId: 'player-001',
+      characterId: 'char_11111111-1111-4111-8111-111111111111',
+      position: {
+        x: 2,
+        y: 3,
+      },
+    },
+  });
 
-  assert.equal(result.success, true);
+  assert.equal(hpResult.success, true);
+  assert.equal(repositionResult.success, true);
 });
 
 test('invalid encounter movement-usage payloads are rejected during command validation', () => {
@@ -1054,6 +1080,122 @@ test('DM HP override command ID conflicts do not mutate HP or emit SSE', async (
   assert.equal(
     getCharacterStateUpdates(updates).length,
     characterUpdatesBeforeConflict,
+  );
+});
+
+test('duplicate DM reposition commands return cached success without duplicate movement_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-dm-reposition-1',
+    type: 'dm_reposition_character_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      position: {
+        x: 2,
+        y: 2,
+      },
+    },
+  };
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const movementUpdates = getMovementUpdates(updates).slice(
+    movementUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(movementUpdates.length, 1);
+  assert.equal(movementUpdates[0]?.reason, 'dm_character_repositioned');
+  assert.deepEqual(movementUpdates[0]?.position, {
+    x: 2,
+    y: 2,
+  });
+});
+
+test('DM reposition command ID conflicts do not mutate position or emit SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const firstCommand = {
+    commandId: 'conflicting-dm-reposition-1',
+    type: 'dm_reposition_character_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      position: {
+        x: 2,
+        y: 2,
+      },
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      position: {
+        x: 3,
+        y: 3,
+      },
+    },
+  };
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+  );
+  const movementUpdatesBeforeConflict = getMovementUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+  );
+  const character = runtime.characters.getCharacter(firstCharacterId);
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.deepEqual(character.overlay.position, {
+    sceneId:
+      runtime.sessions.getSessionSnapshot(sessionId).session.activeSceneId,
+    x: 2,
+    y: 2,
+  });
+  assert.equal(
+    getMovementUpdates(updates).length,
+    movementUpdatesBeforeConflict,
   );
 });
 

@@ -50,6 +50,26 @@ Implemented:
 - Confirmed that setting a current-turn actor to `0` HP feeds existing downed
   turn-action gating.
 
+## Slice 2 — DM Character Reposition Override
+
+Status: Completed.
+
+Implemented:
+
+- Added `dm_reposition_character_in_active_scene`.
+- Reused `/api/dm/command` and the existing `dm` idempotency category.
+- Restricted repositioning to the session DM.
+- Validated target participant membership and assigned character ownership.
+- Required a real active scene.
+- Reused active-scene grid and occupancy validation.
+- Allowed administrative reposition whether the character was unplaced, already
+  placed in the active scene, or placed in a different scene.
+- Updated only the character overlay position.
+- Reused `movement_state` with reason `dm_character_repositioned`.
+- Confirmed encounter state is not mutated, movement is not spent, current-turn
+  ownership is not checked, and downed characters can still be repositioned by
+  the DM.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -61,6 +81,10 @@ Implemented:
   SSE.
 - Command ID conflicts return `command_id_conflict` without mutation.
 - Downed state remains derived from `hp.current === 0`.
+- DM reposition emits one `movement_state` update with
+  `dm_character_repositioned`.
+- DM reposition does not emit `encounter_state`.
+- DM reposition does not spend movement or require turn ownership.
 
 ## Tests Added
 
@@ -73,12 +97,19 @@ Implemented:
 - Server command schema validation.
 - Server idempotency duplicate success and conflict handling.
 - Session revision behavior for character-state broadcasts.
+- DM reposition success for unplaced, active-scene placed, and different-scene
+  placed characters.
+- DM reposition movement-state propagation.
+- DM reposition authorization, active scene, assignment, bounds, and occupancy
+  validation.
+- DM reposition encounter non-interference.
+- DM reposition idempotent duplicate and conflict behavior.
 
 ## Future Slices
 
-- DM position/reposition override.
 - DM turn usage override.
 - DM condition editing foundation after the condition model exists.
+- Explicit force/ignore-occupancy reposition override, if product needs it.
 - DM encounter participant management.
 - Durable override audit trail in a later persistence phase.
 

@@ -27,7 +27,7 @@ Implemented so far:
 - action, bonus action, reaction, and movement usage commands
 - narrow attack action foundation with legality-before-RNG validation
 - downed actor gating derived from `hp.current === 0`
-- backend DM current HP override command
+- backend DM current HP and active-scene reposition override commands
 - in-memory command idempotency for successful mutating command retries
 - reconnect recovery through read models
 - documented event/revision semantics and transaction-boundary limitations
@@ -113,7 +113,7 @@ Current command endpoints:
 Current SSE event types:
 
 - `session_state`: snapshot-style session state update with session revision
-- `movement_state`: live partial movement/placement update
+- `movement_state`: live partial movement/placement/reposition update
 - `encounter_state`: snapshot-style encounter state update
 - `combat_event`: transient combat result notification
 - `character_state`: live partial character state update for DM HP overrides

@@ -8,6 +8,7 @@ import {
 } from './common.js';
 import { characterResourceSchema, hitPointsSchema } from './character.js';
 import { commandErrorSchema } from './errors.js';
+import { scenePositionSchema } from './scene.js';
 
 const dmActorSchema = z.object({
   participantId: participantIdSchema,
@@ -25,8 +26,21 @@ export const dmSetCharacterCurrentHpCommandSchema = z.object({
   }),
 });
 
+export const dmRepositionCharacterInActiveSceneCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_reposition_character_in_active_scene'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    participantId: participantIdSchema,
+    characterId: characterIdSchema,
+    position: scenePositionSchema,
+  }),
+});
+
 export const dmCommandSchema = z.discriminatedUnion('type', [
   dmSetCharacterCurrentHpCommandSchema,
+  dmRepositionCharacterInActiveSceneCommandSchema,
 ]);
 
 export const dmCommandSuccessSchema = z.object({
@@ -54,6 +68,9 @@ export const characterStateUpdateSchema = z.object({
 
 export type DmSetCharacterCurrentHpCommand = z.infer<
   typeof dmSetCharacterCurrentHpCommandSchema
+>;
+export type DmRepositionCharacterInActiveSceneCommand = z.infer<
+  typeof dmRepositionCharacterInActiveSceneCommandSchema
 >;
 export type DmCommand = z.infer<typeof dmCommandSchema>;
 export type DmCommandSuccess = z.infer<typeof dmCommandSuccessSchema>;

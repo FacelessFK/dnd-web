@@ -744,6 +744,9 @@ async function handleDmCommandRequest(
       case 'dm_set_character_current_hp':
         data = runtime.dmSetCharacterCurrentHp(command);
         break;
+      case 'dm_reposition_character_in_active_scene':
+        data = runtime.dmRepositionCharacterInActiveScene(command);
+        break;
       default:
         throw new Error('Unsupported DM command type.');
     }

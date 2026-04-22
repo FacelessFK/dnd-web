@@ -21,6 +21,7 @@ import { InMemoryGameRuntime } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
+import { SessionStoreError } from './session-store.js';
 
 function createRuntimeWithAttackRoll(d20: number) {
   return new InMemoryGameRuntime(
@@ -651,6 +652,32 @@ function dmSetCharacterCurrentHp(
   });
 }
 
+function dmRepositionCharacterInActiveScene(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  characterId: string,
+  position: {
+    x: number;
+    y: number;
+  },
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmRepositionCharacterInActiveScene({
+    commandId: `dm-reposition-${participantId}-${position.x}-${position.y}`,
+    type: 'dm_reposition_character_in_active_scene',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      participantId,
+      characterId,
+      position,
+    },
+  });
+}
+
 function setupEncounterParticipants(
   runtime: InMemoryGameRuntime,
   options: {
@@ -1184,6 +1211,301 @@ test('dm setting current turn actor HP to zero feeds existing downed gating', ()
     getEncounterUpdates(updates).length,
     encounterUpdateCountBeforeFailure,
   );
+});
+
+test('dm can reposition an unplaced assigned character into the active scene', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const character = assignPlayerCharacter(runtime, session.sessionId);
+  activateScene(runtime, session.sessionId);
+
+  const updatedResource = dmRepositionCharacterInActiveScene(
+    runtime,
+    session.sessionId,
+    'player-001',
+    character.character.id,
+    {
+      x: 3,
+      y: 2,
+    },
+  );
+  const activeSceneState = getActiveSceneState(runtime, session.sessionId);
+  const placement = activeSceneState.placedCharacters.find(
+    (candidate) => candidate.participantId === 'player-001',
+  );
+
+  assert.deepEqual(updatedResource.overlay.position, {
+    sceneId: activeSceneState.activeSceneId,
+    x: 3,
+    y: 2,
+  });
+  assert.deepEqual(placement?.position, {
+    x: 3,
+    y: 2,
+  });
+});
+
+test('dm can reposition an already placed character and emit movement_state', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+
+  const updatedResource = dmRepositionCharacterInActiveScene(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+    {
+      x: 3,
+      y: 3,
+    },
+  );
+  const movementUpdates = getMovementUpdates(updates).slice(
+    movementUpdateCountBefore,
+  );
+
+  assert.deepEqual(updatedResource.overlay.position, {
+    sceneId: movementUpdates[0]?.activeSceneId,
+    x: 3,
+    y: 3,
+  });
+  assert.equal(movementUpdates.length, 1);
+  assert.equal(movementUpdates[0]?.reason, 'dm_character_repositioned');
+  assert.equal(movementUpdates[0]?.characterId, firstCharacter.character.id);
+  assert.deepEqual(movementUpdates[0]?.position, {
+    x: 3,
+    y: 3,
+  });
+});
+
+test('dm can reposition a character from another scene into the active scene', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+  const secondScene = runtime.createScene({
+    commandId: 'create-second-scene-for-dm-reposition',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Upper Gallery',
+        grid: {
+          width: 6,
+          height: 6,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  runtime.activateSceneForSession({
+    commandId: 'activate-second-scene-for-dm-reposition',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: secondScene.id,
+    },
+  });
+
+  const updatedResource = dmRepositionCharacterInActiveScene(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+    {
+      x: 1,
+      y: 1,
+    },
+  );
+
+  assert.deepEqual(updatedResource.overlay.position, {
+    sceneId: secondScene.id,
+    x: 1,
+    y: 1,
+  });
+});
+
+test('players cannot reposition characters through the DM control surface', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        {
+          x: 3,
+          y: 3,
+        },
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm reposition validates active scene and target assignment', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  joinSecondPlayer(runtime, session.sessionId);
+  const character = assignPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-001',
+        character.character.id,
+        {
+          x: 0,
+          y: 0,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError && error.code === 'no_active_scene',
+  );
+
+  activateScene(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-999',
+        character.character.id,
+        {
+          x: 0,
+          y: 0,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof SessionStoreError &&
+      error.code === 'participant_not_found',
+  );
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-002',
+        character.character.id,
+        {
+          x: 0,
+          y: 0,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'no_assigned_character',
+  );
+});
+
+test('dm reposition rejects out-of-bounds and blocked destinations', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { scene, session, firstCharacter } =
+    setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        {
+          x: 10,
+          y: 0,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_out_of_bounds',
+  );
+
+  placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 2,
+      y: 2,
+    },
+  });
+
+  assert.throws(
+    () => {
+      dmRepositionCharacterInActiveScene(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        {
+          x: 2,
+          y: 2,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_destination_blocked',
+  );
+});
+
+test('dm reposition during an encounter does not spend movement or emit encounter_state', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, secondCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  dmSetCharacterCurrentHp(
+    runtime,
+    session.sessionId,
+    'player-002',
+    secondCharacter.character.id,
+    0,
+  );
+
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+
+  dmRepositionCharacterInActiveScene(
+    runtime,
+    session.sessionId,
+    'player-002',
+    secondCharacter.character.id,
+    {
+      x: 2,
+      y: 0,
+    },
+  );
+
+  const encounter = getEncounterState(runtime, session.sessionId);
+
+  assert.equal(
+    getMovementUpdates(updates).length,
+    movementUpdateCountBefore + 1,
+  );
+  assert.equal(getEncounterUpdates(updates).length, encounterUpdateCountBefore);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
 });
 
 test('players cannot create characters for other participants', () => {

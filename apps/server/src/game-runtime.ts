@@ -27,6 +27,7 @@ import type {
   CreateCharacterCommand,
   CreateSceneCommand,
   CreateSessionCommand,
+  DmRepositionCharacterInActiveSceneCommand,
   DmSetCharacterCurrentHpCommand,
   EncounterStateUpdateReason,
   FinalizeCharacterCommand,
@@ -389,6 +390,75 @@ export class InMemoryGameRuntime {
       participantId: participant.id,
       record: updatedRecord,
       reason: 'dm_hp_changed',
+    });
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
+  }
+
+  dmRepositionCharacterInActiveScene(
+    command: DmRepositionCharacterInActiveSceneCommand,
+  ): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const participant = this.requireParticipant(
+      snapshot,
+      command.payload.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'reposition characters');
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+    const allCharacterRecords =
+      this.getResolvedSessionCharacterRecords(snapshot);
+
+    if (record.character.id !== command.payload.characterId) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+      );
+    }
+
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+    assertCharacterDestinationAvailable({
+      scene,
+      footprint: record.overlay.footprint,
+      targetPosition: command.payload.position,
+      blockingOccupancies: buildMovementBlockingOccupancies({
+        scene,
+        characterRecords: allCharacterRecords,
+        excludedCharacterId: record.character.id,
+      }),
+      characterId: record.character.id,
+    });
+
+    const updatedRecord = this.characters.saveCharacter(
+      withCharacterPlacedInScene({
+        record,
+        sceneId: activeSceneId,
+        position: command.payload.position,
+      }),
+    );
+
+    this.publishMovementStateUpdate({
+      sessionId: snapshot.session.id,
+      activeSceneId,
+      participantId: participant.id,
+      record: updatedRecord,
+      reason: 'dm_character_repositioned',
     });
 
     return this.buildCharacterResource(

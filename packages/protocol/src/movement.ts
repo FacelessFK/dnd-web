@@ -45,6 +45,7 @@ export const movementCommandErrorSchema = commandErrorSchema;
 export const movementStateUpdateReasonSchema = z.enum([
   'character_moved',
   'character_placed',
+  'dm_character_repositioned',
 ]);
 
 export const movementStateUpdateSchema = z.object({
