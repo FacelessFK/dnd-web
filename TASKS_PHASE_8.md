@@ -55,6 +55,7 @@ rules automation, frontend features, or persistence.
 
 ### Slice 2 — Reconnect Snapshot Consistency
 
+- Status: completed.
 - Clarify what reconnecting clients receive after reconnect.
 - Ensure current snapshot/read-model state is sufficient after reconnect.
 - Document which SSE events are transient and not replayed yet.
@@ -96,6 +97,21 @@ rules automation, frontend features, or persistence.
 - No durable command log, event sourcing, database table, Redis, or
   multi-process coordination was added.
 
+## Slice 2 Detailed Task List
+
+- `reconnect_session` returns the current authoritative session snapshot,
+  including active scene references and participant character assignments.
+- Reconnected clients can use existing read commands to recover active scene
+  placement, encounter state, and current character HP.
+- Session SSE subscription still sends a current `session_state` snapshot on
+  reconnect/resubscribe.
+- `combat_event` remains a transient live notification and is not replayed.
+- `movement_state` and `encounter_state` remain live SSE updates, not durable
+  replay streams.
+- Clients should call read models after reconnect instead of relying on missed
+  SSE event replay.
+- Full replay belongs to a future persistence/event-log phase.
+
 ## Acceptance Criteria
 
 - Phase 8 improves runtime reliability without expanding gameplay.
@@ -104,6 +120,8 @@ rules automation, frontend features, or persistence.
 - Duplicate successful mutating commands return the cached success response.
 - Command ID conflicts fail safely with no runtime mutation or SSE emission.
 - Reconnect expectations are documented before adding broader reconnect logic.
+- Reconnecting participants can recover session, active-scene, encounter, and
+  character HP state through existing snapshots/read models.
 - SSE event semantics are documented clearly enough for future client work.
 - Current in-memory limitations are explicit.
 - Multi-store transaction risks are documented before persistence work begins.
@@ -119,15 +137,13 @@ rules automation, frontend features, or persistence.
   action, reaction, or movement.
 - Duplicate attack commands do not reroll, double-damage, or emit duplicate
   events for the selected baseline.
-- Reconnect flows can read enough authoritative state to recover current
-  session, active scene, placement, and encounter state.
 - SSE event/read-model consistency holds for movement, encounter, and combat
   state after reconnect.
 
 ## Phase Exit Checklist
 
 - Command idempotency baseline is implemented and tested.
-- Reconnect snapshot expectations are documented and validated where practical.
+- Reconnect snapshot expectations are documented and validated.
 - Event and revision semantics are documented.
 - Known transient event limitations are documented.
 - Current in-memory restart limitations are documented.

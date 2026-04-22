@@ -5,7 +5,10 @@ import test from 'node:test';
 
 import {
   activeSceneStateCommandSuccessSchema,
+  type CharacterCommandResponse,
   type EncounterCommandResponse,
+  type MovementCommandResponse,
+  type SessionCommandResponse,
   characterCommandSchema,
   clientCommandSchema,
   encounterCommandSchema,
@@ -1042,6 +1045,277 @@ test('read commands are not cached as idempotent mutations', async () => {
   assert.equal(
     secondRead.body.data.encounter.currentTurnUsage.actionUsed,
     true,
+  );
+});
+
+test('reconnect returns the current session snapshot with active scene and character assignments', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, secondCharacterId, sessionId } =
+    setupEncounterForIdempotency(runtime);
+
+  const reconnect = await postJson<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'reconnect-snapshot-consistency-1',
+      type: 'reconnect_session',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  assert.equal(reconnect.status, 200);
+  assert.equal(reconnect.body.ok, true);
+
+  if (!reconnect.body.ok) {
+    return;
+  }
+
+  const playerOne = reconnect.body.data.state.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+  const playerTwo = reconnect.body.data.state.participants.find(
+    (participant) => participant.id === 'player-002',
+  );
+
+  assert.equal(reconnect.body.data.sessionId, sessionId);
+  assert.equal(reconnect.body.data.participantId, 'player-001');
+  assert.ok(reconnect.body.data.streamPath.includes(sessionId));
+  assert.ok(reconnect.body.data.streamPath.includes('player-001'));
+  assert.notEqual(reconnect.body.data.state.session.activeSceneId, null);
+  assert.equal(playerOne?.characterId, firstCharacterId);
+  assert.equal(playerTwo?.characterId, secondCharacterId);
+});
+
+test('reconnecting participants can recover movement, encounter, and character HP through read models', async () => {
+  const runtime = new InMemoryGameRuntime(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => 20,
+  );
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { secondCharacterId, sessionId } =
+    setupEncounterForIdempotency(runtime);
+
+  runtime.moveCharacterInActiveScene({
+    commandId: 'reconnect-move-before-read',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 1,
+      },
+    },
+  });
+  runtime.attack({
+    commandId: 'reconnect-attack-before-read',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      targetParticipantId: 'player-002',
+    },
+  });
+
+  await postJson<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'reconnect-before-read-models',
+      type: 'reconnect_session',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  const activeSceneRead = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'read-active-scene-after-reconnect',
+      type: 'get_active_scene_state',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+  const encounterRead = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    {
+      commandId: 'read-encounter-after-reconnect',
+      type: 'get_encounter_state',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+  const characterRead = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    {
+      commandId: 'read-character-hp-after-reconnect',
+      type: 'get_character',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+        characterId: secondCharacterId,
+      },
+    },
+  );
+
+  assert.equal(activeSceneRead.status, 200);
+  assert.equal(activeSceneRead.body.ok, true);
+  assert.equal(encounterRead.status, 200);
+  assert.equal(encounterRead.body.ok, true);
+  assert.equal(characterRead.status, 200);
+  assert.equal(characterRead.body.ok, true);
+
+  if (
+    !activeSceneRead.body.ok ||
+    !encounterRead.body.ok ||
+    !characterRead.body.ok
+  ) {
+    return;
+  }
+
+  assert.ok('placedCharacters' in activeSceneRead.body.data);
+  assert.ok('character' in characterRead.body.data);
+
+  const playerOnePlacement = activeSceneRead.body.data.placedCharacters.find(
+    (placement) => placement.participantId === 'player-001',
+  );
+  const playerTwoPlacement = activeSceneRead.body.data.placedCharacters.find(
+    (placement) => placement.participantId === 'player-002',
+  );
+
+  assert.deepEqual(playerOnePlacement?.position, {
+    x: 1,
+    y: 1,
+  });
+  assert.deepEqual(playerTwoPlacement?.position, {
+    x: 1,
+    y: 0,
+  });
+  assert.equal(encounterRead.body.data.encounter.currentTurnIndex, 0);
+  assert.equal(encounterRead.body.data.encounter.roundNumber, 1);
+  assert.equal(encounterRead.body.data.encounter.participants.length, 2);
+  assert.equal(
+    encounterRead.body.data.encounter.currentTurnUsage.actionUsed,
+    true,
+  );
+  assert.equal(
+    encounterRead.body.data.encounter.currentTurnUsage.movementUsed,
+    10,
+  );
+  assert.equal(characterRead.body.data.character.hp.current, 33);
+});
+
+test('reconnected SSE subscribers receive current session state without combat event replay', () => {
+  const runtime = new InMemoryGameRuntime(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => 20,
+  );
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const liveUpdates: SessionStreamEvent[] = [];
+  const reconnectUpdates: SessionStreamEvent[] = [];
+
+  runtime.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'player-001-live-stream',
+    close: () => undefined,
+    send: (update) => {
+      liveUpdates.push(update);
+    },
+  });
+  runtime.attack({
+    commandId: 'attack-before-sse-reconnect',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      targetParticipantId: 'player-002',
+    },
+  });
+
+  assert.equal(
+    liveUpdates.some((update) => update.type === 'combat_event'),
+    true,
+  );
+
+  runtime.reconnectSession({
+    commandId: 'reconnect-before-sse-resubscribe',
+    type: 'reconnect_session',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+  runtime.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'player-001-reconnected-stream',
+    close: () => undefined,
+    send: (update) => {
+      reconnectUpdates.push(update);
+    },
+  });
+
+  assert.equal(reconnectUpdates.length, 1);
+  assert.equal(reconnectUpdates[0]?.type, 'session_state');
+  assert.equal(reconnectUpdates[0]?.reason, 'initial_sync');
+
+  if (reconnectUpdates[0]?.type !== 'session_state') {
+    return;
+  }
+
+  const playerOne = reconnectUpdates[0].state.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(reconnectUpdates[0].state.session.id, sessionId);
+  assert.notEqual(reconnectUpdates[0].state.session.activeSceneId, null);
+  assert.equal(playerOne?.characterId, firstCharacterId);
+  assert.equal(
+    reconnectUpdates.some((update) => update.type === 'combat_event'),
+    false,
   );
 });
 
