@@ -117,8 +117,8 @@ export async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-6',
-      status: 'attack-foundation-ready',
+      phase: 'phase-9',
+      status: 'runtime-api-cleanup-ready',
     });
     return;
   }

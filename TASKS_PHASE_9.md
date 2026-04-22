@@ -47,7 +47,7 @@ event/revision semantics, and transaction boundary limitations.
 
 ### Slice 1 — Server/API Status & README Sync
 
-- Status: planned.
+- Status: completed.
 - Update server root status metadata if it still references an old phase.
 - Update README current implementation status.
 - Summarize current server command endpoints.
