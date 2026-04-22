@@ -60,7 +60,7 @@ event/revision semantics, and transaction boundary limitations.
 
 ### Slice 2 — Manual End-to-End Validation Scenario
 
-- Status: planned.
+- Status: completed.
 - Define a complete manual validation path:
   - create a session,
   - join/reconnect participants,
@@ -138,6 +138,26 @@ event/revision semantics, and transaction boundary limitations.
   - `movement_state` is a live partial movement update,
   - `combat_event` is a transient combat notification.
 - Run validation after documentation/status changes.
+
+## Slice 2 Detailed Task List
+
+- Added a dedicated manual validation guide at `docs/manual-validation.md`.
+- Kept README concise and pointed it to the full manual flow.
+- Covered the current end-to-end runtime path:
+  - server status check,
+  - session creation,
+  - SSE subscription,
+  - player joins,
+  - character creation, finalization, assignment, and readback,
+  - scene creation and activation,
+  - character placement and active-scene readback,
+  - encounter start,
+  - reaction and bonus action usage,
+  - attack resolution,
+  - idempotent retry of a successful attack command,
+  - downed actor gating,
+  - reconnect and read-model recovery.
+- Did not add scripts or replace copy-paste manual validation.
 
 ## Acceptance Criteria
 
