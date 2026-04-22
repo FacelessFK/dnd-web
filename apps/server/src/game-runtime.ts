@@ -21,11 +21,13 @@ import type {
   CharacterAssignmentSuccess,
   CharacterInput,
   CharacterResource,
+  CharacterStateUpdateReason,
   CharacterUpdateInput,
   CombatEvent,
   CreateCharacterCommand,
   CreateSceneCommand,
   CreateSessionCommand,
+  DmSetCharacterCurrentHpCommand,
   EncounterStateUpdateReason,
   FinalizeCharacterCommand,
   GetEncounterStateCommand,
@@ -344,6 +346,57 @@ export class InMemoryGameRuntime {
       characterId: record.character.id,
       state,
     };
+  }
+
+  dmSetCharacterCurrentHp(
+    command: DmSetCharacterCurrentHpCommand,
+  ): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const participant = this.requireParticipant(
+      snapshot,
+      command.payload.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'set character HP');
+
+    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+
+    if (record.character.id !== command.payload.characterId) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+      );
+    }
+
+    this.assertCharacterCurrentHpCanBeSet(
+      record.character,
+      command.payload.currentHp,
+    );
+
+    const updatedRecord = this.characters.saveCharacter(
+      this.withUpdatedCharacterHitPoints(record, command.payload.currentHp),
+    );
+
+    this.publishCharacterStateUpdate({
+      sessionId: snapshot.session.id,
+      participantId: participant.id,
+      record: updatedRecord,
+      reason: 'dm_hp_changed',
+    });
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
   }
 
   createScene(command: CreateSceneCommand): Scene {
@@ -1310,6 +1363,38 @@ export class InMemoryGameRuntime {
     }
 
     return record;
+  }
+
+  private assertCharacterCurrentHpCanBeSet(
+    character: Character,
+    currentHp: number,
+  ): void {
+    if (
+      !Number.isInteger(currentHp) ||
+      currentHp < 0 ||
+      currentHp > character.hp.max
+    ) {
+      throw new CharacterStoreError(
+        'invalid_character_hp',
+        `Current HP for character "${character.id}" must be an integer from 0 to ${character.hp.max}.`,
+      );
+    }
+  }
+
+  private publishCharacterStateUpdate(params: {
+    sessionId: SessionId;
+    participantId: ParticipantId;
+    record: StoredCharacterRecord;
+    reason: CharacterStateUpdateReason;
+  }): void {
+    this.sessions.publishCharacterStateUpdate({
+      type: 'character_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      participantId: params.participantId,
+      characterId: params.record.character.id,
+      hp: params.record.character.hp,
+    });
   }
 
   private publishMovementStateUpdate(params: {

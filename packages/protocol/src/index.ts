@@ -7,4 +7,5 @@ export * from './scene.js';
 export * from './movement.js';
 export * from './encounter.js';
 export * from './combat.js';
+export * from './dm.js';
 export * from './stream.js';

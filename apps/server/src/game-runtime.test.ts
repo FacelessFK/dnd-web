@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type {
+  CharacterStateUpdate,
   CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
@@ -443,6 +444,15 @@ function getCombatEvents(updates: SessionStreamEvent[]): CombatEvent[] {
   );
 }
 
+function getCharacterStateUpdates(
+  updates: SessionStreamEvent[],
+): CharacterStateUpdate[] {
+  return updates.filter(
+    (update): update is CharacterStateUpdate =>
+      update.type === 'character_state',
+  );
+}
+
 function subscribeToSession(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -614,6 +624,29 @@ function attack(
     payload: {
       sessionId,
       targetParticipantId,
+    },
+  });
+}
+
+function dmSetCharacterCurrentHp(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  characterId: string,
+  currentHp: number,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmSetCharacterCurrentHp({
+    commandId: `dm-set-hp-${participantId}-${currentHp}`,
+    type: 'dm_set_character_current_hp',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      participantId,
+      characterId,
+      currentHp,
     },
   });
 }
@@ -995,6 +1028,161 @@ test('assigning a character to the wrong participant is rejected', () => {
     (error: unknown) =>
       error instanceof CharacterStoreError &&
       error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('dm can set assigned character current HP and broadcast character state', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
+
+  const updatedResource = dmSetCharacterCurrentHp(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+    12,
+  );
+  const rereadResource = runtime.getCharacter({
+    commandId: 'get-character-after-dm-hp',
+    type: 'get_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: firstCharacter.character.id,
+    },
+  });
+  const characterUpdates = getCharacterStateUpdates(updates).slice(
+    characterUpdateCountBefore,
+  );
+
+  assert.equal(updatedResource.character.hp.current, 12);
+  assert.equal(
+    updatedResource.character.hp.max,
+    firstCharacter.character.hp.max,
+  );
+  assert.equal(
+    updatedResource.character.hp.temp,
+    firstCharacter.character.hp.temp,
+  );
+  assert.equal(rereadResource.character.hp.current, 12);
+  assert.equal(characterUpdates.length, 1);
+  assert.deepEqual(characterUpdates[0], {
+    type: 'character_state',
+    reason: 'dm_hp_changed',
+    sessionId: session.sessionId,
+    participantId: 'player-001',
+    characterId: firstCharacter.character.id,
+    hp: updatedResource.character.hp,
+  });
+});
+
+test('players cannot set character HP through the DM control surface', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterCurrentHp(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        12,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm HP override validates target participant assignment', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterCurrentHp(
+        runtime,
+        session.sessionId,
+        'player-002',
+        firstCharacter.character.id,
+        12,
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('dm HP override rejects values outside the character HP range', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterCurrentHp(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        -1,
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_character_hp',
+  );
+
+  assert.throws(
+    () => {
+      dmSetCharacterCurrentHp(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        firstCharacter.character.hp.max + 1,
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_character_hp',
+  );
+});
+
+test('dm setting current turn actor HP to zero feeds existing downed gating', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const encounterUpdateCountBeforeFailure = getEncounterUpdates(updates).length;
+
+  dmSetCharacterCurrentHp(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+    0,
+  );
+
+  assert.throws(
+    () => {
+      useAction(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeFailure,
   );
 });
 

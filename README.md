@@ -27,6 +27,7 @@ Implemented so far:
 - action, bonus action, reaction, and movement usage commands
 - narrow attack action foundation with legality-before-RNG validation
 - downed actor gating derived from `hp.current === 0`
+- backend DM current HP override command
 - in-memory command idempotency for successful mutating command retries
 - reconnect recovery through read models
 - documented event/revision semantics and transaction-boundary limitations
@@ -106,6 +107,7 @@ Current command endpoints:
 - `POST /api/scenes/command`
 - `POST /api/movement/command`
 - `POST /api/encounters/command`
+- `POST /api/dm/command`
 - `GET /api/sessions/:sessionId/stream?participantId=:participantId`
 
 Current SSE event types:
@@ -114,6 +116,7 @@ Current SSE event types:
 - `movement_state`: live partial movement/placement update
 - `encounter_state`: snapshot-style encounter state update
 - `combat_event`: transient combat result notification
+- `character_state`: live partial character state update for DM HP overrides
 
 Reliability notes:
 
@@ -199,5 +202,6 @@ repo-root `.env` file works for local development.
 - [TASKS_PHASE_7.md](TASKS_PHASE_7.md)
 - [TASKS_PHASE_8.md](TASKS_PHASE_8.md)
 - [TASKS_PHASE_9.md](TASKS_PHASE_9.md)
+- [TASKS_ROADMAP_PHASE_8_DM_CONTROLS.md](TASKS_ROADMAP_PHASE_8_DM_CONTROLS.md)
 - [STACK_DECISIONS.md](STACK_DECISIONS.md)
 - [docs/decisions/0001-initial-stack.md](docs/decisions/0001-initial-stack.md)

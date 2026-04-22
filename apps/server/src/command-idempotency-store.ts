@@ -11,6 +11,7 @@ type IdempotentCommand = {
 
 export type CommandIdempotencyCategory =
   | 'character'
+  | 'dm'
   | 'encounter'
   | 'movement'
   | 'scene'

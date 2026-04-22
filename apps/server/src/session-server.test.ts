@@ -6,6 +6,9 @@ import test from 'node:test';
 import {
   activeSceneStateCommandSuccessSchema,
   type CharacterCommandResponse,
+  type CharacterStateUpdate,
+  dmCommandSchema,
+  type DmCommandResponse,
   type EncounterCommandResponse,
   type MovementCommandResponse,
   type SessionCommandResponse,
@@ -126,6 +129,15 @@ function getEncounterUpdates(updates: SessionStreamEvent[]) {
 
 function getCombatEvents(updates: SessionStreamEvent[]) {
   return updates.filter((update) => update.type === 'combat_event');
+}
+
+function getCharacterStateUpdates(
+  updates: SessionStreamEvent[],
+): CharacterStateUpdate[] {
+  return updates.filter(
+    (update): update is CharacterStateUpdate =>
+      update.type === 'character_state',
+  );
 }
 
 function setupEncounterForIdempotency(runtime: InMemoryGameRuntime) {
@@ -775,6 +787,24 @@ test('encounter commands are accepted for narrow start/read/advance validation',
   assert.equal(attackResult.success, true);
 });
 
+test('dm commands are accepted for narrow HP override validation', () => {
+  const result = dmCommandSchema.safeParse({
+    commandId: 'dm-set-hp-1',
+    type: 'dm_set_character_current_hp',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      participantId: 'player-001',
+      characterId: 'char_11111111-1111-4111-8111-111111111111',
+      currentHp: 12,
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
 test('invalid encounter movement-usage payloads are rejected during command validation', () => {
   const result = encounterCommandSchema.safeParse({
     commandId: 'record-movement-usage-invalid',
@@ -922,6 +952,109 @@ test('duplicate attack commands do not reroll, double damage, or duplicate SSE',
   assert.equal(target.character.hp.current, 33);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getCombatEvents(updates).length - combatEventsBefore, 1);
+});
+
+test('duplicate DM HP override commands return cached success without duplicate character_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-dm-set-hp-1',
+    type: 'dm_set_character_current_hp',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      currentHp: 12,
+    },
+  };
+  const characterUpdatesBefore = getCharacterStateUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const character = runtime.characters.getCharacter(firstCharacterId);
+  const characterUpdates = getCharacterStateUpdates(updates).slice(
+    characterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(character.character.hp.current, 12);
+  assert.equal(characterUpdates.length, 1);
+  assert.equal(characterUpdates[0]?.reason, 'dm_hp_changed');
+  assert.equal(characterUpdates[0]?.characterId, firstCharacterId);
+  assert.equal(characterUpdates[0]?.hp.current, 12);
+});
+
+test('DM HP override command ID conflicts do not mutate HP or emit SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const firstCommand = {
+    commandId: 'conflicting-dm-set-hp-1',
+    type: 'dm_set_character_current_hp',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      currentHp: 12,
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      currentHp: 10,
+    },
+  };
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+  );
+  const characterUpdatesBeforeConflict =
+    getCharacterStateUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+  );
+  const character = runtime.characters.getCharacter(firstCharacterId);
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.equal(character.character.hp.current, 12);
+  assert.equal(
+    getCharacterStateUpdates(updates).length,
+    characterUpdatesBeforeConflict,
+  );
 });
 
 test('command ID conflicts are rejected without runtime mutation or SSE', async () => {
@@ -1451,6 +1584,23 @@ test('combat session-stream updates are validated as authoritative attack payloa
     targetHp: {
       previous: 10,
       current: 9,
+    },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('character session-stream updates are validated as authoritative HP payloads', () => {
+  const result = sessionStreamEventSchema.safeParse({
+    type: 'character_state',
+    reason: 'dm_hp_changed',
+    sessionId: 'ABC123',
+    participantId: 'player-001',
+    characterId: 'char_11111111-1111-4111-8111-111111111111',
+    hp: {
+      max: 26,
+      current: 12,
+      temp: 0,
     },
   });
 

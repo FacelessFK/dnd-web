@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 
 import type {
+  CharacterStateUpdate,
   CombatEvent,
   CreateSessionCommand,
   EncounterStateUpdate,
@@ -290,6 +291,23 @@ export class InMemorySessionStore {
 
   publishCombatEvent(update: CombatEvent): void {
     const room = this.requireRoom(update.sessionId);
+
+    this.broadcast(room, update);
+  }
+
+  publishCharacterStateUpdate(update: CharacterStateUpdate): void {
+    const room = this.requireRoom(update.sessionId);
+    const participant = this.requireParticipant(
+      room.snapshot,
+      update.participantId,
+    );
+
+    if (participant.characterId !== update.characterId) {
+      throw new SessionStoreError(
+        'internal_server_error',
+        `Cannot publish character state for character "${update.characterId}" because participant "${participant.id}" is assigned to "${participant.characterId ?? 'none'}".`,
+      );
+    }
 
     this.broadcast(room, update);
   }

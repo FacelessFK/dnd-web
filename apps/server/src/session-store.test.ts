@@ -212,7 +212,7 @@ test('activating a scene updates the session snapshot and broadcasts a revision'
   assert.equal(updates.at(-1), 'active_scene_changed');
 });
 
-test('session revisions track session snapshots, not movement encounter or combat broadcasts', () => {
+test('session revisions track session snapshots, not movement encounter combat or character broadcasts', () => {
   const store = new InMemorySessionStore();
   const created = store.createSession(createSessionCommand());
   const receivedUpdates: SessionStreamEvent[] = [];
@@ -301,14 +301,26 @@ test('session revisions track session snapshots, not movement encounter or comba
       current: 1,
     },
   });
+  store.publishCharacterStateUpdate({
+    type: 'character_state',
+    reason: 'dm_hp_changed',
+    sessionId: created.sessionId,
+    participantId: 'dm-001',
+    characterId,
+    hp: {
+      max: 2,
+      current: 1,
+      temp: 0,
+    },
+  });
 
   assert.equal(
     store.getSessionSnapshot(created.sessionId).session.revision,
     revisionAfterSessionMutations,
   );
   assert.deepEqual(
-    receivedUpdates.slice(-3).map((update) => update.type),
-    ['movement_state', 'encounter_state', 'combat_event'],
+    receivedUpdates.slice(-4).map((update) => update.type),
+    ['movement_state', 'encounter_state', 'combat_event', 'character_state'],
   );
 });
 

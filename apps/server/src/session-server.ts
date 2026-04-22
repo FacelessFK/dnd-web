@@ -11,6 +11,9 @@ import {
   characterCommandSchema,
   characterCommandSuccessSchema,
   clientCommandSchema,
+  dmCommandErrorSchema,
+  dmCommandSchema,
+  dmCommandSuccessSchema,
   encounterCommandErrorSchema,
   encounterCommandSchema,
   encounterCommandSuccessSchema,
@@ -29,6 +32,8 @@ import {
   type CharacterAssignmentSuccess,
   type CharacterCommandError,
   type CharacterCommandSuccess,
+  type DmCommandError,
+  type DmCommandSuccess,
   type EncounterCommandError,
   type EncounterCommandSuccess,
   type MovementCommandError,
@@ -145,6 +150,11 @@ export async function handleRequest(
 
   if (request.method === 'POST' && url.pathname === '/api/movement/command') {
     await handleMovementCommandRequest(request, response, runtime, idempotency);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/dm/command') {
+    await handleDmCommandRequest(request, response, runtime, idempotency);
     return;
   }
 
@@ -681,6 +691,79 @@ async function handleEncounterCommandRequest(
   }
 }
 
+async function handleDmCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: InMemoryGameRuntime,
+  idempotency: CommandIdempotencyStore,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message: 'Request body must be valid JSON.',
+      },
+    } satisfies DmCommandError);
+    return;
+  }
+
+  const commandResult = dmCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies DmCommandError);
+    return;
+  }
+
+  try {
+    const command = commandResult.data;
+    const cachedSuccess = idempotency.getCachedSuccess<DmCommandSuccess>({
+      category: 'dm',
+      command,
+    });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, dmCommandSuccessSchema);
+      return;
+    }
+
+    let data: DmCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'dm_set_character_current_hp':
+        data = runtime.dmSetCharacterCurrentHp(command);
+        break;
+      default:
+        throw new Error('Unsupported DM command type.');
+    }
+
+    const success: DmCommandSuccess = {
+      ok: true,
+      data,
+    };
+
+    idempotency.cacheSuccess({
+      category: 'dm',
+      command,
+      response: success,
+    });
+    sendJson(response, 200, success, dmCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, dmCommandErrorSchema);
+  }
+}
+
 function handleStreamRequest(
   response: ServerResponse,
   request: IncomingMessage,
@@ -803,6 +886,7 @@ function handleRuntimeError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof dmCommandErrorSchema
     | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
@@ -837,6 +921,7 @@ function handleUnexpectedError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof dmCommandErrorSchema
     | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
     | typeof sceneCommandErrorSchema
@@ -971,6 +1056,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
       return 500;
     case 'invalid_command':
     case 'invalid_character_id':
+    case 'invalid_character_hp':
     case 'invalid_entity_position':
     case 'invalid_grid_size':
     case 'invalid_movement_usage_amount':
