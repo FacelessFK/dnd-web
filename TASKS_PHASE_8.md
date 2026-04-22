@@ -74,6 +74,7 @@ rules automation, frontend features, or persistence.
 
 ### Slice 4 — Transaction Boundary Planning
 
+- Status: completed.
 - Document multi-store write risks in the current in-memory architecture.
 - Pay special attention to attack resolution, where character HP, encounter
   usage, and SSE events are coordinated.
@@ -148,6 +149,61 @@ rules automation, frontend features, or persistence.
   - no reconnect catch-up by event cursor,
   - no transactionally persisted multi-store mutations yet.
 
+## Slice 4 Detailed Task List
+
+- Attack resolution boundary:
+  - resolves and validates attacker/target legality before mutation,
+  - saves target character HP first when the attack hits,
+  - saves encounter action usage and emits `encounter_state`,
+  - emits `combat_event` after the encounter save/publication path.
+- Attack known risks:
+  - target character HP can be saved while a later encounter save or
+    `encounter_state` publication fails,
+  - `encounter_state` can be emitted while a later `combat_event` publication
+    fails,
+  - there is no durable transaction boundary tying character, encounter, and
+    event publication together.
+- Movement during encounter boundary:
+  - validates destination and encounter turn usage before persistence,
+  - saves character position,
+  - saves encounter movement usage and emits `encounter_state` when movement
+    cost is greater than zero,
+  - emits `movement_state` independently after the character position save.
+- Movement known risks:
+  - character position can be saved while encounter movement usage save or
+    publication later fails,
+  - `encounter_state` and `movement_state` can diverge temporarily if one
+    publication path fails,
+  - zero-cost movement intentionally skips encounter mutation and only emits
+    `movement_state`.
+- Session-only lower-risk boundaries:
+  - scene activation mutates session active scene, increments session revision,
+    and emits `session_state` within the session store,
+  - character assignment mutates session participant assignment, increments
+    session revision, and emits `session_state` within the session store,
+  - these are lower-risk than multi-store flows but still not durable
+    transactions because in-memory mutation and subscriber broadcast are not
+    persisted atomically.
+- Encounter-only boundaries:
+  - encounter start creates the encounter and emits `encounter_state`,
+  - turn usage, reaction usage, movement usage commands, and turn advancement
+    save the encounter and emit `encounter_state`,
+  - if publication fails after the encounter save, the in-memory state remains
+    mutated without durable replay.
+- Fake in-memory transactions were intentionally not added:
+  - they would not solve process crash, subscriber failure, durable event
+    ordering, or database/SSE atomicity,
+  - they could make future persistence semantics harder to reason about,
+  - the safer next step is an explicit persistence transaction plus outbox/event
+    publication design.
+- Future persistence needs:
+  - database transaction boundaries for multi-store command mutations,
+  - durable command idempotency records,
+  - durable event/outbox records for `session_state`, `encounter_state`,
+    `movement_state`, and `combat_event` publication,
+  - event ordering/cursor semantics if replay or reconnect catch-up is added,
+  - clear retry behavior for saved state with failed publication.
+
 ## Acceptance Criteria
 
 - Phase 8 improves runtime reliability without expanding gameplay.
@@ -162,6 +218,8 @@ rules automation, frontend features, or persistence.
 - Session revision semantics are documented and covered by narrow tests.
 - Current in-memory limitations are explicit.
 - Multi-store transaction risks are documented before persistence work begins.
+- Future persistence and event-publication boundaries are documented without
+  adding fake in-memory transactions.
 - Each implementation slice passes `pnpm lint`, `pnpm test`,
   `pnpm typecheck`, and `pnpm format:check`.
 
@@ -176,6 +234,8 @@ rules automation, frontend features, or persistence.
   events for the selected baseline.
 - SSE event/read-model consistency holds for movement, encounter, and combat
   state after reconnect.
+- Future persistence tests cover transaction rollback and durable outbox
+  behavior once real persistence exists.
 
 ## Phase Exit Checklist
 
@@ -185,6 +245,7 @@ rules automation, frontend features, or persistence.
 - Known transient event limitations are documented.
 - Current in-memory restart limitations are documented.
 - Future persistence transaction boundaries are documented.
+- Phase 8 transaction boundary review is complete.
 - No gameplay systems were expanded during Phase 8.
 - No database, Redis, event-sourcing, or distributed coordination work was added.
 - All implemented slices pass the required validation commands.
