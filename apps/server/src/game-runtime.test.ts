@@ -678,6 +678,30 @@ function dmRepositionCharacterInActiveScene(
   });
 }
 
+function dmSetCurrentTurnUsage(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  turnUsage: {
+    actionUsed: boolean;
+    bonusActionUsed: boolean;
+    reactionUsed: boolean;
+    movementUsed: number;
+  },
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmSetCurrentTurnUsage({
+    commandId: `dm-set-turn-usage-${actorParticipantId}-${turnUsage.movementUsed}`,
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      turnUsage,
+    },
+  });
+}
+
 function setupEncounterParticipants(
   runtime: InMemoryGameRuntime,
   options: {
@@ -1506,6 +1530,129 @@ test('dm reposition during an encounter does not spend movement or emit encounte
   );
   assert.equal(getEncounterUpdates(updates).length, encounterUpdateCountBefore);
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+});
+
+test('dm can set current encounter turn usage without changing turn ownership', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const startedEncounter = startEncounter(runtime, session.sessionId);
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+
+  const updatedEncounter = dmSetCurrentTurnUsage(runtime, session.sessionId, {
+    actionUsed: true,
+    bonusActionUsed: true,
+    reactionUsed: true,
+    movementUsed: 42,
+  });
+  const rereadEncounter = getEncounterState(runtime, session.sessionId);
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBefore,
+  );
+
+  assert.deepEqual(updatedEncounter.currentTurnUsage, {
+    actionUsed: true,
+    bonusActionUsed: true,
+    reactionUsed: true,
+    movementUsed: 42,
+  });
+  assert.deepEqual(rereadEncounter.currentTurnUsage, {
+    actionUsed: true,
+    bonusActionUsed: true,
+    reactionUsed: true,
+    movementUsed: 42,
+  });
+  assert.equal(
+    updatedEncounter.currentTurnIndex,
+    startedEncounter.currentTurnIndex,
+  );
+  assert.equal(updatedEncounter.roundNumber, startedEncounter.roundNumber);
+  assert.deepEqual(
+    updatedEncounter.participants,
+    startedEncounter.participants,
+  );
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'dm_turn_usage_changed');
+});
+
+test('dm turn usage override does not mutate character movement or combat state', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { firstCharacter, session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+  const combatEventCountBefore = getCombatEvents(updates).length;
+  const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
+  const recordBefore = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+
+  dmSetCurrentTurnUsage(runtime, session.sessionId, {
+    actionUsed: true,
+    bonusActionUsed: false,
+    reactionUsed: true,
+    movementUsed: 999,
+  });
+
+  const recordAfter = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+
+  assert.deepEqual(recordAfter.character.hp, recordBefore.character.hp);
+  assert.deepEqual(recordAfter.overlay.position, recordBefore.overlay.position);
+  assert.equal(getMovementUpdates(updates).length, movementUpdateCountBefore);
+  assert.equal(getCombatEvents(updates).length, combatEventCountBefore);
+  assert.equal(
+    getCharacterStateUpdates(updates).length,
+    characterUpdateCountBefore,
+  );
+});
+
+test('players cannot set current encounter turn usage', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmSetCurrentTurnUsage(
+        runtime,
+        session.sessionId,
+        {
+          actionUsed: true,
+          bonusActionUsed: false,
+          reactionUsed: false,
+          movementUsed: 0,
+        },
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm turn usage override requires an active encounter', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCurrentTurnUsage(runtime, session.sessionId, {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 0,
+      });
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
 });
 
 test('players cannot create characters for other participants', () => {

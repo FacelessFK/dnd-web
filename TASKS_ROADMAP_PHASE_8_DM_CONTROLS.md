@@ -70,6 +70,25 @@ Implemented:
   ownership is not checked, and downed characters can still be repositioned by
   the DM.
 
+## Slice 3 — DM Turn Usage Override
+
+Status: Completed.
+
+Implemented:
+
+- Added `dm_set_current_turn_usage`.
+- Reused `/api/dm/command` and the existing `dm` idempotency category.
+- Restricted the command to the session DM.
+- Required an active encounter.
+- Updated only the current encounter's `currentTurnUsage`.
+- Added `encounter_state` reason `dm_turn_usage_changed`.
+- Returned an explicit DM success payload containing the updated encounter.
+- Confirmed the command does not advance turns, mutate participants, change HP,
+  change scene position, emit combat events, emit movement events, or emit
+  character-state events.
+- Kept the command administrative: schema-valid movement usage can be set
+  without checking the current actor's speed.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -85,6 +104,9 @@ Implemented:
   `dm_character_repositioned`.
 - DM reposition does not emit `encounter_state`.
 - DM reposition does not spend movement or require turn ownership.
+- DM turn usage override emits one `encounter_state` update with
+  `dm_turn_usage_changed`.
+- DM turn usage override mutates only encounter bookkeeping state.
 
 ## Tests Added
 
@@ -104,12 +126,16 @@ Implemented:
   validation.
 - DM reposition encounter non-interference.
 - DM reposition idempotent duplicate and conflict behavior.
+- DM turn usage override success and readback.
+- DM turn usage override authorization and no-active-encounter rejection.
+- DM turn usage override protocol validation for invalid movement usage.
+- DM turn usage override event-boundary and idempotency behavior.
 
 ## Future Slices
 
-- DM turn usage override.
 - DM condition editing foundation after the condition model exists.
 - Explicit force/ignore-occupancy reposition override, if product needs it.
+- Encounter end command.
 - DM encounter participant management.
 - Durable override audit trail in a later persistence phase.
 

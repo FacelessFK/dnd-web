@@ -261,6 +261,13 @@ export function recordEncounterMovementUsage(params: {
   );
 }
 
+export function setEncounterTurnUsage(
+  encounter: Encounter,
+  currentTurnUsage: Encounter['currentTurnUsage'],
+): Encounter {
+  return withUpdatedTurnUsage(encounter, structuredClone(currentTurnUsage));
+}
+
 function createEncounterId(): EncounterId {
   return `encounter_${randomUUID()}`;
 }

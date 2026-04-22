@@ -747,6 +747,11 @@ async function handleDmCommandRequest(
       case 'dm_reposition_character_in_active_scene':
         data = runtime.dmRepositionCharacterInActiveScene(command);
         break;
+      case 'dm_set_current_turn_usage':
+        data = {
+          encounter: runtime.dmSetCurrentTurnUsage(command),
+        };
+        break;
       default:
         throw new Error('Unsupported DM command type.');
     }

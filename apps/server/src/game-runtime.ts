@@ -29,6 +29,7 @@ import type {
   CreateSessionCommand,
   DmRepositionCharacterInActiveSceneCommand,
   DmSetCharacterCurrentHpCommand,
+  DmSetCurrentTurnUsageCommand,
   EncounterStateUpdateReason,
   FinalizeCharacterCommand,
   GetEncounterStateCommand,
@@ -90,6 +91,7 @@ import {
   markEncounterReactionUsed,
   recordEncounterMovementUsage,
   requireCurrentEncounterParticipant,
+  setEncounterTurnUsage,
 } from './encounter-runtime.js';
 import {
   DEFAULT_RULES_PROFILE_ID,
@@ -467,6 +469,28 @@ export class InMemoryGameRuntime {
         updatedRecord.character.rulesProfileId,
       ),
     );
+  }
+
+  dmSetCurrentTurnUsage(command: DmSetCurrentTurnUsageCommand): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'set current turn usage');
+
+    return this.saveAndPublishEncounter({
+      sessionId: snapshot.session.id,
+      encounter: setEncounterTurnUsage(
+        this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+        command.payload.turnUsage,
+      ),
+      reason: 'dm_turn_usage_changed',
+    });
   }
 
   createScene(command: CreateSceneCommand): Scene {

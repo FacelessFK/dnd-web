@@ -27,7 +27,8 @@ Implemented so far:
 - action, bonus action, reaction, and movement usage commands
 - narrow attack action foundation with legality-before-RNG validation
 - downed actor gating derived from `hp.current === 0`
-- backend DM current HP and active-scene reposition override commands
+- backend DM current HP, active-scene reposition, and turn-usage override
+  commands
 - in-memory command idempotency for successful mutating command retries
 - reconnect recovery through read models
 - documented event/revision semantics and transaction-boundary limitations

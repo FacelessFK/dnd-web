@@ -6,7 +6,12 @@ import {
   participantIdSchema,
   sessionIdSchema,
 } from './common.js';
-import { characterResourceSchema, hitPointsSchema } from './character.js';
+import {
+  characterResourceSchema,
+  hitPointsSchema,
+  turnUsageSchema,
+} from './character.js';
+import { encounterSchema } from './encounter.js';
 import { commandErrorSchema } from './errors.js';
 import { scenePositionSchema } from './scene.js';
 
@@ -38,14 +43,29 @@ export const dmRepositionCharacterInActiveSceneCommandSchema = z.object({
   }),
 });
 
+export const dmSetCurrentTurnUsageCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_set_current_turn_usage'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    turnUsage: turnUsageSchema,
+  }),
+});
+
 export const dmCommandSchema = z.discriminatedUnion('type', [
   dmSetCharacterCurrentHpCommandSchema,
   dmRepositionCharacterInActiveSceneCommandSchema,
+  dmSetCurrentTurnUsageCommandSchema,
 ]);
+
+const dmEncounterCommandSuccessDataSchema = z.object({
+  encounter: encounterSchema,
+});
 
 export const dmCommandSuccessSchema = z.object({
   ok: z.literal(true),
-  data: characterResourceSchema,
+  data: z.union([characterResourceSchema, dmEncounterCommandSuccessDataSchema]),
 });
 
 export const dmCommandErrorSchema = commandErrorSchema;
@@ -71,6 +91,9 @@ export type DmSetCharacterCurrentHpCommand = z.infer<
 >;
 export type DmRepositionCharacterInActiveSceneCommand = z.infer<
   typeof dmRepositionCharacterInActiveSceneCommandSchema
+>;
+export type DmSetCurrentTurnUsageCommand = z.infer<
+  typeof dmSetCurrentTurnUsageCommandSchema
 >;
 export type DmCommand = z.infer<typeof dmCommandSchema>;
 export type DmCommandSuccess = z.infer<typeof dmCommandSuccessSchema>;

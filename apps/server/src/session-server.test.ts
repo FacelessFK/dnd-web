@@ -826,9 +826,57 @@ test('dm commands are accepted for narrow HP override validation', () => {
       },
     },
   });
+  const turnUsageResult = dmCommandSchema.safeParse({
+    commandId: 'dm-set-turn-usage-1',
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: true,
+        movementUsed: 30,
+      },
+    },
+  });
 
   assert.equal(hpResult.success, true);
   assert.equal(repositionResult.success, true);
+  assert.equal(turnUsageResult.success, true);
+});
+
+test('invalid DM turn-usage override payloads are rejected during command validation', () => {
+  const result = dmCommandSchema.safeParse({
+    commandId: 'dm-set-turn-usage-invalid',
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: -1,
+      },
+    },
+  });
+
+  assert.equal(result.success, false);
+
+  if (result.success) {
+    return;
+  }
+
+  assert.deepEqual(result.error.issues[0]?.path, [
+    'payload',
+    'turnUsage',
+    'movementUsed',
+  ]);
 });
 
 test('invalid encounter movement-usage payloads are rejected during command validation', () => {
@@ -1196,6 +1244,140 @@ test('DM reposition command ID conflicts do not mutate position or emit SSE', as
   assert.equal(
     getMovementUpdates(updates).length,
     movementUpdatesBeforeConflict,
+  );
+});
+
+test('duplicate DM turn usage override commands return cached success without duplicate encounter_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-dm-turn-usage-1',
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: true,
+        reactionUsed: false,
+        movementUsed: 25,
+      },
+    },
+  };
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'dm_turn_usage_changed');
+
+  if (!first.body.ok || !('encounter' in first.body.data)) {
+    return;
+  }
+
+  assert.deepEqual(first.body.data.encounter.currentTurnUsage, {
+    actionUsed: true,
+    bonusActionUsed: true,
+    reactionUsed: false,
+    movementUsed: 25,
+  });
+});
+
+test('DM turn usage override command ID conflicts do not mutate usage or emit SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const firstCommand = {
+    commandId: 'conflicting-dm-turn-usage-1',
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 25,
+      },
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 30,
+      },
+    },
+  };
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+  );
+  const encounterUpdatesBeforeConflict = getEncounterUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+  );
+  const encounter = runtime.getEncounterState({
+    commandId: 'read-after-dm-turn-usage-conflict',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.deepEqual(encounter.currentTurnUsage, {
+    actionUsed: true,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 25,
+  });
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdatesBeforeConflict,
   );
 });
 
