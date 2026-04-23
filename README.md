@@ -8,8 +8,10 @@ small reliability baseline.
 ## Current Status
 
 The runtime foundation is complete through **Phase 8 — Runtime Reliability &
-Reconnect Readiness**. The project is now in **Phase 9 — Runtime/API Surface
-Cleanup & Manual Validation Readiness**.
+Reconnect Readiness**. **Phase 9 — Runtime/API Surface Cleanup & Manual
+Validation Readiness** is complete through Slice 4, including API surface
+documentation and project handoff refresh. Backend Roadmap Phase 8 DM controls
+are also implemented as narrow server-authoritative commands.
 
 Implemented so far:
 
@@ -109,15 +111,44 @@ Current command endpoints:
 - `POST /api/movement/command`
 - `POST /api/encounters/command`
 - `POST /api/dm/command`
+
+Current stream endpoint:
+
 - `GET /api/sessions/:sessionId/stream?participantId=:participantId`
+
+Current command groups:
+
+| Endpoint                  | Mutating commands                                                                                                                                                                                         | Read-only commands       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `/api/session/command`    | `create_session`, `join_session`, `reconnect_session`                                                                                                                                                     | none                     |
+| `/api/characters/command` | `create_character`, `update_character`, `finalize_character`, `assign_character_to_participant`                                                                                                           | `get_character`          |
+| `/api/scenes/command`     | `create_scene`, `activate_scene_for_session`, `place_entity_in_scene`                                                                                                                                     | `get_scene`              |
+| `/api/movement/command`   | `place_character_in_active_scene`, `move_character_in_active_scene`                                                                                                                                       | `get_active_scene_state` |
+| `/api/encounters/command` | `start_encounter`, `advance_turn`, `use_action`, `use_bonus_action`, `use_reaction`, `record_movement_usage`, `attack`                                                                                    | `get_encounter_state`    |
+| `/api/dm/command`         | `dm_set_character_current_hp`, `dm_set_character_active_conditions`, `dm_reposition_character_in_active_scene`, `dm_set_current_turn_usage`, `dm_set_current_turn_participant`, `dm_end_active_encounter` | none                     |
 
 Current SSE event types:
 
-- `session_state`: snapshot-style session state update with session revision
-- `movement_state`: live partial movement/placement/reposition update
-- `encounter_state`: snapshot-style encounter state update
-- `combat_event`: transient combat result notification
-- `character_state`: live partial character state update for DM HP overrides
+- `session_state`: snapshot-style session state update with session revision.
+- `encounter_state`: snapshot-style encounter state update. It does not imply a
+  session revision change.
+- `movement_state`: live partial movement/placement/reposition update, not a
+  durable full-scene snapshot.
+- `combat_event`: transient combat result notification, currently used for
+  resolved attacks.
+- `character_state`: live partial character update for DM HP and condition-tag
+  changes. Payloads always include authoritative HP and may include
+  `activeConditions`.
+
+Current response/error behavior:
+
+- Successful command responses use `{ "ok": true, "data": ... }`.
+- Failed command responses use `{ "ok": false, "error": { "code", "message" } }`.
+- Validation problems generally return `400`.
+- Missing resources generally return `404`.
+- Valid commands rejected by current authoritative state generally return `409`.
+- Role/DM authorization failures return `403`.
+- Unexpected internal failures return `500`.
 
 Reliability notes:
 
@@ -126,6 +157,8 @@ Reliability notes:
   response without repeating side effects.
 - Failed command responses are not cached.
 - Read commands are intentionally not cached by idempotency.
+- Command idempotency is scoped by command category, command type, command ID,
+  actor participant ID, and session ID when available.
 - Idempotency is process-local and does not survive server restart.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
@@ -138,7 +171,7 @@ For the complete copy-pasteable scenario, see
 [docs/manual-validation.md](docs/manual-validation.md). It walks through session
 creation, SSE subscription, character setup, scene activation, placement,
 encounter start, reaction/attack usage, reconnect recovery, read-model checks,
-downed actor gating, and idempotent retry behavior.
+downed actor gating, DM override commands, and idempotent retry behavior.
 
 Quick smoke flow:
 
@@ -194,6 +227,7 @@ repo-root `.env` file works for local development.
 - [PRD.md](PRD.md)
 - [ROADMAP.md](ROADMAP.md)
 - [docs/manual-validation.md](docs/manual-validation.md)
+- [dnd_project_handoff_context.md](dnd_project_handoff_context.md)
 - [TASKS_PHASE_0.md](TASKS_PHASE_0.md)
 - [TASKS_PHASE_1.md](TASKS_PHASE_1.md)
 - [TASKS_PHASE_3.md](TASKS_PHASE_3.md)

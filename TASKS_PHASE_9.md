@@ -79,13 +79,14 @@ event/revision semantics, and transaction boundary limitations.
 
 ### Slice 3 — API Surface Documentation
 
-- Status: planned.
+- Status: completed.
 - Document command endpoints:
   - `/api/session/command`,
   - `/api/characters/command`,
   - `/api/scenes/command`,
   - `/api/movement/command`,
-  - `/api/encounters/command`.
+  - `/api/encounters/command`,
+  - `/api/dm/command`.
 - Document SSE endpoint usage:
   - `/api/sessions/:sessionId/stream?participantId=:participantId`.
 - Document command categories and command types.
@@ -96,14 +97,16 @@ event/revision semantics, and transaction boundary limitations.
   - `session_state`,
   - `movement_state`,
   - `encounter_state`,
-  - `combat_event`.
+  - `combat_event`,
+  - `character_state`.
 - Document snapshot vs transient event behavior.
 
 ### Slice 4 — Project Handoff Refresh
 
-- Status: planned.
+- Status: completed.
 - Refresh project handoff context with completed Phase 6, Phase 7, and Phase 8
   behavior.
+- Capture completed Roadmap Phase 8 backend DM controls behavior.
 - Capture known limitations:
   - no persistence,
   - no durable event replay,
@@ -159,6 +162,68 @@ event/revision semantics, and transaction boundary limitations.
   - reconnect and read-model recovery.
 - Did not add scripts or replace copy-paste manual validation.
 
+## Slice 3 Detailed Task List
+
+- Expanded README API surface documentation with all current command endpoints:
+  - `/api/session/command`,
+  - `/api/characters/command`,
+  - `/api/scenes/command`,
+  - `/api/movement/command`,
+  - `/api/encounters/command`,
+  - `/api/dm/command`.
+- Documented the session SSE stream endpoint:
+  - `/api/sessions/:sessionId/stream?participantId=:participantId`.
+- Documented current command groups and command types.
+- Documented mutating commands versus read-only commands.
+- Clarified that successful mutating command responses are cached by the
+  process-local in-memory idempotency store.
+- Clarified that read commands are intentionally not cached.
+- Documented practical error/status behavior:
+  - validation errors generally return `400`,
+  - missing resources generally return `404`,
+  - state conflicts generally return `409`,
+  - role/DM authorization failures return `403`,
+  - unexpected internal failures return `500`.
+- Documented current SSE event semantics:
+  - `session_state` is a snapshot-style session update with revision,
+  - `encounter_state` is a snapshot-style encounter update,
+  - `movement_state` is a live partial movement/placement/reposition update,
+  - `combat_event` is a transient combat result notification,
+  - `character_state` is a live partial character update for DM HP and
+    condition-tag changes.
+- Updated manual validation notes to include the current backend DM command
+  surface.
+- No runtime, protocol, or gameplay behavior changed.
+
+## Slice 4 Detailed Task List
+
+- Added `dnd_project_handoff_context.md` as a concise current-state handoff.
+- Captured completed Phase 6 combat foundation:
+  - narrow attack command,
+  - legality-before-RNG,
+  - fixed damage,
+  - HP floor,
+  - `encounter_state` before `combat_event`.
+- Captured completed Phase 7 combat-state foundation:
+  - HP-derived downed state,
+  - downed actor gating,
+  - current-turn reaction usage foundation.
+- Captured completed internal Phase 8 reliability foundation:
+  - in-memory command idempotency,
+  - reconnect/read-model recovery,
+  - event/revision semantics,
+  - transaction-boundary limitations.
+- Captured completed Roadmap Phase 8 backend DM controls:
+  - HP override,
+  - condition-tag editing,
+  - active-scene reposition,
+  - turn usage override,
+  - current turn override,
+  - encounter end.
+- Captured remaining limitations and likely next work options after Phase 9.
+- Kept the handoff concise and did not duplicate every task file.
+- No runtime, protocol, or gameplay behavior changed.
+
 ## Acceptance Criteria
 
 - Current README/status documentation matches the implemented runtime.
@@ -194,7 +259,7 @@ event/revision semantics, and transaction boundary limitations.
 - SSE event behavior is documented.
 - Reconnect/read-model recovery path is documented.
 - Idempotency behavior and limitations are documented.
-- Project handoff context is refreshed if useful.
+- Project handoff context is refreshed.
 - Stale phase references from earlier docs are identified or cleaned up.
 - No runtime/gameplay scope was expanded.
 - Required validation passes.

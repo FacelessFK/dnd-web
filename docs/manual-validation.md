@@ -1,7 +1,7 @@
 # Manual End-to-End Validation
 
 This guide validates the current in-memory authoritative runtime through Phase 9
-Slice 2. It is intentionally copy-pasteable and does not require frontend UI,
+Slice 4. It is intentionally copy-pasteable and does not require frontend UI,
 database persistence, event replay, auth, or deployment.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
@@ -16,6 +16,8 @@ environment variables manually.
 - Encounter start, turn usage, attack, and encounter state read.
 - Reaction usage foundation through `use_reaction`.
 - Downed actor gating using a 1 HP target.
+- Backend DM controls for HP, condition tags, active-scene reposition, turn
+  usage, current turn actor, and active encounter end.
 - In-memory idempotent retry behavior for a successful mutating command.
 - Reconnect recovery through read models instead of missed-event replay.
 
@@ -78,8 +80,9 @@ export SESSION_ID="<SESSION_ID>"
 curl -N "http://127.0.0.1:2567/api/sessions/$SESSION_ID/stream?participantId=dm-001"
 ```
 
-You should see `session_state`, `movement_state`, `encounter_state`, and
-`combat_event` events as later commands mutate runtime state.
+You should see `session_state`, `movement_state`, `encounter_state`,
+`combat_event`, and `character_state` events as later commands mutate runtime
+state.
 
 ## 4. Join Players
 
@@ -559,15 +562,153 @@ curl -sS -X POST http://127.0.0.1:2567/api/characters/command \
 JSON
 ```
 
+## 13. Optional DM Control Checks
+
+These commands validate the current backend-only DM command surface. They are
+administrative overrides, not normal player actions.
+
+Restore Borin from 0 HP to 1 HP and retry the exact same command to confirm
+idempotency. The retry should return the cached success response without a
+second `character_state` event.
+
+```bash
+DM_HP_PAYLOAD=$(cat <<JSON
+{
+  "commandId": "manual-dm-set-hp-1",
+  "type": "dm_set_character_current_hp",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "participantId": "player-002",
+    "characterId": "$CHARACTER_TWO_ID",
+    "currentHp": 1
+  }
+}
+JSON
+)
+
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d "$DM_HP_PAYLOAD" | jq .
+
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d "$DM_HP_PAYLOAD" | jq .
+```
+
+Set DM-managed condition tags on Aria. These tags are metadata only in the
+current runtime and do not apply rules effects.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-set-conditions-1",
+  "type": "dm_set_character_active_conditions",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "participantId": "player-001",
+    "characterId": "$CHARACTER_ONE_ID",
+    "activeConditions": ["prone", "marked"]
+  }
+}
+JSON
+```
+
+Reposition Aria administratively. This reuses active-scene occupancy validation
+but does not spend movement or require current-turn ownership.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-reposition-1",
+  "type": "dm_reposition_character_in_active_scene",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "participantId": "player-001",
+    "characterId": "$CHARACTER_ONE_ID",
+    "position": { "x": 0, "y": 1 }
+  }
+}
+JSON
+```
+
+Set current turn usage directly, then switch the current turn actor back to
+player 001. The current-turn override resets usage and does not reroll
+initiative, reorder participants, or change the round number.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-turn-usage-1",
+  "type": "dm_set_current_turn_usage",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "turnUsage": {
+      "actionUsed": false,
+      "bonusActionUsed": true,
+      "reactionUsed": true,
+      "movementUsed": 5
+    }
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-current-turn-1",
+  "type": "dm_set_current_turn_participant",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "participantId": "player-001"
+  }
+}
+JSON
+```
+
+End the active encounter. This emits one final `encounter_state` with
+`encounter_ended`, then clears the active encounter. After this command,
+`get_encounter_state` should return `no_active_encounter` until a new encounter
+is started.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-end-encounter-1",
+  "type": "dm_end_active_encounter",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID"
+  }
+}
+JSON
+```
+
 ## Expected Stream Behavior
 
 During this flow, the SSE terminal should receive:
 
 - `session_state` when participants join, characters are assigned, and the
   active scene changes.
-- `movement_state` when characters are placed.
+- `movement_state` when characters are placed, moved, or repositioned by the
+  DM.
 - `encounter_state` when the encounter starts and turn usage changes.
 - `combat_event` when attack resolution succeeds.
+- `character_state` when the DM changes HP or condition tags.
 
-`combat_event` is not replayed after reconnect. Use the read commands above to
-recover current authoritative state.
+`combat_event`, `movement_state`, and `character_state` are not durable replay
+events. Use the read commands above to recover current authoritative state after
+reconnect.
