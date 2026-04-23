@@ -117,7 +117,8 @@ Current SSE event types:
 - `movement_state`: live partial movement/placement/reposition update
 - `encounter_state`: snapshot-style encounter state update
 - `combat_event`: transient combat result notification
-- `character_state`: live partial character state update for DM HP overrides
+- `character_state`: live partial character state update for DM HP and
+  condition-tag overrides
 
 Reliability notes:
 

@@ -312,6 +312,7 @@ test('session revisions track session snapshots, not movement encounter combat o
       current: 1,
       temp: 0,
     },
+    activeConditions: [],
   });
 
   assert.equal(

@@ -2264,6 +2264,7 @@ test('character session-stream updates are validated as authoritative HP payload
       current: 12,
       temp: 0,
     },
+    activeConditions: [],
   });
 
   assert.equal(result.success, true);

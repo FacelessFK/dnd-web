@@ -1187,6 +1187,7 @@ test('dm can set assigned character current HP and broadcast character state', (
     participantId: 'player-001',
     characterId: firstCharacter.character.id,
     hp: updatedResource.character.hp,
+    activeConditions: updatedResource.overlay.activeConditions,
   });
 });
 
