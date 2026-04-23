@@ -1,296 +1,144 @@
-# 📄 D&D DM-Driven Platform – Product Requirements Document (PRD)
-
----
-
-## 1. 🎯 Product Overview
-
-### Product Name
-
-D&D DM-Driven Platform (working name)
-
-### Summary
-
-A browser-based platform that enables Dungeon Masters (DMs) to run Dungeons & Dragons sessions with:
-
-- structured player actions
-- visual maps and entities
-- rules-assisted gameplay
-- full DM authority over outcomes
-
-The system acts as a **digital tabletop runtime**, not a video game.
-
----
-
-## 2. 🧠 Problem Statement
-
-Running D&D digitally today has several problems:
-
-- Tools like VTTs (e.g. :contentReference[oaicite:0]{index=0}) lack strong rule enforcement
-- Many actions rely on manual tracking (movement, conditions, turns)
-- DM overhead is high (tracking state, validating rules)
-- Visual clarity is often limited or cluttered
-- No clear separation between "player intent" and "game resolution"
-
-### Goal
-
-Reduce DM cognitive load while preserving:
-
-- player freedom
-- narrative control
-- rule flexibility
-
----
-
-## 3. 👥 Target Users
-
-### Primary: Dungeon Master (DM)
-
-Needs:
-
-- control over game flow
-- ability to override rules
-- clear visibility of game state
-- fast interaction tools
-
-### Secondary: Player
-
-Needs:
-
-- clear understanding of available actions
-- structured interaction
-- visual feedback
-- minimal confusion about rules
-
----
-
-## 4. 🎮 Core User Experience
-
-### Player Loop
-
-1. Observe current game state
-2. Choose an action (move, attack, interact, etc.)
-3. Submit intent
-4. Wait for validation / DM decision
-5. See result applied
-
----
-
-### DM Loop
-
-1. Observe full game state (including hidden info)
-2. Receive player intents
-3. Accept / reject / modify / override
-4. Trigger events when needed
-5. Control NPCs and world
-
----
-
-## 5. 🧩 Core Features (MVP)
-
-### 5.1 Session System
-
-- Create session
-- Join session (players)
-- Assign DM role
-- Maintain isolated session state
-
----
-
-### 5.2 Map & Scene System
-
-- Grid-based map (5ft cells)
-- Place entities (players, monsters, objects)
-- Support multiple scenes per session
-- DM controls active scene
-
----
-
-### 5.3 Movement System
-
-- Player selects destination
-- System calculates valid movement
-- Highlight reachable tiles
-- Movement requires validation
-- DM can override
-
----
-
-### 5.4 Turn System
-
-- Initiative order
-- Turn-based gameplay
-- Action / Bonus / Reaction tracking
-- Movement tracking per turn
-
----
-
-### 5.5 Dice System
-
-- Roll d20 and other dice
-- Apply modifiers automatically
-- Support visibility:
-  - public
-  - private
-  - DM-only
-- DM can override outcomes
-
----
-
-### 5.6 Character System
-
-- Character sheet per player
-- Stores:
-  - stats
-  - HP
-  - AC
-  - movement
-  - abilities
-- Used for rule validation
-
----
-
-### 5.7 Rule Enforcement (Partial)
-
-System should enforce:
-
-- movement limits
-- turn order
-- attack rolls
-- saving throws
-- basic conditions
-
-System should NOT enforce:
-
-- improvised actions
-- social interactions
-- ambiguous situations
-
----
-
-### 5.8 DM Control Panel
-
-- Approve/reject actions
-- Override results
-- Modify HP, position, conditions
-- Trigger events (traps, scene changes)
-
----
-
-## 6. ⚖️ Rules Configuration
-
-Each session must define:
-
-- base ruleset (e.g. 5e 2024)
-- optional rules
-- house rules
-- strictness level
-
-### Strictness Levels
-
-- strict → system enforces rules strictly
-- assistive → warnings + DM confirmation
-- DM-led → minimal blocking
-
----
-
-## 7. ❌ Non-Goals (MVP)
-
-- Full spell system
-- Full D&D rule coverage
-- Campaign progression tools
-- Voice/video chat
-- Advanced AI
-- Complex lighting system
-- High-end graphics
-
----
-
-## 8. 📏 Success Metrics
-
-### Product Success
-
-- DM can run a full combat encounter without confusion
-- Players understand what actions they can take
-- Minimal manual tracking required
-
-### Technical Success
-
-- Stable session state
-- Low latency per action
-- No desync between players
-
----
-
-## 9. 🚨 Risks
-
-- Over-automation breaking DM flexibility
-- Under-automation causing frustration
-- Complex rules creating bugs
-- State sync issues in multiplayer
-- Performance issues with map/geometry
-
----
-
-## 10. 🧭 MVP Definition
-
-The MVP is successful when:
-
-- A DM can create a session
-- 2–5 players can join
-- A map is loaded
-- Players can move and attack
-- Turns are enforced
-- Dice rolls work
-- DM can override actions
-- A full combat scenario can be played end-to-end
-
----
-
-## 11. 🔜 Future Features (Post-MVP)
-
-- Full spell system
-- Advanced conditions and effects
-- Campaign system
-- Scene branching tools
-- Replay system
-- Analytics
-- AI-assisted DM tools
-- Asset marketplace
-
-### Asset System
-
-The platform will require an asset management system to support:
-
-- map tiles
-- tokens (players, monsters)
-- props (objects, environment)
-- icons and UI assets
-
-The system should eventually support:
-
-- reusable asset libraries
-- DM-controlled asset placement
-- potential user-uploaded assets
-
-This is not part of the MVP, but must be considered in long-term product design.
-
-### Character Builder & Ability Tools
-
-Future versions should include tools to assist character creation and management, such as:
-
-- ability score generation (point-buy, standard array, etc.)
-- ability modifier calculations
-- derived stat previews (initiative, passive perception, spell DC)
-
-For MVP, only derived stat calculation needed for gameplay will be implemented.
-Full character creation tools are out of scope.
-
----
-
-## 12. 📌 Open Questions
-
-- Which ruleset is MVP default? (2014 vs 2024)
-- How strict should rule enforcement be?
-- How much control should players have vs DM?
-- How detailed should maps be?
-- How to handle split-party scenarios?
+# Product Requirements Document
+
+## Product Definition
+
+A DM-first, top-down, rules-assisted tactical D&D platform where players submit
+structured intents, the server keeps authoritative state, and the Dungeon Master
+retains full control over what actually happens.
+
+The product is not a D&D video game or a fully automated CRPG. It is a visual
+tabletop runtime that makes map play, turn flow, character state, and DM
+bookkeeping easier without replacing tabletop adjudication.
+
+## Product Principles
+
+- **DM authority first:** the DM can see the full game state, inspect hidden
+  information, override state, and decide ambiguous outcomes.
+- **Player intent, not player truth:** players choose destinations, actions, and
+  targets through structured UI, but the server and DM decide what changes.
+- **Top-down tactical clarity:** the MVP should prefer readable 2D grid play
+  over cinematic or heavy 3D presentation.
+- **Reusable content plus reusable characters:** adventures, maps/scenes, assets,
+  and player-owned characters should be reusable across sessions.
+- **Automation stops at ambiguity:** deterministic validation is useful;
+  edge-case rulings remain DM-led.
+
+## Primary Users
+
+### Dungeon Master
+
+The DM operates the runtime. The DM needs:
+
+- an omniscient tactical view,
+- fast scene, encounter, and character controls,
+- hidden information visibility,
+- reliable override tools,
+- low bookkeeping friction,
+- confidence that the system will not fight their rulings.
+
+### Player
+
+The player participates through a limited, clear view. The player needs:
+
+- a readable map,
+- a reliable character sheet,
+- clear movement and action affordances,
+- confirmation that submitted intents reached the runtime,
+- authoritative feedback after the server and/or DM resolves the intent.
+
+## Target Play Loop
+
+1. A player creates or selects a saved character from their character library.
+2. A DM creates a session, chooses a rules profile, and selects prepared content.
+3. Players join and are assigned characters.
+4. The DM activates a starting scene and places the party.
+5. Players submit movement, interaction, or combat intents.
+6. The server validates deterministic constraints.
+7. The DM can approve, reject, modify, or override when needed.
+8. Authoritative state updates are broadcast to connected clients.
+9. A narrow encounter can be played through with turn tracking, attack
+   resolution, downed-state handling, and DM corrections.
+
+## Domain Shape
+
+The product should keep these concepts distinct:
+
+- **Campaign:** a longer-lived organizational container for sessions, notes,
+  reusable content, and progression.
+- **Adventure:** reusable prepared content containing one or more connected
+  scenes.
+- **Scene:** one tactical playable space with grid, terrain, objects, hidden
+  information, and transition points.
+- **Session:** a live runtime instance with participants, assignments, active
+  scene, presence, and current state.
+- **Encounter:** a combat mode inside a session with turn order and turn usage.
+- **Character library entry:** persistent player-owned character identity/build.
+- **Character runtime overlay:** mutable session state such as HP, conditions,
+  position, visibility, and concentration.
+- **Asset:** reusable visual/content pieces such as tiles, props, tokens, icons,
+  and markers.
+
+Doors, portals, stairs, trapdoors, and similar links should transition play
+between scenes rather than forcing one giant mutable map.
+
+## MVP Scope
+
+The first useful product should include:
+
+- session creation, joining, reconnect, and participant assignment,
+- rules-profile selection,
+- player character builder and character library foundations,
+- prepared adventure/map selection,
+- top-down 2D scene presentation,
+- active scene placement and movement,
+- turn order and turn usage,
+- narrow attack/combat loop,
+- DM overrides for common corrections,
+- read-model recovery after reconnect,
+- persistence for important reusable state.
+
+## Current Implementation Reality
+
+The backend currently implements a strong authoritative runtime foundation:
+
+- sessions, participants, reconnect, and SSE updates,
+- character create/update/finalize/assign/read flows,
+- scene create/read/activate/entity placement,
+- active-scene character placement and movement,
+- encounter start/read/advance turn,
+- action, bonus action, reaction, and movement usage,
+- narrow attack resolution with legality-before-RNG,
+- HP-derived downed actor gating,
+- backend DM commands for HP, condition tags, repositioning, turn usage, current
+  turn actor, and encounter ending,
+- in-memory command idempotency,
+- reconnect recovery through read models,
+- Drizzle/Postgres character persistence groundwork.
+
+The frontend remains a minimal shell. The product is not yet MVP-ready because
+the character builder/library UI, top-down battle UX, map/content authoring,
+durable runtime storage, auth, and broader rules coverage are not complete.
+
+## Explicit Non-Goals For Near-Term MVP
+
+- Full automation of all D&D rules.
+- Full spell system.
+- Full condition engine and condition effects.
+- Opportunity attacks and out-of-turn reaction windows.
+- Complete weapons, inventory, ranged combat, or monster AI.
+- Advanced line of sight, fog, cover, and lighting as a blocker for early play.
+- 3D character/avatar creation or graphics-heavy tactical presentation.
+- Voice/video, marketplace, or production-scale multi-process infrastructure.
+- Replacing DM judgment with hardcoded automation.
+
+## Success Criteria
+
+The product is moving in the right direction when:
+
+- a player can create and reuse a character without a live session hack,
+- a DM can start a session, pick content, and place the party without direct
+  admin access,
+- players clearly understand where they can move and what they can submit,
+- the DM can see and correct the full game state quickly,
+- a simple encounter can be completed without out-of-band bookkeeping,
+- reconnect and persistence behavior are trustworthy enough for repeated play.

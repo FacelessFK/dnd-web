@@ -1,22 +1,28 @@
 # D&D DM-Driven Platform
 
-Browser-based, DM-authoritative Dungeons & Dragons runtime built as a
-TypeScript monorepo. The current backend is an in-memory authoritative runtime
-with explicit protocol schemas, server-owned validation, SSE updates, and a
-small reliability baseline.
+DM-first, top-down, rules-assisted tactical Dungeons & Dragons platform built as
+a TypeScript monorepo. Players submit structured intent, the server owns
+authoritative state, and the Dungeon Master remains fully authoritative over
+adjudication and overrides.
+
+The current repository is backend-first: the runtime foundations are much
+stronger than the product UI. The next product direction is to make that runtime
+usable through character onboarding, session setup, top-down tactical play, DM
+controls, and durable persistence.
 
 ## Current Status
 
-The runtime foundation is complete through **Phase 8 — Runtime Reliability &
-Reconnect Readiness**. **Phase 9 — Runtime/API Surface Cleanup & Manual
-Validation Readiness** is complete through Slice 4, including API surface
-documentation and project handoff refresh. Backend Roadmap Phase 8 DM controls
-are also implemented as narrow server-authoritative commands.
+The backend runtime foundation is complete through **Phase 8 — Runtime
+Reliability & Reconnect Readiness**. **Phase 9 — Runtime/API Surface Cleanup &
+Manual Validation Readiness** refreshed API/manual-validation docs, and backend
+Roadmap Phase 8 DM controls are implemented as narrow server-authoritative
+commands. Phase 10 persistence work has begun with Drizzle/Postgres character
+record groundwork, while most live runtime state remains process-local.
 
 Implemented so far:
 
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
-  database-placeholder packages
+  database packages
 - minimal Next.js web app shell
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
@@ -34,17 +40,20 @@ Implemented so far:
 - in-memory command idempotency for successful mutating command retries
 - reconnect recovery through read models
 - documented event/revision semantics and transaction-boundary limitations
+- Drizzle/Postgres character persistence groundwork
 - ESLint, Prettier, tests, and TypeScript validation
 
 Not implemented yet:
 
-- persistence-backed runtime storage
+- fully persistence-backed runtime storage for sessions, scenes, encounters,
+  idempotency, and streams
 - durable idempotency, event replay, event cursors, or distributed coordination
 - full transaction/outbox persistence boundaries
+- character builder/library product UI
+- top-down tactical battle UX, map/adventure editor, or frontend DM panel
 - opportunity attacks or out-of-turn reaction windows
 - full condition engine, death saves, spells, weapons, ranged attacks, or monster
   AI
-- frontend battle UX or character builder/library UI
 - authentication, production deployment, or multi-process scaling
 
 ## Stack Summary
@@ -54,7 +63,7 @@ Not implemented yet:
 - Next.js + React + Tailwind CSS
 - Node.js
 - Colyseus-ready server package
-- PostgreSQL + Drizzle package placeholder
+- PostgreSQL + Drizzle persistence package
 - Zod protocol package
 
 ## Repository Structure
@@ -67,7 +76,7 @@ packages/
   shared/   Shared domain models and primitives
   protocol/ Shared protocol contracts and Zod validation
   rules/    Pure deterministic rules and derivation helpers
-  db/       Database package placeholder
+  db/       Drizzle/Postgres persistence groundwork
 docs/
   decisions/ Architecture and stack decision records
 scripts/    Repository-level helper scripts and smoke tests
@@ -226,6 +235,11 @@ repo-root `.env` file works for local development.
 - [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md)
 - [PRD.md](PRD.md)
 - [ROADMAP.md](ROADMAP.md)
+- [01_PRODUCT_BLUEPRINT.md](01_PRODUCT_BLUEPRINT.md)
+- [02_DOMAIN_MODEL_AND_GAMEPLAY_FLOWS.md](02_DOMAIN_MODEL_AND_GAMEPLAY_FLOWS.md)
+- [03_UX_AND_VIEW_POLICY.md](03_UX_AND_VIEW_POLICY.md)
+- [04_CHARACTER_AND_CONTENT_STRATEGY.md](04_CHARACTER_AND_CONTENT_STRATEGY.md)
+- [05_REVISED_PRODUCT_ROADMAP.md](05_REVISED_PRODUCT_ROADMAP.md)
 - [docs/manual-validation.md](docs/manual-validation.md)
 - [dnd_project_handoff_context.md](dnd_project_handoff_context.md)
 - [TASKS_PHASE_0.md](TASKS_PHASE_0.md)
@@ -240,3 +254,6 @@ repo-root `.env` file works for local development.
 - [TASKS_ROADMAP_PHASE_8_DM_CONTROLS.md](TASKS_ROADMAP_PHASE_8_DM_CONTROLS.md)
 - [STACK_DECISIONS.md](STACK_DECISIONS.md)
 - [docs/decisions/0001-initial-stack.md](docs/decisions/0001-initial-stack.md)
+- [docs/decisions/0002-dm-first-authority-and-intent-model.md](docs/decisions/0002-dm-first-authority-and-intent-model.md)
+- [docs/decisions/0003-top-down-2d-tactical-visual-direction.md](docs/decisions/0003-top-down-2d-tactical-visual-direction.md)
+- [docs/decisions/0004-character-builder-and-library-inside-monolith.md](docs/decisions/0004-character-builder-and-library-inside-monolith.md)
