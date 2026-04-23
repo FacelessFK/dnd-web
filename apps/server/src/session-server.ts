@@ -146,7 +146,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-10',
-      status: 'durable-scene-restart-baseline',
+      status: 'persistence-foundation-exit-pass',
     });
     return;
   }

@@ -1,8 +1,8 @@
 # Persistence Boundary And Transaction Design
 
-This document completes Phase 10 Slice 1. It turns the current in-memory
-runtime notes into an implementation-ready persistence direction without
-changing runtime behavior.
+This document started as the Phase 10 Slice 1 design pass. Later Phase 10
+slices update it as the source of truth for the currently implemented durable
+boundaries and remaining persistence gaps, without changing gameplay behavior.
 
 ## Current Boundary Audit
 
@@ -406,6 +406,53 @@ Outbox should eventually cover:
 Replay remains deferred. An outbox can support reliable publication without
 exposing a client replay/cursor contract yet.
 
+## Current Durable Baseline After Slice 7
+
+With DB-backed stores injected, the current narrow restart-safe read-model
+baseline is:
+
+- character records can be reread through `get_character`,
+- session membership and stored `activeSceneId` can be reread through
+  `reconnect_session`,
+- scene definitions can be reread through `get_scene`,
+- `get_active_scene_state` can recover only when those three persisted
+  boundaries line up and character overlays already contain valid active-scene
+  placement.
+
+This is still not full runtime durability. Encounter state, movement live
+continuity, stream delivery, replay/catch-up semantics, and outbox guarantees
+remain out of scope.
+
+## Remaining Atomicity Gaps
+
+- Character assignment still validates durable character state and then writes
+  the durable session snapshot without a single cross-store transaction.
+- Scene activation still validates the scene and then writes the durable
+  session snapshot without a single cross-store transaction.
+- Scene writes are durable, but scene commands still use the non-durable
+  idempotency path.
+- Attack resolution and encounter-aware movement still span character,
+  encounter, session, and event publication boundaries that are not jointly
+  durable.
+- Encounter start, turn advancement, turn usage, current-turn overrides, and
+  encounter end still operate on non-durable encounter state.
+- Outside the supported transactional DM character update path, SSE publication
+  is still post-write and non-outboxed.
+
+## Visible Persistence Technical Debt
+
+- The runtime intentionally preserves stable public HTTP behavior by allowing
+  some internal runtime methods to return a Promise on injected DB-backed paths
+  even though their signatures read like synchronous values in many call sites.
+- Narrow persistence invariants are duplicated today:
+  - row keys plus IDs inside JSON documents,
+  - `session_id` columns plus `session.id` or `scene.sessionId` inside
+    persisted payloads.
+- The DB-backed session and scene stores currently preload durable records into
+  fresh in-memory runtime maps on startup to keep live read paths synchronous.
+  That is a valid narrow baseline, but it is not yet a full repository/runtime
+  redesign.
+
 ## Slice 2 Result
 
 Completed target:
@@ -427,6 +474,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Proceed with Phase 10 Slice 7: Persistence Exit Pass, or start the next durable
-repository slice only if restart-safe encounter continuity becomes a higher
-priority than closing the current persistence phase cleanly.
+Phase 10 is now closed. The next narrow persistence step should be a dedicated
+durable encounter boundary design slice before any attempt at restart-safe
+combat continuity, outbox delivery, or replay semantics.

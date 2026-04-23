@@ -1,6 +1,6 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 10 Slice 6.
+This handoff summarizes the current repository state after Phase 10 Slice 7.
 It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
@@ -87,6 +87,8 @@ Important boundary:
   injected.
 - Presence, encounters, most command idempotency, SSE delivery, replay, and
   outbox behavior remain non-durable.
+- Phase 10 Slice 7 closes the initial persistence foundation by documenting the
+  remaining atomicity gaps and technical debt without widening gameplay scope.
 
 ## Completed Combat Foundations
 
@@ -171,10 +173,10 @@ should recover current authoritative state through read models.
 
 ## Known Limitations
 
-- No runtime-wide database persistence.
-- Character records and session snapshots have DB-backed boundaries, but
-  scene records now do too, but default local server startup remains in-memory
-  unless those DB-backed stores are injected.
+- No runtime-wide fully transactional persistence.
+- Character, session snapshot, and scene records now have DB-backed
+  boundaries, but default local server startup remains in-memory unless those
+  DB-backed stores are injected.
 - Restarted runtimes can preserve session membership through
   `reconnect_session` only when the DB-backed session snapshot store is
   injected.
@@ -184,6 +186,12 @@ should recover current authoritative state through read models.
 - `get_active_scene_state` can recover after restart only when durable session,
   scene, and character stores are all injected and the character overlay still
   points at the active scene.
+- The runtime still carries intentional async/sync typing debt on injected
+  DB-backed paths so public HTTP behavior can stay stable while persistence is
+  added incrementally.
+- Some persistence invariants are intentionally duplicated today:
+  - row keys plus IDs inside JSON payloads,
+  - `session_id` columns plus session association inside persisted documents.
 - No command-surface-wide durable idempotency. Durable idempotency records exist
   only for supported character-record mutation commands when the DB-backed
   idempotency/transaction boundary is injected.
@@ -209,9 +217,8 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Implement Phase 10 Slice 7 — Persistence Exit Pass, or start the next
-   durable repository slice first only if restart-safe encounter continuity
-   becomes more urgent than closing the current persistence phase.
+1. Start a dedicated durable encounter boundary design slice before attempting
+   restart-safe combat continuity, outbox delivery, or replay semantics.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.

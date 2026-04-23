@@ -6,8 +6,8 @@ and does not require frontend UI, database persistence, event replay, auth, or
 deployment.
 
 Phase 10 added injected DB-backed character, session snapshot, and scene
-boundaries, but this manual curl flow does not exercise those injected durable
-restart paths.
+boundaries, but this manual curl flow still validates the default in-memory
+startup path rather than those injected durable restart paths.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
@@ -46,7 +46,7 @@ Expected high-level status:
 {
   "name": "dnd-dm-platform-server",
   "phase": "phase-10",
-  "status": "durable-scene-restart-baseline"
+  "status": "persistence-foundation-exit-pass"
 }
 ```
 

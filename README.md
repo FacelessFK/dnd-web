@@ -20,8 +20,9 @@ commands. Phase 10 persistence work now includes a DB-backed character
 repository boundary, transactional durable idempotency for supported
 character mutations, a narrow durable session snapshot baseline for
 restart-safe reconnect, and a DB-backed scene persistence baseline for
-restart-safe active-scene rereads, while most live runtime state remains
-process-local.
+restart-safe active-scene rereads. Phase 10 Slice 7 closes that initial
+durable-runtime foundation without changing gameplay behavior; most live
+runtime state still remains process-local.
 
 Implemented so far:
 
@@ -203,9 +204,15 @@ Reliability notes:
   DB-backed scene store are all injected, `get_active_scene_state` can reread a
   narrow active-scene snapshot after restart if character overlays already
   contain valid active-scene placement.
+- Internal runtime/store typing still carries deliberate technical debt here:
+  some runtime methods stay externally stable while returning a Promise on
+  injected DB-backed paths.
 - Presence, subscriber state, encounter continuity, stream delivery, replay,
   and catch-up semantics remain non-durable; do not treat the whole command
   surface as restart-safe.
+- Session snapshots and scene records duplicate some invariants in both row
+  columns and JSON payloads today; that is intentional for this narrow baseline
+  but still a cleanup target for a later persistence phase.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

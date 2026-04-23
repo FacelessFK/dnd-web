@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 10 durable scene restart baseline listening on http://${host}:${port}`,
+    `[server] Phase 10 persistence foundation exit pass listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Default startup is still in-memory; injected DB-backed session snapshots, scene persistence, character persistence, and transactional durable idempotency for supported character mutations enable narrow restart recovery without full encounter or replay continuity.',
+    '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, and scene stores plus transactional durable idempotency for supported character mutations provide narrow restart recovery without encounter durability, replay, or outbox guarantees.',
   );
 });

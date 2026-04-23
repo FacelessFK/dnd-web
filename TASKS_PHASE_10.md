@@ -576,7 +576,7 @@ Completed outcome:
 
 ### Slice 7 — Persistence Exit Pass
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -602,6 +602,51 @@ Acceptance:
 - Remaining durability gaps are documented clearly.
 - Validation passes.
 - Next implementation options are concrete and narrow.
+
+Completed outcome:
+
+- Reviewed the currently implemented durable boundaries for consistency:
+  - DB-backed character records,
+  - DB-backed session snapshots,
+  - DB-backed scene records,
+  - transactional durable idempotency for supported character mutations.
+- Confirmed no gameplay scope slipped into Phase 10:
+  - no rules expansion,
+  - no protocol changes,
+  - no frontend scope,
+  - no replay/outbox/auth work.
+- Documented the remaining non-durable areas explicitly:
+  - encounter state,
+  - movement live continuity,
+  - SSE delivery,
+  - replay/catch-up/event cursor semantics,
+  - outbox/publication guarantees,
+  - broad command-surface idempotency.
+- Documented the remaining atomicity gaps explicitly:
+  - character assignment still validates character state and then persists the
+    session snapshot without a cross-store transaction,
+  - scene activation still validates the scene and then persists the session
+    snapshot without a cross-store transaction,
+  - scene writes are durable but still use the non-durable idempotency path,
+  - attack, encounter-aware movement, and encounter commands still span
+    non-durable encounter/session/event boundaries,
+  - SSE publication remains post-write and non-outboxed outside the supported
+    transactional DM character update path.
+- Documented the visible persistence technical debt explicitly:
+  - the runtime still contains intentional async/sync typing debt where some
+    methods may return a Promise on injected DB-backed paths while preserving
+    unchanged public HTTP behavior,
+  - persistence invariants are duplicated in narrow places, such as:
+    - row keys plus IDs inside JSON documents,
+    - `session_id` columns plus `session.id` / `scene.sessionId` in persisted
+      payloads.
+- Reconfirmed default local startup remains in-memory unless DB-backed stores
+  are explicitly injected.
+- Updated README, persistence notes, handoff context, manual validation notes,
+  and server status wording for final Phase 10 consistency.
+- Recommended the next narrow step after Phase 10:
+  - start a dedicated durable encounter boundary design slice before any
+    attempt at restart-safe combat continuity or outbox/replay work.
 
 ## Acceptance Criteria
 
