@@ -159,6 +159,41 @@ Design boundary:
 - The command does not automatically change `roundNumber`.
 - Richer initiative/order editing remains deferred to a future dedicated slice.
 
+## Slice 7 — DM Controls Combat Foundation Exit Pass
+
+Status: Completed.
+
+Reviewed:
+
+- DM-only authorization across the current DM command surface.
+- Command naming and `/api/dm/command` routing consistency.
+- Response shape consistency for character-scoped and encounter-scoped DM
+  commands.
+- In-memory idempotency behavior through the shared `dm` category.
+- SSE event semantics for character, movement, and encounter updates.
+- Read-model recovery expectations after DM commands.
+- README/API surface alignment.
+- Task tracking clarity for completed DM combat/admin foundations.
+
+Current command boundaries:
+
+- Character-scoped override: `dm_set_character_current_hp` emits
+  `character_state` with reason `dm_hp_changed`.
+- Scene/admin reposition: `dm_reposition_character_in_active_scene` emits
+  `movement_state` with reason `dm_character_repositioned`; it does not spend
+  movement, require current-turn ownership, or mutate encounter usage.
+- Encounter bookkeeping: `dm_set_current_turn_usage` emits `encounter_state`
+  with reason `dm_turn_usage_changed`.
+- Encounter lifecycle/admin: `dm_end_active_encounter` emits one final
+  `encounter_state` with reason `encounter_ended`, clears the active encounter,
+  and does not preserve encounter history in this slice.
+- Current turn override: `dm_set_current_turn_participant` emits
+  `encounter_state` with reason `dm_current_turn_changed`, resets current turn
+  usage, and does not reroll initiative, reorder participants, or
+  automatically change round number.
+
+No new DM feature was added in this exit pass.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -187,6 +222,8 @@ Design boundary:
   `currentTurnUsage`.
 - DM current-turn override does not reroll initiative, reorder participants, or
   change the round number.
+- DM controls foundation exit pass confirms all current DM commands use
+  `/api/dm/command` and the `dm` idempotency category.
 
 ## Tests Added
 
@@ -240,11 +277,13 @@ Design boundary:
   `encounter_state`, resets turn usage, and preserves participant order,
   initiative values, and round number.
 - All current DM commands are idempotent through the `dm` command category.
+- All current DM commands use `/api/dm/command`.
 - There is no audit log, event replay, or durable override history yet.
 - There is no force mode or ignore-collision reposition override yet.
 - There is no condition editor yet.
 - Encounter end exists, but there is no encounter reset, history, audit, or
   cleanup flow yet.
+- There is no frontend DM panel yet.
 - Future DM controls should continue as dedicated narrow slices instead of
   becoming a broad generic override endpoint.
 - True auditability and transaction safety require future persistence/outbox
