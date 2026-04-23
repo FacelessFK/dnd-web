@@ -14,7 +14,10 @@ import {
   calculateProficiencyBonus,
 } from '@dnd/rules';
 
-import { CharacterStoreError } from './character-store.js';
+import {
+  CharacterStoreError,
+  InMemoryCharacterStore,
+} from './character-store.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
@@ -24,7 +27,7 @@ import { SceneStoreError } from './scene-store.js';
 import { SessionStoreError } from './session-store.js';
 
 function createRuntimeWithAttackRoll(d20: number) {
-  return new InMemoryGameRuntime(
+  return new InMemoryGameRuntime<InMemoryCharacterStore>(
     undefined,
     undefined,
     undefined,
@@ -35,7 +38,7 @@ function createRuntimeWithAttackRoll(d20: number) {
 }
 
 function createRuntimeWithAttackRoller(roller: () => number) {
-  return new InMemoryGameRuntime(
+  return new InMemoryGameRuntime<InMemoryCharacterStore>(
     undefined,
     undefined,
     undefined,

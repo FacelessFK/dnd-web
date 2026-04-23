@@ -273,6 +273,9 @@ Reasoning:
   Drizzle/Postgres access is async. If Slice 2 does not introduce a runtime
   async boundary, it should be treated as persistence groundwork rather than
   completed end-to-end durable runtime integration.
+- Slice 2B resolved that mismatch by adding an internal awaitable runtime
+  character repository boundary while preserving public HTTP/protocol/SSE
+  behavior.
 - Adding an outbox before the first durable repository would be mostly
   speculative.
 - However, the design should not pretend SSE publication is transactional.
@@ -280,8 +283,8 @@ Reasoning:
 Recommended sequence:
 
 1. Slice 2: implement the first DB-backed repository groundwork with tests.
-2. Slice 2B if needed: wire the live runtime to an async character repository
-   boundary without changing public API behavior.
+2. Slice 2B: wire the live runtime to an async character repository boundary
+   without changing public API behavior.
 3. Slice 3: implement durable command idempotency once it can commit with real
    durable state changes.
 4. Add an outbox soon after any production path depends on durable writes plus
@@ -298,23 +301,25 @@ Outbox should eventually cover:
 Replay remains deferred. An outbox can support reliable publication without
 exposing a client replay/cursor contract yet.
 
-## Next Slice Recommendation
+## Slice 2 Result
 
-Proceed with Phase 10 Slice 2: First Durable Repository Slice.
-
-Concrete target:
+Completed target:
 
 - Implement DB-backed character storage while keeping `InMemoryCharacterStore`
   available.
 
-Minimum next-slice expectations:
+Completed expectations:
 
 - Add the minimal schema for `StoredCharacterRecord`.
 - Preserve public HTTP/protocol/SSE behavior.
-- Do not claim the live runtime can use the DB-backed character repository until
-  the sync/async `CharacterRepository` mismatch is resolved.
+- Resolve the sync/async character repository mismatch before claiming live
+  runtime integration.
 - Add repository tests for create, get, save, missing character errors, and
   clone/value semantics.
 - Keep runtime command behavior unchanged.
 - Do not add event replay, durable idempotency, or broad DB wiring in the same
   slice.
+
+## Next Slice Recommendation
+
+Proceed with Phase 10 Slice 3: Durable Command Idempotency Baseline.

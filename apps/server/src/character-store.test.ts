@@ -9,7 +9,6 @@ import type {
 import type { CharacterId } from '@dnd/shared';
 
 import {
-  type CharacterRepository,
   CharacterStoreError,
   InMemoryCharacterStore,
   type StoredCharacterRecord,
@@ -163,7 +162,7 @@ function createDbBackedCharacterRepository(): DbBackedCharacterRepository {
 }
 
 test('character repository stores clones and persists saves through the boundary', () => {
-  const repository: CharacterRepository = new InMemoryCharacterStore();
+  const repository = new InMemoryCharacterStore();
   const created = repository.createCharacter(createStoredCharacterRecord());
 
   created.character.name = 'Locally Mutated';
@@ -322,7 +321,7 @@ test('db-backed character repository create overwrites existing ids to match in-
 });
 
 test('saving a missing character through the repository boundary fails safely', () => {
-  const repository: CharacterRepository = new InMemoryCharacterStore();
+  const repository = new InMemoryCharacterStore();
 
   assert.throws(
     () => {

@@ -146,7 +146,7 @@ Completed outcome:
 
 ### Slice 2 — First Durable Repository Slice
 
-Status: partially complete / groundwork only.
+Status: completed.
 
 Goal:
 
@@ -211,27 +211,29 @@ Groundwork completed:
 - No public command, protocol, gameplay, SSE, session, encounter, idempotency,
   outbox, replay, auth, or frontend behavior changed.
 
-Contract mismatch still blocking full Slice 2 completion:
+Sync/async contract resolution:
 
 - Real Drizzle/Postgres access is async.
-- The current runtime-facing `CharacterRepository` contract is synchronous:
+- The in-memory `CharacterRepository` contract remains synchronous:
   - `createCharacter(record): StoredCharacterRecord`,
   - `getCharacter(characterId): StoredCharacterRecord`,
   - `saveCharacter(record): StoredCharacterRecord`.
-- `InMemoryGameRuntime` currently calls `CharacterRepository` synchronously
-  across character, movement, encounter, attack, DM override, and read-model
-  paths.
-- Therefore the async `DbBackedCharacterRepository` is not yet a drop-in
-  runtime repository and the live runtime cannot honestly use it by injection
-  today.
+- The runtime now has an internal awaitable character repository boundary for
+  live command paths.
+- Server command handlers now await runtime command results, preserving public
+  HTTP/protocol/SSE behavior while allowing async character storage.
+- The default in-memory path still returns synchronously for existing runtime
+  tests and local behavior.
 
-Durability boundary after current Slice 2 groundwork:
+Durability boundary after Slice 2 + Slice 2B:
 
 - Character records have a real DB-backed storage boundary through
   `DrizzleCharacterRecordDatabase`.
 - Character repository semantics are tested through the async
   `DbBackedCharacterRepository` adapter.
-- Full runtime integration is not complete yet.
+- The live server/runtime command path can use `DbBackedCharacterRepository`
+  without changing public command shapes, response shapes, SSE schemas, or
+  gameplay behavior.
 - The default runtime still uses `InMemoryCharacterStore`.
 - Sessions are still in memory.
 - Scenes are still in memory.
@@ -239,18 +241,9 @@ Durability boundary after current Slice 2 groundwork:
 - Command idempotency is still in memory.
 - SSE delivery is still non-durable.
 
-Required follow-up before starting Slice 3:
-
-- Add a narrow runtime async repository boundary so live command paths can use
-  the DB-backed character repository without changing public HTTP/protocol/SSE
-  behavior.
-- Keep gameplay behavior unchanged.
-- Add at least one runtime/server-level test proving a real command path can
-  operate with the DB-backed character repository.
-
 ### Slice 2B — Runtime Character Repository Async Boundary
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -276,6 +269,24 @@ Acceptance:
   are unchanged.
 - Existing in-memory tests continue to pass.
 - Slice 2 can then be marked fully complete.
+
+Completed outcome:
+
+- Added an internal awaitable runtime character repository boundary.
+- Kept the public in-memory `CharacterRepository` contract synchronous.
+- Allowed `InMemoryGameRuntime` to accept either:
+  - `InMemoryCharacterStore`,
+  - `DbBackedCharacterRepository`.
+- Updated server handlers to await runtime command results while preserving
+  external HTTP behavior.
+- Added a server-level integration test proving a real command path can:
+  - create a character through the DB-backed repository,
+  - finalize and assign it,
+  - apply a DM HP override,
+  - read the updated HP back,
+  - observe the expected `character_state` SSE event shape.
+- No protocol, response, SSE, gameplay, idempotency, session, scene, encounter,
+  outbox, replay, auth, or frontend behavior changed.
 
 ### Slice 3 — Durable Command Idempotency Baseline
 

@@ -71,7 +71,6 @@ import type {
 } from '@dnd/shared';
 
 import {
-  CharacterRepository,
   CharacterStoreError,
   InMemoryCharacterStore,
   type StoredCharacterRecord,
@@ -154,11 +153,27 @@ type ResolvedAttack = {
   nextTargetRecord: StoredCharacterRecord | null;
 };
 
-export class InMemoryGameRuntime {
+type RuntimeCharacterRepositoryResult<T> = T | Promise<T>;
+
+export type RuntimeCharacterRepository = {
+  createCharacter(
+    record: StoredCharacterRecord,
+  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+  getCharacter(
+    characterId: CharacterId,
+  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+  saveCharacter(
+    record: StoredCharacterRecord,
+  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+};
+
+export class InMemoryGameRuntime<
+  TCharacters extends RuntimeCharacterRepository = InMemoryCharacterStore,
+> {
   constructor(
     readonly sessions = new InMemorySessionStore(),
     readonly rulesProfiles = new InMemoryRulesProfileStore(),
-    readonly characters: CharacterRepository = new InMemoryCharacterStore(),
+    readonly characters: TCharacters = new InMemoryCharacterStore() as unknown as TCharacters,
     readonly scenes: SceneRepository = new InMemorySceneStore(),
     readonly encounters: EncounterRepository = new InMemoryEncounterStore(),
     readonly d20Roller: () => number = () => rollD20(),
@@ -223,15 +238,16 @@ export class InMemoryGameRuntime {
     const rulesProfile = this.rulesProfiles.getRulesProfile(
       snapshot.session.rulesProfileId,
     );
-    const record = this.characters.createCharacter(
-      this.createDraftCharacterRecord({
-        ownerParticipantId: ownerParticipant.id,
-        rulesProfileId: rulesProfile.id,
-        character: command.payload.character,
-      }),
+    return this.resolveRepositoryResult(
+      this.characters.createCharacter(
+        this.createDraftCharacterRecord({
+          ownerParticipantId: ownerParticipant.id,
+          rulesProfileId: rulesProfile.id,
+          character: command.payload.character,
+        }),
+      ),
+      (record) => this.buildCharacterResource(record, rulesProfile),
     );
-
-    return this.buildCharacterResource(record, rulesProfile);
   }
 
   getCharacter(command: GetCharacterCommand): CharacterResource {
@@ -239,13 +255,21 @@ export class InMemoryGameRuntime {
       command.payload.sessionId,
       command.actor.participantId,
     );
-    const record = this.characters.getCharacter(command.payload.characterId);
 
-    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(command.payload.characterId),
+      (record) => {
+        this.assertCharacterBelongsToSession(
+          snapshot,
+          record.character.id,
+          record,
+        );
 
-    return this.buildCharacterResource(
-      record,
-      this.rulesProfiles.getRulesProfile(record.character.rulesProfileId),
+        return this.buildCharacterResource(
+          record,
+          this.rulesProfiles.getRulesProfile(record.character.rulesProfileId),
+        );
+      },
     );
   }
 
@@ -258,24 +282,35 @@ export class InMemoryGameRuntime {
       snapshot,
       command.actor.participantId,
     );
-    const record = this.characters.getCharacter(command.payload.characterId);
-    const ownerParticipant = this.requireParticipant(
-      snapshot,
-      record.character.ownerParticipantId,
-    );
 
-    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
-    this.assertActorCanEditCharacter(actor, ownerParticipant);
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(command.payload.characterId),
+      (record) => {
+        const ownerParticipant = this.requireParticipant(
+          snapshot,
+          record.character.ownerParticipantId,
+        );
 
-    const updatedRecord = this.characters.saveCharacter(
-      this.withUpdatedCharacterDetails(record, command.payload.character),
-    );
+        this.assertCharacterBelongsToSession(
+          snapshot,
+          record.character.id,
+          record,
+        );
+        this.assertActorCanEditCharacter(actor, ownerParticipant);
 
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter(
+            this.withUpdatedCharacterDetails(record, command.payload.character),
+          ),
+          (updatedRecord) =>
+            this.buildCharacterResource(
+              updatedRecord,
+              this.rulesProfiles.getRulesProfile(
+                updatedRecord.character.rulesProfileId,
+              ),
+            ),
+        );
+      },
     );
   }
 
@@ -288,30 +323,41 @@ export class InMemoryGameRuntime {
       snapshot,
       command.actor.participantId,
     );
-    const record = this.characters.getCharacter(command.payload.characterId);
-    const ownerParticipant = this.requireParticipant(
-      snapshot,
-      record.character.ownerParticipantId,
-    );
 
-    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
-    this.assertActorCanEditCharacter(actor, ownerParticipant);
-    this.assertCharacterCanBeFinalized(record.character);
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(command.payload.characterId),
+      (record) => {
+        const ownerParticipant = this.requireParticipant(
+          snapshot,
+          record.character.ownerParticipantId,
+        );
 
-    const finalizedRecord = this.characters.saveCharacter({
-      character: {
-        ...record.character,
-        status: 'ready',
-        updatedAt: this.now(),
+        this.assertCharacterBelongsToSession(
+          snapshot,
+          record.character.id,
+          record,
+        );
+        this.assertActorCanEditCharacter(actor, ownerParticipant);
+        this.assertCharacterCanBeFinalized(record.character);
+
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter({
+            character: {
+              ...record.character,
+              status: 'ready',
+              updatedAt: this.now(),
+            },
+            overlay: record.overlay,
+          }),
+          (finalizedRecord) =>
+            this.buildCharacterResource(
+              finalizedRecord,
+              this.rulesProfiles.getRulesProfile(
+                finalizedRecord.character.rulesProfileId,
+              ),
+            ),
+        );
       },
-      overlay: record.overlay,
-    });
-
-    return this.buildCharacterResource(
-      finalizedRecord,
-      this.rulesProfiles.getRulesProfile(
-        finalizedRecord.character.rulesProfileId,
-      ),
     );
   }
 
@@ -330,30 +376,38 @@ export class InMemoryGameRuntime {
       snapshot,
       command.payload.participantId,
     );
-    const record = this.characters.getCharacter(command.payload.characterId);
 
-    this.assertActorCanEditCharacter(actor, participant);
-    this.assertCharacterBelongsToSession(snapshot, record.character.id, record);
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(command.payload.characterId),
+      (record) => {
+        this.assertActorCanEditCharacter(actor, participant);
+        this.assertCharacterBelongsToSession(
+          snapshot,
+          record.character.id,
+          record,
+        );
 
-    if (record.character.ownerParticipantId !== participant.id) {
-      throw new CharacterStoreError(
-        'invalid_participant_session_association',
-        `Character "${record.character.id}" belongs to participant "${record.character.ownerParticipantId}" and cannot be assigned to "${participant.id}".`,
-      );
-    }
+        if (record.character.ownerParticipantId !== participant.id) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Character "${record.character.id}" belongs to participant "${record.character.ownerParticipantId}" and cannot be assigned to "${participant.id}".`,
+          );
+        }
 
-    const state = this.sessions.assignCharacterToParticipant(
-      snapshot.session.id,
-      participant.id,
-      record.character.id,
+        const state = this.sessions.assignCharacterToParticipant(
+          snapshot.session.id,
+          participant.id,
+          record.character.id,
+        );
+
+        return {
+          sessionId: snapshot.session.id,
+          participantId: participant.id,
+          characterId: record.character.id,
+          state,
+        };
+      },
     );
-
-    return {
-      sessionId: snapshot.session.id,
-      participantId: participant.id,
-      characterId: record.character.id,
-      state,
-    };
   }
 
   dmSetCharacterCurrentHp(
@@ -374,36 +428,45 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'set character HP');
 
-    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+    return this.resolveRepositoryResult(
+      this.requireAssignedCharacterRecord(snapshot, participant),
+      (record) => {
+        if (record.character.id !== command.payload.characterId) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+          );
+        }
 
-    if (record.character.id !== command.payload.characterId) {
-      throw new CharacterStoreError(
-        'invalid_participant_session_association',
-        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
-      );
-    }
+        this.assertCharacterCurrentHpCanBeSet(
+          record.character,
+          command.payload.currentHp,
+        );
 
-    this.assertCharacterCurrentHpCanBeSet(
-      record.character,
-      command.payload.currentHp,
-    );
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter(
+            this.withUpdatedCharacterHitPoints(
+              record,
+              command.payload.currentHp,
+            ),
+          ),
+          (updatedRecord) => {
+            this.publishCharacterStateUpdate({
+              sessionId: snapshot.session.id,
+              participantId: participant.id,
+              record: updatedRecord,
+              reason: 'dm_hp_changed',
+            });
 
-    const updatedRecord = this.characters.saveCharacter(
-      this.withUpdatedCharacterHitPoints(record, command.payload.currentHp),
-    );
-
-    this.publishCharacterStateUpdate({
-      sessionId: snapshot.session.id,
-      participantId: participant.id,
-      record: updatedRecord,
-      reason: 'dm_hp_changed',
-    });
-
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+            return this.buildCharacterResource(
+              updatedRecord,
+              this.rulesProfiles.getRulesProfile(
+                updatedRecord.character.rulesProfileId,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -425,36 +488,43 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'set character active conditions');
 
-    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+    return this.resolveRepositoryResult(
+      this.requireAssignedCharacterRecord(snapshot, participant),
+      (record) => {
+        if (record.character.id !== command.payload.characterId) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+          );
+        }
 
-    if (record.character.id !== command.payload.characterId) {
-      throw new CharacterStoreError(
-        'invalid_participant_session_association',
-        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
-      );
-    }
+        const activeConditions = this.normalizeActiveConditions(
+          record.character.id,
+          command.payload.activeConditions,
+        );
 
-    const activeConditions = this.normalizeActiveConditions(
-      record.character.id,
-      command.payload.activeConditions,
-    );
-    const updatedRecord = this.characters.saveCharacter(
-      this.withUpdatedCharacterActiveConditions(record, activeConditions),
-    );
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter(
+            this.withUpdatedCharacterActiveConditions(record, activeConditions),
+          ),
+          (updatedRecord) => {
+            this.publishCharacterStateUpdate({
+              sessionId: snapshot.session.id,
+              participantId: participant.id,
+              record: updatedRecord,
+              reason: 'dm_conditions_changed',
+              activeConditions: updatedRecord.overlay.activeConditions,
+            });
 
-    this.publishCharacterStateUpdate({
-      sessionId: snapshot.session.id,
-      participantId: participant.id,
-      record: updatedRecord,
-      reason: 'dm_conditions_changed',
-      activeConditions: updatedRecord.overlay.activeConditions,
-    });
-
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+            return this.buildCharacterResource(
+              updatedRecord,
+              this.rulesProfiles.getRulesProfile(
+                updatedRecord.character.rulesProfileId,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -478,52 +548,60 @@ export class InMemoryGameRuntime {
 
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
-    const record = this.requireAssignedCharacterRecord(snapshot, participant);
-    const allCharacterRecords =
-      this.getResolvedSessionCharacterRecords(snapshot);
 
-    if (record.character.id !== command.payload.characterId) {
-      throw new CharacterStoreError(
-        'invalid_participant_session_association',
-        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
-      );
-    }
+    return this.resolveRepositoryResults(
+      [
+        this.requireAssignedCharacterRecord(snapshot, participant),
+        this.getResolvedSessionCharacterRecords(snapshot),
+      ],
+      ([record, allCharacterRecords]) => {
+        if (record.character.id !== command.payload.characterId) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+          );
+        }
 
-    assertSceneBelongsToSession(snapshot, scene);
-    assertGridDefinitionIsValid(scene.grid);
-    assertCharacterDestinationAvailable({
-      scene,
-      footprint: record.overlay.footprint,
-      targetPosition: command.payload.position,
-      blockingOccupancies: buildMovementBlockingOccupancies({
-        scene,
-        characterRecords: allCharacterRecords,
-        excludedCharacterId: record.character.id,
-      }),
-      characterId: record.character.id,
-    });
+        assertSceneBelongsToSession(snapshot, scene);
+        assertGridDefinitionIsValid(scene.grid);
+        assertCharacterDestinationAvailable({
+          scene,
+          footprint: record.overlay.footprint,
+          targetPosition: command.payload.position,
+          blockingOccupancies: buildMovementBlockingOccupancies({
+            scene,
+            characterRecords: allCharacterRecords,
+            excludedCharacterId: record.character.id,
+          }),
+          characterId: record.character.id,
+        });
 
-    const updatedRecord = this.characters.saveCharacter(
-      withCharacterPlacedInScene({
-        record,
-        sceneId: activeSceneId,
-        position: command.payload.position,
-      }),
-    );
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter(
+            withCharacterPlacedInScene({
+              record,
+              sceneId: activeSceneId,
+              position: command.payload.position,
+            }),
+          ),
+          (updatedRecord) => {
+            this.publishMovementStateUpdate({
+              sessionId: snapshot.session.id,
+              activeSceneId,
+              participantId: participant.id,
+              record: updatedRecord,
+              reason: 'dm_character_repositioned',
+            });
 
-    this.publishMovementStateUpdate({
-      sessionId: snapshot.session.id,
-      activeSceneId,
-      participantId: participant.id,
-      record: updatedRecord,
-      reason: 'dm_character_repositioned',
-    });
-
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+            return this.buildCharacterResource(
+              updatedRecord,
+              this.rulesProfiles.getRulesProfile(
+                updatedRecord.character.rulesProfileId,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -539,14 +617,18 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'set current turn usage');
 
-    return this.saveAndPublishEncounter({
-      sessionId: snapshot.session.id,
-      encounter: setEncounterTurnUsage(
-        this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
-        command.payload.turnUsage,
-      ),
-      reason: 'dm_turn_usage_changed',
-    });
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      (encounter) =>
+        this.saveAndPublishEncounter({
+          sessionId: snapshot.session.id,
+          encounter: setEncounterTurnUsage(
+            encounter,
+            command.payload.turnUsage,
+          ),
+          reason: 'dm_turn_usage_changed',
+        }),
+    );
   }
 
   dmSetCurrentTurnParticipant(
@@ -563,17 +645,18 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'set the current turn participant');
 
-    return this.saveAndPublishEncounter({
-      sessionId: snapshot.session.id,
-      encounter: setEncounterCurrentTurnParticipant({
-        encounter: this.getEncounterStateForParticipant(
-          snapshot.session.id,
-          actor.id,
-        ),
-        participantId: command.payload.participantId,
-      }),
-      reason: 'dm_current_turn_changed',
-    });
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      (encounter) =>
+        this.saveAndPublishEncounter({
+          sessionId: snapshot.session.id,
+          encounter: setEncounterCurrentTurnParticipant({
+            encounter,
+            participantId: command.payload.participantId,
+          }),
+          reason: 'dm_current_turn_changed',
+        }),
+    );
   }
 
   dmEndActiveEncounter(command: DmEndActiveEncounterCommand): Encounter {
@@ -706,50 +789,58 @@ export class InMemoryGameRuntime {
 
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
-    const record = this.requireAssignedCharacterRecord(snapshot, participant);
-    const allCharacterRecords =
-      this.getResolvedSessionCharacterRecords(snapshot);
 
-    assertSceneBelongsToSession(snapshot, scene);
-    assertGridDefinitionIsValid(scene.grid);
-    assertCharacterCanBeSpawnedInActiveScene(
-      record,
-      activeSceneId,
-      command.payload.position,
-    );
-    assertCharacterDestinationAvailable({
-      scene,
-      footprint: record.overlay.footprint,
-      targetPosition: command.payload.position,
-      blockingOccupancies: buildMovementBlockingOccupancies({
-        scene,
-        characterRecords: allCharacterRecords,
-        excludedCharacterId: record.character.id,
-      }),
-      characterId: record.character.id,
-    });
+    return this.resolveRepositoryResults(
+      [
+        this.requireAssignedCharacterRecord(snapshot, participant),
+        this.getResolvedSessionCharacterRecords(snapshot),
+      ],
+      ([record, allCharacterRecords]) => {
+        assertSceneBelongsToSession(snapshot, scene);
+        assertGridDefinitionIsValid(scene.grid);
+        assertCharacterCanBeSpawnedInActiveScene(
+          record,
+          activeSceneId,
+          command.payload.position,
+        );
+        assertCharacterDestinationAvailable({
+          scene,
+          footprint: record.overlay.footprint,
+          targetPosition: command.payload.position,
+          blockingOccupancies: buildMovementBlockingOccupancies({
+            scene,
+            characterRecords: allCharacterRecords,
+            excludedCharacterId: record.character.id,
+          }),
+          characterId: record.character.id,
+        });
 
-    const updatedRecord = this.characters.saveCharacter(
-      withCharacterPlacedInScene({
-        record,
-        sceneId: activeSceneId,
-        position: command.payload.position,
-      }),
-    );
+        return this.resolveRepositoryResult(
+          this.characters.saveCharacter(
+            withCharacterPlacedInScene({
+              record,
+              sceneId: activeSceneId,
+              position: command.payload.position,
+            }),
+          ),
+          (updatedRecord) => {
+            this.publishMovementStateUpdate({
+              sessionId: snapshot.session.id,
+              activeSceneId,
+              participantId: participant.id,
+              record: updatedRecord,
+              reason: 'character_placed',
+            });
 
-    this.publishMovementStateUpdate({
-      sessionId: snapshot.session.id,
-      activeSceneId,
-      participantId: participant.id,
-      record: updatedRecord,
-      reason: 'character_placed',
-    });
-
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+            return this.buildCharacterResource(
+              updatedRecord,
+              this.rulesProfiles.getRulesProfile(
+                updatedRecord.character.rulesProfileId,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -773,118 +864,127 @@ export class InMemoryGameRuntime {
 
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
-    const record = this.requireAssignedCharacterRecord(snapshot, participant);
-    const allCharacterRecords =
-      this.getResolvedSessionCharacterRecords(snapshot);
 
-    assertSceneBelongsToSession(snapshot, scene);
-    assertGridDefinitionIsValid(scene.grid);
+    return this.resolveRepositoryResults(
+      [
+        this.requireAssignedCharacterRecord(snapshot, participant),
+        this.getResolvedSessionCharacterRecords(snapshot),
+      ],
+      ([record, allCharacterRecords]) => {
+        assertSceneBelongsToSession(snapshot, scene);
+        assertGridDefinitionIsValid(scene.grid);
 
-    const currentPosition = requireCharacterPlacedInActiveScene(
-      record,
-      activeSceneId,
-    );
-    const movementCostFeet = calculateMovementDistanceFeet(
-      {
-        x: currentPosition.x,
-        y: currentPosition.y,
-      },
-      command.payload.position,
-      scene.grid.cellSizeFeet,
-    );
-
-    assertMovementWithinAllowance({
-      origin: {
-        x: currentPosition.x,
-        y: currentPosition.y,
-      },
-      target: command.payload.position,
-      speedFeet: record.character.speed,
-      cellSizeFeet: scene.grid.cellSizeFeet,
-      characterId: record.character.id,
-    });
-
-    const encounter = this.findActiveEncounterForParticipant(
-      snapshot.session.id,
-      actor.id,
-    );
-
-    let updatedEncounter: Encounter | null = null;
-
-    if (encounter) {
-      const currentTurnParticipant = assertEncounterTurnActor(
-        encounter,
-        actor.id,
-      );
-
-      if (
-        currentTurnParticipant.participantId !== participant.id ||
-        currentTurnParticipant.characterId !== record.character.id
-      ) {
-        throw new EncounterRuntimeError(
-          'invalid_turn_actor',
-          `Participant "${actor.id}" cannot move character "${record.character.id}" because it is not the current turn owner in encounter "${encounter.id}".`,
+        const currentPosition = requireCharacterPlacedInActiveScene(
+          record,
+          activeSceneId,
         );
-      }
+        const movementCostFeet = calculateMovementDistanceFeet(
+          {
+            x: currentPosition.x,
+            y: currentPosition.y,
+          },
+          command.payload.position,
+          scene.grid.cellSizeFeet,
+        );
 
-      this.assertCurrentTurnActorIsConscious(encounter, record);
-
-      // Zero-cost movement is an encounter no-op: it still republishes the
-      // authoritative movement position if requested, but it does not spend
-      // movement or emit `encounter_state`.
-      if (movementCostFeet > 0) {
-        updatedEncounter = recordEncounterMovementUsage({
-          encounter,
-          additionalMovementFeet: movementCostFeet,
-          movementAllowanceFeet: record.character.speed,
+        assertMovementWithinAllowance({
+          origin: {
+            x: currentPosition.x,
+            y: currentPosition.y,
+          },
+          target: command.payload.position,
+          speedFeet: record.character.speed,
+          cellSizeFeet: scene.grid.cellSizeFeet,
+          characterId: record.character.id,
         });
-      }
-    }
 
-    assertCharacterDestinationAvailable({
-      scene,
-      footprint: record.overlay.footprint,
-      targetPosition: command.payload.position,
-      blockingOccupancies: buildMovementBlockingOccupancies({
-        scene,
-        characterRecords: allCharacterRecords,
-        excludedCharacterId: record.character.id,
-      }),
-      characterId: record.character.id,
-    });
+        return this.resolveRepositoryResult(
+          this.findActiveEncounterForParticipant(snapshot.session.id, actor.id),
+          (encounter) => {
+            let updatedEncounter: Encounter | null = null;
 
-    const updatedRecord = this.characters.saveCharacter(
-      withCharacterPlacedInScene({
-        record,
-        sceneId: activeSceneId,
-        position: command.payload.position,
-      }),
-    );
+            if (encounter) {
+              const currentTurnParticipant = assertEncounterTurnActor(
+                encounter,
+                actor.id,
+              );
 
-    if (updatedEncounter) {
-      this.saveAndPublishEncounter({
-        sessionId: snapshot.session.id,
-        encounter: updatedEncounter,
-        reason: 'movement_used',
-      });
-    }
+              if (
+                currentTurnParticipant.participantId !== participant.id ||
+                currentTurnParticipant.characterId !== record.character.id
+              ) {
+                throw new EncounterRuntimeError(
+                  'invalid_turn_actor',
+                  `Participant "${actor.id}" cannot move character "${record.character.id}" because it is not the current turn owner in encounter "${encounter.id}".`,
+                );
+              }
 
-    // NOTE:
-    // `movement_state` and `encounter_state` are emitted independently.
-    // Clients must treat them as separate authoritative updates.
-    this.publishMovementStateUpdate({
-      sessionId: snapshot.session.id,
-      activeSceneId,
-      participantId: participant.id,
-      record: updatedRecord,
-      reason: 'character_moved',
-    });
+              this.assertCurrentTurnActorIsConscious(encounter, record);
 
-    return this.buildCharacterResource(
-      updatedRecord,
-      this.rulesProfiles.getRulesProfile(
-        updatedRecord.character.rulesProfileId,
-      ),
+              // Zero-cost movement is an encounter no-op: it still republishes
+              // the authoritative movement position if requested, but it does
+              // not spend movement or emit `encounter_state`.
+              if (movementCostFeet > 0) {
+                updatedEncounter = recordEncounterMovementUsage({
+                  encounter,
+                  additionalMovementFeet: movementCostFeet,
+                  movementAllowanceFeet: record.character.speed,
+                });
+              }
+            }
+
+            assertCharacterDestinationAvailable({
+              scene,
+              footprint: record.overlay.footprint,
+              targetPosition: command.payload.position,
+              blockingOccupancies: buildMovementBlockingOccupancies({
+                scene,
+                characterRecords: allCharacterRecords,
+                excludedCharacterId: record.character.id,
+              }),
+              characterId: record.character.id,
+            });
+
+            return this.resolveRepositoryResult(
+              this.characters.saveCharacter(
+                withCharacterPlacedInScene({
+                  record,
+                  sceneId: activeSceneId,
+                  position: command.payload.position,
+                }),
+              ),
+              (updatedRecord) => {
+                if (updatedEncounter) {
+                  this.saveAndPublishEncounter({
+                    sessionId: snapshot.session.id,
+                    encounter: updatedEncounter,
+                    reason: 'movement_used',
+                  });
+                }
+
+                // NOTE:
+                // `movement_state` and `encounter_state` are emitted
+                // independently. Clients must treat them as separate
+                // authoritative updates.
+                this.publishMovementStateUpdate({
+                  sessionId: snapshot.session.id,
+                  activeSceneId,
+                  participantId: participant.id,
+                  record: updatedRecord,
+                  reason: 'character_moved',
+                });
+
+                return this.buildCharacterResource(
+                  updatedRecord,
+                  this.rulesProfiles.getRulesProfile(
+                    updatedRecord.character.rulesProfileId,
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 
@@ -906,27 +1006,31 @@ export class InMemoryGameRuntime {
     );
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
-    const activeSceneState = this.getActiveSceneStateForParticipant(
-      snapshot.session.id,
-      actor.id,
-    );
 
     this.assertActorIsDm(actor, 'start encounters');
     assertSceneBelongsToSession(snapshot, scene);
     assertGridDefinitionIsValid(scene.grid);
 
-    return this.saveAndPublishEncounter({
-      sessionId: snapshot.session.id,
-      encounter: createEncounterRecord({
-        sessionId: snapshot.session.id,
-        sceneId: activeSceneId,
-        participants: this.buildEncounterParticipantsFromActiveScene(
-          snapshot,
-          activeSceneState,
+    return this.resolveRepositoryResult(
+      this.getActiveSceneStateForParticipant(snapshot.session.id, actor.id),
+      (activeSceneState) =>
+        this.resolveRepositoryResult(
+          this.buildEncounterParticipantsFromActiveScene(
+            snapshot,
+            activeSceneState,
+          ),
+          (participants) =>
+            this.saveAndPublishEncounter({
+              sessionId: snapshot.session.id,
+              encounter: createEncounterRecord({
+                sessionId: snapshot.session.id,
+                sceneId: activeSceneId,
+                participants,
+              }),
+              reason: 'encounter_started',
+            }),
         ),
-      }),
-      reason: 'encounter_started',
-    });
+    );
   }
 
   getEncounterState(command: GetEncounterStateCommand): Encounter {
@@ -937,67 +1041,78 @@ export class InMemoryGameRuntime {
   }
 
   useAction(command: UseActionCommand): Encounter {
-    const { encounter } = this.getCurrentTurnMutationContext(
-      command.payload.sessionId,
-      command.actor.participantId,
-    );
-
-    return this.saveAndPublishEncounter({
-      sessionId: command.payload.sessionId,
-      encounter: markEncounterActionUsed(encounter),
-      reason: 'action_used',
-    });
-  }
-
-  useBonusAction(command: UseBonusActionCommand): Encounter {
-    const { encounter } = this.getCurrentTurnMutationContext(
-      command.payload.sessionId,
-      command.actor.participantId,
-    );
-
-    return this.saveAndPublishEncounter({
-      sessionId: command.payload.sessionId,
-      encounter: markEncounterBonusActionUsed(encounter),
-      reason: 'bonus_action_used',
-    });
-  }
-
-  useReaction(command: UseReactionCommand): Encounter {
-    const { encounter } = this.getCurrentTurnMutationContext(
-      command.payload.sessionId,
-      command.actor.participantId,
-    );
-
-    return this.saveAndPublishEncounter({
-      sessionId: command.payload.sessionId,
-      encounter: markEncounterReactionUsed(encounter),
-      reason: 'reaction_used',
-    });
-  }
-
-  recordMovementUsage(command: RecordMovementUsageCommand): Encounter {
-    const { encounter, currentTurnCharacterRecord } =
+    return this.resolveRepositoryResult(
       this.getCurrentTurnMutationContext(
         command.payload.sessionId,
         command.actor.participantId,
-      );
+      ),
+      ({ encounter }) =>
+        this.saveAndPublishEncounter({
+          sessionId: command.payload.sessionId,
+          encounter: markEncounterActionUsed(encounter),
+          reason: 'action_used',
+        }),
+    );
+  }
 
-    return this.saveAndPublishEncounter({
-      sessionId: command.payload.sessionId,
-      encounter: recordEncounterMovementUsage({
-        encounter,
-        additionalMovementFeet: command.payload.amountFeet,
-        movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
-      }),
-      reason: 'movement_used',
-    });
+  useBonusAction(command: UseBonusActionCommand): Encounter {
+    return this.resolveRepositoryResult(
+      this.getCurrentTurnMutationContext(
+        command.payload.sessionId,
+        command.actor.participantId,
+      ),
+      ({ encounter }) =>
+        this.saveAndPublishEncounter({
+          sessionId: command.payload.sessionId,
+          encounter: markEncounterBonusActionUsed(encounter),
+          reason: 'bonus_action_used',
+        }),
+    );
+  }
+
+  useReaction(command: UseReactionCommand): Encounter {
+    return this.resolveRepositoryResult(
+      this.getCurrentTurnMutationContext(
+        command.payload.sessionId,
+        command.actor.participantId,
+      ),
+      ({ encounter }) =>
+        this.saveAndPublishEncounter({
+          sessionId: command.payload.sessionId,
+          encounter: markEncounterReactionUsed(encounter),
+          reason: 'reaction_used',
+        }),
+    );
+  }
+
+  recordMovementUsage(command: RecordMovementUsageCommand): Encounter {
+    return this.resolveRepositoryResult(
+      this.getCurrentTurnMutationContext(
+        command.payload.sessionId,
+        command.actor.participantId,
+      ),
+      ({ encounter, currentTurnCharacterRecord }) =>
+        this.saveAndPublishEncounter({
+          sessionId: command.payload.sessionId,
+          encounter: recordEncounterMovementUsage({
+            encounter,
+            additionalMovementFeet: command.payload.amountFeet,
+            movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
+          }),
+          reason: 'movement_used',
+        }),
+    );
   }
 
   attack(command: AttackCommand): Encounter {
-    const context = this.resolveAttackContext(command);
-    const resolution = this.resolveAttack(context);
+    return this.resolveRepositoryResult(
+      this.resolveAttackContext(command),
+      (context) => {
+        const resolution = this.resolveAttack(context);
 
-    return this.persistResolvedAttack(context, resolution);
+        return this.persistResolvedAttack(context, resolution);
+      },
+    );
   }
 
   advanceTurn(command: AdvanceTurnCommand): Encounter {
@@ -1012,13 +1127,15 @@ export class InMemoryGameRuntime {
 
     this.assertActorIsDm(actor, 'advance encounter turns');
 
-    return this.saveAndPublishEncounter({
-      sessionId: snapshot.session.id,
-      encounter: advanceEncounterTurn(
-        this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
-      ),
-      reason: 'turn_advanced',
-    });
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      (encounter) =>
+        this.saveAndPublishEncounter({
+          sessionId: snapshot.session.id,
+          encounter: advanceEncounterTurn(encounter),
+          reason: 'turn_advanced',
+        }),
+    );
   }
 
   getActiveSceneStateForParticipant(
@@ -1035,52 +1152,58 @@ export class InMemoryGameRuntime {
     assertSceneBelongsToSession(snapshot, scene);
     assertGridDefinitionIsValid(scene.grid);
 
-    return {
-      sessionId: snapshot.session.id,
-      activeSceneId,
-      placedCharacters: snapshot.participants.flatMap((participant) => {
-        if (!participant.characterId) {
-          return [];
-        }
+    const placedCharacterEntries = snapshot.participants.map((participant) => {
+      if (!participant.characterId) {
+        return [];
+      }
 
-        const record = this.requireAssignedCharacterRecord(
-          snapshot,
-          participant,
-        );
-        const position = record.overlay.position;
+      return this.resolveRepositoryResult(
+        this.requireAssignedCharacterRecord(snapshot, participant),
+        (record) => {
+          const position = record.overlay.position;
 
-        if (!position || position.sceneId !== activeSceneId) {
-          return [];
-        }
+          if (!position || position.sceneId !== activeSceneId) {
+            return [];
+          }
 
-        if (
-          !doesOccupancyFitWithinGrid(scene.grid, {
-            position: {
-              x: position.x,
-              y: position.y,
+          if (
+            !doesOccupancyFitWithinGrid(scene.grid, {
+              position: {
+                x: position.x,
+                y: position.y,
+              },
+              footprint: record.overlay.footprint,
+            })
+          ) {
+            throw new CharacterStoreError(
+              'internal_server_error',
+              `Character "${record.character.id}" has an invalid stored active-scene placement in scene "${activeSceneId}".`,
+            );
+          }
+
+          return [
+            {
+              characterId: record.character.id,
+              participantId: participant.id,
+              position: {
+                x: position.x,
+                y: position.y,
+              },
+              footprint: structuredClone(record.overlay.footprint),
             },
-            footprint: record.overlay.footprint,
-          })
-        ) {
-          throw new CharacterStoreError(
-            'internal_server_error',
-            `Character "${record.character.id}" has an invalid stored active-scene placement in scene "${activeSceneId}".`,
-          );
-        }
+          ];
+        },
+      );
+    });
 
-        return [
-          {
-            characterId: record.character.id,
-            participantId: participant.id,
-            position: {
-              x: position.x,
-              y: position.y,
-            },
-            footprint: structuredClone(record.overlay.footprint),
-          },
-        ];
+    return this.resolveRepositoryResults(
+      placedCharacterEntries,
+      (placements) => ({
+        sessionId: snapshot.session.id,
+        activeSceneId,
+        placedCharacters: placements.flat(),
       }),
-    };
+    );
   }
 
   getEncounterStateForParticipant(
@@ -1102,20 +1225,23 @@ export class InMemoryGameRuntime {
     assertSceneBelongsToEncounter(encounter, scene);
     assertEncounterSceneIsActive(encounter, activeSceneId);
 
-    const activeSceneState = this.getActiveSceneStateForParticipant(
-      snapshot.session.id,
-      participantId,
-    );
-
-    assertEncounterParticipantsArePlaced(
-      encounter,
-      activeSceneState.placedCharacters.map(
-        (placement) => placement.participantId,
+    return this.resolveRepositoryResult(
+      this.getActiveSceneStateForParticipant(
+        snapshot.session.id,
+        participantId,
       ),
-    );
-    requireCurrentEncounterParticipant(encounter);
+      (activeSceneState) => {
+        assertEncounterParticipantsArePlaced(
+          encounter,
+          activeSceneState.placedCharacters.map(
+            (placement) => placement.participantId,
+          ),
+        );
+        requireCurrentEncounterParticipant(encounter);
 
-    return encounter;
+        return encounter;
+      },
+    );
   }
 
   getDefaultRulesProfileId(): string {
@@ -1132,6 +1258,41 @@ export class InMemoryGameRuntime {
       overlay: record.overlay,
       rulesProfile,
     };
+  }
+
+  private resolveRepositoryResult<T, TResult>(
+    result: RuntimeCharacterRepositoryResult<T>,
+    resolve: (value: T) => TResult | Promise<TResult>,
+  ): TResult {
+    if (this.isPromiseLike(result)) {
+      return result.then(resolve) as TResult;
+    }
+
+    return resolve(result) as TResult;
+  }
+
+  private resolveRepositoryResults<T extends readonly unknown[], TResult>(
+    results: { [K in keyof T]: RuntimeCharacterRepositoryResult<T[K]> },
+    resolve: (values: T) => TResult | Promise<TResult>,
+  ): TResult {
+    if (results.some((result) => this.isPromiseLike(result))) {
+      return Promise.all(results).then((values) =>
+        resolve(values as unknown as T),
+      ) as TResult;
+    }
+
+    return resolve(results as T) as TResult;
+  }
+
+  private isPromiseLike<T>(
+    value: RuntimeCharacterRepositoryResult<T>,
+  ): value is Promise<T> {
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      'then' in value &&
+      typeof value.then === 'function'
+    );
   }
 
   private createDraftCharacterRecord(params: {
@@ -1232,107 +1393,111 @@ export class InMemoryGameRuntime {
     );
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
-    const encounter = this.getEncounterStateForParticipant(
-      snapshot.session.id,
-      actor.id,
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      (encounter) => {
+        const attackerEncounterParticipant = assertEncounterTurnActor(
+          encounter,
+          actor.id,
+        );
+        const attackerParticipant = this.requireParticipant(
+          snapshot,
+          attackerEncounterParticipant.participantId,
+        );
+        const targetParticipant = this.requireParticipant(
+          snapshot,
+          command.payload.targetParticipantId,
+        );
+
+        if (targetParticipant.id === attackerParticipant.id) {
+          throw new EncounterRuntimeError(
+            'self_target_not_allowed',
+            `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
+          );
+        }
+
+        return this.resolveRepositoryResults(
+          [
+            this.requireAssignedCharacterRecord(snapshot, attackerParticipant),
+            this.requireAssignedCharacterRecord(snapshot, targetParticipant),
+          ],
+          ([attackerRecord, targetRecord]) => {
+            if (
+              attackerRecord.character.id !==
+              attackerEncounterParticipant.characterId
+            ) {
+              throw new CharacterStoreError(
+                'internal_server_error',
+                `Encounter "${encounter.id}" resolved attacker character "${attackerEncounterParticipant.characterId}", but session state loaded assigned character "${attackerRecord.character.id}".`,
+              );
+            }
+
+            this.assertCurrentTurnActorIsConscious(encounter, attackerRecord);
+
+            const targetEncounterParticipant = encounter.participants.find(
+              (participant) =>
+                participant.participantId === targetParticipant.id,
+            );
+
+            if (
+              !targetEncounterParticipant ||
+              targetEncounterParticipant.characterId !==
+                targetRecord.character.id
+            ) {
+              throw new EncounterRuntimeError(
+                'invalid_attack_target',
+                `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
+              );
+            }
+
+            const attackerPosition = this.requireAttackPlacement({
+              record: attackerRecord,
+              activeSceneId,
+              participantId: attackerParticipant.id,
+              role: 'attacker',
+            });
+            const targetPosition = this.requireAttackPlacement({
+              record: targetRecord,
+              activeSceneId,
+              participantId: targetParticipant.id,
+              role: 'target',
+            });
+
+            if (isCharacterDowned(targetRecord.character)) {
+              throw new EncounterRuntimeError(
+                'attack_target_downed',
+                `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
+              );
+            }
+
+            if (
+              !isWithinBaselineMeleeReach({
+                attackerPosition,
+                targetPosition,
+                cellSizeFeet: scene.grid.cellSizeFeet,
+              })
+            ) {
+              throw new EncounterRuntimeError(
+                'attack_target_out_of_reach',
+                `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
+              );
+            }
+
+            return {
+              sessionId: snapshot.session.id,
+              activeSceneId,
+              encounter,
+              attackerParticipant,
+              attackerRecord,
+              attackerPosition,
+              targetParticipant,
+              targetRecord,
+              targetPosition,
+            };
+          },
+        );
+      },
     );
-    const attackerEncounterParticipant = assertEncounterTurnActor(
-      encounter,
-      actor.id,
-    );
-    const attackerParticipant = this.requireParticipant(
-      snapshot,
-      attackerEncounterParticipant.participantId,
-    );
-    const attackerRecord = this.requireAssignedCharacterRecord(
-      snapshot,
-      attackerParticipant,
-    );
-    const targetParticipant = this.requireParticipant(
-      snapshot,
-      command.payload.targetParticipantId,
-    );
-
-    if (targetParticipant.id === attackerParticipant.id) {
-      throw new EncounterRuntimeError(
-        'self_target_not_allowed',
-        `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
-      );
-    }
-
-    if (
-      attackerRecord.character.id !== attackerEncounterParticipant.characterId
-    ) {
-      throw new CharacterStoreError(
-        'internal_server_error',
-        `Encounter "${encounter.id}" resolved attacker character "${attackerEncounterParticipant.characterId}", but session state loaded assigned character "${attackerRecord.character.id}".`,
-      );
-    }
-
-    this.assertCurrentTurnActorIsConscious(encounter, attackerRecord);
-
-    const targetRecord = this.requireAssignedCharacterRecord(
-      snapshot,
-      targetParticipant,
-    );
-    const targetEncounterParticipant = encounter.participants.find(
-      (participant) => participant.participantId === targetParticipant.id,
-    );
-
-    if (
-      !targetEncounterParticipant ||
-      targetEncounterParticipant.characterId !== targetRecord.character.id
-    ) {
-      throw new EncounterRuntimeError(
-        'invalid_attack_target',
-        `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
-      );
-    }
-
-    const attackerPosition = this.requireAttackPlacement({
-      record: attackerRecord,
-      activeSceneId,
-      participantId: attackerParticipant.id,
-      role: 'attacker',
-    });
-    const targetPosition = this.requireAttackPlacement({
-      record: targetRecord,
-      activeSceneId,
-      participantId: targetParticipant.id,
-      role: 'target',
-    });
-
-    if (isCharacterDowned(targetRecord.character)) {
-      throw new EncounterRuntimeError(
-        'attack_target_downed',
-        `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
-      );
-    }
-
-    if (
-      !isWithinBaselineMeleeReach({
-        attackerPosition,
-        targetPosition,
-        cellSizeFeet: scene.grid.cellSizeFeet,
-      })
-    ) {
-      throw new EncounterRuntimeError(
-        'attack_target_out_of_reach',
-        `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
-      );
-    }
-
-    return {
-      sessionId: snapshot.session.id,
-      activeSceneId,
-      encounter,
-      attackerParticipant,
-      attackerRecord,
-      attackerPosition,
-      targetParticipant,
-      targetRecord,
-      targetPosition,
-    };
   }
 
   private resolveAttack(context: AttackContext): ResolvedAttack {
@@ -1379,10 +1544,20 @@ export class InMemoryGameRuntime {
     // character and encounter repositories. Keep the multi-write sequence and
     // both emissions centralized here so a later persistence slice can replace
     // this with a real transaction without changing the public attack flow.
-    if (resolution.nextTargetRecord) {
-      this.characters.saveCharacter(resolution.nextTargetRecord);
+    if (!resolution.nextTargetRecord) {
+      return this.publishResolvedAttack(context, resolution);
     }
 
+    return this.resolveRepositoryResult(
+      this.characters.saveCharacter(resolution.nextTargetRecord),
+      () => this.publishResolvedAttack(context, resolution),
+    );
+  }
+
+  private publishResolvedAttack(
+    context: AttackContext,
+    resolution: ResolvedAttack,
+  ): Encounter {
     const savedEncounter = this.saveAndPublishEncounter({
       sessionId: context.sessionId,
       encounter: resolution.updatedEncounter,
@@ -1572,18 +1747,22 @@ export class InMemoryGameRuntime {
     participant: Participant,
   ): StoredCharacterRecord {
     const characterId = requireAssignedCharacterId(participant);
-    const record = this.characters.getCharacter(characterId);
 
-    this.assertCharacterBelongsToSession(snapshot, characterId, record);
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(characterId),
+      (record) => {
+        this.assertCharacterBelongsToSession(snapshot, characterId, record);
 
-    if (record.character.ownerParticipantId !== participant.id) {
-      throw new CharacterStoreError(
-        'invalid_participant_session_association',
-        `Character "${characterId}" belongs to participant "${record.character.ownerParticipantId}" and cannot be controlled by "${participant.id}".`,
-      );
-    }
+        if (record.character.ownerParticipantId !== participant.id) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Character "${characterId}" belongs to participant "${record.character.ownerParticipantId}" and cannot be controlled by "${participant.id}".`,
+          );
+        }
 
-    return record;
+        return record;
+      },
+    );
   }
 
   private assertCharacterCurrentHpCanBeSet(
@@ -1736,7 +1915,7 @@ export class InMemoryGameRuntime {
   private getResolvedSessionCharacterRecords(
     snapshot: SessionSnapshot,
   ): StoredCharacterRecord[] {
-    return snapshot.participants.flatMap((participant) => {
+    const recordResults = snapshot.participants.flatMap((participant) => {
       if (!participant.characterId) {
         return [];
       }
@@ -1747,6 +1926,8 @@ export class InMemoryGameRuntime {
       // surface instead of being silently ignored.
       return [this.characters.getCharacter(participant.characterId)];
     });
+
+    return this.resolveRepositoryResults(recordResults, (records) => records);
   }
 
   private findActiveEncounterForParticipant(
@@ -1773,68 +1954,80 @@ export class InMemoryGameRuntime {
       sessionId,
       actorParticipantId,
     );
-    const encounter = this.getEncounterStateForParticipant(
-      sessionId,
-      actorParticipantId,
-    );
-    const currentTurnParticipant = assertEncounterTurnActor(
-      encounter,
-      actorParticipantId,
-    );
-    const currentTurnSessionParticipant = this.requireParticipant(
-      snapshot,
-      currentTurnParticipant.participantId,
-    );
-    const currentTurnCharacterRecord = this.requireAssignedCharacterRecord(
-      snapshot,
-      currentTurnSessionParticipant,
-    );
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(sessionId, actorParticipantId),
+      (encounter) => {
+        const currentTurnParticipant = assertEncounterTurnActor(
+          encounter,
+          actorParticipantId,
+        );
+        const currentTurnSessionParticipant = this.requireParticipant(
+          snapshot,
+          currentTurnParticipant.participantId,
+        );
 
-    if (
-      currentTurnCharacterRecord.character.id !==
-      currentTurnParticipant.characterId
-    ) {
-      throw new CharacterStoreError(
-        'internal_server_error',
-        `Encounter "${encounter.id}" resolved current turn character "${currentTurnParticipant.characterId}", but session state loaded assigned character "${currentTurnCharacterRecord.character.id}".`,
-      );
-    }
+        return this.resolveRepositoryResult(
+          this.requireAssignedCharacterRecord(
+            snapshot,
+            currentTurnSessionParticipant,
+          ),
+          (currentTurnCharacterRecord) => {
+            if (
+              currentTurnCharacterRecord.character.id !==
+              currentTurnParticipant.characterId
+            ) {
+              throw new CharacterStoreError(
+                'internal_server_error',
+                `Encounter "${encounter.id}" resolved current turn character "${currentTurnParticipant.characterId}", but session state loaded assigned character "${currentTurnCharacterRecord.character.id}".`,
+              );
+            }
 
-    this.assertCurrentTurnActorIsConscious(
-      encounter,
-      currentTurnCharacterRecord,
+            this.assertCurrentTurnActorIsConscious(
+              encounter,
+              currentTurnCharacterRecord,
+            );
+
+            return {
+              encounter,
+              currentTurnCharacterRecord,
+            };
+          },
+        );
+      },
     );
-
-    return {
-      encounter,
-      currentTurnCharacterRecord,
-    };
   }
 
   private buildEncounterParticipantsFromActiveScene(
     snapshot: SessionSnapshot,
     activeSceneState: ActiveSceneState,
   ): EncounterParticipant[] {
-    return activeSceneState.placedCharacters.map((placement) => {
-      const participant = this.requireParticipant(
-        snapshot,
-        placement.participantId,
-      );
-      const record = this.requireAssignedCharacterRecord(snapshot, participant);
-
-      if (record.character.id !== placement.characterId) {
-        throw new CharacterStoreError(
-          'internal_server_error',
-          `Active-scene placement for participant "${participant.id}" resolved character "${placement.characterId}", but assigned character "${record.character.id}" was loaded from storage.`,
+    return this.resolveRepositoryResults(
+      activeSceneState.placedCharacters.map((placement) => {
+        const participant = this.requireParticipant(
+          snapshot,
+          placement.participantId,
         );
-      }
+        return this.resolveRepositoryResult(
+          this.requireAssignedCharacterRecord(snapshot, participant),
+          (record) => {
+            if (record.character.id !== placement.characterId) {
+              throw new CharacterStoreError(
+                'internal_server_error',
+                `Active-scene placement for participant "${participant.id}" resolved character "${placement.characterId}", but assigned character "${record.character.id}" was loaded from storage.`,
+              );
+            }
 
-      return {
-        characterId: record.character.id,
-        participantId: participant.id,
-        initiative: deriveCharacterStats(record.character).initiativeModifier,
-      };
-    });
+            return {
+              characterId: record.character.id,
+              participantId: participant.id,
+              initiative: deriveCharacterStats(record.character)
+                .initiativeModifier,
+            };
+          },
+        );
+      }),
+      (participants) => participants,
+    );
   }
 
   private createCharacterId(): CharacterId {

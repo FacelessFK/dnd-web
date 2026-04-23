@@ -56,7 +56,11 @@ import {
 } from './command-idempotency-store.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
-import { createConnectionId, InMemoryGameRuntime } from './game-runtime.js';
+import {
+  createConnectionId,
+  InMemoryGameRuntime,
+  type RuntimeCharacterRepository,
+} from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
@@ -78,14 +82,16 @@ type RuntimeStoreError =
   | SceneStoreError
   | SessionStoreError;
 
+type GameRuntime = InMemoryGameRuntime<RuntimeCharacterRepository>;
+
 export function createSessionServer(
-  runtime = new InMemoryGameRuntime(),
+  runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
 ): {
   idempotency: CommandIdempotencyStore;
   server: Server;
-  runtime: InMemoryGameRuntime;
-  store: InMemoryGameRuntime['sessions'];
+  runtime: GameRuntime;
+  store: GameRuntime['sessions'];
 } {
   const server = createServer(async (request, response) => {
     try {
@@ -106,7 +112,7 @@ export function createSessionServer(
 export async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   setCorsHeaders(response);
@@ -206,7 +212,7 @@ export async function handleRequest(
 async function handleSessionCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -254,13 +260,13 @@ async function handleSessionCommandRequest(
 
     switch (command.type) {
       case 'create_session':
-        result = runtime.createSession(command);
+        result = await runtime.createSession(command);
         break;
       case 'join_session':
-        result = runtime.joinSession(command);
+        result = await runtime.joinSession(command);
         break;
       case 'reconnect_session':
-        result = runtime.reconnectSession(command);
+        result = await runtime.reconnectSession(command);
         break;
       default:
         throw new Error('Unsupported session command type.');
@@ -290,7 +296,7 @@ async function handleSessionCommandRequest(
 async function handleCharacterCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -345,8 +351,8 @@ async function handleCharacterCommandRequest(
       case 'get_character': {
         const data =
           command.type === 'create_character'
-            ? runtime.createCharacter(command)
-            : runtime.getCharacter(command);
+            ? await runtime.createCharacter(command)
+            : await runtime.getCharacter(command);
         const success: CharacterCommandSuccess = {
           ok: true,
           data,
@@ -366,8 +372,8 @@ async function handleCharacterCommandRequest(
       case 'finalize_character': {
         const data =
           command.type === 'update_character'
-            ? runtime.updateCharacter(command)
-            : runtime.finalizeCharacter(command);
+            ? await runtime.updateCharacter(command)
+            : await runtime.finalizeCharacter(command);
         const success: CharacterCommandSuccess = {
           ok: true,
           data,
@@ -384,7 +390,7 @@ async function handleCharacterCommandRequest(
       case 'assign_character_to_participant': {
         const success: CharacterAssignmentSuccess = {
           ok: true,
-          data: runtime.assignCharacterToParticipant(command),
+          data: await runtime.assignCharacterToParticipant(command),
         };
 
         idempotency.cacheSuccess({
@@ -406,7 +412,7 @@ async function handleCharacterCommandRequest(
 async function handleSceneCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -462,10 +468,10 @@ async function handleSceneCommandRequest(
       case 'place_entity_in_scene': {
         const scene =
           command.type === 'create_scene'
-            ? runtime.createScene(command)
+            ? await runtime.createScene(command)
             : command.type === 'get_scene'
-              ? runtime.getScene(command)
-              : runtime.placeEntityInScene(command);
+              ? await runtime.getScene(command)
+              : await runtime.placeEntityInScene(command);
         const success: SceneCommandSuccess = {
           ok: true,
           data: {
@@ -486,7 +492,7 @@ async function handleSceneCommandRequest(
       case 'activate_scene_for_session': {
         const success: SceneActivationSuccess = {
           ok: true,
-          data: runtime.activateSceneForSession(command),
+          data: await runtime.activateSceneForSession(command),
         };
 
         idempotency.cacheSuccess({
@@ -508,7 +514,7 @@ async function handleSceneCommandRequest(
 async function handleMovementCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -560,13 +566,13 @@ async function handleMovementCommandRequest(
 
     switch (command.type) {
       case 'place_character_in_active_scene':
-        data = runtime.placeCharacterInActiveScene(command);
+        data = await runtime.placeCharacterInActiveScene(command);
         break;
       case 'move_character_in_active_scene':
-        data = runtime.moveCharacterInActiveScene(command);
+        data = await runtime.moveCharacterInActiveScene(command);
         break;
       case 'get_active_scene_state':
-        data = runtime.getActiveSceneState(command);
+        data = await runtime.getActiveSceneState(command);
         break;
       default:
         throw new Error('Unsupported movement command type.');
@@ -592,7 +598,7 @@ async function handleMovementCommandRequest(
 async function handleEncounterCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -644,28 +650,28 @@ async function handleEncounterCommandRequest(
 
     switch (command.type) {
       case 'start_encounter':
-        encounter = runtime.startEncounter(command);
+        encounter = await runtime.startEncounter(command);
         break;
       case 'get_encounter_state':
-        encounter = runtime.getEncounterState(command);
+        encounter = await runtime.getEncounterState(command);
         break;
       case 'advance_turn':
-        encounter = runtime.advanceTurn(command);
+        encounter = await runtime.advanceTurn(command);
         break;
       case 'use_action':
-        encounter = runtime.useAction(command);
+        encounter = await runtime.useAction(command);
         break;
       case 'use_bonus_action':
-        encounter = runtime.useBonusAction(command);
+        encounter = await runtime.useBonusAction(command);
         break;
       case 'use_reaction':
-        encounter = runtime.useReaction(command);
+        encounter = await runtime.useReaction(command);
         break;
       case 'record_movement_usage':
-        encounter = runtime.recordMovementUsage(command);
+        encounter = await runtime.recordMovementUsage(command);
         break;
       case 'attack':
-        encounter = runtime.attack(command);
+        encounter = await runtime.attack(command);
         break;
       default:
         throw new Error('Unsupported encounter command type.');
@@ -694,7 +700,7 @@ async function handleEncounterCommandRequest(
 async function handleDmCommandRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
 ): Promise<void> {
   let body: unknown;
@@ -742,27 +748,27 @@ async function handleDmCommandRequest(
 
     switch (command.type) {
       case 'dm_set_character_current_hp':
-        data = runtime.dmSetCharacterCurrentHp(command);
+        data = await runtime.dmSetCharacterCurrentHp(command);
         break;
       case 'dm_set_character_active_conditions':
-        data = runtime.dmSetCharacterActiveConditions(command);
+        data = await runtime.dmSetCharacterActiveConditions(command);
         break;
       case 'dm_reposition_character_in_active_scene':
-        data = runtime.dmRepositionCharacterInActiveScene(command);
+        data = await runtime.dmRepositionCharacterInActiveScene(command);
         break;
       case 'dm_set_current_turn_usage':
         data = {
-          encounter: runtime.dmSetCurrentTurnUsage(command),
+          encounter: await runtime.dmSetCurrentTurnUsage(command),
         };
         break;
       case 'dm_set_current_turn_participant':
         data = {
-          encounter: runtime.dmSetCurrentTurnParticipant(command),
+          encounter: await runtime.dmSetCurrentTurnParticipant(command),
         };
         break;
       case 'dm_end_active_encounter':
         data = {
-          encounter: runtime.dmEndActiveEncounter(command),
+          encounter: await runtime.dmEndActiveEncounter(command),
         };
         break;
       default:
@@ -790,7 +796,7 @@ function handleStreamRequest(
   request: IncomingMessage,
   url: URL,
   rawSessionId: string,
-  runtime: InMemoryGameRuntime,
+  runtime: GameRuntime,
 ): void {
   const sessionIdResult = sessionIdSchema.safeParse(rawSessionId);
 
