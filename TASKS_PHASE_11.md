@@ -238,7 +238,7 @@ Completed outcome:
 
 ### Slice 3 — Encounter Transaction Boundary Design
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -262,23 +262,83 @@ Acceptance:
 - The repository knows exactly which encounter flows are still non-atomic after
   the first DB-backed active-encounter slice.
 
-### Slice 4 — Encounter Restart Read Baseline
+Completed outcome:
+
+- Mapped the exact store sets touched by:
+  - `start_encounter`,
+  - `advance_turn`,
+  - `use_action`,
+  - `use_bonus_action`,
+  - `use_reaction`,
+  - `record_movement_usage`,
+  - `attack`,
+  - `dm_set_current_turn_usage`,
+  - `dm_set_current_turn_participant`,
+  - `dm_end_active_encounter`,
+  - encounter-aware movement.
+- Classified the flows into three buckets:
+  - encounter-only durable writes after cross-store validation reads,
+  - cross-store writes involving character plus encounter state,
+  - cross-store writes plus multi-event publication.
+- Made the current non-atomic gaps explicit:
+  - target HP write plus encounter usage write in `attack`,
+  - character position write plus encounter movement usage write in
+    encounter-aware movement,
+  - validation against durable session/scene/character state before encounter
+    writes,
+  - final ended snapshot publication after active encounter deletion.
+- Chose the first honest transactional target:
+  - start with encounter-only transactional work for encounter-local mutation
+    commands,
+  - defer `attack` and encounter-aware movement until a later cross-store
+    transaction design slice.
+- Clarified when durable idempotency for encounter commands becomes worth
+  adding:
+  - once the command can write durable encounter state and the durable
+    completed-command record in the same real transaction.
+- Clarified when outbox/publication work becomes necessary:
+  - still deferrable for the first encounter-only transactional slice,
+  - becomes harder to defer once cross-store combat writes need reliable
+    ordered `encounter_state`, `movement_state`, and `combat_event` delivery.
+
+### Slice 4 — Encounter-Only Transactional Baseline
 
 Status: planned.
 
 Goal:
 
-- Prove the honest restart-read boundary for active encounters.
+- Add the first real transaction boundary for encounter-local durable writes
+  before any attempt at cross-store combat continuity.
 
 Tasks:
 
-- Add tests for restart-time `get_encounter_state` recovery.
-- Keep reconnect recovery read-model based.
-- Document which encounter semantics still do not survive restart.
+- Introduce a real DB transaction/unit-of-work path for encounter-local durable
+  commands.
+- Keep public HTTP/protocol/SSE behavior unchanged.
+- Target commands whose durable mutation is encounter-only:
+  - `advance_turn`,
+  - `use_action`,
+  - `use_bonus_action`,
+  - `use_reaction`,
+  - `record_movement_usage`,
+  - `dm_set_current_turn_usage`,
+  - `dm_set_current_turn_participant`,
+  - `dm_end_active_encounter`,
+  - and possibly `start_encounter` if the narrower validation assumptions stay
+    explicit.
+- Add durable idempotency for supported encounter commands only when the
+  idempotency record can commit in the same real transaction as the encounter
+  write.
+- Keep outbox/replay deferred, with post-commit publication risk documented
+  honestly.
 
 Acceptance:
 
-- Restart-read durability is proven without implying replay or live continuity.
+- Supported encounter-only commands can commit the durable encounter mutation
+  and durable idempotency record atomically.
+- Duplicate successful retries do not rerun the supported encounter mutation.
+- No claim is made that `attack` or encounter-aware movement are transactionally
+  durable yet.
 
 ### Slice 5 — Encounter Persistence Exit Pass
 
@@ -302,8 +362,8 @@ Acceptance:
 
 ## Acceptance Criteria
 
-- Encounter persistence design is explicit before DB-backed implementation
-  begins.
+- Encounter persistence design remains explicit as DB-backed encounter work
+  expands.
 - Active-encounter semantics are chosen intentionally.
 - Cross-store risks with session snapshots, character records, and scene
   records are documented clearly.
@@ -330,6 +390,7 @@ For implementation slices:
 - Encounter history should be a separate decision after the first durable
   active-encounter slice.
 - Outbox and replay should remain separate from the first encounter persistence
-  slice.
+  slice and from the first encounter-only transactional slice unless product
+  requirements force reliable ordered delivery sooner.
 - Restart-safe combat continuity should wait for honest cross-store transaction
   work.

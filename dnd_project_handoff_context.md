@@ -1,6 +1,6 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 11 Slice 2.
+This handoff summarizes the current repository state after Phase 11 Slice 3.
 It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
@@ -96,6 +96,9 @@ Important boundary:
   encounter through `get_encounter_state` when the DB-backed session snapshot,
   character, scene, and active-encounter stores are all injected and still
   coherent.
+- Phase 11 Slice 3 documents that the first honest transaction target is the
+  encounter-only command set, while `attack` and encounter-aware movement still
+  need a later cross-store transaction design.
 - Presence, most command idempotency, SSE delivery, replay, and outbox behavior
   remain non-durable.
 - Phase 10 Slice 7 closes the initial persistence foundation by documenting the
@@ -212,6 +215,9 @@ should recover current authoritative state through read models.
 - No command-surface-wide durable idempotency. Durable idempotency records exist
   only for supported character-record mutation commands when the DB-backed
   idempotency/transaction boundary is injected.
+- Encounter commands still use in-memory idempotency because the repo does not
+  yet have an encounter transaction boundary that can commit the encounter
+  write and completed-command record atomically.
 - No durable event replay.
 - No global event cursor.
 - No event sourcing.
@@ -234,15 +240,15 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Phase 11 Slice 2 now lands the first DB-backed active-encounter repository
-   groundwork; the next narrow slice should design encounter transaction
-   boundaries before claiming restart-safe combat continuity.
+1. Phase 11 Slice 3 now recommends an encounter-only transactional baseline as
+   the next narrow implementation slice before any cross-store combat
+   transaction work.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.
-3. Continue durable repository expansion for encounters only after the
-   encounter transaction-boundary design makes the remaining cross-store gaps
-   explicit.
+3. Keep `attack` and encounter-aware movement out of the first encounter
+   transaction slice; they still need a later cross-store transaction plus
+   publication design.
 4. Add outbox/replay only as dedicated future slices once durable writes need
    reliable publication.
 5. Start product-surface work, such as character onboarding or top-down tactical

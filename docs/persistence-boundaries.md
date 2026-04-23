@@ -35,13 +35,16 @@ Durability notes:
   session snapshots and scenes now have narrow durable baselines too, but
   encounters, stream delivery, replay, and broader live runtime continuity do
   not.
-- After Slice 6, the narrow honest restart baseline is:
+- After Phase 11 Slice 2, the narrow honest restart baseline is:
   - a restarted runtime can reread persisted character state through
     `get_character` when the same DB-backed character store is injected,
   - `reconnect_session` can also recover session membership when the DB-backed
     session store is injected,
   - `get_active_scene_state` can recover when the DB-backed scene store is
     injected too and character overlays still point into the active scene,
+  - `get_encounter_state` can recover when the DB-backed active-encounter
+    store is injected too and durable session, character, and scene state still
+    line up,
   - encounter continuity, stream delivery, and replay still do not survive
     restart.
 
@@ -69,8 +72,8 @@ Durability notes:
   is injected.
 - This improves restart-safe active-scene recovery only when paired with the
   already durable session snapshot and character boundaries.
-- Encounter state, movement SSE continuity, and replay still do not survive
-  restart.
+- Encounter rereads still require the DB-backed active-encounter store too.
+- Movement SSE continuity and replay still do not survive restart.
 
 ### `EncounterRepository`
 
@@ -145,7 +148,9 @@ Durability notes:
     persisted session snapshot references,
   - Slice 6 closes the scene-definition gap for that baseline when the
     DB-backed scene store is also injected,
-  - encounter state and stream continuity still do not survive restart.
+  - Slice 11.2 closes the active-encounter reread gap for that baseline when
+    the DB-backed active-encounter store is also injected,
+  - encounter continuity and stream continuity still do not survive restart.
 
 ### `DbBackedSessionStore`
 
@@ -540,6 +545,91 @@ Transaction and publication implications after the first encounter slice:
   - still spans character position mutation, encounter movement usage, and both
     `encounter_state` plus `movement_state` publication,
   - it should not be treated as fully durable live tactical continuity yet.
+
+## Encounter Transaction-Boundary Matrix
+
+| Flow                                                            | Stores read or validated today                                                                                          | Stores written today                                       | Publication today                                 | Classification                                                    | Current non-atomic gap                                                                                                                             |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `start_encounter`                                               | session snapshot, scene, character records via active-scene placement and participant build                             | active encounter                                           | `encounter_state`                                 | cross-store validation plus encounter-only durable write plus SSE | validation happens before the encounter write; no transaction spans session/scene/character reads plus encounter create; publication is post-write |
+| `advance_turn`                                                  | session snapshot, scene, active encounter, character records via `get_encounter_state` placement validation             | active encounter                                           | `encounter_state`                                 | encounter-only durable write after cross-store validation reads   | only the encounter row changes, but validation reads are outside the write and publication is post-write                                           |
+| `use_action` / `use_bonus_action` / `use_reaction`              | session snapshot, scene, active encounter, character records via current-turn validation                                | active encounter                                           | `encounter_state`                                 | encounter-only durable write after cross-store validation reads   | same as above; no durable idempotency yet and publication remains post-write                                                                       |
+| `record_movement_usage`                                         | session snapshot, scene, active encounter, current-turn character record for speed, character placement validation      | active encounter                                           | `encounter_state`                                 | encounter-only durable write after cross-store validation reads   | encounter write is isolated, but validation depends on character/session/scene reads outside the write and publication is post-write               |
+| `dm_set_current_turn_usage` / `dm_set_current_turn_participant` | session snapshot, scene, active encounter, character placement validation through `get_encounter_state`                 | active encounter                                           | `encounter_state`                                 | encounter-only durable write after cross-store validation reads   | encounter mutation is isolated, but validation reads and publication are not in one durable boundary                                               |
+| `dm_end_active_encounter`                                       | session snapshot, active encounter                                                                                      | delete active encounter                                    | final `encounter_state` ended snapshot            | encounter-only durable delete plus SSE                            | delete commits before the final ended snapshot is published; without outbox the final snapshot can still be missed                                 |
+| `attack`                                                        | session snapshot, scene, active encounter, attacker record, target record, active-scene placement validation            | target character HP on hit, active encounter usage         | `encounter_state`, then `combat_event`            | cross-store write plus multi-event publication                    | HP write and encounter write are separate; publication is separate again; no single durable boundary spans state plus both events                  |
+| encounter-aware movement                                        | session snapshot, scene, moving character record, all placed character records for occupancy, optional active encounter | moving character position, optional active encounter usage | optional `encounter_state`, then `movement_state` | cross-store write plus multi-event publication                    | character position and encounter usage can diverge; event publication is separate and ordered only in-process                                      |
+
+## Transaction Slice Recommendation
+
+Recommended first transactional encounter slice:
+
+- start with **encounter-only transactional work first**,
+- target the commands whose durable mutation is encounter-only:
+  - `advance_turn`,
+  - `use_action`,
+  - `use_bonus_action`,
+  - `use_reaction`,
+  - `record_movement_usage`,
+  - `dm_set_current_turn_usage`,
+  - `dm_set_current_turn_participant`,
+  - `dm_end_active_encounter`,
+  - and optionally `start_encounter` once its validation assumptions remain
+    explicit.
+
+Why this is the first honest target:
+
+- the durable active-encounter repository already exists,
+- these commands mutate only encounter state, even though they still validate
+  against session/scene/character reads first,
+- they can gain real DB transaction plus durable idempotency value without
+  pretending `attack` or encounter-aware movement are solved.
+
+Why not start with `attack` or encounter-aware movement:
+
+- both already span durable character writes plus durable encounter writes,
+- both publish more than one SSE event,
+- both need a later cross-store transaction plus publication design to make any
+  stronger combat-continuity claim honest.
+
+## Durable Encounter Idempotency Recommendation
+
+Durable idempotency for encounter commands becomes worth adding only when the
+command can write both:
+
+- the durable encounter mutation, and
+- the successful completed-command record
+
+in the same real DB transaction.
+
+That makes it worth adding first for the encounter-only transactional slice
+above. It should still stay deferred for:
+
+- `attack`
+- encounter-aware movement
+
+because those flows do not yet have a real cross-store transaction boundary.
+
+## Outbox Recommendation For Encounter Work
+
+Outbox/publication work is still deferrable for the first encounter-only
+transactional slice.
+
+Why it can stay deferred one more slice:
+
+- `encounter_state` remains a rereadable snapshot through `get_encounter_state`,
+- the current product/runtime already accepts post-commit publication risk in
+  exchange for read-model recovery,
+- adding a transaction plus durable idempotency for encounter-only commands is
+  still useful even before reliable stream delivery exists.
+
+When outbox work stops being easy to defer:
+
+- when `attack` or encounter-aware movement move to a cross-store transactional
+  slice,
+- when ordered reliable delivery of `encounter_state`, `movement_state`, and
+  `combat_event` becomes a product requirement,
+- when the final ended snapshot from `dm_end_active_encounter` must be
+  delivered reliably instead of being only best-effort post-commit.
 
 ## Remaining Atomicity Gaps
 

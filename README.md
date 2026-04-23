@@ -22,11 +22,13 @@ character mutations, a narrow durable session snapshot baseline for
 restart-safe reconnect, and a DB-backed scene persistence baseline for
 restart-safe active-scene rereads. Phase 11 Slice 2 now adds a DB-backed
 active-encounter repository baseline for injected restart-time
-`get_encounter_state` rereads. Most live runtime state still remains
-process-local, and combat continuity is not yet restart-safe.
+`get_encounter_state` rereads. Phase 11 Slice 3 now maps the real encounter
+transaction boundaries and keeps combat continuity claims honest. Most live
+runtime state still remains process-local, and combat continuity is not yet
+restart-safe.
 
-The next recommended persistence step is an encounter transaction-boundary
-design slice, not gameplay expansion.
+The next recommended persistence step is an encounter-only transactional
+baseline for encounter-local durable commands, not gameplay expansion.
 
 Implemented so far:
 
@@ -215,6 +217,9 @@ Reliability notes:
 - When the DB-backed active-encounter store is injected too, `get_encounter_state`
   can reread an active encounter after restart if durable session, scene, and
   character state still line up.
+- Encounter commands still use the in-memory idempotency path today because the
+  repo does not yet have a real encounter transaction boundary that can commit
+  the encounter write and completed-command record atomically.
 - Internal runtime/store typing still carries deliberate technical debt here:
   some runtime methods stay externally stable while returning a Promise on
   injected DB-backed paths.
