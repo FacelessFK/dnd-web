@@ -1479,6 +1479,286 @@ test('server command paths can use the DB-backed character repository without pu
   );
 });
 
+test('db-backed character state can be reread after runtime reinitialization, while reconnect remains limited by non-durable session state', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+  );
+  const runtimeBeforeRestart = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotencyBeforeRestart: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const transactionBeforeRestart =
+    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+
+  const firstSession = await postJson<SessionCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/session/command',
+    {
+      commandId: 'restart-baseline-create-session-1',
+      type: 'create_session',
+      actor: {
+        participantId: 'dm-001',
+        displayName: 'Dungeon Master',
+        role: 'dm',
+      },
+      payload: {
+        rulesProfileId: 'dnd5e-2024-core',
+      },
+    },
+  );
+
+  assert.equal(firstSession.status, 200);
+  assert.equal(firstSession.body.ok, true);
+
+  if (!firstSession.body.ok) {
+    return;
+  }
+
+  const firstSessionId = firstSession.body.data.sessionId;
+
+  await postJson<SessionCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/session/command',
+    {
+      commandId: 'restart-baseline-join-player-1',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-001',
+        displayName: 'Player One',
+        role: 'player',
+      },
+      payload: {
+        sessionId: firstSessionId,
+      },
+    },
+  );
+
+  const created = await postJson<CharacterCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/characters/command',
+    {
+      commandId: 'restart-baseline-create-character-1',
+      type: 'create_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId: firstSessionId,
+        ownerParticipantId: 'player-001',
+        character: {
+          name: 'Aria',
+          level: 5,
+          className: 'Wizard',
+          speciesOrRace: 'Elf',
+          background: 'Sage',
+          abilities: {
+            str: 8,
+            dex: 14,
+            con: 13,
+            int: 16,
+            wis: 12,
+            cha: 10,
+          },
+          hp: {
+            max: 26,
+            current: 26,
+            temp: 0,
+          },
+          armorClass: 13,
+          speed: 30,
+          notes: 'Created before restart.',
+          meta: {
+            arcaneFocus: 'oak staff',
+          },
+        },
+      },
+    },
+    transactionBeforeRestart,
+  );
+
+  assert.equal(created.status, 200);
+  assert.equal(created.body.ok, true);
+
+  if (!created.body.ok || !('character' in created.body.data)) {
+    return;
+  }
+
+  const characterId = created.body.data.character.id;
+
+  const updated = await postJson<CharacterCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/characters/command',
+    {
+      commandId: 'restart-baseline-update-character-1',
+      type: 'update_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId: firstSessionId,
+        characterId,
+        character: {
+          name: 'Aria Restarted',
+          level: 5,
+          className: 'Wizard',
+          speciesOrRace: 'Elf',
+          background: 'Sage',
+          abilities: {
+            str: 8,
+            dex: 14,
+            con: 13,
+            int: 16,
+            wis: 12,
+            cha: 10,
+          },
+          hp: {
+            max: 26,
+            current: 19,
+            temp: 0,
+          },
+          armorClass: 13,
+          speed: 30,
+          notes: 'Persisted across restart.',
+          meta: {
+            arcaneFocus: 'oak staff',
+            restartMarker: 'phase-10-slice-4',
+          },
+        },
+      },
+    },
+    transactionBeforeRestart,
+  );
+
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.ok, true);
+
+  const runtimeAfterRestart = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotencyAfterRestart: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+
+  const failedReconnect = await postJson<SessionCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/session/command',
+    {
+      commandId: 'restart-baseline-reconnect-old-session',
+      type: 'reconnect_session',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId: firstSessionId,
+      },
+    },
+  );
+
+  assert.equal(failedReconnect.status, 404);
+  assert.equal(failedReconnect.body.ok, false);
+
+  if (!failedReconnect.body.ok) {
+    assert.equal(failedReconnect.body.error.code, 'session_not_found');
+  }
+
+  const secondSession = await postJson<SessionCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/session/command',
+    {
+      commandId: 'restart-baseline-create-session-2',
+      type: 'create_session',
+      actor: {
+        participantId: 'dm-001',
+        displayName: 'Dungeon Master',
+        role: 'dm',
+      },
+      payload: {
+        rulesProfileId: 'dnd5e-2024-core',
+      },
+    },
+  );
+
+  assert.equal(secondSession.status, 200);
+  assert.equal(secondSession.body.ok, true);
+
+  if (!secondSession.body.ok) {
+    return;
+  }
+
+  const secondSessionId = secondSession.body.data.sessionId;
+
+  assert.notEqual(secondSessionId, firstSessionId);
+
+  await postJson<SessionCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/session/command',
+    {
+      commandId: 'restart-baseline-join-player-2',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-001',
+        displayName: 'Player One',
+        role: 'player',
+      },
+      payload: {
+        sessionId: secondSessionId,
+      },
+    },
+  );
+
+  const rereadAfterRestart = await postJson<CharacterCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/characters/command',
+    {
+      commandId: 'restart-baseline-read-character-after-restart',
+      type: 'get_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId: secondSessionId,
+        characterId,
+      },
+    },
+  );
+
+  assert.equal(rereadAfterRestart.status, 200);
+  assert.equal(rereadAfterRestart.body.ok, true);
+
+  if (
+    !rereadAfterRestart.body.ok ||
+    !('character' in rereadAfterRestart.body.data)
+  ) {
+    return;
+  }
+
+  assert.equal(rereadAfterRestart.body.data.character.name, 'Aria Restarted');
+  assert.equal(rereadAfterRestart.body.data.character.hp.current, 19);
+  assert.equal(
+    rereadAfterRestart.body.data.character.notes,
+    'Persisted across restart.',
+  );
+  assert.deepEqual(rereadAfterRestart.body.data.character.meta, {
+    arcaneFocus: 'oak staff',
+    restartMarker: 'phase-10-slice-4',
+  });
+});
+
 test('encounter success payloads are validated as authoritative turn-order responses', () => {
   const result = encounterCommandSuccessSchema.safeParse({
     ok: true,

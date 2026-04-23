@@ -139,8 +139,8 @@ export async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-9',
-      status: 'runtime-api-cleanup-ready',
+      phase: 'phase-10',
+      status: 'character-restart-durability-baseline',
     });
     return;
   }

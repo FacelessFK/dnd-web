@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Runtime API cleanup baseline listening on http://${host}:${port}`,
+    `[server] Phase 10 character restart durability baseline listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Authoritative sessions, scenes, movement, encounters, narrow combat, DM controls, and persistence groundwork are enabled.',
+    '[server] Default startup is still in-memory; injected DB-backed character persistence, transactional durable idempotency for supported character mutations, and narrow restart rereads are available.',
   );
 });

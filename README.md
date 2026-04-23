@@ -16,8 +16,10 @@ The backend runtime foundation is complete through **Phase 8 — Runtime
 Reliability & Reconnect Readiness**. **Phase 9 — Runtime/API Surface Cleanup &
 Manual Validation Readiness** refreshed API/manual-validation docs, and backend
 Roadmap Phase 8 DM controls are implemented as narrow server-authoritative
-commands. Phase 10 persistence work has begun with Drizzle/Postgres character
-record groundwork, while most live runtime state remains process-local.
+commands. Phase 10 persistence work now includes a DB-backed character
+repository boundary, transactional durable idempotency for supported
+character mutations, and a narrow restart reread baseline, while most live
+runtime state remains process-local.
 
 Implemented so far:
 
@@ -40,8 +42,11 @@ Implemented so far:
 - in-memory command idempotency by default, plus a DB-backed durable
   idempotency boundary for supported character-record mutation commands
 - reconnect recovery through read models
+- narrow restart durability baseline for persisted character rereads when the
+  DB-backed character store is injected
 - documented event/revision semantics and transaction-boundary limitations
-- Drizzle/Postgres character persistence groundwork
+- Drizzle/Postgres character persistence and idempotency boundaries for the
+  currently supported narrow scope
 - ESLint, Prettier, tests, and TypeScript validation
 
 Not implemented yet:
@@ -78,7 +83,7 @@ packages/
   shared/   Shared domain models and primitives
   protocol/ Shared protocol contracts and Zod validation
   rules/    Pure deterministic rules and derivation helpers
-  db/       Drizzle/Postgres persistence groundwork
+  db/       Drizzle/Postgres persistence boundaries and migrations
 docs/
   decisions/ Architecture and stack decision records
 scripts/    Repository-level helper scripts and smoke tests
@@ -181,6 +186,10 @@ Reliability notes:
   transaction.
 - Session, scene, movement, encounter, assignment, stream, and replay semantics
   remain non-durable; do not treat the whole command surface as restart-safe.
+- After runtime reinitialization, old `reconnect_session` state is still lost
+  because sessions remain in memory. The current durable restart baseline is
+  limited to rereading persisted character state through a new valid session
+  context.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

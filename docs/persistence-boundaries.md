@@ -33,6 +33,11 @@ Durability notes:
   characters and should continue to fail for unknown character IDs.
 - Because session assignment still lives in `InMemorySessionStore`, durable
   characters alone do not yet make full reconnect-after-restart possible.
+- After Slice 4, the narrow honest restart baseline is:
+  - a restarted runtime can reread persisted character state through
+    `get_character` when the same DB-backed character store is injected,
+  - but callers still need a fresh valid session context because session
+    membership and reconnect state are not durable.
 
 ### `SceneRepository`
 
@@ -352,6 +357,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Proceed with Phase 10 Slice 4: Reconnect Durability Baseline, or add the next
-durable repository slice first if reconnect durability needs persistent
-session/scene/encounter read models.
+Proceed with Phase 10 Slice 5: Persistence Exit Pass, or start the next durable
+repository slice if stronger restart-safe reconnect behavior needs persisted
+session/scene/encounter state.

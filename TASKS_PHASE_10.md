@@ -386,7 +386,7 @@ Acceptance:
 
 ### Slice 4 — Reconnect Durability Baseline
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -410,6 +410,26 @@ Acceptance:
   selected durable repositories support it.
 - Transient SSE limitations remain explicit.
 - No event replay, cursor, or event sourcing is added.
+
+Completed outcome:
+
+- Added a server-level restart/reinitialization test using the DB-backed
+  character repository path.
+- Proved that persisted character state can be reread after runtime/server
+  reinitialization through the existing `get_character` command path when:
+  - the restarted runtime injects the same DB-backed character repository, and
+  - a new session context is established with the same participant identity and
+    rules profile.
+- Proved that `reconnect_session` against the pre-restart session still fails
+  after runtime/server reinitialization because session state remains
+  in-memory-only.
+- Kept reconnect recovery read-model based and added no event replay, cursor,
+  or outbox behavior.
+- Updated README, persistence notes, handoff context, manual validation notes,
+  and server status wording to distinguish:
+  - durable character reread after restart,
+  - non-durable session/scene/encounter/live runtime recovery,
+  - no missed-event replay.
 
 ### Slice 5 — Persistence Exit Pass
 
