@@ -38,10 +38,14 @@ The DM is omniscient by product rule. The DM-facing experience should expose:
 
 ### Player
 
-The player sees a limited policy-driven view and submits intents. A player should
-not directly mutate authoritative runtime state from the client. Movement,
-attacks, interactions, and later spells should be represented as requests that
-the server validates and the DM can override when appropriate.
+The target product policy is that the player sees a limited view and submits
+intents. A player should not directly mutate authoritative runtime state from
+the client. Movement, attacks, interactions, and later spells should be
+represented as requests that the server validates and the DM can override when
+appropriate.
+
+The current backend enforces server authority and role-gated commands, but it
+does not yet fully enforce player-specific visibility filtering.
 
 ## Current Runtime Architecture
 
@@ -126,8 +130,11 @@ Live state should include:
 - active encounter state,
 - transient events and prompts.
 
-Character identity/build should stay distinct from runtime overlays such as
-current HP, conditions, position, concentration, and visibility.
+Character identity/build should stay distinct from runtime overlays. In the
+current implemented runtime, HP still lives on `Character`, while the overlay
+holds active-scene position, active condition tags, concentration placeholder,
+and visibility. A cleaner long-term character-library/session-overlay split
+remains a future modeling direction.
 
 ## Map, Scene, And Campaign Relationships
 
@@ -167,9 +174,13 @@ metadata, transitions, secret notes, and complete character/encounter state.
 
 ### Player View
 
-The player view should show only allowed information. Early MVP can keep player
-visibility simple, but the model should leave room for future hidden entities,
-fog, LOS, special senses, and secret information.
+The intended player view should show only allowed information. Early MVP can
+keep player visibility simple, but the model should leave room for future hidden
+entities, fog, LOS, special senses, and secret information.
+
+Current backend state and stream publication do not yet provide a complete
+player-specific visibility filter; this section describes the target product
+policy.
 
 ## Command And Event Model
 

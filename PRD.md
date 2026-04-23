@@ -38,7 +38,9 @@ The DM operates the runtime. The DM needs:
 
 ### Player
 
-The player participates through a limited, clear view. The player needs:
+The target player experience is a limited, clear view. The current backend is
+server-authoritative but does not yet fully enforce player-specific visibility
+filtering. The player needs:
 
 - a readable map,
 - a reliable character sheet,
@@ -73,8 +75,10 @@ The product should keep these concepts distinct:
   scene, presence, and current state.
 - **Encounter:** a combat mode inside a session with turn order and turn usage.
 - **Character library entry:** persistent player-owned character identity/build.
-- **Character runtime overlay:** mutable session state such as HP, conditions,
-  position, visibility, and concentration.
+- **Character runtime overlay:** mutable session state. In the current runtime,
+  HP lives on `Character`, while the overlay holds position, active condition
+  tags, concentration placeholder, and visibility. A cleaner long-term
+  library/runtime split remains a future modeling direction.
 - **Asset:** reusable visual/content pieces such as tiles, props, tokens, icons,
   and markers.
 

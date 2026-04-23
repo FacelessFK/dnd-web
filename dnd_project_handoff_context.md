@@ -1,7 +1,7 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 9 Slice 4. It
-is intentionally concise; trust implementation code and protocol schemas over
+This handoff summarizes the current repository state after Phase 10 Slice 2B.
+It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
 ## Current Project Position
@@ -10,10 +10,14 @@ older planning language if details disagree.
 - The backend is playable for a narrow session, scene, movement, encounter,
   attack, downed-state, reaction-usage, reconnect, idempotency, and DM-admin
   flow.
-- The runtime is still in-memory only.
+- The default runtime still starts with in-memory session, scene, encounter,
+  idempotency, and character stores.
+- A DB-backed character repository boundary now exists and can be injected into
+  the live server/runtime command path.
 - The web app remains a minimal shell, not a battle UI or DM panel.
-- The project is not MVP-ready because persistence, frontend UX, durable event
-  handling, broader rules, and production posture are still missing.
+- The project is not MVP-ready because runtime-wide persistence, frontend UX,
+  durable event handling, broader rules, and production posture are still
+  missing.
 
 ## Completed Runtime Foundations
 
@@ -31,6 +35,29 @@ older planning language if details disagree.
 - Reconnect recovery through read models instead of missed-event replay.
 - Event/revision semantics documentation.
 - Transaction-boundary risk documentation for future persistence work.
+- Drizzle/Postgres character-record persistence groundwork.
+- Async character repository support through live server/runtime command paths.
+
+## Completed Phase 10 Persistence Groundwork
+
+- Added a `character_records` Drizzle/Postgres schema and migration.
+- Added `DrizzleCharacterRecordDatabase` in `packages/db`.
+- Added `DbBackedCharacterRepository` for full `StoredCharacterRecord`
+  documents:
+  - canonical `character`,
+  - runtime `overlay`.
+- Added an internal awaitable character repository boundary in the runtime.
+- Updated server handlers to await runtime command results while preserving
+  public HTTP/protocol/SSE behavior.
+- Added server-level test coverage proving the DB-backed character repository
+  can be used through real command paths by injection.
+
+Important boundary:
+
+- DB-backed character storage is usable, but it is not the default server
+  startup path yet.
+- Sessions, scenes, encounters, command idempotency, SSE delivery, replay, and
+  outbox behavior remain non-durable.
 
 ## Completed Combat Foundations
 
@@ -115,13 +142,16 @@ should recover current authoritative state through read models.
 
 ## Known Limitations
 
-- No database persistence.
+- No runtime-wide database persistence.
+- Character records have a DB-backed repository boundary, but default local
+  server startup remains in-memory unless a DB-backed repository is injected.
 - No durable idempotency.
 - No durable event replay.
 - No global event cursor.
 - No event sourcing.
 - No audit log.
 - No outbox/transactional event publication.
+- No durable session, scene, or encounter repositories.
 - No frontend battle UI.
 - No frontend DM panel.
 - No full condition engine.
@@ -138,14 +168,16 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Finish Phase 9 documentation cleanup if more stale API/manual-validation
-   details are found.
-2. Start a narrow persistence planning or first durable repository slice, with
-   explicit transaction/outbox design instead of fake in-memory transactions.
-3. Start Roadmap Phase 9 geometry foundations with pure LOS/cover helpers only,
-   before wiring them into combat legality.
-4. Add more DM controls only as explicit narrow commands, such as concentration
-   or visibility editing, if product use demands them.
+1. Implement Phase 10 Slice 3 — Durable Command Idempotency Baseline.
+2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
+   cache successful mutating command responses, and avoid claiming global
+   restart-safe behavior for stores that are still in memory.
+3. Continue durable repository expansion later for sessions, scenes, and
+   encounters.
+4. Add outbox/replay only as dedicated future slices once durable writes need
+   reliable publication.
+5. Start product-surface work, such as character onboarding or top-down tactical
+   UI, only after the next durability boundary is clear.
 
 Avoid broad gameplay expansion next. Spells, full conditions, opportunity
 attacks, weapons, and frontend battle UX should remain dedicated future slices.

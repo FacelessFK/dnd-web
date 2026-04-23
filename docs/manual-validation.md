@@ -1,8 +1,13 @@
 # Manual End-to-End Validation
 
-This guide validates the current in-memory authoritative runtime through Phase 9
-Slice 4. It is intentionally copy-pasteable and does not require frontend UI,
-database persistence, event replay, auth, or deployment.
+This guide validates the default local server path, which still starts with the
+in-memory authoritative runtime by default. It is intentionally copy-pasteable
+and does not require frontend UI, database persistence, event replay, auth, or
+deployment.
+
+Phase 10 added a DB-backed character repository boundary that can be injected
+into live server/runtime command paths, but this manual curl flow does not
+exercise that injected DB-backed path.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the

@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 5 runtime slice listening on http://${host}:${port}`,
+    `[server] Runtime API cleanup baseline listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Authoritative sessions, encounter turns, turn-usage mutations, and movement foundations are enabled.',
+    '[server] Authoritative sessions, scenes, movement, encounters, narrow combat, DM controls, and persistence groundwork are enabled.',
   );
 });
