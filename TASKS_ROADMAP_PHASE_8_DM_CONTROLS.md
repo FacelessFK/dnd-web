@@ -89,6 +89,25 @@ Implemented:
 - Kept the command administrative: schema-valid movement usage can be set
   without checking the current actor's speed.
 
+## Slice 4 — DM Controls Foundation Exit Pass
+
+Status: Completed.
+
+Reviewed:
+
+- DM-only authorization across all current DM commands.
+- Command naming and `/api/dm/command` routing consistency.
+- DM command success response shape for character-resource and encounter-state
+  results.
+- In-memory idempotency behavior through the shared `dm` category.
+- SSE event semantics for character, movement, and encounter updates.
+- Read-model recovery expectations after DM overrides.
+- README/API surface alignment.
+- Task tracking clarity for Roadmap Phase 8 versus the internal Phase 8
+  reliability phase.
+
+No new DM feature was added in this exit pass.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -143,6 +162,18 @@ Implemented:
 
 - This is backend-only by design.
 - `character_state` is a live partial update, not durable replay.
+- Current DM HP override is character-scoped and emits `character_state`.
+- Current DM reposition override is administrative, respects active-scene
+  occupancy validation, and emits `movement_state`.
+- Current DM turn-usage override is encounter-scoped and emits
+  `encounter_state`.
+- All current DM commands are idempotent through the `dm` command category.
+- There is no audit log, event replay, or durable override history yet.
+- There is no force mode or ignore-collision reposition override yet.
+- There is no condition editor yet.
+- There is no encounter end, reset, or cleanup flow yet.
+- Future DM controls should continue as dedicated narrow slices instead of
+  becoming a broad generic override endpoint.
 - True auditability and transaction safety require future persistence/outbox
   work; this slice keeps the command path explicit without pretending in-memory
   storage is transactional.
