@@ -73,7 +73,7 @@ production features.
 
 ### Slice 1 — Persistence Boundary And Transaction Design
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -112,6 +112,37 @@ Acceptance:
 - No fake in-memory transaction abstraction is introduced.
 - No runtime/gameplay behavior changes.
 
+Completed outcome:
+
+- Added `docs/persistence-boundaries.md`.
+- Audited current persistence implications for:
+  - `CharacterRepository`,
+  - `SceneRepository`,
+  - `EncounterRepository`,
+  - `InMemorySessionStore`,
+  - `CommandIdempotencyStore`.
+- Documented transaction-risk flows:
+  - attack resolution,
+  - encounter-aware movement,
+  - DM HP override,
+  - DM condition-tag editing,
+  - DM active-scene reposition,
+  - DM turn usage override,
+  - DM current-turn override,
+  - DM encounter end,
+  - character assignment,
+  - scene activation,
+  - encounter start.
+- Confirmed `CharacterRepository` as the recommended first durable repository
+  target.
+- Clarified durable idempotency placement:
+  - after command parsing,
+  - before runtime mutation,
+  - inside the same real database transaction as durable state writes.
+- Recommended an outbox-ready design now, with actual outbox implementation
+  deferred until durable writes need reliable SSE publication.
+- No runtime, protocol, SSE, DB, or gameplay behavior changed.
+
 ### Slice 2 — First Durable Repository Slice
 
 Status: planned.
@@ -122,18 +153,22 @@ Goal:
 
 Recommended first target:
 
-- `CharacterRepository`, because character state is central to HP, downed
-  gating, DM HP overrides, condition tags, and combat damage while still being
-  narrower than full session/event durability.
+- `CharacterRepository`, confirmed by the Slice 1 boundary audit, because
+  character state is central to HP, downed gating, DM HP overrides, condition
+  tags, active-scene position, and combat damage while still being narrower than
+  full session/event durability.
 
 Tasks:
 
+- Use `docs/persistence-boundaries.md` as the design source of truth.
 - Add the minimal schema/migration needed for the selected repository.
 - Implement a database-backed repository behind the existing interface.
 - Keep the in-memory repository available for tests and local development.
 - Add tests proving clone-safety/serialization behavior still holds.
 - Add tests proving the durable repository can save and read current state.
 - Avoid changing public command shapes or runtime behavior.
+- Do not add durable idempotency, event replay, or outbox behavior in this same
+  slice unless a narrow test-only repository harness absolutely requires it.
 
 Acceptance:
 
