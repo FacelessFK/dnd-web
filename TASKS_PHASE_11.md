@@ -11,13 +11,14 @@ Gameplay expansion remains deferred.
 
 ## Phase Goal
 
-Design the first honest durable persistence boundary for encounter state without
-changing gameplay behavior or overclaiming restart-safe combat continuity.
+Design and land the first honest durable persistence boundary for encounter
+state without changing gameplay behavior or overclaiming restart-safe combat
+continuity.
 
 This phase should make the encounter persistence shape, active-encounter
 semantics, cross-store consistency risks, restart expectations, and transaction
-implications explicit before the repository adds any DB-backed active encounter
-implementation.
+implications explicit, then land the first DB-backed active-encounter
+groundwork before any broader combat-continuity claims.
 
 ## Phase Scope
 
@@ -44,7 +45,8 @@ implementation.
 - Document honest restart expectations for future durable encounter reads.
 - Document transaction/publication implications for attack, encounter-aware
   movement, encounter start/end, and DM encounter overrides.
-- Recommend the next implementation slice after the design pass.
+- Recommend the next implementation slice after the first DB-backed
+  active-encounter groundwork lands.
 
 ## Explicit Non-Goals
 
@@ -178,7 +180,7 @@ Completed outcome:
 
 ### Slice 2 — First DB-Backed Active Encounter Repository Groundwork
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -200,6 +202,39 @@ Acceptance:
 - `get_encounter_state` can be reread after restart only for the supported
   injected path.
 - No replay, outbox, or broader gameplay scope is added.
+
+Completed outcome:
+
+- Added `active_encounter_records` in `packages/db` with:
+  - `encounter_id` primary key,
+  - unique `session_id`,
+  - `scene_id`,
+  - JSONB `record`,
+  - `created_at` / `updated_at`.
+- Added `DrizzleActiveEncounterRecordDatabase`.
+- Added `DbBackedEncounterStore`, which:
+  - preloads durable active encounters into a fresh in-memory encounter map on
+    startup,
+  - keeps runtime encounter reads synchronous,
+  - persists active-encounter create, save, and end/delete writes durably.
+- Preserved current active-encounter semantics intentionally:
+  - at most one active encounter per session,
+  - ended encounters removed from future reads,
+  - no durable encounter history yet.
+- Kept `InMemoryEncounterStore` as the default startup path.
+- Added focused repository tests for:
+  - create/read active encounter,
+  - uniqueness of one active encounter per session,
+  - save/update behavior,
+  - end/delete behavior,
+  - missing encounter failures.
+- Added a restart-oriented server test proving:
+  - `reconnect_session` can recover the session snapshot on the injected path,
+  - `get_encounter_state` can reread a durable active encounter after restart
+    only when durable session, scene, character, and active-encounter state all
+    line up.
+- Did not add replay, outbox, encounter history, or broader combat-continuity
+  guarantees.
 
 ### Slice 3 — Encounter Transaction Boundary Design
 

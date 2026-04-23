@@ -93,17 +93,20 @@ Persistence implications:
 
 Durability notes:
 
-- A durable encounter store needs a unique active-encounter constraint per
-  session.
-- Encounter persistence is tightly coupled to session and character consistency:
-  encounter participants reference participant IDs and character IDs stored
-  elsewhere.
-- Persisting encounters before sessions/characters could preserve orphaned or
-  unrecoverable encounter state.
-- The first durable encounter slice should keep current behavior intentionally:
-  - at most one active encounter per session,
-  - ended encounters removed from active lookup,
-  - no durable encounter history yet.
+- Slice 11.2 implements the first durable active-encounter baseline through a
+  DB-backed active-encounter store that preloads persisted active encounters
+  into fresh in-memory runtime state on startup.
+- The DB-backed store enforces one active encounter per session durably through
+  a unique `session_id` invariant.
+- Encounter persistence is tightly coupled to session, character, and scene
+  consistency:
+  - encounter participants reference participant IDs and character IDs stored
+    elsewhere,
+  - `encounter.sceneId` must still line up with the durable active scene,
+  - combat continuity is still not restart-safe without broader transaction and
+    publication work.
+- Ended encounters still disappear from future reads; durable encounter history
+  remains deferred.
 
 ### `InMemorySessionStore`
 
@@ -192,6 +195,34 @@ Durability notes:
   - character overlays survive with valid active-scene placement.
 - This is still read-model recovery, not replay. Encounter state, stream
   delivery, and tactical event continuity remain non-durable.
+
+### `DbBackedEncounterStore`
+
+Current role:
+
+- Loads persisted active encounters from the DB-backed encounter record
+  boundary into a fresh in-memory encounter map on startup.
+- Keeps runtime encounter reads synchronous by serving them from that preloaded
+  in-memory cache.
+- Persists active encounter writes for:
+  - encounter creation,
+  - encounter save/update,
+  - active encounter end/delete.
+
+Durability notes:
+
+- `get_encounter_state` can succeed after restart when the DB-backed active
+  encounter store is injected and durable session, scene, and character state
+  still line up.
+- The first durable invariant is now enforced in the DB boundary:
+  - at most one active encounter per session.
+- Encounter end still preserves current behavior:
+  - the runtime may build and publish a final ended snapshot,
+  - the active encounter then disappears from future reads,
+  - durable encounter history is still out of scope.
+- This remains read-model recovery, not replay. Encounter continuity beyond the
+  reread boundary, missed event delivery, and outbox guarantees are still
+  non-durable.
 
 ### `CommandIdempotencyStore`
 
@@ -410,7 +441,7 @@ Outbox should eventually cover:
 Replay remains deferred. An outbox can support reliable publication without
 exposing a client replay/cursor contract yet.
 
-## Current Durable Baseline After Slice 7
+## Current Durable Baseline After Phase 11 Slice 2
 
 With DB-backed stores injected, the current narrow restart-safe read-model
 baseline is:
@@ -419,9 +450,12 @@ baseline is:
 - session membership and stored `activeSceneId` can be reread through
   `reconnect_session`,
 - scene definitions can be reread through `get_scene`,
+- active encounters can be reread through `get_encounter_state`,
 - `get_active_scene_state` can recover only when those three persisted
   boundaries line up and character overlays already contain valid active-scene
-  placement.
+  placement,
+- `get_encounter_state` can recover only when durable session, character,
+  scene, and active encounter state all line up.
 
 This is still not full runtime durability. Encounter state, movement live
 continuity, stream delivery, replay/catch-up semantics, and outbox guarantees
@@ -429,8 +463,7 @@ remain out of scope.
 
 ## Durable Encounter Boundary Recommendation
 
-The next persistence step should be a dedicated DB-backed active-encounter
-boundary.
+Phase 11 Slice 2 implements the first DB-backed active-encounter boundary.
 
 Recommended minimal durable encounter state:
 
@@ -445,7 +478,7 @@ Recommended minimal durable encounter state:
 - encounter status,
 - created/updated timestamps.
 
-Recommended durable semantics for the first encounter slice:
+Implemented durable semantics for the first encounter slice:
 
 - durably enforce at most one active encounter per session,
 - keep ended encounters non-historical to preserve current behavior,
@@ -470,9 +503,9 @@ Cross-store consistency risks that a durable encounter slice must respect:
   - start and read flows still depend on the active scene grid and entity
     layout.
 
-Honest restart expectations for a future DB-backed active encounter slice:
+Honest restart expectations for the current DB-backed active encounter slice:
 
-- `get_encounter_state` could become rereadable after restart only when durable
+- `get_encounter_state` can become rereadable after restart only when durable
   session, character, scene, and encounter boundaries all remain coherent.
 - This still would not restore:
   - SSE subscribers,
@@ -482,7 +515,7 @@ Honest restart expectations for a future DB-backed active encounter slice:
   - replay/catch-up semantics,
   - outbox-backed publication guarantees.
 
-Transaction and publication implications for the next encounter slice:
+Transaction and publication implications after the first encounter slice:
 
 - `start_encounter`
   - currently validates session, active scene, and placed characters before the
@@ -516,11 +549,15 @@ Transaction and publication implications for the next encounter slice:
   session snapshot without a single cross-store transaction.
 - Scene writes are durable, but scene commands still use the non-durable
   idempotency path.
+- Encounter writes are now durable, but encounter commands still use the
+  non-durable idempotency path.
 - Attack resolution and encounter-aware movement still span character,
   encounter, session, and event publication boundaries that are not jointly
   durable.
 - Encounter start, turn advancement, turn usage, current-turn overrides, and
-  encounter end still operate on non-durable encounter state.
+  encounter end now operate on durable active-encounter state when the
+  DB-backed encounter store is injected, but they still are not transactionally
+  coupled to other stores or outboxed publication.
 - Outside the supported transactional DM character update path, SSE publication
   is still post-write and non-outboxed.
 
@@ -531,12 +568,12 @@ Transaction and publication implications for the next encounter slice:
   even though their signatures read like synchronous values in many call sites.
 - Narrow persistence invariants are duplicated today:
   - row keys plus IDs inside JSON documents,
-  - `session_id` columns plus `session.id` or `scene.sessionId` inside
-    persisted payloads.
-- The DB-backed session and scene stores currently preload durable records into
-  fresh in-memory runtime maps on startup to keep live read paths synchronous.
-  That is a valid narrow baseline, but it is not yet a full repository/runtime
-  redesign.
+  - `session_id` / `scene_id` columns plus `session.id`, `scene.sessionId`, or
+    `encounter.sessionId` / `encounter.sceneId` inside persisted payloads.
+- The DB-backed session, scene, and active-encounter stores currently preload
+  durable records into fresh in-memory runtime maps on startup to keep live
+  read paths synchronous. That is a valid narrow baseline, but it is not yet a
+  full repository/runtime redesign.
 
 ## Slice 2 Result
 
@@ -559,7 +596,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Phase 10 is closed, and the encounter design slice is now complete. The next
-implementation slice should be **first DB-backed active encounter repository
-groundwork** before any attempt at restart-safe combat continuity, outbox
-delivery, or replay semantics.
+The next encounter persistence slice should be an **encounter transaction
+boundary design** pass before any attempt at restart-safe combat continuity,
+outbox delivery, or replay semantics.

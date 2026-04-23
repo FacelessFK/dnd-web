@@ -1,6 +1,6 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 10 Slice 7.
+This handoff summarizes the current repository state after Phase 11 Slice 2.
 It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
@@ -18,6 +18,8 @@ older planning language if details disagree.
   live runtime to preserve narrow session recovery after restart.
 - A DB-backed scene boundary now exists and can be injected into the live
   runtime to preserve narrow active-scene rereads after restart.
+- A DB-backed active-encounter boundary now exists and can be injected into the
+  live runtime to preserve narrow `get_encounter_state` rereads after restart.
 - The web app remains a minimal shell, not a battle UI or DM panel.
 - The project is not MVP-ready because runtime-wide persistence, frontend UX,
   durable event handling, broader rules, and production posture are still
@@ -50,10 +52,15 @@ older planning language if details disagree.
 - Added `DrizzleSessionSnapshotDatabase` in `packages/db`.
 - Added a `scene_records` Drizzle/Postgres schema and migration.
 - Added `DrizzleSceneRecordDatabase` in `packages/db`.
+- Added an `active_encounter_records` Drizzle/Postgres schema and migration.
+- Added `DrizzleActiveEncounterRecordDatabase` in `packages/db`.
 - Added `DbBackedSessionStore`, which loads persisted session snapshots into
   fresh in-memory room state while resetting presence/subscriber state.
 - Added `DbBackedSceneStore`, which loads persisted scenes into a fresh
   in-memory scene cache while persisting scene writes durably.
+- Added `DbBackedEncounterStore`, which loads persisted active encounters into
+  a fresh in-memory encounter cache while persisting active-encounter writes
+  durably.
 - Added `DbBackedCharacterRepository` for full `StoredCharacterRecord`
   documents:
   - canonical `character`,
@@ -85,12 +92,16 @@ Important boundary:
   active scene and character placement already survive, and reactivate a
   persisted scene after restart when the DB-backed session store is also
   injected.
-- Presence, encounters, most command idempotency, SSE delivery, replay, and
-  outbox behavior remain non-durable.
+- Phase 11 Slice 2 proves a restarted runtime can reread a persisted active
+  encounter through `get_encounter_state` when the DB-backed session snapshot,
+  character, scene, and active-encounter stores are all injected and still
+  coherent.
+- Presence, most command idempotency, SSE delivery, replay, and outbox behavior
+  remain non-durable.
 - Phase 10 Slice 7 closes the initial persistence foundation by documenting the
   remaining atomicity gaps and technical debt without widening gameplay scope.
-- Phase 11 Slice 1 is design-only and maps the first honest durable encounter
-  boundary; no DB-backed encounter repository is implemented yet.
+- Phase 11 Slice 1 mapped the durable encounter boundary, and Phase 11 Slice 2
+  implements the first DB-backed active-encounter repository groundwork.
 
 ## Completed Combat Foundations
 
@@ -188,12 +199,16 @@ should recover current authoritative state through read models.
 - `get_active_scene_state` can recover after restart only when durable session,
   scene, and character stores are all injected and the character overlay still
   points at the active scene.
+- Restarted runtimes can preserve active encounter reads through
+  `get_encounter_state` only when durable session, scene, character, and active
+  encounter stores are all injected and still coherent.
 - The runtime still carries intentional async/sync typing debt on injected
   DB-backed paths so public HTTP behavior can stay stable while persistence is
   added incrementally.
 - Some persistence invariants are intentionally duplicated today:
   - row keys plus IDs inside JSON payloads,
-  - `session_id` columns plus session association inside persisted documents.
+  - `session_id` / `scene_id` columns plus association inside persisted
+    documents.
 - No command-surface-wide durable idempotency. Durable idempotency records exist
   only for supported character-record mutation commands when the DB-backed
   idempotency/transaction boundary is injected.
@@ -202,7 +217,7 @@ should recover current authoritative state through read models.
 - No event sourcing.
 - No audit log.
 - No outbox/transactional event publication.
-- No durable encounter repository.
+- No durable encounter history.
 - No frontend battle UI.
 - No frontend DM panel.
 - No full condition engine.
@@ -219,14 +234,15 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Phase 11 Slice 1 now defines the durable encounter boundary and recommends
-   the next implementation slice: first DB-backed active encounter repository
-   groundwork.
+1. Phase 11 Slice 2 now lands the first DB-backed active-encounter repository
+   groundwork; the next narrow slice should design encounter transaction
+   boundaries before claiming restart-safe combat continuity.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.
-3. Continue durable repository expansion for encounters only after the first
-   active-encounter persistence slice lands.
+3. Continue durable repository expansion for encounters only after the
+   encounter transaction-boundary design makes the remaining cross-store gaps
+   explicit.
 4. Add outbox/replay only as dedicated future slices once durable writes need
    reliable publication.
 5. Start product-surface work, such as character onboarding or top-down tactical

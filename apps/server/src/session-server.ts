@@ -145,8 +145,8 @@ export async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-10',
-      status: 'persistence-foundation-exit-pass',
+      phase: 'phase-11',
+      status: 'durable-active-encounter-groundwork',
     });
     return;
   }

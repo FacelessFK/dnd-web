@@ -1,12 +1,14 @@
 import type { SessionErrorCode } from '@dnd/protocol';
 import type { Encounter, SessionId } from '@dnd/shared';
 
+export type EncounterRepositoryResult<T> = T | Promise<T>;
+
 export interface EncounterRepository {
-  createEncounter(encounter: Encounter): Encounter;
-  endEncounter(encounter: Encounter): Encounter;
+  createEncounter(encounter: Encounter): EncounterRepositoryResult<Encounter>;
+  endEncounter(encounter: Encounter): EncounterRepositoryResult<Encounter>;
   findEncounterBySession(sessionId: SessionId): Encounter | null;
   getEncounterBySession(sessionId: SessionId): Encounter;
-  saveEncounter(encounter: Encounter): Encounter;
+  saveEncounter(encounter: Encounter): EncounterRepositoryResult<Encounter>;
 }
 
 export class EncounterStoreError extends Error {

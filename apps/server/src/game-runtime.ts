@@ -77,6 +77,7 @@ import {
   type StoredCharacterRecord,
 } from './character-store.js';
 import {
+  EncounterRepositoryResult,
   EncounterRepository,
   InMemoryEncounterStore,
 } from './encounter-store.js';
@@ -719,17 +720,18 @@ export class InMemoryGameRuntime<
 
     assertEncounterBelongsToSession(activeEncounter, snapshot.session.id);
 
-    const endedEncounter = this.encounters.endEncounter(
-      endEncounterRecord(activeEncounter),
+    return this.resolveRepositoryResult(
+      this.encounters.endEncounter(endEncounterRecord(activeEncounter)),
+      (endedEncounter) => {
+        this.publishEncounterStateUpdate({
+          sessionId: snapshot.session.id,
+          encounter: endedEncounter,
+          reason: 'encounter_ended',
+        });
+
+        return endedEncounter;
+      },
     );
-
-    this.publishEncounterStateUpdate({
-      sessionId: snapshot.session.id,
-      encounter: endedEncounter,
-      reason: 'encounter_ended',
-    });
-
-    return endedEncounter;
   }
 
   createScene(command: CreateSceneCommand): Scene {
@@ -1312,7 +1314,10 @@ export class InMemoryGameRuntime<
   }
 
   private resolveRepositoryResult<T, TResult>(
-    result: RuntimeRepositoryResult<T> | SceneRepositoryResult<T>,
+    result:
+      | EncounterRepositoryResult<T>
+      | RuntimeRepositoryResult<T>
+      | SceneRepositoryResult<T>,
     resolve: (value: T) => TResult | Promise<TResult>,
   ): TResult {
     if (this.isPromiseLike(result)) {
@@ -1348,6 +1353,7 @@ export class InMemoryGameRuntime<
 
   private isPromiseLike<T>(
     value:
+      | EncounterRepositoryResult<T>
       | RuntimeRepositoryResult<T>
       | RuntimeSessionStoreResult<T>
       | SceneRepositoryResult<T>,
@@ -1970,18 +1976,20 @@ export class InMemoryGameRuntime<
     sessionId: SessionId;
     reason: EncounterStateUpdateReason;
   }): Encounter {
-    const savedEncounter =
+    const saveResult =
       params.reason === 'encounter_started'
         ? this.encounters.createEncounter(params.encounter)
         : this.encounters.saveEncounter(params.encounter);
 
-    this.publishEncounterStateUpdate({
-      sessionId: params.sessionId,
-      encounter: savedEncounter,
-      reason: params.reason,
-    });
+    return this.resolveRepositoryResult(saveResult, (savedEncounter) => {
+      this.publishEncounterStateUpdate({
+        sessionId: params.sessionId,
+        encounter: savedEncounter,
+        reason: params.reason,
+      });
 
-    return savedEncounter;
+      return savedEncounter;
+    });
   }
 
   private getResolvedSessionCharacterRecords(

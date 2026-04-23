@@ -20,12 +20,13 @@ commands. Phase 10 persistence work now includes a DB-backed character
 repository boundary, transactional durable idempotency for supported
 character mutations, a narrow durable session snapshot baseline for
 restart-safe reconnect, and a DB-backed scene persistence baseline for
-restart-safe active-scene rereads. Phase 10 Slice 7 closes that initial
-durable-runtime foundation without changing gameplay behavior; most live
-runtime state still remains process-local.
+restart-safe active-scene rereads. Phase 11 Slice 2 now adds a DB-backed
+active-encounter repository baseline for injected restart-time
+`get_encounter_state` rereads. Most live runtime state still remains
+process-local, and combat continuity is not yet restart-safe.
 
-The next recommended persistence step is a dedicated DB-backed active-encounter
-repository groundwork slice, not gameplay expansion.
+The next recommended persistence step is an encounter transaction-boundary
+design slice, not gameplay expansion.
 
 Implemented so far:
 
@@ -54,16 +55,20 @@ Implemented so far:
   DB-backed session store is injected
 - narrow durable scene baseline for restart-safe `get_scene` and
   `get_active_scene_state` recovery when the DB-backed scene store is injected
+- narrow durable active-encounter baseline for restart-safe
+  `get_encounter_state` recovery when DB-backed session, character, scene, and
+  active-encounter stores are all injected
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
-  persistence boundary and DB-backed scene persistence boundary
+  persistence boundary, DB-backed scene persistence boundary, and DB-backed
+  active-encounter persistence boundary
 - ESLint, Prettier, tests, and TypeScript validation
 
 Not implemented yet:
 
-- fully persistence-backed runtime storage for encounters, movement state,
-  streams, and broad live tactical continuity
+- fully persistence-backed runtime storage for movement state, streams, and
+  broad live tactical continuity
 - command-surface-wide durable idempotency, event replay, event cursors, or
   distributed coordination
 - full transaction/outbox persistence boundaries
@@ -207,15 +212,21 @@ Reliability notes:
   DB-backed scene store are all injected, `get_active_scene_state` can reread a
   narrow active-scene snapshot after restart if character overlays already
   contain valid active-scene placement.
+- When the DB-backed active-encounter store is injected too, `get_encounter_state`
+  can reread an active encounter after restart if durable session, scene, and
+  character state still line up.
 - Internal runtime/store typing still carries deliberate technical debt here:
   some runtime methods stay externally stable while returning a Promise on
   injected DB-backed paths.
-- Presence, subscriber state, encounter continuity, stream delivery, replay,
-  and catch-up semantics remain non-durable; do not treat the whole command
-  surface as restart-safe.
+- Presence, subscriber state, encounter continuity beyond rereads, stream
+  delivery, replay, and catch-up semantics remain non-durable; do not treat the
+  whole command surface as restart-safe.
 - Session snapshots and scene records duplicate some invariants in both row
   columns and JSON payloads today; that is intentional for this narrow baseline
   but still a cleanup target for a later persistence phase.
+- Active encounter records now duplicate the same kind of invariants too:
+  row keys plus IDs inside JSON payloads and `session_id` / `scene_id` columns
+  alongside the persisted encounter document.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

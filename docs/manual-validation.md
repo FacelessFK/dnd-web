@@ -6,8 +6,9 @@ and does not require frontend UI, database persistence, event replay, auth, or
 deployment.
 
 Phase 10 added injected DB-backed character, session snapshot, and scene
-boundaries, but this manual curl flow still validates the default in-memory
-startup path rather than those injected durable restart paths.
+boundaries, and Phase 11 Slice 2 adds an injected DB-backed active-encounter
+boundary. This manual curl flow still validates the default in-memory startup
+path rather than those injected durable restart paths.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
@@ -45,8 +46,8 @@ Expected high-level status:
 ```json
 {
   "name": "dnd-dm-platform-server",
-  "phase": "phase-10",
-  "status": "persistence-foundation-exit-pass"
+  "phase": "phase-11",
+  "status": "durable-active-encounter-groundwork"
 }
 ```
 
