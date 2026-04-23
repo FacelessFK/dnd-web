@@ -194,6 +194,35 @@ Current command boundaries:
 
 No new DM feature was added in this exit pass.
 
+## Slice 8 — DM Condition Tag Editing Foundation
+
+Status: Completed.
+
+Implemented:
+
+- Added `dm_set_character_active_conditions`.
+- Reused `/api/dm/command` and the existing `dm` idempotency category.
+- Restricted the command to the session DM.
+- Validated target participant membership and assigned character ownership.
+- Updated only `overlay.activeConditions`.
+- Preserved HP, position, footprint, concentration, visibility, character build
+  fields, and ownership/session integrity.
+- Added `character_state` reason `dm_conditions_changed`.
+- Included authoritative `activeConditions` in condition character-state
+  updates.
+- Validated condition tags as trimmed, non-empty, unique strings without
+  requiring a closed condition enum.
+- Added `invalid_condition_list` for invalid condition tag lists.
+
+Design boundary:
+
+- Condition tags are DM-managed overlay metadata only in this slice.
+- This slice does not add condition rules effects or a condition engine.
+- Setting `prone`, `unconscious`, or similar tags does not yet alter movement,
+  attack legality, downed behavior, or turn usage.
+- Future slices may connect specific condition tags to rules behavior once a
+  condition model/engine exists.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -224,6 +253,12 @@ No new DM feature was added in this exit pass.
   change the round number.
 - DM controls foundation exit pass confirms all current DM commands use
   `/api/dm/command` and the `dm` idempotency category.
+- DM can set assigned character active condition tags.
+- DM condition tag editing emits one `character_state` update with
+  `dm_conditions_changed`.
+- DM condition tag editing mutates only `overlay.activeConditions`.
+- Duplicate or empty condition tags are rejected.
+- Condition tags do not apply rules effects in this slice.
 
 ## Tests Added
 
@@ -254,13 +289,18 @@ No new DM feature was added in this exit pass.
 - DM current-turn override authorization, no-active-encounter, and
   invalid-participant rejection.
 - DM current-turn override event-boundary and idempotency behavior.
+- DM condition tag edit success and `get_character` readback.
+- DM condition tag edit authorization and assignment validation.
+- DM condition tag duplicate/empty validation.
+- DM condition tag event-boundary and idempotency behavior.
+- Character-state stream validation for condition tag payloads.
 
 ## Future Slices
 
-- DM condition editing foundation after the condition model exists.
 - Explicit force/ignore-occupancy reposition override, if product needs it.
 - Encounter reset/history/audit flows.
 - Richer initiative/order editing, if product needs it.
+- Condition rules-effect integration after a condition model/engine exists.
 - DM encounter participant management.
 - Durable override audit trail in a later persistence phase.
 
@@ -269,6 +309,8 @@ No new DM feature was added in this exit pass.
 - This is backend-only by design.
 - `character_state` is a live partial update, not durable replay.
 - Current DM HP override is character-scoped and emits `character_state`.
+- Current DM condition-tag override is character-scoped, emits
+  `character_state`, and updates only overlay metadata.
 - Current DM reposition override is administrative, respects active-scene
   occupancy validation, and emits `movement_state`.
 - Current DM turn-usage override is encounter-scoped and emits
@@ -280,7 +322,7 @@ No new DM feature was added in this exit pass.
 - All current DM commands use `/api/dm/command`.
 - There is no audit log, event replay, or durable override history yet.
 - There is no force mode or ignore-collision reposition override yet.
-- There is no condition editor yet.
+- There is no condition rules engine or condition effect automation yet.
 - Encounter end exists, but there is no encounter reset, history, audit, or
   cleanup flow yet.
 - There is no frontend DM panel yet.

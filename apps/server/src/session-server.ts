@@ -744,6 +744,9 @@ async function handleDmCommandRequest(
       case 'dm_set_character_current_hp':
         data = runtime.dmSetCharacterCurrentHp(command);
         break;
+      case 'dm_set_character_active_conditions':
+        data = runtime.dmSetCharacterActiveConditions(command);
+        break;
       case 'dm_reposition_character_in_active_scene':
         data = runtime.dmRepositionCharacterInActiveScene(command);
         break;
@@ -1075,6 +1078,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'invalid_command':
     case 'invalid_character_id':
     case 'invalid_character_hp':
+    case 'invalid_condition_list':
     case 'invalid_entity_position':
     case 'invalid_grid_size':
     case 'invalid_movement_usage_amount':

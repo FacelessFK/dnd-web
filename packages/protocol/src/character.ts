@@ -115,6 +115,26 @@ export const concentrationStateSchema = z.object({
   effectName: z.string().trim().min(1).max(128),
 });
 
+export const activeConditionsSchema = z
+  .array(z.string().trim().min(1).max(128))
+  .max(50)
+  .superRefine((conditions, ctx) => {
+    const seenConditions = new Set<string>();
+
+    conditions.forEach((condition, index) => {
+      if (seenConditions.has(condition)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Active condition tags must be unique.',
+          path: [index],
+        });
+        return;
+      }
+
+      seenConditions.add(condition);
+    });
+  });
+
 export const turnUsageSchema = z.object({
   actionUsed: z.boolean(),
   bonusActionUsed: z.boolean(),
@@ -126,7 +146,7 @@ export const encounterOverlaySchema = z.object({
   characterId: characterIdSchema,
   footprint: sceneEntityFootprintSchema,
   position: encounterPositionSchema.nullable(),
-  activeConditions: z.array(z.string().trim().min(1)),
+  activeConditions: activeConditionsSchema,
   concentration: concentrationStateSchema.nullable(),
   currentVisibility: visibilityStateSchema,
 });

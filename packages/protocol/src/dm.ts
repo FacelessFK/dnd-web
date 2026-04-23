@@ -7,6 +7,7 @@ import {
   sessionIdSchema,
 } from './common.js';
 import {
+  activeConditionsSchema,
   characterResourceSchema,
   hitPointsSchema,
   turnUsageSchema,
@@ -28,6 +29,18 @@ export const dmSetCharacterCurrentHpCommandSchema = z.object({
     participantId: participantIdSchema,
     characterId: characterIdSchema,
     currentHp: z.number().int(),
+  }),
+});
+
+export const dmSetCharacterActiveConditionsCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_set_character_active_conditions'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    participantId: participantIdSchema,
+    characterId: characterIdSchema,
+    activeConditions: z.array(z.string()).max(50),
   }),
 });
 
@@ -74,6 +87,7 @@ export const dmEndActiveEncounterCommandSchema = z.object({
 
 export const dmCommandSchema = z.discriminatedUnion('type', [
   dmSetCharacterCurrentHpCommandSchema,
+  dmSetCharacterActiveConditionsCommandSchema,
   dmRepositionCharacterInActiveSceneCommandSchema,
   dmSetCurrentTurnUsageCommandSchema,
   dmSetCurrentTurnParticipantCommandSchema,
@@ -96,7 +110,10 @@ export const dmCommandResponseSchema = z.union([
   dmCommandErrorSchema,
 ]);
 
-export const characterStateUpdateReasonSchema = z.enum(['dm_hp_changed']);
+export const characterStateUpdateReasonSchema = z.enum([
+  'dm_hp_changed',
+  'dm_conditions_changed',
+]);
 
 export const characterStateUpdateSchema = z.object({
   type: z.literal('character_state'),
@@ -105,10 +122,14 @@ export const characterStateUpdateSchema = z.object({
   participantId: participantIdSchema,
   characterId: characterIdSchema,
   hp: hitPointsSchema,
+  activeConditions: activeConditionsSchema.optional(),
 });
 
 export type DmSetCharacterCurrentHpCommand = z.infer<
   typeof dmSetCharacterCurrentHpCommandSchema
+>;
+export type DmSetCharacterActiveConditionsCommand = z.infer<
+  typeof dmSetCharacterActiveConditionsCommandSchema
 >;
 export type DmRepositionCharacterInActiveSceneCommand = z.infer<
   typeof dmRepositionCharacterInActiveSceneCommandSchema

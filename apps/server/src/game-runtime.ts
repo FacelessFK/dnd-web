@@ -29,6 +29,7 @@ import type {
   CreateSessionCommand,
   DmEndActiveEncounterCommand,
   DmRepositionCharacterInActiveSceneCommand,
+  DmSetCharacterActiveConditionsCommand,
   DmSetCharacterCurrentHpCommand,
   DmSetCurrentTurnParticipantCommand,
   DmSetCurrentTurnUsageCommand,
@@ -396,6 +397,57 @@ export class InMemoryGameRuntime {
       participantId: participant.id,
       record: updatedRecord,
       reason: 'dm_hp_changed',
+    });
+
+    return this.buildCharacterResource(
+      updatedRecord,
+      this.rulesProfiles.getRulesProfile(
+        updatedRecord.character.rulesProfileId,
+      ),
+    );
+  }
+
+  dmSetCharacterActiveConditions(
+    command: DmSetCharacterActiveConditionsCommand,
+  ): CharacterResource {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const participant = this.requireParticipant(
+      snapshot,
+      command.payload.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'set character active conditions');
+
+    const record = this.requireAssignedCharacterRecord(snapshot, participant);
+
+    if (record.character.id !== command.payload.characterId) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Participant "${participant.id}" is assigned to character "${record.character.id}", not "${command.payload.characterId}".`,
+      );
+    }
+
+    const activeConditions = this.normalizeActiveConditions(
+      record.character.id,
+      command.payload.activeConditions,
+    );
+    const updatedRecord = this.characters.saveCharacter(
+      this.withUpdatedCharacterActiveConditions(record, activeConditions),
+    );
+
+    this.publishCharacterStateUpdate({
+      sessionId: snapshot.session.id,
+      participantId: participant.id,
+      record: updatedRecord,
+      reason: 'dm_conditions_changed',
+      activeConditions: updatedRecord.overlay.activeConditions,
     });
 
     return this.buildCharacterResource(
@@ -1156,6 +1208,19 @@ export class InMemoryGameRuntime {
     };
   }
 
+  private withUpdatedCharacterActiveConditions(
+    record: StoredCharacterRecord,
+    activeConditions: string[],
+  ): StoredCharacterRecord {
+    return {
+      character: record.character,
+      overlay: {
+        ...record.overlay,
+        activeConditions: structuredClone(activeConditions),
+      },
+    };
+  }
+
   private resolveAttackContext(command: AttackCommand): AttackContext {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
@@ -1537,11 +1602,57 @@ export class InMemoryGameRuntime {
     }
   }
 
+  private normalizeActiveConditions(
+    characterId: CharacterId,
+    activeConditions: string[],
+  ): string[] {
+    const normalizedConditions: string[] = [];
+    const seenConditions = new Set<string>();
+
+    if (activeConditions.length > 50) {
+      throw new CharacterStoreError(
+        'invalid_condition_list',
+        `Character "${characterId}" cannot have more than 50 active condition tags.`,
+      );
+    }
+
+    for (const condition of activeConditions) {
+      const normalizedCondition = condition.trim();
+
+      if (!normalizedCondition) {
+        throw new CharacterStoreError(
+          'invalid_condition_list',
+          `Character "${characterId}" has an empty active condition tag.`,
+        );
+      }
+
+      if (normalizedCondition.length > 128) {
+        throw new CharacterStoreError(
+          'invalid_condition_list',
+          `Character "${characterId}" has an active condition tag longer than 128 characters.`,
+        );
+      }
+
+      if (seenConditions.has(normalizedCondition)) {
+        throw new CharacterStoreError(
+          'invalid_condition_list',
+          `Character "${characterId}" has duplicate active condition tag "${normalizedCondition}".`,
+        );
+      }
+
+      seenConditions.add(normalizedCondition);
+      normalizedConditions.push(normalizedCondition);
+    }
+
+    return normalizedConditions;
+  }
+
   private publishCharacterStateUpdate(params: {
     sessionId: SessionId;
     participantId: ParticipantId;
     record: StoredCharacterRecord;
     reason: CharacterStateUpdateReason;
+    activeConditions?: string[];
   }): void {
     this.sessions.publishCharacterStateUpdate({
       type: 'character_state',
@@ -1550,6 +1661,9 @@ export class InMemoryGameRuntime {
       participantId: params.participantId,
       characterId: params.record.character.id,
       hp: params.record.character.hp,
+      ...(params.activeConditions
+        ? { activeConditions: params.activeConditions }
+        : {}),
     });
   }
 

@@ -810,6 +810,19 @@ test('dm commands are accepted for narrow HP override validation', () => {
       currentHp: 12,
     },
   });
+  const conditionsResult = dmCommandSchema.safeParse({
+    commandId: 'dm-set-conditions-1',
+    type: 'dm_set_character_active_conditions',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      participantId: 'player-001',
+      characterId: 'char_11111111-1111-4111-8111-111111111111',
+      activeConditions: ['prone', 'frightened'],
+    },
+  });
   const repositionResult = dmCommandSchema.safeParse({
     commandId: 'dm-reposition-1',
     type: 'dm_reposition_character_in_active_scene',
@@ -865,6 +878,7 @@ test('dm commands are accepted for narrow HP override validation', () => {
   });
 
   assert.equal(hpResult.success, true);
+  assert.equal(conditionsResult.success, true);
   assert.equal(repositionResult.success, true);
   assert.equal(turnUsageResult.success, true);
   assert.equal(currentTurnParticipantResult.success, true);
@@ -1148,6 +1162,111 @@ test('DM HP override command ID conflicts do not mutate HP or emit SSE', async (
   }
   assert.equal(conflict.body.error.code, 'command_id_conflict');
   assert.equal(character.character.hp.current, 12);
+  assert.equal(
+    getCharacterStateUpdates(updates).length,
+    characterUpdatesBeforeConflict,
+  );
+});
+
+test('duplicate DM condition tag commands return cached success without duplicate character_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-dm-set-conditions-1',
+    type: 'dm_set_character_active_conditions',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      activeConditions: ['prone', 'frightened'],
+    },
+  };
+  const characterUpdatesBefore = getCharacterStateUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const character = runtime.characters.getCharacter(firstCharacterId);
+  const characterUpdates = getCharacterStateUpdates(updates).slice(
+    characterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.deepEqual(character.overlay.activeConditions, ['prone', 'frightened']);
+  assert.equal(characterUpdates.length, 1);
+  assert.equal(characterUpdates[0]?.reason, 'dm_conditions_changed');
+  assert.deepEqual(characterUpdates[0]?.activeConditions, [
+    'prone',
+    'frightened',
+  ]);
+});
+
+test('DM condition tag command ID conflicts do not mutate conditions or emit SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const firstCommand = {
+    commandId: 'conflicting-dm-set-conditions-1',
+    type: 'dm_set_character_active_conditions',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacterId,
+      activeConditions: ['prone'],
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      activeConditions: ['frightened'],
+    },
+  };
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+  );
+  const characterUpdatesBeforeConflict =
+    getCharacterStateUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+  );
+  const character = runtime.characters.getCharacter(firstCharacterId);
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.deepEqual(character.overlay.activeConditions, ['prone']);
   assert.equal(
     getCharacterStateUpdates(updates).length,
     characterUpdatesBeforeConflict,
@@ -2145,6 +2264,24 @@ test('character session-stream updates are validated as authoritative HP payload
       current: 12,
       temp: 0,
     },
+  });
+
+  assert.equal(result.success, true);
+});
+
+test('character session-stream updates validate condition tag payloads', () => {
+  const result = sessionStreamEventSchema.safeParse({
+    type: 'character_state',
+    reason: 'dm_conditions_changed',
+    sessionId: 'ABC123',
+    participantId: 'player-001',
+    characterId: 'char_11111111-1111-4111-8111-111111111111',
+    hp: {
+      max: 26,
+      current: 12,
+      temp: 0,
+    },
+    activeConditions: ['prone', 'frightened'],
   });
 
   assert.equal(result.success, true);

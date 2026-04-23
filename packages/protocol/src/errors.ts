@@ -14,6 +14,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_attack_target',
   'invalid_character_id',
   'invalid_character_hp',
+  'invalid_condition_list',
   'invalid_command',
   'invalid_character_state',
   'invalid_encounter_participant',

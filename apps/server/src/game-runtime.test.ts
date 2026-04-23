@@ -652,6 +652,29 @@ function dmSetCharacterCurrentHp(
   });
 }
 
+function dmSetCharacterActiveConditions(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  characterId: string,
+  activeConditions: string[],
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmSetCharacterActiveConditions({
+    commandId: `dm-set-conditions-${participantId}-${activeConditions.join('-')}`,
+    type: 'dm_set_character_active_conditions',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      participantId,
+      characterId,
+      activeConditions,
+    },
+  });
+}
+
 function dmRepositionCharacterInActiveScene(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -1270,6 +1293,157 @@ test('dm setting current turn actor HP to zero feeds existing downed gating', ()
   assert.equal(
     getEncounterUpdates(updates).length,
     encounterUpdateCountBeforeFailure,
+  );
+});
+
+test('dm can set assigned character active condition tags and broadcast character state', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const encounter = startEncounter(runtime, session.sessionId);
+  const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+  const combatEventCountBefore = getCombatEvents(updates).length;
+  const recordBefore = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+
+  const updatedResource = dmSetCharacterActiveConditions(
+    runtime,
+    session.sessionId,
+    'player-001',
+    firstCharacter.character.id,
+    ['prone', 'frightened'],
+  );
+  const rereadResource = runtime.getCharacter({
+    commandId: 'get-character-after-dm-conditions',
+    type: 'get_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: firstCharacter.character.id,
+    },
+  });
+  const characterUpdates = getCharacterStateUpdates(updates).slice(
+    characterUpdateCountBefore,
+  );
+
+  assert.deepEqual(updatedResource.overlay.activeConditions, [
+    'prone',
+    'frightened',
+  ]);
+  assert.deepEqual(rereadResource.overlay.activeConditions, [
+    'prone',
+    'frightened',
+  ]);
+  assert.deepEqual(updatedResource.character.hp, recordBefore.character.hp);
+  assert.deepEqual(
+    updatedResource.overlay.position,
+    recordBefore.overlay.position,
+  );
+  assert.deepEqual(
+    updatedResource.overlay.footprint,
+    recordBefore.overlay.footprint,
+  );
+  assert.deepEqual(
+    updatedResource.overlay.concentration,
+    recordBefore.overlay.concentration,
+  );
+  assert.equal(
+    updatedResource.overlay.currentVisibility,
+    recordBefore.overlay.currentVisibility,
+  );
+  assert.deepEqual(updatedResource.character, recordBefore.character);
+  assert.equal(characterUpdates.length, 1);
+  assert.equal(characterUpdates[0]?.reason, 'dm_conditions_changed');
+  assert.equal(characterUpdates[0]?.characterId, firstCharacter.character.id);
+  assert.deepEqual(characterUpdates[0]?.activeConditions, [
+    'prone',
+    'frightened',
+  ]);
+  assert.deepEqual(characterUpdates[0]?.hp, recordBefore.character.hp);
+  assert.equal(getMovementUpdates(updates).length, movementUpdateCountBefore);
+  assert.equal(getEncounterUpdates(updates).length, encounterUpdateCountBefore);
+  assert.equal(getCombatEvents(updates).length, combatEventCountBefore);
+  assert.deepEqual(getEncounterState(runtime, session.sessionId), encounter);
+});
+
+test('players cannot set active condition tags through the DM control surface', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterActiveConditions(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        ['prone'],
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm condition tag editing validates target participant assignment', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterActiveConditions(
+        runtime,
+        session.sessionId,
+        'player-002',
+        firstCharacter.character.id,
+        ['prone'],
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('dm condition tag editing rejects invalid condition lists', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session, firstCharacter } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCharacterActiveConditions(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        ['prone', ' prone '],
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_condition_list',
+  );
+
+  assert.throws(
+    () => {
+      dmSetCharacterActiveConditions(
+        runtime,
+        session.sessionId,
+        'player-001',
+        firstCharacter.character.id,
+        [''],
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_condition_list',
   );
 });
 
