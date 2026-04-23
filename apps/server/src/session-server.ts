@@ -752,6 +752,11 @@ async function handleDmCommandRequest(
           encounter: runtime.dmSetCurrentTurnUsage(command),
         };
         break;
+      case 'dm_set_current_turn_participant':
+        data = {
+          encounter: runtime.dmSetCurrentTurnParticipant(command),
+        };
+        break;
       case 'dm_end_active_encounter':
         data = {
           encounter: runtime.dmEndActiveEncounter(command),

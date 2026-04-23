@@ -842,6 +842,17 @@ test('dm commands are accepted for narrow HP override validation', () => {
       },
     },
   });
+  const currentTurnParticipantResult = dmCommandSchema.safeParse({
+    commandId: 'dm-set-current-turn-1',
+    type: 'dm_set_current_turn_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      participantId: 'player-001',
+    },
+  });
   const endEncounterResult = dmCommandSchema.safeParse({
     commandId: 'dm-end-encounter-1',
     type: 'dm_end_active_encounter',
@@ -856,6 +867,7 @@ test('dm commands are accepted for narrow HP override validation', () => {
   assert.equal(hpResult.success, true);
   assert.equal(repositionResult.success, true);
   assert.equal(turnUsageResult.success, true);
+  assert.equal(currentTurnParticipantResult.success, true);
   assert.equal(endEncounterResult.success, true);
 });
 
@@ -1386,6 +1398,156 @@ test('DM turn usage override command ID conflicts do not mutate usage or emit SS
     reactionUsed: false,
     movementUsed: 25,
   });
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdatesBeforeConflict,
+  );
+});
+
+test('duplicate DM current turn participant commands return cached success without duplicate encounter_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const encounter = runtime.getEncounterState({
+    commandId: 'read-before-dm-current-turn-idempotency',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+  const currentParticipant =
+    encounter.participants[encounter.currentTurnIndex]!;
+  const requestedParticipant = encounter.participants.find(
+    (participant) =>
+      participant.participantId !== currentParticipant.participantId,
+  )!;
+
+  const command = {
+    commandId: 'idempotent-dm-current-turn-1',
+    type: 'dm_set_current_turn_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: requestedParticipant.participantId,
+    },
+  };
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'dm_current_turn_changed');
+
+  if (!first.body.ok || !('encounter' in first.body.data)) {
+    return;
+  }
+
+  assert.equal(
+    first.body.data.encounter.participants[
+      first.body.data.encounter.currentTurnIndex
+    ]?.participantId,
+    requestedParticipant.participantId,
+  );
+});
+
+test('DM current turn participant command ID conflicts do not mutate turn or emit SSE', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const encounter = runtime.getEncounterState({
+    commandId: 'read-before-dm-current-turn-conflict',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+  const currentParticipant =
+    encounter.participants[encounter.currentTurnIndex]!;
+  const requestedParticipant = encounter.participants.find(
+    (participant) =>
+      participant.participantId !== currentParticipant.participantId,
+  )!;
+
+  const firstCommand = {
+    commandId: 'conflicting-dm-current-turn-1',
+    type: 'dm_set_current_turn_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: requestedParticipant.participantId,
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      participantId: currentParticipant.participantId,
+    },
+  };
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+  );
+  const encounterUpdatesBeforeConflict = getEncounterUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+  );
+  const updatedEncounter = runtime.getEncounterState({
+    commandId: 'read-after-dm-current-turn-conflict',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  if (conflict.body.ok) {
+    return;
+  }
+  assert.equal(conflict.body.error.code, 'command_id_conflict');
+  assert.equal(
+    updatedEncounter.participants[updatedEncounter.currentTurnIndex]
+      ?.participantId,
+    requestedParticipant.participantId,
+  );
   assert.equal(
     getEncounterUpdates(updates).length,
     encounterUpdatesBeforeConflict,

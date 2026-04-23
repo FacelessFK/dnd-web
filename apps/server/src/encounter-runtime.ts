@@ -268,6 +268,32 @@ export function setEncounterTurnUsage(
   return withUpdatedTurnUsage(encounter, structuredClone(currentTurnUsage));
 }
 
+export function setEncounterCurrentTurnParticipant(params: {
+  encounter: Encounter;
+  participantId: ParticipantId;
+}): Encounter {
+  const currentTurnIndex = params.encounter.participants.findIndex(
+    (participant) => participant.participantId === params.participantId,
+  );
+
+  if (currentTurnIndex === -1) {
+    throw new EncounterRuntimeError(
+      'invalid_encounter_participant',
+      `Participant "${params.participantId}" is not part of encounter "${params.encounter.id}".`,
+    );
+  }
+
+  // This is a DM bookkeeping override, not normal turn progression:
+  // participant order, initiative values, and round number are intentionally
+  // preserved while usage resets for the newly selected current turn.
+  return {
+    ...params.encounter,
+    currentTurnIndex,
+    currentTurnUsage: createDefaultTurnUsage(),
+    updatedAt: createTimestamp(),
+  };
+}
+
 export function endEncounterRecord(encounter: Encounter): Encounter {
   return {
     ...encounter,

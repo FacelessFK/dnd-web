@@ -47,6 +47,7 @@ export const encounterStateUpdateReasonSchema = z.enum([
   'reaction_used',
   'movement_used',
   'dm_turn_usage_changed',
+  'dm_current_turn_changed',
 ]);
 
 export const encounterStateUpdateSchema = z.object({

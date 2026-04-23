@@ -30,6 +30,7 @@ import type {
   DmEndActiveEncounterCommand,
   DmRepositionCharacterInActiveSceneCommand,
   DmSetCharacterCurrentHpCommand,
+  DmSetCurrentTurnParticipantCommand,
   DmSetCurrentTurnUsageCommand,
   EncounterStateUpdateReason,
   FinalizeCharacterCommand,
@@ -93,6 +94,7 @@ import {
   markEncounterReactionUsed,
   recordEncounterMovementUsage,
   requireCurrentEncounterParticipant,
+  setEncounterCurrentTurnParticipant,
   setEncounterTurnUsage,
 } from './encounter-runtime.js';
 import {
@@ -492,6 +494,33 @@ export class InMemoryGameRuntime {
         command.payload.turnUsage,
       ),
       reason: 'dm_turn_usage_changed',
+    });
+  }
+
+  dmSetCurrentTurnParticipant(
+    command: DmSetCurrentTurnParticipantCommand,
+  ): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'set the current turn participant');
+
+    return this.saveAndPublishEncounter({
+      sessionId: snapshot.session.id,
+      encounter: setEncounterCurrentTurnParticipant({
+        encounter: this.getEncounterStateForParticipant(
+          snapshot.session.id,
+          actor.id,
+        ),
+        participantId: command.payload.participantId,
+      }),
+      reason: 'dm_current_turn_changed',
     });
   }
 

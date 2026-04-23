@@ -702,6 +702,25 @@ function dmSetCurrentTurnUsage(
   });
 }
 
+function dmSetCurrentTurnParticipant(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  participantId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmSetCurrentTurnParticipant({
+    commandId: `dm-set-current-turn-${actorParticipantId}-${participantId}`,
+    type: 'dm_set_current_turn_participant',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      participantId,
+    },
+  });
+}
+
 function dmEndActiveEncounter(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -1669,6 +1688,143 @@ test('dm turn usage override requires an active encounter', () => {
     (error: unknown) =>
       error instanceof EncounterStoreError &&
       error.code === 'no_active_encounter',
+  );
+});
+
+test('dm can set the current turn participant without changing encounter order or round', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { firstCharacter, secondCharacter, session } =
+    setupEncounterParticipants(runtime);
+  const startedEncounter = startEncounter(runtime, session.sessionId);
+  const currentParticipant =
+    startedEncounter.participants[startedEncounter.currentTurnIndex]!;
+  const requestedParticipant = startedEncounter.participants.find(
+    (participant) =>
+      participant.participantId !== currentParticipant.participantId,
+  )!;
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  dmSetCurrentTurnUsage(runtime, session.sessionId, {
+    actionUsed: true,
+    bonusActionUsed: true,
+    reactionUsed: true,
+    movementUsed: 15,
+  });
+
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+  const combatEventCountBefore = getCombatEvents(updates).length;
+  const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
+  const firstRecordBefore = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+  const secondRecordBefore = runtime.characters.getCharacter(
+    secondCharacter.character.id,
+  );
+  const updatedEncounter = dmSetCurrentTurnParticipant(
+    runtime,
+    session.sessionId,
+    requestedParticipant.participantId,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBefore,
+  );
+  const firstRecordAfter = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+  const secondRecordAfter = runtime.characters.getCharacter(
+    secondCharacter.character.id,
+  );
+
+  assert.equal(
+    updatedEncounter.participants[updatedEncounter.currentTurnIndex]
+      ?.participantId,
+    requestedParticipant.participantId,
+  );
+  assert.deepEqual(
+    updatedEncounter.participants,
+    startedEncounter.participants,
+  );
+  assert.equal(updatedEncounter.roundNumber, startedEncounter.roundNumber);
+  assert.deepEqual(updatedEncounter.currentTurnUsage, {
+    actionUsed: false,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 0,
+  });
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'dm_current_turn_changed');
+  assert.deepEqual(
+    firstRecordAfter.character.hp,
+    firstRecordBefore.character.hp,
+  );
+  assert.deepEqual(
+    secondRecordAfter.character.hp,
+    secondRecordBefore.character.hp,
+  );
+  assert.deepEqual(
+    firstRecordAfter.overlay.position,
+    firstRecordBefore.overlay.position,
+  );
+  assert.deepEqual(
+    secondRecordAfter.overlay.position,
+    secondRecordBefore.overlay.position,
+  );
+  assert.equal(getMovementUpdates(updates).length, movementUpdateCountBefore);
+  assert.equal(getCombatEvents(updates).length, combatEventCountBefore);
+  assert.equal(
+    getCharacterStateUpdates(updates).length,
+    characterUpdateCountBefore,
+  );
+});
+
+test('players cannot set the current turn participant', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmSetCurrentTurnParticipant(
+        runtime,
+        session.sessionId,
+        encounter.participants[0]!.participantId,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm current turn participant override requires an active encounter', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmSetCurrentTurnParticipant(runtime, session.sessionId, 'player-001');
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+});
+
+test('dm current turn participant override requires an encounter participant', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmSetCurrentTurnParticipant(runtime, session.sessionId, 'player-003');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'invalid_encounter_participant',
   );
 });
 

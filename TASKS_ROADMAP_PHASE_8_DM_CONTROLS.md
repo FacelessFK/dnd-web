@@ -134,6 +134,31 @@ Design boundary:
 - Ended encounters are not preserved in history.
 - There is no combat summary, audit log, replay, or persistence yet.
 
+## Slice 6 — DM Current Turn Override Foundation
+
+Status: Completed.
+
+Implemented:
+
+- Added `dm_set_current_turn_participant`.
+- Reused `/api/dm/command` and the existing `dm` idempotency category.
+- Restricted the command to the session DM.
+- Required an active encounter.
+- Required the requested participant to be part of the active encounter.
+- Set `currentTurnIndex` so the requested participant becomes the active turn
+  actor.
+- Reset `currentTurnUsage` to the empty/default turn usage state.
+- Added `encounter_state` reason `dm_current_turn_changed`.
+- Confirmed the command does not reroll initiative, reorder participants,
+  change HP, change character position, emit combat events, emit movement
+  events, or emit character-state events.
+
+Design boundary:
+
+- This is an administrative bookkeeping override, not normal turn progression.
+- The command does not automatically change `roundNumber`.
+- Richer initiative/order editing remains deferred to a future dedicated slice.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -156,6 +181,12 @@ Design boundary:
   `encounter_ended`.
 - DM encounter end clears the active encounter without mutating scene or
   character state.
+- DM current-turn override emits one `encounter_state` update with
+  `dm_current_turn_changed`.
+- DM current-turn override changes only `currentTurnIndex` and
+  `currentTurnUsage`.
+- DM current-turn override does not reroll initiative, reorder participants, or
+  change the round number.
 
 ## Tests Added
 
@@ -182,12 +213,17 @@ Design boundary:
 - DM encounter end success, post-end read failure, and restart behavior.
 - DM encounter end authorization and no-active-encounter rejection.
 - DM encounter end event-boundary and idempotency behavior.
+- DM current-turn override success and usage reset.
+- DM current-turn override authorization, no-active-encounter, and
+  invalid-participant rejection.
+- DM current-turn override event-boundary and idempotency behavior.
 
 ## Future Slices
 
 - DM condition editing foundation after the condition model exists.
 - Explicit force/ignore-occupancy reposition override, if product needs it.
 - Encounter reset/history/audit flows.
+- Richer initiative/order editing, if product needs it.
 - DM encounter participant management.
 - Durable override audit trail in a later persistence phase.
 
@@ -200,6 +236,9 @@ Design boundary:
   occupancy validation, and emits `movement_state`.
 - Current DM turn-usage override is encounter-scoped and emits
   `encounter_state`.
+- Current DM turn-participant override is encounter-scoped, emits
+  `encounter_state`, resets turn usage, and preserves participant order,
+  initiative values, and round number.
 - All current DM commands are idempotent through the `dm` command category.
 - There is no audit log, event replay, or durable override history yet.
 - There is no force mode or ignore-collision reposition override yet.
