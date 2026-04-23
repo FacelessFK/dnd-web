@@ -647,6 +647,7 @@ Completed outcome:
 - Recommended the next narrow step after Phase 10:
   - start a dedicated durable encounter boundary design slice before any
     attempt at restart-safe combat continuity or outbox/replay work.
+- Follow-on planning now lives in `TASKS_PHASE_11.md`.
 
 ## Acceptance Criteria
 

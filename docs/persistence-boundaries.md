@@ -100,6 +100,10 @@ Durability notes:
   elsewhere.
 - Persisting encounters before sessions/characters could preserve orphaned or
   unrecoverable encounter state.
+- The first durable encounter slice should keep current behavior intentionally:
+  - at most one active encounter per session,
+  - ended encounters removed from active lookup,
+  - no durable encounter history yet.
 
 ### `InMemorySessionStore`
 
@@ -423,6 +427,87 @@ This is still not full runtime durability. Encounter state, movement live
 continuity, stream delivery, replay/catch-up semantics, and outbox guarantees
 remain out of scope.
 
+## Durable Encounter Boundary Recommendation
+
+The next persistence step should be a dedicated DB-backed active-encounter
+boundary.
+
+Recommended minimal durable encounter state:
+
+- encounter identity,
+- owning session ID,
+- active scene ID,
+- participants,
+- initiative/order,
+- current turn index,
+- round number,
+- current turn usage,
+- encounter status,
+- created/updated timestamps.
+
+Recommended durable semantics for the first encounter slice:
+
+- durably enforce at most one active encounter per session,
+- keep ended encounters non-historical to preserve current behavior,
+- allow the runtime to construct and publish a final ended snapshot before the
+  active encounter disappears from future reads,
+- defer durable encounter history until a later dedicated slice.
+
+Cross-store consistency risks that a durable encounter slice must respect:
+
+- `session_snapshots`
+  - `encounter.sessionId` must match durable session identity,
+  - participant IDs must still belong to the session,
+  - `session.activeSceneId` must still match `encounter.sceneId` for
+    `get_encounter_state` to remain coherent.
+- `character_records`
+  - encounter participants reference character IDs owned elsewhere,
+  - downed gating depends on durable character HP,
+  - attack and encounter-aware movement already mutate both character and
+    encounter state.
+- `scene_records`
+  - `encounter.sceneId` must still reference a durable scene definition,
+  - start and read flows still depend on the active scene grid and entity
+    layout.
+
+Honest restart expectations for a future DB-backed active encounter slice:
+
+- `get_encounter_state` could become rereadable after restart only when durable
+  session, character, scene, and encounter boundaries all remain coherent.
+- This still would not restore:
+  - SSE subscribers,
+  - missed `encounter_state`,
+  - missed `movement_state`,
+  - missed `combat_event`,
+  - replay/catch-up semantics,
+  - outbox-backed publication guarantees.
+
+Transaction and publication implications for the next encounter slice:
+
+- `start_encounter`
+  - currently validates session, active scene, and placed characters before the
+    encounter write,
+  - a durable slice can persist the encounter itself, but broader atomicity with
+    session/character state still remains a later decision.
+- `advance_turn`, `use_action`, `use_bonus_action`, `use_reaction`,
+  `record_movement_usage`, `dm_set_current_turn_usage`,
+  `dm_set_current_turn_participant`
+  - these are encounter-local writes once a durable active encounter exists,
+    but SSE publication still remains post-write without an outbox.
+- `dm_end_active_encounter`
+  - should preserve current behavior in the first durable slice by publishing a
+    final ended snapshot and then removing the active encounter from future
+    reads.
+- `attack`
+  - still spans character HP mutation, encounter action usage, and both
+    `encounter_state` plus `combat_event` publication,
+  - it should not be treated as restart-safe combat continuity until a later
+    cross-store transaction/outbox design exists.
+- encounter-aware movement
+  - still spans character position mutation, encounter movement usage, and both
+    `encounter_state` plus `movement_state` publication,
+  - it should not be treated as fully durable live tactical continuity yet.
+
 ## Remaining Atomicity Gaps
 
 - Character assignment still validates durable character state and then writes
@@ -474,6 +559,7 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Phase 10 is now closed. The next narrow persistence step should be a dedicated
-durable encounter boundary design slice before any attempt at restart-safe
-combat continuity, outbox delivery, or replay semantics.
+Phase 10 is closed, and the encounter design slice is now complete. The next
+implementation slice should be **first DB-backed active encounter repository
+groundwork** before any attempt at restart-safe combat continuity, outbox
+delivery, or replay semantics.

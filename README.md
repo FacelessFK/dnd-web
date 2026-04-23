@@ -24,6 +24,9 @@ restart-safe active-scene rereads. Phase 10 Slice 7 closes that initial
 durable-runtime foundation without changing gameplay behavior; most live
 runtime state still remains process-local.
 
+The next recommended persistence step is a dedicated DB-backed active-encounter
+repository groundwork slice, not gameplay expansion.
+
 Implemented so far:
 
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and

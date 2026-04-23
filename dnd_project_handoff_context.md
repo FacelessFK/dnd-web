@@ -89,6 +89,8 @@ Important boundary:
   outbox behavior remain non-durable.
 - Phase 10 Slice 7 closes the initial persistence foundation by documenting the
   remaining atomicity gaps and technical debt without widening gameplay scope.
+- Phase 11 Slice 1 is design-only and maps the first honest durable encounter
+  boundary; no DB-backed encounter repository is implemented yet.
 
 ## Completed Combat Foundations
 
@@ -217,13 +219,14 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Start a dedicated durable encounter boundary design slice before attempting
-   restart-safe combat continuity, outbox delivery, or replay semantics.
+1. Phase 11 Slice 1 now defines the durable encounter boundary and recommends
+   the next implementation slice: first DB-backed active encounter repository
+   groundwork.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.
-3. Continue durable repository expansion for encounters if tactical continuity
-   beyond read-model rereads becomes necessary.
+3. Continue durable repository expansion for encounters only after the first
+   active-encounter persistence slice lands.
 4. Add outbox/replay only as dedicated future slices once durable writes need
    reliable publication.
 5. Start product-surface work, such as character onboarding or top-down tactical
