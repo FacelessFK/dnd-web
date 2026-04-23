@@ -499,7 +499,82 @@ Completed outcome:
   and server status wording to distinguish durable session snapshot recovery
   from still-non-durable tactical/runtime continuity.
 
-### Slice 6 — Persistence Exit Pass
+### Slice 6 — Durable Scene Repository Baseline
+
+Status: completed.
+
+Goal:
+
+- Close the narrow restart-recovery gap where `activeSceneId` could survive in
+  durable session snapshots before the underlying scene definition did.
+
+Tasks:
+
+- Add a DB-backed scene schema and migration.
+- Persist the minimal current scene definition state:
+  - scene identity,
+  - owning session association,
+  - scene name,
+  - grid,
+  - scene entities,
+  - timestamps.
+- Add a DB-backed scene repository/store behind the live runtime boundary while
+  keeping `InMemorySceneStore` as the default startup path.
+- Preserve current scene semantics intentionally:
+  - clone/value behavior,
+  - `scene_not_found` failures,
+  - unchanged public HTTP/protocol/SSE/gameplay behavior.
+- Add restart-focused tests proving:
+  - created scenes survive runtime/server reinitialization,
+  - `get_scene` works after restart when the DB-backed scene store is injected,
+  - `activate_scene_for_session` can reference a persisted scene after restart
+    when the DB-backed session store is also injected,
+  - `get_active_scene_state` can succeed after restart for the durable
+    session + character + scene path when the active scene ID and character
+    placement already survive.
+
+Acceptance:
+
+- A DB-backed scene boundary exists.
+- Persisted scenes survive runtime/server reinitialization when the DB-backed
+  scene store is injected.
+- `get_scene` and durable active-scene rereads work honestly after restart for
+  the supported injected path.
+- Encounter continuity, movement SSE replay, and full tactical continuity are
+  still not overclaimed.
+- Default local startup remains in-memory.
+
+Completed outcome:
+
+- Added a `scene_records` Drizzle/Postgres schema and migration.
+- Added `DrizzleSceneRecordDatabase` in `packages/db`.
+- Added `DbBackedSceneStore`, which loads persisted scenes into a fresh
+  in-memory scene cache on startup while persisting scene writes durably.
+- Kept `InMemorySceneStore` as the default runtime scene store.
+- Preserved current scene semantics intentionally:
+  - `getScene` remains synchronous through the preloaded cache,
+  - scene writes are clone-safe,
+  - missing scenes still fail with `scene_not_found`.
+- Added focused DB-backed scene-store tests for:
+  - clone/value safety across rehydration,
+  - durable create/save behavior,
+  - missing scene failures.
+- Added a server-level restart test proving:
+  - session snapshots, character records, and scene definitions can be
+    rehydrated together,
+  - `reconnect_session` still works after restart,
+  - `get_scene` works after restart,
+  - `get_active_scene_state` can succeed after restart when active scene and
+    character placement already survive,
+  - `activate_scene_for_session` can target a persisted scene after restart,
+  - live presence still resets to `disconnected`.
+- Updated README, persistence notes, handoff context, manual validation notes,
+  and server status wording to distinguish:
+  - durable session/scene/character read-model recovery,
+  - still-non-durable encounter continuity,
+  - no replay or catch-up stream semantics.
+
+### Slice 7 — Persistence Exit Pass
 
 Status: planned.
 

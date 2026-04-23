@@ -18,8 +18,10 @@ Manual Validation Readiness** refreshed API/manual-validation docs, and backend
 Roadmap Phase 8 DM controls are implemented as narrow server-authoritative
 commands. Phase 10 persistence work now includes a DB-backed character
 repository boundary, transactional durable idempotency for supported
-character mutations, and a narrow durable session snapshot baseline for
-restart-safe reconnect, while most live runtime state remains process-local.
+character mutations, a narrow durable session snapshot baseline for
+restart-safe reconnect, and a DB-backed scene persistence baseline for
+restart-safe active-scene rereads, while most live runtime state remains
+process-local.
 
 Implemented so far:
 
@@ -46,16 +48,18 @@ Implemented so far:
   DB-backed character store is injected
 - narrow durable session snapshot baseline for restart-safe reconnect when the
   DB-backed session store is injected
+- narrow durable scene baseline for restart-safe `get_scene` and
+  `get_active_scene_state` recovery when the DB-backed scene store is injected
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
-  persistence boundary
+  persistence boundary and DB-backed scene persistence boundary
 - ESLint, Prettier, tests, and TypeScript validation
 
 Not implemented yet:
 
-- fully persistence-backed runtime storage for scenes, encounters, movement
-  state, and streams
+- fully persistence-backed runtime storage for encounters, movement state,
+  streams, and broad live tactical continuity
 - command-surface-wide durable idempotency, event replay, event cursors, or
   distributed coordination
 - full transaction/outbox persistence boundaries
@@ -193,12 +197,15 @@ Reliability notes:
   participant membership, participant roles/display names, assigned character
   IDs, and the stored `activeSceneId` can survive runtime reinitialization and
   allow `reconnect_session` to succeed.
-- Presence, subscriber state, scene contents, movement continuity, encounter
-  continuity, stream delivery, and replay remain non-durable; do not treat the
-  whole command surface as restart-safe.
-- Because scenes remain in memory, a persisted `activeSceneId` can survive
-  restart before the underlying scene definition does. `get_active_scene_state`
-  still requires a durable scene store before tactical continuity is restart-safe.
+- When the DB-backed scene store is injected too, scene definitions can survive
+  runtime reinitialization and `get_scene` can reread them after restart.
+- When the DB-backed character store, DB-backed session snapshot store, and
+  DB-backed scene store are all injected, `get_active_scene_state` can reread a
+  narrow active-scene snapshot after restart if character overlays already
+  contain valid active-scene placement.
+- Presence, subscriber state, encounter continuity, stream delivery, replay,
+  and catch-up semantics remain non-durable; do not treat the whole command
+  surface as restart-safe.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

@@ -1,10 +1,12 @@
 import type { SessionErrorCode } from '@dnd/protocol';
 import type { Scene, SceneId } from '@dnd/shared';
 
+export type SceneRepositoryResult<T> = T | Promise<T>;
+
 export interface SceneRepository {
-  createScene(scene: Scene): Scene;
+  createScene(scene: Scene): SceneRepositoryResult<Scene>;
   getScene(sceneId: SceneId): Scene;
-  saveScene(scene: Scene): Scene;
+  saveScene(scene: Scene): SceneRepositoryResult<Scene>;
 }
 
 export class SceneStoreError extends Error {

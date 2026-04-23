@@ -31,13 +31,19 @@ Durability notes:
   together in the first slice unless a schema design explicitly splits them.
 - `saveCharacter` should remain an upsert-like update only for existing
   characters and should continue to fail for unknown character IDs.
-- Durable characters alone do not yet make full reconnect-after-restart
-  possible; session snapshot durability is also required.
-- After Slice 4, the narrow honest restart baseline is:
+- Durable characters alone still do not make the whole runtime restart-safe;
+  session snapshots and scenes now have narrow durable baselines too, but
+  encounters, stream delivery, replay, and broader live runtime continuity do
+  not.
+- After Slice 6, the narrow honest restart baseline is:
   - a restarted runtime can reread persisted character state through
     `get_character` when the same DB-backed character store is injected,
-  - but callers still need a fresh valid session context because session
-    membership and reconnect state are not durable.
+  - `reconnect_session` can also recover session membership when the DB-backed
+    session store is injected,
+  - `get_active_scene_state` can recover when the DB-backed scene store is
+    injected too and character overlays still point into the active scene,
+  - encounter continuity, stream delivery, and replay still do not survive
+    restart.
 
 ### `SceneRepository`
 
@@ -56,10 +62,15 @@ Persistence implications:
 
 Durability notes:
 
-- This is a clean future durable target, but it is less connected to current
-  combat reliability than characters.
-- Persisting scenes first would not preserve assignments, active scene, HP,
-  downed state, or encounter state after restart.
+- Slice 6 implements the first durable scene baseline through a DB-backed
+  scene store that preloads persisted scenes into fresh in-memory runtime state
+  on startup.
+- Persisted scenes can now survive restart when the same DB-backed scene store
+  is injected.
+- This improves restart-safe active-scene recovery only when paired with the
+  already durable session snapshot and character boundaries.
+- Encounter state, movement SSE continuity, and replay still do not survive
+  restart.
 
 ### `EncounterRepository`
 
@@ -125,8 +136,9 @@ Durability notes:
   - participant presence/subscriber state still resets to `disconnected`,
   - assigned character IDs and stored `activeSceneId` can survive only as
     persisted session snapshot references,
-  - scene contents, encounter state, and tactical continuity still do not
-    survive restart.
+  - Slice 6 closes the scene-definition gap for that baseline when the
+    DB-backed scene store is also injected,
+  - encounter state and stream continuity still do not survive restart.
 
 ### `DbBackedSessionStore`
 
@@ -148,7 +160,34 @@ Durability notes:
   is injected because session identity and participant membership are durable.
 - Participant `connectionStatus` and subscriber state still reset on restart.
 - Stored `activeSceneId` can survive before the underlying scene definition
-  does, because scene persistence remains out of scope.
+  does unless the DB-backed scene store is also injected.
+
+### `DbBackedSceneStore`
+
+Current role:
+
+- Loads persisted scenes from the DB-backed scene record boundary into a fresh
+  in-memory scene map on startup.
+- Keeps runtime scene reads synchronous by serving them from that preloaded
+  in-memory cache.
+- Persists scene writes for:
+  - scene creation,
+  - scene entity placement,
+  - any future scene saves routed through the existing scene repository
+    boundary.
+
+Durability notes:
+
+- `get_scene` can succeed after restart when the DB-backed scene store is
+  injected.
+- `activate_scene_for_session` can reference a persisted scene after restart
+  when the DB-backed session snapshot store is also injected.
+- `get_active_scene_state` can succeed after restart only when:
+  - the session snapshot survives and still points at the active scene,
+  - the scene definition survives,
+  - character overlays survive with valid active-scene placement.
+- This is still read-model recovery, not replay. Encounter state, stream
+  delivery, and tactical event continuity remain non-durable.
 
 ### `CommandIdempotencyStore`
 
@@ -216,25 +255,25 @@ Why:
 - It gives the next slice meaningful durability without forcing a full session,
   encounter, or event-store redesign.
 
-Tradeoffs:
+Tradeoffs at the time of Slice 1:
 
-- Durable characters alone do not make the whole runtime restart-safe because
-  sessions, assignments, active scene, encounters, and idempotency remain
-  in-memory.
+- Durable characters alone would not have made the whole runtime restart-safe
+  because sessions, assignments, active scene, encounters, and idempotency were
+  still in-memory.
 - Character overlays currently contain active-scene position and active
   conditions; persisting characters means persisting some runtime overlay state
   earlier than session/encounter state.
 - Multi-store flows like attack still need real transactions later because
   attack touches both character and encounter state.
 
-Why not `InMemorySessionStore` first:
+Why not `InMemorySessionStore` first at the time of Slice 1:
 
 - It mixes durable session/participant data with process-local subscriber state.
 - It needs a design split before a clean repository replacement.
 - It is more important for restart-safe reconnect, but broader and riskier as a
   first DB slice.
 
-Why not `EncounterRepository` first:
+Why not `EncounterRepository` first at the time of Slice 1:
 
 - Encounters reference session participants and character IDs.
 - Durable encounters without durable sessions/assignments/characters can create
@@ -243,14 +282,14 @@ Why not `EncounterRepository` first:
   encounter durability is best after at least one durable entity repository
   exists.
 
-Why not `SceneRepository` first:
+Why not `SceneRepository` first at the time of Slice 1:
 
 - Scenes are a clean persistence target, but less connected to current combat
   reliability.
-- Persisting scenes first does not preserve HP, positions, downed state,
+- Persisting scenes first would not have preserved HP, positions, downed state,
   assignments, active scene, or encounter state.
 
-Why not durable idempotency first:
+Why not durable idempotency first at the time of Slice 1:
 
 - Durable idempotency is valuable only when it can be committed with the
   durable state mutation it protects.
@@ -388,6 +427,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Proceed with Phase 10 Slice 6: Persistence Exit Pass, or start the next durable
-repository slice if stronger restart-safe tactical continuity needs persisted
-scene or encounter state.
+Proceed with Phase 10 Slice 7: Persistence Exit Pass, or start the next durable
+repository slice only if restart-safe encounter continuity becomes a higher
+priority than closing the current persistence phase cleanly.

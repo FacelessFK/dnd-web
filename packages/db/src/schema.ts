@@ -6,6 +6,7 @@ import type {
   EncounterOverlay,
   ParticipantId,
   ParticipantRole,
+  Scene,
   SceneId,
   Session,
   SessionId,
@@ -32,6 +33,8 @@ export type PersistedSessionSnapshotDocument = {
   participants: PersistedSessionParticipantDocument[];
   session: PersistedSessionDocument;
 };
+
+export type StoredSceneRecordDocument = Scene;
 
 export const characterRecords = pgTable('character_records', {
   characterId: text('character_id').primaryKey().$type<CharacterId>(),
@@ -74,9 +77,22 @@ export const sessionSnapshots = pgTable('session_snapshots', {
     .notNull(),
 });
 
+export const sceneRecords = pgTable('scene_records', {
+  sceneId: text('scene_id').primaryKey().$type<SceneId>(),
+  sessionId: text('session_id').$type<SessionId>().notNull(),
+  record: jsonb('record').$type<StoredSceneRecordDocument>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const dbSchema = {
   characterRecords,
   completedCommandIdempotencyRecords,
+  sceneRecords,
   sessionSnapshots,
 };
 
@@ -84,4 +100,5 @@ export type DbSchema = typeof dbSchema;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
 export type CompletedCommandIdempotencyRecordRow =
   typeof completedCommandIdempotencyRecords.$inferSelect;
+export type SceneRecordRow = typeof sceneRecords.$inferSelect;
 export type SessionSnapshotRow = typeof sessionSnapshots.$inferSelect;

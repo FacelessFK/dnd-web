@@ -12,6 +12,9 @@ import {
   type DndDatabaseUnitOfWorkContext,
   type CompletedCommandIdempotencyRecordRow,
   type CompletedCommandIdempotencyRecordWrite,
+  type SceneRecordDatabase,
+  type SceneRecordRow,
+  type SceneRecordWrite,
   type SessionSnapshotDatabase,
   type SessionSnapshotRow,
   type SessionSnapshotWrite,
@@ -48,6 +51,7 @@ import {
 import { InMemoryCharacterStore } from './character-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
+import { DbBackedSceneStore } from './db-scene-store.js';
 import {
   InMemoryGameRuntime,
   type RuntimeCharacterRepository,
@@ -275,6 +279,71 @@ class InMemorySessionSnapshotDatabase implements SessionSnapshotDatabase {
 
   private nextTimestamp(): Date {
     const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 10, this.clock, 0));
+
+    this.clock += 1;
+
+    return timestamp;
+  }
+
+  private clone<T>(value: T): T {
+    return structuredClone(value);
+  }
+}
+
+class InMemorySceneRecordDatabase implements SceneRecordDatabase {
+  private readonly rows = new Map<string, SceneRecordRow>();
+  private clock = 0;
+
+  async getSceneRecord(sceneId: string): Promise<SceneRecordRow | null> {
+    const row = this.rows.get(sceneId);
+
+    return row ? this.clone(row) : null;
+  }
+
+  async listSceneRecords(): Promise<SceneRecordRow[]> {
+    return [...this.rows.values()].map((row) => this.clone(row));
+  }
+
+  async updateSceneRecord(
+    write: SceneRecordWrite,
+  ): Promise<SceneRecordRow | null> {
+    const existing = this.rows.get(write.sceneId);
+
+    if (!existing) {
+      return null;
+    }
+
+    const row: SceneRecordRow = {
+      sceneId: write.sceneId,
+      sessionId: write.sessionId,
+      record: this.clone(write.record),
+      createdAt: existing.createdAt,
+      updatedAt: this.nextTimestamp(),
+    };
+
+    this.rows.set(write.sceneId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  async upsertSceneRecord(write: SceneRecordWrite): Promise<SceneRecordRow> {
+    const existing = this.rows.get(write.sceneId);
+    const now = this.nextTimestamp();
+    const row: SceneRecordRow = {
+      sceneId: write.sceneId,
+      sessionId: write.sessionId,
+      record: this.clone(write.record),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    this.rows.set(write.sceneId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  private nextTimestamp(): Date {
+    const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 20, this.clock, 0));
 
     this.clock += 1;
 
@@ -1813,9 +1882,10 @@ test('db-backed character state can be reread after runtime reinitialization, wh
   });
 });
 
-test('db-backed session snapshots survive runtime reinitialization for reconnect, while presence and active-scene tactical continuity remain non-durable', async () => {
+test('db-backed session snapshots and scenes survive runtime reinitialization for reconnect and active-scene rereads, while live presence still resets', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
@@ -1825,6 +1895,7 @@ test('db-backed session snapshots survive runtime reinitialization for reconnect
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
   );
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
@@ -2003,6 +2074,42 @@ test('db-backed session snapshots survive runtime reinitialization for reconnect
 
   const sceneId = createdScene.body.data.scene.id;
 
+  const createdSecondScene = await postJson<SceneCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/scenes/command',
+    {
+      commandId: 'session-durability-create-scene-2',
+      type: 'create_scene',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        scene: {
+          name: 'Restart Switch Room',
+          grid: {
+            width: 8,
+            height: 8,
+            cellSizeFeet: 5,
+          },
+        },
+      },
+    },
+  );
+
+  assert.equal(createdSecondScene.status, 200);
+  assert.equal(createdSecondScene.body.ok, true);
+
+  if (
+    !createdSecondScene.body.ok ||
+    !('scene' in createdSecondScene.body.data)
+  ) {
+    return;
+  }
+
+  const secondSceneId = createdSecondScene.body.data.scene.id;
+
   await postJson<SceneCommandResponse>(
     runtimeBeforeRestart,
     idempotencyBeforeRestart,
@@ -2020,10 +2127,35 @@ test('db-backed session snapshots survive runtime reinitialization for reconnect
     },
   );
 
+  const placedCharacter = await postJson<MovementCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/movement/command',
+    {
+      commandId: 'session-durability-place-character-1',
+      type: 'place_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 2,
+          y: 3,
+        },
+      },
+    },
+  );
+
+  assert.equal(placedCharacter.status, 200);
+  assert.equal(placedCharacter.body.ok, true);
+
   const runtimeAfterRestart = new InMemoryGameRuntime(
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
   );
   const idempotencyAfterRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
@@ -2080,6 +2212,26 @@ test('db-backed session snapshots survive runtime reinitialization for reconnect
   assert.equal(rereadCharacter.status, 200);
   assert.equal(rereadCharacter.body.ok, true);
 
+  const rereadScene = await postJson<SceneCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/scenes/command',
+    {
+      commandId: 'session-durability-read-scene-after-restart',
+      type: 'get_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        sceneId,
+      },
+    },
+  );
+
+  assert.equal(rereadScene.status, 200);
+  assert.equal(rereadScene.body.ok, true);
+
   const activeSceneReadAfterRestart = await postJson<MovementCommandResponse>(
     runtimeAfterRestart,
     idempotencyAfterRestart,
@@ -2096,13 +2248,54 @@ test('db-backed session snapshots survive runtime reinitialization for reconnect
     },
   );
 
-  assert.equal(activeSceneReadAfterRestart.status, 404);
-  assert.equal(activeSceneReadAfterRestart.body.ok, false);
+  assert.equal(activeSceneReadAfterRestart.status, 200);
+  assert.equal(activeSceneReadAfterRestart.body.ok, true);
 
-  if (!activeSceneReadAfterRestart.body.ok) {
+  if (
+    rereadScene.body.ok &&
+    'scene' in rereadScene.body.data &&
+    activeSceneReadAfterRestart.body.ok &&
+    'placedCharacters' in activeSceneReadAfterRestart.body.data
+  ) {
+    const playerPlacement =
+      activeSceneReadAfterRestart.body.data.placedCharacters.find(
+        (placement) => placement.participantId === 'player-001',
+      );
+
+    assert.equal(rereadScene.body.data.scene.id, sceneId);
+    assert.equal(activeSceneReadAfterRestart.body.data.activeSceneId, sceneId);
+    assert.equal(playerPlacement?.position.x, 2);
+    assert.equal(playerPlacement?.position.y, 3);
+  }
+
+  const activatePersistedSceneAfterRestart =
+    await postJson<SceneCommandResponse>(
+      runtimeAfterRestart,
+      idempotencyAfterRestart,
+      '/api/scenes/command',
+      {
+        commandId: 'session-durability-activate-persisted-scene-after-restart',
+        type: 'activate_scene_for_session',
+        actor: {
+          participantId: 'dm-001',
+        },
+        payload: {
+          sessionId,
+          sceneId: secondSceneId,
+        },
+      },
+    );
+
+  assert.equal(activatePersistedSceneAfterRestart.status, 200);
+  assert.equal(activatePersistedSceneAfterRestart.body.ok, true);
+
+  if (
+    activatePersistedSceneAfterRestart.body.ok &&
+    'state' in activatePersistedSceneAfterRestart.body.data
+  ) {
     assert.equal(
-      activeSceneReadAfterRestart.body.error.code,
-      'scene_not_found',
+      activatePersistedSceneAfterRestart.body.data.state.session.activeSceneId,
+      secondSceneId,
     );
   }
 });

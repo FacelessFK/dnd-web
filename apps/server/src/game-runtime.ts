@@ -105,6 +105,7 @@ import {
 import {
   InMemorySceneStore,
   SceneRepository,
+  type SceneRepositoryResult,
   SceneStoreError,
 } from './scene-store.js';
 import {
@@ -158,18 +159,18 @@ type ResolvedAttack = {
   nextTargetRecord: StoredCharacterRecord | null;
 };
 
-type RuntimeCharacterRepositoryResult<T> = T | Promise<T>;
+type RuntimeRepositoryResult<T> = T | Promise<T>;
 
 export type RuntimeCharacterRepository = {
   createCharacter(
     record: StoredCharacterRecord,
-  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+  ): RuntimeRepositoryResult<StoredCharacterRecord>;
   getCharacter(
     characterId: CharacterId,
-  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+  ): RuntimeRepositoryResult<StoredCharacterRecord>;
   saveCharacter(
     record: StoredCharacterRecord,
-  ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
+  ): RuntimeRepositoryResult<StoredCharacterRecord>;
 };
 
 type RuntimeSessionMutationResult<
@@ -744,8 +745,11 @@ export class InMemoryGameRuntime<
     this.assertActorIsDm(actor, 'create scenes');
     assertGridDefinitionIsValid(command.payload.scene.grid);
 
-    return this.scenes.createScene(
-      createSceneRecord(snapshot.session.id, command.payload.scene),
+    return this.resolveRepositoryResult(
+      this.scenes.createScene(
+        createSceneRecord(snapshot.session.id, command.payload.scene),
+      ),
+      (scene) => scene,
     );
   }
 
@@ -806,11 +810,14 @@ export class InMemoryGameRuntime<
 
     assertSceneEntityPlacement(scene, entity);
 
-    return this.scenes.saveScene({
-      ...scene,
-      entities: [...scene.entities, entity],
-      updatedAt: this.now(),
-    });
+    return this.resolveRepositoryResult(
+      this.scenes.saveScene({
+        ...scene,
+        entities: [...scene.entities, entity],
+        updatedAt: this.now(),
+      }),
+      (updatedScene) => updatedScene,
+    );
   }
 
   placeCharacterInActiveScene(
@@ -1305,7 +1312,7 @@ export class InMemoryGameRuntime<
   }
 
   private resolveRepositoryResult<T, TResult>(
-    result: RuntimeCharacterRepositoryResult<T>,
+    result: RuntimeRepositoryResult<T> | SceneRepositoryResult<T>,
     resolve: (value: T) => TResult | Promise<TResult>,
   ): TResult {
     if (this.isPromiseLike(result)) {
@@ -1316,7 +1323,7 @@ export class InMemoryGameRuntime<
   }
 
   private resolveRepositoryResults<T extends readonly unknown[], TResult>(
-    results: { [K in keyof T]: RuntimeCharacterRepositoryResult<T[K]> },
+    results: { [K in keyof T]: RuntimeRepositoryResult<T[K]> },
     resolve: (values: T) => TResult | Promise<TResult>,
   ): TResult {
     if (results.some((result) => this.isPromiseLike(result))) {
@@ -1340,7 +1347,10 @@ export class InMemoryGameRuntime<
   }
 
   private isPromiseLike<T>(
-    value: RuntimeCharacterRepositoryResult<T> | RuntimeSessionStoreResult<T>,
+    value:
+      | RuntimeRepositoryResult<T>
+      | RuntimeSessionStoreResult<T>
+      | SceneRepositoryResult<T>,
   ): value is Promise<T> {
     return (
       !!value &&
