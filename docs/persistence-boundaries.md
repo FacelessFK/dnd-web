@@ -227,7 +227,35 @@ Durable idempotency should live at the server command boundary, after protocol
 parsing and before runtime mutation, but it must participate in the same real
 database transaction as the durable mutation.
 
-Recommended future flow for mutating commands:
+Slice 3 implemented the first storage boundary:
+
+- `completed_command_idempotency_records` stores successful command responses by
+  the existing deterministic key and stable fingerprint.
+- The server idempotency interface is awaitable, so a DB-backed store can be
+  injected without changing HTTP routes, protocol schemas, response shapes, SSE
+  shapes, or gameplay behavior.
+- The default local server path still uses `InMemoryCommandIdempotencyStore`.
+- The DB-backed store persists only character-record mutation command types by
+  default:
+  - `create_character`,
+  - `update_character`,
+  - `finalize_character`,
+  - `dm_set_character_current_hp`,
+  - `dm_set_character_active_conditions`.
+- Unsupported command types use an in-memory fallback because their underlying
+  session, scene, encounter, assignment, movement, or stream state is still
+  non-durable.
+- The follow-up transactional boundary adds `DndDatabaseUnitOfWork` and
+  `DbBackedCharacterCommandTransactionBoundary` so supported character-mutation
+  commands can perform idempotency lookup/conflict check, character write, and
+  successful idempotency response write in one database transaction.
+- For supported transactional DM character updates, `character_state` SSE is
+  buffered during the transaction and published only after commit.
+
+This means Slice 3 provides a real durable idempotency boundary, but not a full
+restart-safe guarantee for the entire command surface.
+
+Recommended future flow for fully durable mutating commands:
 
 1. Parse and validate the command body with the existing protocol schema.
 2. Determine whether the command is mutating. Read commands remain uncached.
@@ -258,6 +286,8 @@ Rules:
 - Do not publish SSE before the durable transaction commits.
 - Duplicate successful retries should not publish new SSE events.
 - Until an outbox exists, publication failure after commit remains a known risk.
+- Until durable session/scene/encounter repositories exist, do not widen durable
+  idempotency to those command types.
 
 ## Outbox Recommendation
 
@@ -322,4 +352,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Proceed with Phase 10 Slice 3: Durable Command Idempotency Baseline.
+Proceed with Phase 10 Slice 4: Reconnect Durability Baseline, or add the next
+durable repository slice first if reconnect durability needs persistent
+session/scene/encounter read models.

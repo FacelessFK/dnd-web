@@ -21,6 +21,7 @@ import type {
   CharacterAssignmentSuccess,
   CharacterInput,
   CharacterResource,
+  CharacterStateUpdate,
   CharacterStateUpdateReason,
   CharacterUpdateInput,
   CombatEvent,
@@ -177,6 +178,9 @@ export class InMemoryGameRuntime<
     readonly scenes: SceneRepository = new InMemorySceneStore(),
     readonly encounters: EncounterRepository = new InMemoryEncounterStore(),
     readonly d20Roller: () => number = () => rollD20(),
+    private readonly characterStateUpdateSink?: (
+      update: CharacterStateUpdate,
+    ) => void,
   ) {}
 
   createSession(command: CreateSessionCommand) {
@@ -217,6 +221,23 @@ export class InMemoryGameRuntime<
     connectionId: string,
   ): void {
     this.sessions.disconnectParticipant(sessionId, participantId, connectionId);
+  }
+
+  withCharacterRepository<TNextCharacters extends RuntimeCharacterRepository>(
+    characters: TNextCharacters,
+    options: {
+      characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
+    } = {},
+  ): InMemoryGameRuntime<TNextCharacters> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      characters,
+      this.scenes,
+      this.encounters,
+      this.d20Roller,
+      options.characterStateUpdateSink,
+    );
   }
 
   createCharacter(command: CreateCharacterCommand): CharacterResource {
@@ -1833,7 +1854,7 @@ export class InMemoryGameRuntime<
     reason: CharacterStateUpdateReason;
     activeConditions?: string[];
   }): void {
-    this.sessions.publishCharacterStateUpdate({
+    const update: CharacterStateUpdate = {
       type: 'character_state',
       reason: params.reason,
       sessionId: params.sessionId,
@@ -1843,7 +1864,14 @@ export class InMemoryGameRuntime<
       ...(params.activeConditions
         ? { activeConditions: params.activeConditions }
         : {}),
-    });
+    };
+
+    if (this.characterStateUpdateSink) {
+      this.characterStateUpdateSink(structuredClone(update));
+      return;
+    }
+
+    this.sessions.publishCharacterStateUpdate(update);
   }
 
   private publishMovementStateUpdate(params: {

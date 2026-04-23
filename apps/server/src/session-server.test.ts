@@ -7,6 +7,11 @@ import {
   type CharacterRecordDatabase,
   type CharacterRecordRow,
   type CharacterRecordWrite,
+  type CommandIdempotencyRecordDatabase,
+  type DndDatabaseUnitOfWork,
+  type DndDatabaseUnitOfWorkContext,
+  type CompletedCommandIdempotencyRecordRow,
+  type CompletedCommandIdempotencyRecordWrite,
 } from '@dnd/db';
 import type { CharacterId } from '@dnd/shared';
 
@@ -32,9 +37,13 @@ import {
   type SessionStreamEvent,
 } from '@dnd/protocol';
 
-import { InMemoryCommandIdempotencyStore } from './command-idempotency-store.js';
+import {
+  InMemoryCommandIdempotencyStore,
+  type CommandIdempotencyStore,
+} from './command-idempotency-store.js';
 import { InMemoryCharacterStore } from './character-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
+import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import {
   InMemoryGameRuntime,
   type RuntimeCharacterRepository,
@@ -49,9 +58,10 @@ type JsonResponse<T> = {
 
 async function postJson<TResponse>(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository>,
-  idempotency: InMemoryCommandIdempotencyStore,
+  idempotency: CommandIdempotencyStore,
   path: string,
   body: unknown,
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -72,6 +82,7 @@ async function postJson<TResponse>(
     response as never,
     runtime,
     idempotency,
+    characterCommandTransaction,
   );
 
   return {
@@ -124,6 +135,7 @@ function createMockResponse() {
 function subscribeToSessionEvents(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository>,
   sessionId: string,
+  onSend: (update: SessionStreamEvent) => void = () => undefined,
 ) {
   const updates: SessionStreamEvent[] = [];
 
@@ -131,6 +143,7 @@ function subscribeToSessionEvents(
     connectionId: `test-dm-stream-${sessionId}`,
     close: () => undefined,
     send: (update) => {
+      onSend(update);
       updates.push(update);
     },
   });
@@ -141,6 +154,10 @@ function subscribeToSessionEvents(
 class InMemoryCharacterRecordDatabase implements CharacterRecordDatabase {
   private readonly rows = new Map<CharacterId, CharacterRecordRow>();
   private clock = 0;
+
+  get recordCount(): number {
+    return this.rows.size;
+  }
 
   async upsertCharacterRecord(
     write: CharacterRecordWrite,
@@ -188,6 +205,20 @@ class InMemoryCharacterRecordDatabase implements CharacterRecordDatabase {
     return this.clone(row);
   }
 
+  cloneRows(): Map<CharacterId, CharacterRecordRow> {
+    return new Map(
+      [...this.rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+  }
+
+  replaceRows(rows: Map<CharacterId, CharacterRecordRow>): void {
+    this.rows.clear();
+
+    for (const [key, row] of rows.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
+  }
+
   private nextTimestamp(): Date {
     const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 0, this.clock, 0));
 
@@ -198,6 +229,109 @@ class InMemoryCharacterRecordDatabase implements CharacterRecordDatabase {
 
   private clone<T>(value: T): T {
     return structuredClone(value);
+  }
+}
+
+class InMemoryCommandIdempotencyRecordDatabase implements CommandIdempotencyRecordDatabase {
+  private readonly rows = new Map<
+    string,
+    CompletedCommandIdempotencyRecordRow
+  >();
+  insertCount = 0;
+
+  get recordCount(): number {
+    return this.rows.size;
+  }
+
+  async getCompletedCommandIdempotencyRecord(
+    idempotencyKey: string,
+  ): Promise<CompletedCommandIdempotencyRecordRow | null> {
+    const row = this.rows.get(idempotencyKey);
+
+    return row ? this.clone(row) : null;
+  }
+
+  async insertCompletedCommandIdempotencyRecord(
+    write: CompletedCommandIdempotencyRecordWrite,
+  ): Promise<CompletedCommandIdempotencyRecordRow | null> {
+    if (this.rows.has(write.idempotencyKey)) {
+      return null;
+    }
+
+    const row: CompletedCommandIdempotencyRecordRow = {
+      actorParticipantId: write.actorParticipantId,
+      category: write.category,
+      commandId: write.commandId,
+      commandType: write.commandType,
+      createdAt: new Date(Date.UTC(2026, 3, 23, 0, 0, this.insertCount, 0)),
+      fingerprint: write.fingerprint,
+      idempotencyKey: write.idempotencyKey,
+      response: this.clone(write.response),
+      sessionId: write.sessionId,
+    };
+
+    this.insertCount += 1;
+    this.rows.set(write.idempotencyKey, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  cloneRows(): Map<string, CompletedCommandIdempotencyRecordRow> {
+    return new Map(
+      [...this.rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+  }
+
+  replaceRows(rows: Map<string, CompletedCommandIdempotencyRecordRow>): void {
+    this.rows.clear();
+
+    for (const [key, row] of rows.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
+  }
+
+  private clone<T>(value: T): T {
+    return structuredClone(value);
+  }
+}
+
+class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
+  committedCount = 0;
+  failBeforeCommit = false;
+
+  constructor(
+    private readonly characters: InMemoryCharacterRecordDatabase,
+    private readonly commandIdempotency: InMemoryCommandIdempotencyRecordDatabase,
+  ) {}
+
+  async transaction<T>(
+    run: (context: DndDatabaseUnitOfWorkContext) => Promise<T>,
+  ): Promise<T> {
+    const transactionalCharacters = new InMemoryCharacterRecordDatabase();
+    const transactionalCommandIdempotency =
+      new InMemoryCommandIdempotencyRecordDatabase();
+
+    transactionalCharacters.replaceRows(this.characters.cloneRows());
+    transactionalCommandIdempotency.replaceRows(
+      this.commandIdempotency.cloneRows(),
+    );
+
+    const result = await run({
+      characters: transactionalCharacters,
+      commandIdempotency: transactionalCommandIdempotency,
+    });
+
+    if (this.failBeforeCommit) {
+      throw new Error('Simulated transaction commit failure.');
+    }
+
+    this.characters.replaceRows(transactionalCharacters.cloneRows());
+    this.commandIdempotency.replaceRows(
+      transactionalCommandIdempotency.cloneRows(),
+    );
+    this.committedCount += 1;
+
+    return result;
   }
 }
 
@@ -1017,12 +1151,20 @@ test('invalid encounter movement-usage payloads are rejected during command vali
 
 test('server command paths can use the DB-backed character repository without public shape changes', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+  );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
   );
-  const idempotency = new InMemoryCommandIdempotencyStore();
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let characterCommandTransaction =
+    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
   const session = await postJson<SessionCommandResponse>(
     runtime,
     idempotency,
@@ -1049,6 +1191,52 @@ test('server command paths can use the DB-backed character repository without pu
   }
 
   const sessionId = session.body.data.sessionId;
+  const createCharacterCommand = {
+    commandId: 'db-backed-runtime-create-character',
+    type: 'create_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      ownerParticipantId: 'player-001',
+      character: {
+        name: 'Aria',
+        level: 5,
+        className: 'Wizard',
+        speciesOrRace: 'Elf',
+        background: 'Sage',
+        abilities: {
+          str: 8,
+          dex: 14,
+          con: 13,
+          int: 16,
+          wis: 12,
+          cha: 10,
+        },
+        hp: {
+          max: 26,
+          current: 26,
+          temp: 0,
+        },
+        armorClass: 13,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  };
+
+  const failedBeforeJoin = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    createCharacterCommand,
+    characterCommandTransaction,
+  );
+
+  assert.equal(failedBeforeJoin.body.ok, false);
+  assert.equal(idempotencyDatabase.recordCount, 0);
 
   await postJson<SessionCommandResponse>(
     runtime,
@@ -1072,49 +1260,53 @@ test('server command paths can use the DB-backed character repository without pu
     runtime,
     idempotency,
     '/api/characters/command',
+    createCharacterCommand,
+    characterCommandTransaction,
+  );
+  characterCommandTransaction = new DbBackedCharacterCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const duplicateCreated = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    createCharacterCommand,
+    characterCommandTransaction,
+  );
+  const conflictingCreate = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
     {
-      commandId: 'db-backed-runtime-create-character',
-      type: 'create_character',
-      actor: {
-        participantId: 'player-001',
-      },
+      ...createCharacterCommand,
       payload: {
-        sessionId,
-        ownerParticipantId: 'player-001',
+        ...createCharacterCommand.payload,
         character: {
-          name: 'Aria',
-          level: 5,
-          className: 'Wizard',
-          speciesOrRace: 'Elf',
-          background: 'Sage',
-          abilities: {
-            str: 8,
-            dex: 14,
-            con: 13,
-            int: 16,
-            wis: 12,
-            cha: 10,
-          },
-          hp: {
-            max: 26,
-            current: 26,
-            temp: 0,
-          },
-          armorClass: 13,
-          speed: 30,
-          notes: null,
-          meta: {},
+          ...createCharacterCommand.payload.character,
+          name: 'Conflicting Aria',
         },
       },
     },
+    characterCommandTransaction,
   );
 
   assert.equal(created.status, 200);
+  assert.equal(duplicateCreated.status, 200);
+  assert.equal(conflictingCreate.status, 409);
   assert.equal(
     characterCommandSuccessSchema.safeParse(created.body).success,
     true,
   );
   assert.equal(created.body.ok, true);
+  assert.deepEqual(duplicateCreated.body, created.body);
+  assert.equal(conflictingCreate.body.ok, false);
+
+  if (!conflictingCreate.body.ok) {
+    assert.equal(conflictingCreate.body.error.code, 'command_id_conflict');
+  }
+
+  assert.equal(characterDatabase.recordCount, 1);
+  assert.equal(idempotencyDatabase.recordCount, 1);
 
   if (!created.body.ok || !('character' in created.body.data)) {
     return;
@@ -1137,6 +1329,7 @@ test('server command paths can use the DB-backed character repository without pu
         characterId,
       },
     },
+    characterCommandTransaction,
   );
   await postJson<CharacterCommandResponse>(
     runtime,
@@ -1156,25 +1349,43 @@ test('server command paths can use the DB-backed character repository without pu
     },
   );
 
-  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
   const updateCountBeforeHp = updates.length;
+  const markerCountBeforeHp = commitMarkers.length;
+  const commitCountBeforeHp = unitOfWork.committedCount;
+  const dmHpCommand = {
+    commandId: 'db-backed-runtime-dm-hp',
+    type: 'dm_set_character_current_hp',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+      currentHp: 5,
+    },
+  };
   const hpUpdate = await postJson<DmCommandResponse>(
     runtime,
     idempotency,
     '/api/dm/command',
-    {
-      commandId: 'db-backed-runtime-dm-hp',
-      type: 'dm_set_character_current_hp',
-      actor: {
-        participantId: 'dm-001',
-      },
-      payload: {
-        sessionId,
-        participantId: 'player-001',
-        characterId,
-        currentHp: 5,
-      },
-    },
+    dmHpCommand,
+    characterCommandTransaction,
+  );
+  const updateCountAfterHp = updates.length;
+  characterCommandTransaction = new DbBackedCharacterCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const duplicateHpUpdate = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    dmHpCommand,
+    characterCommandTransaction,
   );
   const reread = await postJson<CharacterCommandResponse>(
     runtime,
@@ -1194,16 +1405,22 @@ test('server command paths can use the DB-backed character repository without pu
   );
   const persistedRow = await characterDatabase.getCharacterRecord(characterId);
   const newUpdates = updates.slice(updateCountBeforeHp);
+  const newCommitMarkers = commitMarkers.slice(markerCountBeforeHp);
 
   assert.equal(hpUpdate.status, 200);
+  assert.equal(duplicateHpUpdate.status, 200);
   assert.equal(dmCommandSuccessSchema.safeParse(hpUpdate.body).success, true);
+  assert.deepEqual(duplicateHpUpdate.body, hpUpdate.body);
+  assert.equal(updates.length, updateCountAfterHp);
   assert.equal(reread.status, 200);
   assert.equal(reread.body.ok, true);
   assert.equal(persistedRow?.record.character.hp.current, 5);
+  assert.equal(idempotencyDatabase.recordCount, 3);
   assert.deepEqual(
     newUpdates.map((update) => update.type),
     ['character_state'],
   );
+  assert.deepEqual(newCommitMarkers, [commitCountBeforeHp + 1]);
   assert.equal(newUpdates[0]?.type, 'character_state');
 
   if (!reread.body.ok || !('character' in reread.body.data)) {
@@ -1217,6 +1434,49 @@ test('server command paths can use the DB-backed character repository without pu
     assert.equal(newUpdates[0].characterId, characterId);
     assert.equal(newUpdates[0].hp.current, 5);
   }
+
+  const updateCountBeforeFailedCommit = updates.length;
+  const recordCountBeforeFailedCommit = idempotencyDatabase.recordCount;
+  const originalConsoleError = console.error;
+
+  unitOfWork.failBeforeCommit = true;
+  console.error = () => undefined;
+
+  try {
+    const failedCommit = await postJson<DmCommandResponse>(
+      runtime,
+      idempotency,
+      '/api/dm/command',
+      {
+        commandId: 'db-backed-runtime-dm-conditions-commit-fails',
+        type: 'dm_set_character_active_conditions',
+        actor: {
+          participantId: 'dm-001',
+        },
+        payload: {
+          sessionId,
+          participantId: 'player-001',
+          characterId,
+          activeConditions: ['prone'],
+        },
+      },
+      characterCommandTransaction,
+    );
+
+    assert.equal(failedCommit.status, 500);
+    assert.equal(failedCommit.body.ok, false);
+  } finally {
+    console.error = originalConsoleError;
+    unitOfWork.failBeforeCommit = false;
+  }
+
+  assert.equal(updates.length, updateCountBeforeFailedCommit);
+  assert.equal(idempotencyDatabase.recordCount, recordCountBeforeFailedCommit);
+  assert.deepEqual(
+    (await characterDatabase.getCharacterRecord(characterId))?.record.overlay
+      .activeConditions,
+    [],
+  );
 });
 
 test('encounter success payloads are validated as authoritative turn-order responses', () => {

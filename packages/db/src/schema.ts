@@ -18,9 +18,29 @@ export const characterRecords = pgTable('character_records', {
     .notNull(),
 });
 
+export const completedCommandIdempotencyRecords = pgTable(
+  'completed_command_idempotency_records',
+  {
+    idempotencyKey: text('idempotency_key').primaryKey(),
+    category: text('category').notNull(),
+    commandType: text('command_type').notNull(),
+    commandId: text('command_id').notNull(),
+    actorParticipantId: text('actor_participant_id').notNull(),
+    sessionId: text('session_id'),
+    fingerprint: text('fingerprint').notNull(),
+    response: jsonb('response').$type<unknown>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+);
+
 export const dbSchema = {
   characterRecords,
+  completedCommandIdempotencyRecords,
 };
 
 export type DbSchema = typeof dbSchema;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
+export type CompletedCommandIdempotencyRecordRow =
+  typeof completedCommandIdempotencyRecords.$inferSelect;

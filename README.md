@@ -37,7 +37,8 @@ Implemented so far:
 - downed actor gating derived from `hp.current === 0`
 - backend DM current HP, condition tag, active-scene reposition, turn-usage,
   current-turn, and encounter-end override commands
-- in-memory command idempotency for successful mutating command retries
+- in-memory command idempotency by default, plus a DB-backed durable
+  idempotency boundary for supported character-record mutation commands
 - reconnect recovery through read models
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence groundwork
@@ -45,9 +46,10 @@ Implemented so far:
 
 Not implemented yet:
 
-- fully persistence-backed runtime storage for sessions, scenes, encounters,
-  idempotency, and streams
-- durable idempotency, event replay, event cursors, or distributed coordination
+- fully persistence-backed runtime storage for sessions, scenes, encounters, and
+  streams
+- command-surface-wide durable idempotency, event replay, event cursors, or
+  distributed coordination
 - full transaction/outbox persistence boundaries
 - character builder/library product UI
 - top-down tactical battle UX, map/adventure editor, or frontend DM panel
@@ -161,14 +163,24 @@ Current response/error behavior:
 
 Reliability notes:
 
-- Mutating commands use `commandId` and are protected by in-memory idempotency.
+- Mutating commands use `commandId` and are protected by in-memory idempotency by
+  default.
 - Duplicate successful mutating command retries return the cached success
   response without repeating side effects.
 - Failed command responses are not cached.
 - Read commands are intentionally not cached by idempotency.
 - Command idempotency is scoped by command category, command type, command ID,
   actor participant ID, and session ID when available.
-- Idempotency is process-local and does not survive server restart.
+- Phase 10 adds a DB-backed idempotency record boundary for supported
+  character-record mutation commands when the DB-backed stores are injected:
+  `create_character`, `update_character`, `finalize_character`,
+  `dm_set_character_current_hp`, and
+  `dm_set_character_active_conditions`.
+- For those supported injected DB paths, character writes and durable
+  successful-command idempotency records can be committed in the same real DB
+  transaction.
+- Session, scene, movement, encounter, assignment, stream, and replay semantics
+  remain non-durable; do not treat the whole command surface as restart-safe.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

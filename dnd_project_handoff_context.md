@@ -56,8 +56,14 @@ Important boundary:
 
 - DB-backed character storage is usable, but it is not the default server
   startup path yet.
-- Sessions, scenes, encounters, command idempotency, SSE delivery, replay, and
-  outbox behavior remain non-durable.
+- Phase 10 Slice 3 added a DB-backed completed-command idempotency record
+  boundary for supported character-record mutation commands when the DB-backed
+  stores are injected.
+- The follow-up transaction slice lets supported character mutations commit the
+  character write and durable idempotency success record in one real DB
+  transaction, with `character_state` SSE buffered until commit.
+- Sessions, scenes, encounters, most command idempotency, SSE delivery, replay,
+  and outbox behavior remain non-durable.
 
 ## Completed Combat Foundations
 
@@ -145,7 +151,9 @@ should recover current authoritative state through read models.
 - No runtime-wide database persistence.
 - Character records have a DB-backed repository boundary, but default local
   server startup remains in-memory unless a DB-backed repository is injected.
-- No durable idempotency.
+- No command-surface-wide durable idempotency. Durable idempotency records exist
+  only for supported character-record mutation commands when the DB-backed
+  idempotency/transaction boundary is injected.
 - No durable event replay.
 - No global event cursor.
 - No event sourcing.
@@ -168,12 +176,13 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Implement Phase 10 Slice 3 — Durable Command Idempotency Baseline.
+1. Implement Phase 10 Slice 4 — Reconnect Durability Baseline, or add the next
+   durable repository slice first if reconnect durability needs persistent
+   session/scene/encounter read models.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.
-3. Continue durable repository expansion later for sessions, scenes, and
-   encounters.
+3. Continue durable repository expansion for sessions, scenes, and encounters.
 4. Add outbox/replay only as dedicated future slices once durable writes need
    reliable publication.
 5. Start product-surface work, such as character onboarding or top-down tactical

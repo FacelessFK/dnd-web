@@ -11,6 +11,11 @@ import {
 } from './schema.js';
 
 export type DndDatabase = NodePgDatabase<typeof dbSchema>;
+export type DndTransaction = Parameters<
+  Parameters<DndDatabase['transaction']>[0]
+>[0];
+
+type CharacterRecordDatabaseClient = DndDatabase | DndTransaction;
 
 export type CharacterRecordWrite = {
   characterId: CharacterId;
@@ -30,7 +35,7 @@ export interface CharacterRecordDatabase {
 }
 
 export class DrizzleCharacterRecordDatabase implements CharacterRecordDatabase {
-  constructor(private readonly db: DndDatabase) {}
+  constructor(private readonly db: CharacterRecordDatabaseClient) {}
 
   async upsertCharacterRecord(
     write: CharacterRecordWrite,

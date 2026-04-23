@@ -290,12 +290,13 @@ Completed outcome:
 
 ### Slice 3 — Durable Command Idempotency Baseline
 
-Status: planned.
+Status: completed.
 
 Goal:
 
 - Move the current process-local successful-command cache toward durable command
-  deduplication.
+  deduplication without overclaiming restart safety for non-durable runtime
+  stores.
 
 Tasks:
 
@@ -312,13 +313,76 @@ Tasks:
 - Keep read commands uncached.
 - Add restart-oriented tests where practical.
 
+Completed outcome:
+
+- Added a Drizzle/Postgres `completed_command_idempotency_records` table for
+  successful command response records.
+- Added a DB access boundary and server-side `DbBackedCommandIdempotencyStore`.
+- Made the server idempotency boundary awaitable while preserving the existing
+  public HTTP/protocol/SSE behavior.
+- Kept `InMemoryCommandIdempotencyStore` as the default local/server startup
+  behavior.
+- Added a partially durable idempotency integration that persists only
+  character-record mutation command types where the current durable repository
+  boundary can honestly support the mutation result:
+  - `create_character`,
+  - `update_character`,
+  - `finalize_character`,
+  - `dm_set_character_current_hp`,
+  - `dm_set_character_active_conditions`.
+- Kept all other command types on the process-local in-memory fallback because
+  sessions, scenes, encounters, assignments, movement state, SSE delivery,
+  replay, and outbox are still non-durable.
+- Added a real DB unit-of-work path for supported durable character-mutation
+  commands so the idempotency lookup/conflict check, character write, and
+  successful idempotency response record are executed in one database
+  transaction.
+- Buffered `character_state` SSE for supported transactional DM character
+  mutations and published it only after the transaction commits.
+
 Acceptance:
 
-- Duplicate successful mutating command retries do not repeat side effects after
-  a durable read.
+- Duplicate successful supported character-record mutation command retries do
+  not repeat side effects after a durable idempotency read.
 - Command ID conflicts still fail before runtime mutation.
 - Failed command responses remain uncached.
-- No distributed/multi-process guarantee is claimed unless actually built.
+- Unsupported command types remain protected only by the process-local fallback.
+- No distributed/multi-process or full restart-safe runtime guarantee is
+  claimed.
+
+### Slice 3B — Transactional Character Idempotency Boundary
+
+Status: completed.
+
+Goal:
+
+- Close the atomicity gap for the currently supported durable character-mutation
+  commands.
+
+Completed outcome:
+
+- Added `DndDatabaseUnitOfWork` and `DrizzleDndDatabaseUnitOfWork`.
+- Added `DbBackedCharacterCommandTransactionBoundary`.
+- The supported transactional command types are:
+  - `create_character`,
+  - `update_character`,
+  - `finalize_character`,
+  - `dm_set_character_current_hp`,
+  - `dm_set_character_active_conditions`.
+- Unsupported command types still use the existing non-transactional path.
+- No outbox or replay behavior was added.
+
+Acceptance:
+
+- Successful supported character mutations write both character state and the
+  durable completed-command idempotency record atomically.
+- Duplicate retries return the cached durable success response without
+  re-running runtime mutation.
+- `command_id_conflict` still rejects conflicting command fingerprints before
+  runtime mutation.
+- Failed commands do not persist durable idempotency records.
+- `character_state` SSE is published only after commit for supported
+  transactional DM character updates.
 
 ### Slice 4 — Reconnect Durability Baseline
 

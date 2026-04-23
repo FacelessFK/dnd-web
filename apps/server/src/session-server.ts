@@ -54,6 +54,7 @@ import {
   type CommandIdempotencyCategory,
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
+import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import {
@@ -87,7 +88,9 @@ type GameRuntime = InMemoryGameRuntime<RuntimeCharacterRepository>;
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
 ): {
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
   server: Server;
   runtime: GameRuntime;
@@ -95,13 +98,20 @@ export function createSessionServer(
 } {
   const server = createServer(async (request, response) => {
     try {
-      await handleRequest(request, response, runtime, idempotency);
+      await handleRequest(
+        request,
+        response,
+        runtime,
+        idempotency,
+        characterCommandTransaction,
+      );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
     }
   });
 
   return {
+    characterCommandTransaction,
     idempotency,
     server,
     runtime,
@@ -114,6 +124,7 @@ export async function handleRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -145,6 +156,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      characterCommandTransaction,
     );
     return;
   }
@@ -160,7 +172,13 @@ export async function handleRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/api/dm/command') {
-    await handleDmCommandRequest(request, response, runtime, idempotency);
+    await handleDmCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      characterCommandTransaction,
+    );
     return;
   }
 
@@ -246,10 +264,11 @@ async function handleSessionCommandRequest(
 
   try {
     const command = commandResult.data;
-    const cachedSuccess = idempotency.getCachedSuccess<SessionCommandSuccess>({
-      category: 'session',
-      command,
-    });
+    const cachedSuccess =
+      await idempotency.getCachedSuccess<SessionCommandSuccess>({
+        category: 'session',
+        command,
+      });
 
     if (cachedSuccess) {
       sendJson(response, 200, cachedSuccess, sessionCommandSuccessSchema);
@@ -282,7 +301,7 @@ async function handleSessionCommandRequest(
       },
     };
 
-    idempotency.cacheSuccess({
+    await idempotency.cacheSuccess({
       category: 'session',
       command,
       response: success,
@@ -298,6 +317,7 @@ async function handleCharacterCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -332,8 +352,49 @@ async function handleCharacterCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_character' ? null : 'character';
+
+    if (
+      idempotencyCategory &&
+      characterCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      })
+    ) {
+      const success = await characterCommandTransaction.run({
+        category: idempotencyCategory,
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          switch (command.type) {
+            case 'create_character':
+            case 'update_character':
+            case 'finalize_character': {
+              const data =
+                command.type === 'create_character'
+                  ? await transactionRuntime.createCharacter(command)
+                  : command.type === 'update_character'
+                    ? await transactionRuntime.updateCharacter(command)
+                    : await transactionRuntime.finalizeCharacter(command);
+
+              return {
+                ok: true,
+                data,
+              } satisfies CharacterCommandSuccess;
+            }
+            default:
+              throw new Error(
+                `Unsupported transactional character command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      sendCharacterSuccess(response, command.type, success);
+      return;
+    }
+
     const cachedSuccess = idempotencyCategory
-      ? idempotency.getCachedSuccess<
+      ? await idempotency.getCachedSuccess<
           CharacterAssignmentSuccess | CharacterCommandSuccess
         >({
           category: idempotencyCategory,
@@ -359,7 +420,7 @@ async function handleCharacterCommandRequest(
         };
 
         if (idempotencyCategory) {
-          idempotency.cacheSuccess({
+          await idempotency.cacheSuccess({
             category: idempotencyCategory,
             command,
             response: success,
@@ -379,7 +440,7 @@ async function handleCharacterCommandRequest(
           data,
         };
 
-        idempotency.cacheSuccess({
+        await idempotency.cacheSuccess({
           category: 'character',
           command,
           response: success,
@@ -393,7 +454,7 @@ async function handleCharacterCommandRequest(
           data: await runtime.assignCharacterToParticipant(command),
         };
 
-        idempotency.cacheSuccess({
+        await idempotency.cacheSuccess({
           category: 'character',
           command,
           response: success,
@@ -449,7 +510,7 @@ async function handleSceneCommandRequest(
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_scene' ? null : 'scene';
     const cachedSuccess = idempotencyCategory
-      ? idempotency.getCachedSuccess<
+      ? await idempotency.getCachedSuccess<
           SceneActivationSuccess | SceneCommandSuccess
         >({
           category: idempotencyCategory,
@@ -480,7 +541,7 @@ async function handleSceneCommandRequest(
         };
 
         if (idempotencyCategory) {
-          idempotency.cacheSuccess({
+          await idempotency.cacheSuccess({
             category: idempotencyCategory,
             command,
             response: success,
@@ -495,7 +556,7 @@ async function handleSceneCommandRequest(
           data: await runtime.activateSceneForSession(command),
         };
 
-        idempotency.cacheSuccess({
+        await idempotency.cacheSuccess({
           category: 'scene',
           command,
           response: success,
@@ -551,7 +612,7 @@ async function handleMovementCommandRequest(
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_active_scene_state' ? null : 'movement';
     const cachedSuccess = idempotencyCategory
-      ? idempotency.getCachedSuccess<MovementCommandSuccess>({
+      ? await idempotency.getCachedSuccess<MovementCommandSuccess>({
           category: idempotencyCategory,
           command,
         })
@@ -583,7 +644,7 @@ async function handleMovementCommandRequest(
     };
 
     if (idempotencyCategory) {
-      idempotency.cacheSuccess({
+      await idempotency.cacheSuccess({
         category: idempotencyCategory,
         command,
         response: success,
@@ -635,7 +696,7 @@ async function handleEncounterCommandRequest(
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_encounter_state' ? null : 'encounter';
     const cachedSuccess = idempotencyCategory
-      ? idempotency.getCachedSuccess<EncounterCommandSuccess>({
+      ? await idempotency.getCachedSuccess<EncounterCommandSuccess>({
           category: idempotencyCategory,
           command,
         })
@@ -685,7 +746,7 @@ async function handleEncounterCommandRequest(
     };
 
     if (idempotencyCategory) {
-      idempotency.cacheSuccess({
+      await idempotency.cacheSuccess({
         category: idempotencyCategory,
         command,
         response: success,
@@ -702,6 +763,7 @@ async function handleDmCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -734,7 +796,44 @@ async function handleDmCommandRequest(
 
   try {
     const command = commandResult.data;
-    const cachedSuccess = idempotency.getCachedSuccess<DmCommandSuccess>({
+
+    if (
+      characterCommandTransaction?.supports({
+        category: 'dm',
+        command,
+      })
+    ) {
+      const success = await characterCommandTransaction.run({
+        category: 'dm',
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          switch (command.type) {
+            case 'dm_set_character_current_hp':
+              return {
+                ok: true,
+                data: await transactionRuntime.dmSetCharacterCurrentHp(command),
+              } satisfies DmCommandSuccess;
+            case 'dm_set_character_active_conditions':
+              return {
+                ok: true,
+                data: await transactionRuntime.dmSetCharacterActiveConditions(
+                  command,
+                ),
+              } satisfies DmCommandSuccess;
+            default:
+              throw new Error(
+                `Unsupported transactional DM command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      sendJson(response, 200, success, dmCommandSuccessSchema);
+      return;
+    }
+
+    const cachedSuccess = await idempotency.getCachedSuccess<DmCommandSuccess>({
       category: 'dm',
       command,
     });
@@ -780,7 +879,7 @@ async function handleDmCommandRequest(
       data,
     };
 
-    idempotency.cacheSuccess({
+    await idempotency.cacheSuccess({
       category: 'dm',
       command,
       response: success,

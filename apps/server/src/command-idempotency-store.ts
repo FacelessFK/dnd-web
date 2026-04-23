@@ -1,6 +1,6 @@
 import type { RuntimeErrorCode } from '@dnd/protocol';
 
-type IdempotentCommand = {
+export type IdempotentCommand = {
   actor: {
     participantId: string;
   };
@@ -17,7 +17,7 @@ export type CommandIdempotencyCategory =
   | 'scene'
   | 'session';
 
-type CommandIdempotencyLookup = {
+export type CommandIdempotencyLookup = {
   category: CommandIdempotencyCategory;
   command: IdempotentCommand;
 };
@@ -26,6 +26,8 @@ type StoredCommandResult = {
   fingerprint: string;
   response: unknown;
 };
+
+export type CommandIdempotencyStoreResult<T> = T | Promise<T>;
 
 export class CommandIdempotencyError extends Error {
   readonly code: RuntimeErrorCode = 'command_id_conflict';
@@ -37,10 +39,12 @@ export class CommandIdempotencyError extends Error {
 }
 
 export interface CommandIdempotencyStore {
-  cacheSuccess(params: CommandIdempotencyLookup & { response: unknown }): void;
+  cacheSuccess(
+    params: CommandIdempotencyLookup & { response: unknown },
+  ): CommandIdempotencyStoreResult<void>;
   getCachedSuccess<TResponse>(
     params: CommandIdempotencyLookup,
-  ): TResponse | null;
+  ): CommandIdempotencyStoreResult<TResponse | null>;
 }
 
 export class InMemoryCommandIdempotencyStore implements CommandIdempotencyStore {
@@ -93,7 +97,9 @@ export class InMemoryCommandIdempotencyStore implements CommandIdempotencyStore 
   }
 }
 
-function createCommandIdempotencyKey(params: CommandIdempotencyLookup): string {
+export function createCommandIdempotencyKey(
+  params: CommandIdempotencyLookup,
+): string {
   return stableStringify([
     params.category,
     params.command.type,
@@ -103,14 +109,11 @@ function createCommandIdempotencyKey(params: CommandIdempotencyLookup): string {
   ]);
 }
 
-// This is intentionally process-local and deterministic enough for the current
-// in-memory runtime. Durable deduplication should replace it during a later
-// persistence phase.
-function createCommandFingerprint(command: IdempotentCommand): string {
+export function createCommandFingerprint(command: IdempotentCommand): string {
   return stableStringify(command);
 }
 
-function getCommandSessionId(command: IdempotentCommand): string | null {
+export function getCommandSessionId(command: IdempotentCommand): string | null {
   const sessionId = command.payload?.sessionId;
 
   return typeof sessionId === 'string' ? sessionId : null;
