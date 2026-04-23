@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 
 import type {
   CharacterStateUpdate,
@@ -9,10 +9,9 @@ import type {
   MovementStateUpdate,
   MovementStateUpdateReason,
   ReconnectSessionCommand,
-  SessionErrorCode,
-  SessionStreamEvent,
   SessionStateUpdate,
   SessionStateUpdateReason,
+  SessionStreamEvent,
 } from '@dnd/protocol';
 import type {
   CharacterId,
@@ -26,95 +25,61 @@ import type {
   SessionId,
   SessionSnapshot,
 } from '@dnd/shared';
+import type {
+  PersistedSessionSnapshotDocument,
+  SessionSnapshotDatabase,
+} from '@dnd/db';
+
+import {
+  SessionStoreError,
+  type RuntimeSessionStore,
+  type SessionCommandResult,
+  type SessionSubscriber,
+} from './session-store.js';
 
 type ParticipantCreationCommand = CreateSessionCommand | JoinSessionCommand;
-
-export type SessionSubscriber = {
-  connectionId: string;
-  close: () => void;
-  send: (update: SessionStreamEvent) => void;
-};
 
 type SessionRoomState = {
   snapshot: SessionSnapshot;
   subscribers: Map<ParticipantId, SessionSubscriber>;
 };
 
-export type SessionCommandResult = {
-  participantId: ParticipantId;
-  sessionId: SessionId;
-  state: SessionSnapshot;
-};
-
-export type RuntimeSessionStoreResult<T> = T | Promise<T>;
-
-export interface RuntimeSessionStore {
-  createSession(
-    command: CreateSessionCommand,
-  ): RuntimeSessionStoreResult<SessionCommandResult>;
-  joinSession(
-    command: JoinSessionCommand,
-  ): RuntimeSessionStoreResult<SessionCommandResult>;
-  reconnectSession(command: ReconnectSessionCommand): SessionCommandResult;
-  getSessionSnapshot(sessionId: SessionId): SessionSnapshot;
-  getSessionSnapshotForParticipant(
-    sessionId: SessionId,
-    participantId: ParticipantId,
-  ): SessionSnapshot;
-  connectParticipant(
-    sessionId: SessionId,
-    participantId: ParticipantId,
-    subscriber: SessionSubscriber,
-  ): void;
-  disconnectParticipant(
-    sessionId: SessionId,
-    participantId: ParticipantId,
-    connectionId: string,
-  ): void;
-  assignCharacterToParticipant(
-    sessionId: SessionId,
-    participantId: ParticipantId,
-    characterId: CharacterId,
-  ): RuntimeSessionStoreResult<SessionSnapshot>;
-  activateScene(
-    sessionId: SessionId,
-    sceneId: SceneId,
-  ): RuntimeSessionStoreResult<SessionSnapshot>;
-  publishMovementStateUpdate(params: {
-    sessionId: SessionId;
-    activeSceneId: SceneId;
-    participantId: ParticipantId;
-    characterId: CharacterId;
-    position: ScenePosition;
-    footprint: SceneEntityFootprint;
-    reason: MovementStateUpdateReason;
-  }): MovementStateUpdate;
-  publishEncounterStateUpdate(update: EncounterStateUpdate): void;
-  publishCombatEvent(update: CombatEvent): void;
-  publishCharacterStateUpdate(update: CharacterStateUpdate): void;
-}
-
 const SESSION_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const INITIAL_REVISION = 1;
 
-export class SessionStoreError extends Error {
-  constructor(
-    readonly code: SessionErrorCode,
-    message: string,
+export class DbBackedSessionStore implements RuntimeSessionStore {
+  private readonly rooms: Map<SessionId, SessionRoomState>;
+
+  private constructor(
+    private readonly database: SessionSnapshotDatabase,
+    rooms: Map<SessionId, SessionRoomState>,
   ) {
-    super(message);
-    this.name = 'SessionStoreError';
+    this.rooms = rooms;
   }
-}
 
-export class InMemorySessionStore implements RuntimeSessionStore {
-  private readonly rooms = new Map<SessionId, SessionRoomState>();
+  static async fromDatabase(
+    database: SessionSnapshotDatabase,
+  ): Promise<DbBackedSessionStore> {
+    const rooms = new Map<SessionId, SessionRoomState>();
+    const rows = await database.listSessionSnapshots();
 
-  createSession(command: CreateSessionCommand): SessionCommandResult {
+    for (const row of rows) {
+      rooms.set(row.sessionId, {
+        snapshot: DbBackedSessionStore.hydrateSnapshot(row.snapshot),
+        subscribers: new Map(),
+      });
+    }
+
+    return new DbBackedSessionStore(database, rooms);
+  }
+
+  async createSession(
+    command: CreateSessionCommand,
+  ): Promise<SessionCommandResult> {
     this.assertRoleAssumption(command.actor.role, 'dm');
 
     const now = this.now();
-    const sessionId = this.generateSessionId();
+    const sessionId = await this.generateSessionId();
     const dm = this.createParticipant(command, 'dm', now);
     const session: Session = {
       id: sessionId,
@@ -132,10 +97,14 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       participants: [dm],
     };
 
-    this.rooms.set(sessionId, {
+    await this.persistSnapshot(snapshot);
+
+    const room: SessionRoomState = {
       snapshot,
       subscribers: new Map(),
-    });
+    };
+
+    this.rooms.set(sessionId, room);
 
     return {
       participantId: dm.id,
@@ -144,7 +113,9 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     };
   }
 
-  joinSession(command: JoinSessionCommand): SessionCommandResult {
+  async joinSession(
+    command: JoinSessionCommand,
+  ): Promise<SessionCommandResult> {
     this.assertRoleAssumption(command.actor.role, 'player');
 
     const room = this.requireRoom(command.payload.sessionId);
@@ -159,15 +130,19 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     const now = this.now();
     const participant = this.createParticipant(command, 'player', now);
 
-    this.applyMutation(room, 'participant_joined', () => {
-      room.snapshot.participants.push(participant);
-      room.snapshot.session.playerParticipantIds.push(participant.id);
-    });
+    const snapshot = await this.applyDurableMutation(
+      room,
+      'participant_joined',
+      (nextSnapshot) => {
+        nextSnapshot.participants.push(participant);
+        nextSnapshot.session.playerParticipantIds.push(participant.id);
+      },
+    );
 
     return {
       participantId: participant.id,
-      sessionId: room.snapshot.session.id,
-      state: this.clone(room.snapshot),
+      sessionId: snapshot.session.id,
+      state: snapshot,
     };
   }
 
@@ -222,7 +197,7 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     }
 
     if (participant.connectionStatus !== 'connected') {
-      this.applyMutation(room, 'participant_connected', () => {
+      this.applyEphemeralMutation(room, 'participant_connected', () => {
         participant.connectionStatus = 'connected';
         participant.lastSeenAt = this.now();
       });
@@ -258,17 +233,17 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       return;
     }
 
-    this.applyMutation(room, 'participant_disconnected', () => {
+    this.applyEphemeralMutation(room, 'participant_disconnected', () => {
       participant.connectionStatus = 'disconnected';
       participant.lastSeenAt = this.now();
     });
   }
 
-  assignCharacterToParticipant(
+  async assignCharacterToParticipant(
     sessionId: SessionId,
     participantId: ParticipantId,
     characterId: CharacterId,
-  ): SessionSnapshot {
+  ): Promise<SessionSnapshot> {
     const room = this.requireRoom(sessionId);
     const participant = this.requireParticipant(room.snapshot, participantId);
 
@@ -276,25 +251,37 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       return this.clone(room.snapshot);
     }
 
-    this.applyMutation(room, 'participant_character_assigned', () => {
-      participant.characterId = characterId;
-    });
+    return this.applyDurableMutation(
+      room,
+      'participant_character_assigned',
+      (nextSnapshot) => {
+        const nextParticipant = this.requireParticipant(
+          nextSnapshot,
+          participantId,
+        );
 
-    return this.clone(room.snapshot);
+        nextParticipant.characterId = characterId;
+      },
+    );
   }
 
-  activateScene(sessionId: SessionId, sceneId: SceneId): SessionSnapshot {
+  async activateScene(
+    sessionId: SessionId,
+    sceneId: SceneId,
+  ): Promise<SessionSnapshot> {
     const room = this.requireRoom(sessionId);
 
     if (room.snapshot.session.activeSceneId === sceneId) {
       return this.clone(room.snapshot);
     }
 
-    this.applyMutation(room, 'active_scene_changed', () => {
-      room.snapshot.session.activeSceneId = sceneId;
-    });
-
-    return this.clone(room.snapshot);
+    return this.applyDurableMutation(
+      room,
+      'active_scene_changed',
+      (nextSnapshot) => {
+        nextSnapshot.session.activeSceneId = sceneId;
+      },
+    );
   }
 
   publishMovementStateUpdate(params: {
@@ -360,7 +347,26 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     this.broadcast(room, update);
   }
 
-  private applyMutation(
+  private async applyDurableMutation(
+    room: SessionRoomState,
+    reason: Exclude<SessionStateUpdateReason, 'initial_sync'>,
+    mutate: (nextSnapshot: SessionSnapshot) => void,
+  ): Promise<SessionSnapshot> {
+    const nextSnapshot = this.clone(room.snapshot);
+
+    mutate(nextSnapshot);
+    nextSnapshot.session.revision += 1;
+    nextSnapshot.session.updatedAt = this.now();
+
+    await this.persistSnapshot(nextSnapshot);
+
+    room.snapshot = nextSnapshot;
+    this.broadcast(room, this.buildUpdate(room, reason));
+
+    return this.clone(room.snapshot);
+  }
+
+  private applyEphemeralMutation(
     room: SessionRoomState,
     reason: Exclude<SessionStateUpdateReason, 'initial_sync'>,
     mutate: () => void,
@@ -369,6 +375,41 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     room.snapshot.session.revision += 1;
     room.snapshot.session.updatedAt = this.now();
     this.broadcast(room, this.buildUpdate(room, reason));
+  }
+
+  private async persistSnapshot(snapshot: SessionSnapshot): Promise<void> {
+    await this.database.upsertSessionSnapshot({
+      sessionId: snapshot.session.id,
+      snapshot: this.toPersistedSnapshot(snapshot),
+    });
+  }
+
+  private toPersistedSnapshot(
+    snapshot: SessionSnapshot,
+  ): PersistedSessionSnapshotDocument {
+    return {
+      session: this.clone(snapshot.session),
+      participants: snapshot.participants.map((participant) => ({
+        characterId: participant.characterId,
+        displayName: participant.displayName,
+        id: participant.id,
+        joinedAt: participant.joinedAt,
+        role: participant.role,
+      })),
+    };
+  }
+
+  private static hydrateSnapshot(
+    snapshot: PersistedSessionSnapshotDocument,
+  ): SessionSnapshot {
+    return {
+      session: structuredClone(snapshot.session),
+      participants: snapshot.participants.map((participant) => ({
+        ...structuredClone(participant),
+        connectionStatus: 'disconnected',
+        lastSeenAt: participant.joinedAt,
+      })),
+    };
   }
 
   private broadcast(room: SessionRoomState, update: SessionStreamEvent): void {
@@ -460,7 +501,7 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     );
   }
 
-  private generateSessionId(): SessionId {
+  private async generateSessionId(): Promise<SessionId> {
     let nextId = '';
 
     do {
@@ -480,8 +521,4 @@ export class InMemorySessionStore implements RuntimeSessionStore {
   private clone<T>(value: T): T {
     return structuredClone(value);
   }
-}
-
-export function createConnectionId(): string {
-  return randomUUID();
 }

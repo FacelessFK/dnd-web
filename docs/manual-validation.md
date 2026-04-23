@@ -5,9 +5,9 @@ in-memory authoritative runtime by default. It is intentionally copy-pasteable
 and does not require frontend UI, database persistence, event replay, auth, or
 deployment.
 
-Phase 10 added a DB-backed character repository boundary that can be injected
-into live server/runtime command paths, but this manual curl flow does not
-exercise that injected DB-backed path.
+Phase 10 added injected DB-backed character and session snapshot boundaries,
+but this manual curl flow does not exercise those injected durable restart
+paths.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
@@ -46,7 +46,7 @@ Expected high-level status:
 {
   "name": "dnd-dm-platform-server",
   "phase": "phase-10",
-  "status": "character-restart-durability-baseline"
+  "status": "durable-session-snapshot-baseline"
 }
 ```
 

@@ -18,8 +18,8 @@ Manual Validation Readiness** refreshed API/manual-validation docs, and backend
 Roadmap Phase 8 DM controls are implemented as narrow server-authoritative
 commands. Phase 10 persistence work now includes a DB-backed character
 repository boundary, transactional durable idempotency for supported
-character mutations, and a narrow restart reread baseline, while most live
-runtime state remains process-local.
+character mutations, and a narrow durable session snapshot baseline for
+restart-safe reconnect, while most live runtime state remains process-local.
 
 Implemented so far:
 
@@ -44,15 +44,18 @@ Implemented so far:
 - reconnect recovery through read models
 - narrow restart durability baseline for persisted character rereads when the
   DB-backed character store is injected
+- narrow durable session snapshot baseline for restart-safe reconnect when the
+  DB-backed session store is injected
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
-  currently supported narrow scope
+  currently supported narrow scope, plus DB-backed session snapshot
+  persistence boundary
 - ESLint, Prettier, tests, and TypeScript validation
 
 Not implemented yet:
 
-- fully persistence-backed runtime storage for sessions, scenes, encounters, and
-  streams
+- fully persistence-backed runtime storage for scenes, encounters, movement
+  state, and streams
 - command-surface-wide durable idempotency, event replay, event cursors, or
   distributed coordination
 - full transaction/outbox persistence boundaries
@@ -184,12 +187,18 @@ Reliability notes:
 - For those supported injected DB paths, character writes and durable
   successful-command idempotency records can be committed in the same real DB
   transaction.
-- Session, scene, movement, encounter, assignment, stream, and replay semantics
-  remain non-durable; do not treat the whole command surface as restart-safe.
-- After runtime reinitialization, old `reconnect_session` state is still lost
-  because sessions remain in memory. The current durable restart baseline is
-  limited to rereading persisted character state through a new valid session
-  context.
+- Default local startup still uses in-memory session, scene, encounter, and
+  stream state.
+- When the DB-backed session snapshot store is injected, session identity,
+  participant membership, participant roles/display names, assigned character
+  IDs, and the stored `activeSceneId` can survive runtime reinitialization and
+  allow `reconnect_session` to succeed.
+- Presence, subscriber state, scene contents, movement continuity, encounter
+  continuity, stream delivery, and replay remain non-durable; do not treat the
+  whole command surface as restart-safe.
+- Because scenes remain in memory, a persisted `activeSceneId` can survive
+  restart before the underlying scene definition does. `get_active_scene_state`
+  still requires a durable scene store before tactical continuity is restart-safe.
 - Missed transient SSE events are not replayed.
 - After reconnect, clients should recover current authoritative state through
   read models: reconnect/session snapshot, `get_active_scene_state`,

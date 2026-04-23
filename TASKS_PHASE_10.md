@@ -431,7 +431,75 @@ Completed outcome:
   - non-durable session/scene/encounter/live runtime recovery,
   - no missed-event replay.
 
-### Slice 5 — Persistence Exit Pass
+### Slice 5 — Durable Session Boundary Design And First Session Persistence Groundwork
+
+Status: completed.
+
+Goal:
+
+- Introduce the first durable session snapshot boundary so restart-safe
+  `reconnect_session` can work honestly without claiming durable tactical
+  continuity.
+
+Tasks:
+
+- Add a DB-backed session snapshot schema and migration.
+- Persist the minimal session snapshot state needed for restart-safe reconnect:
+  - session identity,
+  - rules profile ID,
+  - participant membership,
+  - participant roles and display names,
+  - assigned character IDs,
+  - active scene ID.
+- Keep presence, subscriber state, and live connection state ephemeral.
+- Keep scenes, encounters, movement continuity, SSE replay, and outbox out of
+  scope.
+- Preserve public HTTP routes, protocol schemas, response shapes, SSE shapes,
+  and gameplay behavior.
+- Add tests proving a restarted runtime can recover the persisted session
+  snapshot through the existing reconnect/read path where honest.
+
+Acceptance:
+
+- A DB-backed session snapshot boundary exists.
+- Persisted session creation and participant membership survive runtime/server
+  reinitialization when the DB-backed session store is injected.
+- `reconnect_session` works after restart for persisted session membership.
+- Presence and subscriber state do not survive restart.
+- Assignment and stored `activeSceneId` survive only as persisted session
+  snapshot references; broader tactical continuity remains non-durable.
+- No event replay, outbox, auth, or gameplay expansion is added.
+
+Completed outcome:
+
+- Added a `session_snapshots` Drizzle/Postgres schema and migration.
+- Added `DrizzleSessionSnapshotDatabase` in `packages/db`.
+- Added `DbBackedSessionStore`, which loads persisted session snapshots into
+  fresh in-memory room state on startup.
+- Kept subscriber state, connection presence, and SSE delivery ephemeral:
+  - all participants hydrate as `disconnected`,
+  - subscribers are not persisted,
+  - missed events are not replayed.
+- Persisted the narrow session snapshot state needed for restart-safe reconnect:
+  - session identity and rules profile,
+  - participant membership, roles, and display names,
+  - assigned character IDs,
+  - active scene ID.
+- Added a server-level restart test proving:
+  - `reconnect_session` succeeds after restart when the DB-backed session store
+    is injected,
+  - participant membership survives,
+  - assigned character IDs and stored `activeSceneId` survive in the session
+    snapshot,
+  - participant connection status resets to `disconnected`,
+  - `get_active_scene_state` still fails after restart because scenes remain
+    in-memory.
+- Kept the default local startup path in-memory.
+- Updated README, persistence notes, handoff context, manual validation notes,
+  and server status wording to distinguish durable session snapshot recovery
+  from still-non-durable tactical/runtime continuity.
+
+### Slice 6 — Persistence Exit Pass
 
 Status: planned.
 

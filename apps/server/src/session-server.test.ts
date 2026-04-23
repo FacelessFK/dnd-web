@@ -12,8 +12,11 @@ import {
   type DndDatabaseUnitOfWorkContext,
   type CompletedCommandIdempotencyRecordRow,
   type CompletedCommandIdempotencyRecordWrite,
+  type SessionSnapshotDatabase,
+  type SessionSnapshotRow,
+  type SessionSnapshotWrite,
 } from '@dnd/db';
-import type { CharacterId } from '@dnd/shared';
+import type { CharacterId, SessionId } from '@dnd/shared';
 
 import {
   activeSceneStateCommandSuccessSchema,
@@ -26,6 +29,7 @@ import {
   type EncounterCommandResponse,
   type MovementStateUpdate,
   type MovementCommandResponse,
+  type SceneCommandResponse,
   type SessionCommandResponse,
   characterCommandSchema,
   clientCommandSchema,
@@ -48,8 +52,12 @@ import {
   InMemoryGameRuntime,
   type RuntimeCharacterRepository,
 } from './game-runtime.js';
+import { DbBackedSessionStore } from './db-session-store.js';
 import { handleRequest } from './session-server.js';
-import { InMemorySessionStore } from './session-store.js';
+import {
+  InMemorySessionStore,
+  type RuntimeSessionStore,
+} from './session-store.js';
 
 type JsonResponse<T> = {
   body: T;
@@ -57,7 +65,7 @@ type JsonResponse<T> = {
 };
 
 async function postJson<TResponse>(
-  runtime: InMemoryGameRuntime<RuntimeCharacterRepository>,
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   idempotency: CommandIdempotencyStore,
   path: string,
   body: unknown,
@@ -133,7 +141,7 @@ function createMockResponse() {
 }
 
 function subscribeToSessionEvents(
-  runtime: InMemoryGameRuntime<RuntimeCharacterRepository>,
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   sessionId: string,
   onSend: (update: SessionStreamEvent) => void = () => undefined,
 ) {
@@ -221,6 +229,52 @@ class InMemoryCharacterRecordDatabase implements CharacterRecordDatabase {
 
   private nextTimestamp(): Date {
     const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 0, this.clock, 0));
+
+    this.clock += 1;
+
+    return timestamp;
+  }
+
+  private clone<T>(value: T): T {
+    return structuredClone(value);
+  }
+}
+
+class InMemorySessionSnapshotDatabase implements SessionSnapshotDatabase {
+  private readonly rows = new Map<SessionId, SessionSnapshotRow>();
+  private clock = 0;
+
+  async getSessionSnapshot(
+    sessionId: SessionId,
+  ): Promise<SessionSnapshotRow | null> {
+    const row = this.rows.get(sessionId);
+
+    return row ? this.clone(row) : null;
+  }
+
+  async listSessionSnapshots(): Promise<SessionSnapshotRow[]> {
+    return [...this.rows.values()].map((row) => this.clone(row));
+  }
+
+  async upsertSessionSnapshot(
+    write: SessionSnapshotWrite,
+  ): Promise<SessionSnapshotRow> {
+    const existing = this.rows.get(write.sessionId);
+    const now = this.nextTimestamp();
+    const row: SessionSnapshotRow = {
+      sessionId: write.sessionId,
+      snapshot: this.clone(write.snapshot),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+
+    this.rows.set(write.sessionId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  private nextTimestamp(): Date {
+    const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 10, this.clock, 0));
 
     this.clock += 1;
 
@@ -1757,6 +1811,300 @@ test('db-backed character state can be reread after runtime reinitialization, wh
     arcaneFocus: 'oak staff',
     restartMarker: 'phase-10-slice-4',
   });
+});
+
+test('db-backed session snapshots survive runtime reinitialization for reconnect, while presence and active-scene tactical continuity remain non-durable', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+  );
+  const runtimeBeforeRestart = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotencyBeforeRestart: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const transactionBeforeRestart =
+    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+
+  const createdSession = await postJson<SessionCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/session/command',
+    {
+      commandId: 'session-durability-create-session-1',
+      type: 'create_session',
+      actor: {
+        participantId: 'dm-001',
+        displayName: 'Dungeon Master',
+        role: 'dm',
+      },
+      payload: {
+        rulesProfileId: 'dnd5e-2024-core',
+      },
+    },
+  );
+
+  assert.equal(createdSession.status, 200);
+  assert.equal(createdSession.body.ok, true);
+
+  if (!createdSession.body.ok) {
+    return;
+  }
+
+  const sessionId = createdSession.body.data.sessionId;
+
+  await postJson<SessionCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/session/command',
+    {
+      commandId: 'session-durability-join-player-1',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-001',
+        displayName: 'Player One',
+        role: 'player',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  runtimeBeforeRestart.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'session-durability-live-player-001',
+    close: () => undefined,
+    send: () => undefined,
+  });
+
+  const createdCharacter = await postJson<CharacterCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/characters/command',
+    {
+      commandId: 'session-durability-create-character-1',
+      type: 'create_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        ownerParticipantId: 'player-001',
+        character: {
+          name: 'Aria Durable Session',
+          level: 5,
+          className: 'Wizard',
+          speciesOrRace: 'Elf',
+          background: 'Sage',
+          abilities: {
+            str: 8,
+            dex: 14,
+            con: 13,
+            int: 16,
+            wis: 12,
+            cha: 10,
+          },
+          hp: {
+            max: 26,
+            current: 26,
+            temp: 0,
+          },
+          armorClass: 13,
+          speed: 30,
+        },
+      },
+    },
+    transactionBeforeRestart,
+  );
+
+  assert.equal(createdCharacter.status, 200);
+  assert.equal(createdCharacter.body.ok, true);
+
+  if (
+    !createdCharacter.body.ok ||
+    !('character' in createdCharacter.body.data)
+  ) {
+    return;
+  }
+
+  const characterId = createdCharacter.body.data.character.id;
+
+  await postJson<CharacterCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/characters/command',
+    {
+      commandId: 'session-durability-finalize-character-1',
+      type: 'finalize_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        characterId,
+      },
+    },
+    transactionBeforeRestart,
+  );
+
+  await postJson<CharacterCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/characters/command',
+    {
+      commandId: 'session-durability-assign-character-1',
+      type: 'assign_character_to_participant',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        characterId,
+      },
+    },
+  );
+
+  const createdScene = await postJson<SceneCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/scenes/command',
+    {
+      commandId: 'session-durability-create-scene-1',
+      type: 'create_scene',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        scene: {
+          name: 'Restart Test Room',
+          grid: {
+            width: 8,
+            height: 8,
+            cellSizeFeet: 5,
+          },
+        },
+      },
+    },
+  );
+
+  assert.equal(createdScene.status, 200);
+  assert.equal(createdScene.body.ok, true);
+
+  if (!createdScene.body.ok || !('scene' in createdScene.body.data)) {
+    return;
+  }
+
+  const sceneId = createdScene.body.data.scene.id;
+
+  await postJson<SceneCommandResponse>(
+    runtimeBeforeRestart,
+    idempotencyBeforeRestart,
+    '/api/scenes/command',
+    {
+      commandId: 'session-durability-activate-scene-1',
+      type: 'activate_scene_for_session',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        sceneId,
+      },
+    },
+  );
+
+  const runtimeAfterRestart = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotencyAfterRestart: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+
+  const reconnect = await postJson<SessionCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/session/command',
+    {
+      commandId: 'session-durability-reconnect-1',
+      type: 'reconnect_session',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  assert.equal(reconnect.status, 200);
+  assert.equal(reconnect.body.ok, true);
+
+  if (!reconnect.body.ok) {
+    return;
+  }
+
+  const reconnectedPlayer = reconnect.body.data.state.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(reconnect.body.data.sessionId, sessionId);
+  assert.equal(reconnect.body.data.state.session.activeSceneId, sceneId);
+  assert.equal(reconnectedPlayer?.characterId, characterId);
+  assert.equal(reconnectedPlayer?.connectionStatus, 'disconnected');
+
+  const rereadCharacter = await postJson<CharacterCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/characters/command',
+    {
+      commandId: 'session-durability-read-character-after-restart',
+      type: 'get_character',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        characterId,
+      },
+    },
+  );
+
+  assert.equal(rereadCharacter.status, 200);
+  assert.equal(rereadCharacter.body.ok, true);
+
+  const activeSceneReadAfterRestart = await postJson<MovementCommandResponse>(
+    runtimeAfterRestart,
+    idempotencyAfterRestart,
+    '/api/movement/command',
+    {
+      commandId: 'session-durability-read-active-scene-after-restart',
+      type: 'get_active_scene_state',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  assert.equal(activeSceneReadAfterRestart.status, 404);
+  assert.equal(activeSceneReadAfterRestart.body.ok, false);
+
+  if (!activeSceneReadAfterRestart.body.ok) {
+    assert.equal(
+      activeSceneReadAfterRestart.body.error.code,
+      'scene_not_found',
+    );
+  }
 });
 
 test('encounter success payloads are validated as authoritative turn-order responses', () => {

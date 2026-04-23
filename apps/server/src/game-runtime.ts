@@ -127,6 +127,10 @@ import {
 import {
   createConnectionId,
   InMemorySessionStore,
+  type RuntimeSessionStore,
+  type RuntimeSessionStoreResult,
+  type SessionCommandResult,
+  type SessionSubscriber,
   SessionStoreError,
 } from './session-store.js';
 
@@ -168,11 +172,19 @@ export type RuntimeCharacterRepository = {
   ): RuntimeCharacterRepositoryResult<StoredCharacterRecord>;
 };
 
+type RuntimeSessionMutationResult<
+  TSessions extends RuntimeSessionStore,
+  TValue,
+> = TSessions extends InMemorySessionStore
+  ? TValue
+  : RuntimeSessionStoreResult<TValue>;
+
 export class InMemoryGameRuntime<
   TCharacters extends RuntimeCharacterRepository = InMemoryCharacterStore,
+  TSessions extends RuntimeSessionStore = InMemorySessionStore,
 > {
   constructor(
-    readonly sessions = new InMemorySessionStore(),
+    readonly sessions: TSessions = new InMemorySessionStore() as unknown as TSessions,
     readonly rulesProfiles = new InMemoryRulesProfileStore(),
     readonly characters: TCharacters = new InMemoryCharacterStore() as unknown as TCharacters,
     readonly scenes: SceneRepository = new InMemorySceneStore(),
@@ -183,24 +195,31 @@ export class InMemoryGameRuntime<
     ) => void,
   ) {}
 
-  createSession(command: CreateSessionCommand) {
+  createSession(
+    command: CreateSessionCommand,
+  ): RuntimeSessionMutationResult<TSessions, SessionCommandResult> {
     this.rulesProfiles.getRulesProfile(command.payload.rulesProfileId);
 
-    return this.sessions.createSession(command);
+    return this.sessions.createSession(command) as RuntimeSessionMutationResult<
+      TSessions,
+      SessionCommandResult
+    >;
   }
 
-  joinSession(command: JoinSessionCommand) {
-    return this.sessions.joinSession(command);
+  joinSession(
+    command: JoinSessionCommand,
+  ): RuntimeSessionMutationResult<TSessions, SessionCommandResult> {
+    return this.sessions.joinSession(command) as RuntimeSessionMutationResult<
+      TSessions,
+      SessionCommandResult
+    >;
   }
 
   reconnectSession(command: ReconnectSessionCommand) {
     return this.sessions.reconnectSession(command);
   }
 
-  getSessionSnapshotForParticipant(
-    sessionId: string,
-    participantId: string,
-  ): SessionSnapshot {
+  getSessionSnapshotForParticipant(sessionId: string, participantId: string) {
     return this.sessions.getSessionSnapshotForParticipant(
       sessionId,
       participantId,
@@ -210,7 +229,7 @@ export class InMemoryGameRuntime<
   connectParticipant(
     sessionId: string,
     participantId: string,
-    subscriber: Parameters<InMemorySessionStore['connectParticipant']>[2],
+    subscriber: SessionSubscriber,
   ): void {
     this.sessions.connectParticipant(sessionId, participantId, subscriber);
   }
@@ -228,7 +247,7 @@ export class InMemoryGameRuntime<
     options: {
       characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
     } = {},
-  ): InMemoryGameRuntime<TNextCharacters> {
+  ): InMemoryGameRuntime<TNextCharacters, TSessions> {
     return new InMemoryGameRuntime(
       this.sessions,
       this.rulesProfiles,
@@ -415,18 +434,19 @@ export class InMemoryGameRuntime<
           );
         }
 
-        const state = this.sessions.assignCharacterToParticipant(
-          snapshot.session.id,
-          participant.id,
-          record.character.id,
+        return this.resolveSessionResult(
+          this.sessions.assignCharacterToParticipant(
+            snapshot.session.id,
+            participant.id,
+            record.character.id,
+          ),
+          (state) => ({
+            sessionId: snapshot.session.id,
+            participantId: participant.id,
+            characterId: record.character.id,
+            state,
+          }),
         );
-
-        return {
-          sessionId: snapshot.session.id,
-          participantId: participant.id,
-          characterId: record.character.id,
-          state,
-        };
       },
     );
   }
@@ -757,11 +777,14 @@ export class InMemoryGameRuntime<
     this.assertActorIsDm(actor, 'activate scenes');
     assertSceneBelongsToSession(snapshot, scene);
 
-    return {
-      sessionId: snapshot.session.id,
-      sceneId: scene.id,
-      state: this.sessions.activateScene(snapshot.session.id, scene.id),
-    };
+    return this.resolveSessionResult(
+      this.sessions.activateScene(snapshot.session.id, scene.id),
+      (state) => ({
+        sessionId: snapshot.session.id,
+        sceneId: scene.id,
+        state,
+      }),
+    );
   }
 
   placeEntityInScene(command: PlaceEntityInSceneCommand): Scene {
@@ -1305,8 +1328,19 @@ export class InMemoryGameRuntime<
     return resolve(results as T) as TResult;
   }
 
+  private resolveSessionResult<T, TResult>(
+    result: RuntimeSessionStoreResult<T>,
+    resolve: (value: T) => TResult | Promise<TResult>,
+  ): TResult {
+    if (this.isPromiseLike(result)) {
+      return result.then(resolve) as TResult;
+    }
+
+    return resolve(result) as TResult;
+  }
+
   private isPromiseLike<T>(
-    value: RuntimeCharacterRepositoryResult<T>,
+    value: RuntimeCharacterRepositoryResult<T> | RuntimeSessionStoreResult<T>,
   ): value is Promise<T> {
     return (
       !!value &&

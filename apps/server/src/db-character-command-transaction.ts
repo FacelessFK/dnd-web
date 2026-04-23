@@ -21,6 +21,7 @@ import type {
   InMemoryGameRuntime,
   RuntimeCharacterRepository,
 } from './game-runtime.js';
+import type { RuntimeSessionStore } from './session-store.js';
 
 type TransactionalCommandParams = {
   category: CommandIdempotencyCategory;
@@ -29,9 +30,12 @@ type TransactionalCommandParams = {
 
 type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
   execute: (
-    runtime: InMemoryGameRuntime<RuntimeCharacterRepository>,
+    runtime: InMemoryGameRuntime<
+      RuntimeCharacterRepository,
+      RuntimeSessionStore
+    >,
   ) => Promise<TResponse>;
-  runtime: InMemoryGameRuntime<RuntimeCharacterRepository>;
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>;
 };
 
 type TransactionalRunResult<TResponse> = {

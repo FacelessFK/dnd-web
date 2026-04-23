@@ -31,8 +31,8 @@ Durability notes:
   together in the first slice unless a schema design explicitly splits them.
 - `saveCharacter` should remain an upsert-like update only for existing
   characters and should continue to fail for unknown character IDs.
-- Because session assignment still lives in `InMemorySessionStore`, durable
-  characters alone do not yet make full reconnect-after-restart possible.
+- Durable characters alone do not yet make full reconnect-after-restart
+  possible; session snapshot durability is also required.
 - After Slice 4, the narrow honest restart baseline is:
   - a restarted runtime can reread persisted character state through
     `get_character` when the same DB-backed character store is injected,
@@ -118,6 +118,37 @@ Durability notes:
 - Persisting sessions first would unlock stronger reconnect behavior, but it is
   broader than the character repository and requires carefully splitting
   subscriber state from snapshot state.
+- Slice 5 implemented the first honest durable session baseline:
+  - persisted session snapshots can survive restart when a DB-backed session
+    store is injected,
+  - `reconnect_session` can then recover durable session membership,
+  - participant presence/subscriber state still resets to `disconnected`,
+  - assigned character IDs and stored `activeSceneId` can survive only as
+    persisted session snapshot references,
+  - scene contents, encounter state, and tactical continuity still do not
+    survive restart.
+
+### `DbBackedSessionStore`
+
+Current role:
+
+- Loads persisted session snapshots from the DB-backed session snapshot
+  boundary into fresh in-memory room state on startup.
+- Keeps subscriber maps, connection presence, and live SSE broadcasting
+  process-local.
+- Persists session snapshot mutations for:
+  - session creation,
+  - player join,
+  - character assignment,
+  - active scene activation.
+
+Durability notes:
+
+- `reconnect_session` can succeed after restart when the DB-backed session store
+  is injected because session identity and participant membership are durable.
+- Participant `connectionStatus` and subscriber state still reset on restart.
+- Stored `activeSceneId` can survive before the underlying scene definition
+  does, because scene persistence remains out of scope.
 
 ### `CommandIdempotencyStore`
 
@@ -357,6 +388,6 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-Proceed with Phase 10 Slice 5: Persistence Exit Pass, or start the next durable
-repository slice if stronger restart-safe reconnect behavior needs persisted
-session/scene/encounter state.
+Proceed with Phase 10 Slice 6: Persistence Exit Pass, or start the next durable
+repository slice if stronger restart-safe tactical continuity needs persisted
+scene or encounter state.

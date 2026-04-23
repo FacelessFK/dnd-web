@@ -65,7 +65,10 @@ import {
 import { MovementRuntimeError } from './movement-runtime.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
-import { SessionStoreError } from './session-store.js';
+import {
+  SessionStoreError,
+  type RuntimeSessionStore,
+} from './session-store.js';
 
 const corsHeaders = {
   'access-control-allow-headers': 'content-type',
@@ -83,7 +86,10 @@ type RuntimeStoreError =
   | SceneStoreError
   | SessionStoreError;
 
-type GameRuntime = InMemoryGameRuntime<RuntimeCharacterRepository>;
+type GameRuntime = InMemoryGameRuntime<
+  RuntimeCharacterRepository,
+  RuntimeSessionStore
+>;
 
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
@@ -140,7 +146,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-10',
-      status: 'character-restart-durability-baseline',
+      status: 'durable-session-snapshot-baseline',
     });
     return;
   }

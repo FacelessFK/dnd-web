@@ -1,10 +1,36 @@
 import { jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
-import type { Character, CharacterId, EncounterOverlay } from '@dnd/shared';
+import type {
+  Character,
+  CharacterId,
+  EncounterOverlay,
+  ParticipantId,
+  ParticipantRole,
+  SceneId,
+  Session,
+  SessionId,
+} from '@dnd/shared';
 
 export type StoredCharacterRecordDocument = {
   character: Character;
   overlay: EncounterOverlay;
+};
+
+export type PersistedSessionParticipantDocument = {
+  characterId: CharacterId | null;
+  displayName: string;
+  id: ParticipantId;
+  joinedAt: string;
+  role: ParticipantRole;
+};
+
+export type PersistedSessionDocument = Session & {
+  activeSceneId: SceneId | null;
+};
+
+export type PersistedSessionSnapshotDocument = {
+  participants: PersistedSessionParticipantDocument[];
+  session: PersistedSessionDocument;
 };
 
 export const characterRecords = pgTable('character_records', {
@@ -35,12 +61,27 @@ export const completedCommandIdempotencyRecords = pgTable(
   },
 );
 
+export const sessionSnapshots = pgTable('session_snapshots', {
+  sessionId: text('session_id').primaryKey().$type<SessionId>(),
+  snapshot: jsonb('snapshot')
+    .$type<PersistedSessionSnapshotDocument>()
+    .notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
 export const dbSchema = {
   characterRecords,
   completedCommandIdempotencyRecords,
+  sessionSnapshots,
 };
 
 export type DbSchema = typeof dbSchema;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
 export type CompletedCommandIdempotencyRecordRow =
   typeof completedCommandIdempotencyRecords.$inferSelect;
+export type SessionSnapshotRow = typeof sessionSnapshots.$inferSelect;

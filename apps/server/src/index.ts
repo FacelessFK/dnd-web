@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 10 character restart durability baseline listening on http://${host}:${port}`,
+    `[server] Phase 10 durable session snapshot baseline listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Default startup is still in-memory; injected DB-backed character persistence, transactional durable idempotency for supported character mutations, and narrow restart rereads are available.',
+    '[server] Default startup is still in-memory; injected DB-backed session snapshots, character persistence, and transactional durable idempotency for supported character mutations enable narrow restart recovery without full tactical continuity.',
   );
 });
