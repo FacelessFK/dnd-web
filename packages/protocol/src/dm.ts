@@ -122,7 +122,7 @@ export const characterStateUpdateSchema = z.object({
   participantId: participantIdSchema,
   characterId: characterIdSchema,
   hp: hitPointsSchema,
-  activeConditions: activeConditionsSchema,
+  activeConditions: activeConditionsSchema.optional(),
 });
 
 export type DmSetCharacterCurrentHpCommand = z.infer<

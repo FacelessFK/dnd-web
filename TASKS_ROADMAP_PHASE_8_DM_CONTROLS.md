@@ -223,46 +223,6 @@ Design boundary:
 - Future slices may connect specific condition tags to rules behavior once a
   condition model/engine exists.
 
-## Slice 9 — DM Condition/Admin Foundation Exit Pass
-
-Status: Completed.
-
-Reviewed:
-
-- DM-only authorization across character, scene, and encounter admin commands.
-- Command naming and `/api/dm/command` routing consistency.
-- Response shape consistency for character-resource and encounter-state DM
-  results.
-- In-memory idempotency behavior through the shared `dm` category.
-- SSE event semantics for `character_state`, `movement_state`, and
-  `encounter_state`.
-- Read-model recovery expectations after DM admin commands.
-- README/API surface alignment.
-- Character-state payload consistency for HP and condition-tag updates.
-
-Current admin boundaries:
-
-- Character-scoped admin updates: `dm_set_character_current_hp` and
-  `dm_set_character_active_conditions` both emit `character_state` with
-  authoritative HP and active condition tags.
-- Scene/admin reposition: `dm_reposition_character_in_active_scene` emits
-  `movement_state` with reason `dm_character_repositioned`; it does not spend
-  movement, require current-turn ownership, or mutate encounter usage.
-- Encounter bookkeeping/admin: `dm_set_current_turn_usage` emits
-  `encounter_state` with reason `dm_turn_usage_changed`.
-- Current turn override: `dm_set_current_turn_participant` emits
-  `encounter_state` with reason `dm_current_turn_changed`, resets current turn
-  usage, and does not reroll initiative, reorder participants, or
-  automatically change round number.
-- Encounter lifecycle/admin: `dm_end_active_encounter` emits one final
-  `encounter_state` with reason `encounter_ended`, clears the active encounter,
-  and does not preserve encounter history in this slice.
-- Condition/admin boundary: active condition tags are authoritative
-  DM-managed metadata only; they do not automatically change movement, attacks,
-  turn usage, or HP-derived downed behavior.
-
-No new DM feature was added in this exit pass.
-
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -299,11 +259,6 @@ No new DM feature was added in this exit pass.
 - DM condition tag editing mutates only `overlay.activeConditions`.
 - Duplicate or empty condition tags are rejected.
 - Condition tags do not apply rules effects in this slice.
-- Character-state updates consistently include authoritative HP and active
-  condition tags.
-- DM condition/admin exit pass confirms no concentration editor, visibility
-  editor, force reposition mode, audit log, replay, persistence, or frontend DM
-  panel exists yet.
 
 ## Tests Added
 
@@ -339,7 +294,6 @@ No new DM feature was added in this exit pass.
 - DM condition tag duplicate/empty validation.
 - DM condition tag event-boundary and idempotency behavior.
 - Character-state stream validation for condition tag payloads.
-- Character-state payload consistency for HP and condition-tag updates.
 
 ## Future Slices
 
@@ -369,8 +323,6 @@ No new DM feature was added in this exit pass.
 - There is no audit log, event replay, or durable override history yet.
 - There is no force mode or ignore-collision reposition override yet.
 - There is no condition rules engine or condition effect automation yet.
-- There is no concentration editor yet.
-- There is no visibility editor yet.
 - Encounter end exists, but there is no encounter reset, history, audit, or
   cleanup flow yet.
 - There is no frontend DM panel yet.

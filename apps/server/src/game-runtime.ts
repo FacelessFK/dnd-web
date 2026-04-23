@@ -447,6 +447,7 @@ export class InMemoryGameRuntime {
       participantId: participant.id,
       record: updatedRecord,
       reason: 'dm_conditions_changed',
+      activeConditions: updatedRecord.overlay.activeConditions,
     });
 
     return this.buildCharacterResource(
@@ -1651,6 +1652,7 @@ export class InMemoryGameRuntime {
     participantId: ParticipantId;
     record: StoredCharacterRecord;
     reason: CharacterStateUpdateReason;
+    activeConditions?: string[];
   }): void {
     this.sessions.publishCharacterStateUpdate({
       type: 'character_state',
@@ -1659,7 +1661,9 @@ export class InMemoryGameRuntime {
       participantId: params.participantId,
       characterId: params.record.character.id,
       hp: params.record.character.hp,
-      activeConditions: params.record.overlay.activeConditions,
+      ...(params.activeConditions
+        ? { activeConditions: params.activeConditions }
+        : {}),
     });
   }
 
