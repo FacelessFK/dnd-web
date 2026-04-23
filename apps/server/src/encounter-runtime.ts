@@ -268,6 +268,14 @@ export function setEncounterTurnUsage(
   return withUpdatedTurnUsage(encounter, structuredClone(currentTurnUsage));
 }
 
+export function endEncounterRecord(encounter: Encounter): Encounter {
+  return {
+    ...encounter,
+    status: 'ended',
+    updatedAt: createTimestamp(),
+  };
+}
+
 function createEncounterId(): EncounterId {
   return `encounter_${randomUUID()}`;
 }

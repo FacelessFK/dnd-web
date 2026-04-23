@@ -53,10 +53,20 @@ export const dmSetCurrentTurnUsageCommandSchema = z.object({
   }),
 });
 
+export const dmEndActiveEncounterCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_end_active_encounter'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+  }),
+});
+
 export const dmCommandSchema = z.discriminatedUnion('type', [
   dmSetCharacterCurrentHpCommandSchema,
   dmRepositionCharacterInActiveSceneCommandSchema,
   dmSetCurrentTurnUsageCommandSchema,
+  dmEndActiveEncounterCommandSchema,
 ]);
 
 const dmEncounterCommandSuccessDataSchema = z.object({
@@ -94,6 +104,9 @@ export type DmRepositionCharacterInActiveSceneCommand = z.infer<
 >;
 export type DmSetCurrentTurnUsageCommand = z.infer<
   typeof dmSetCurrentTurnUsageCommandSchema
+>;
+export type DmEndActiveEncounterCommand = z.infer<
+  typeof dmEndActiveEncounterCommandSchema
 >;
 export type DmCommand = z.infer<typeof dmCommandSchema>;
 export type DmCommandSuccess = z.infer<typeof dmCommandSuccessSchema>;

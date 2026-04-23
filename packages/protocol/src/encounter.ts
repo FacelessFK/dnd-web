@@ -40,6 +40,7 @@ export const encounterSchema = z.object({
 
 export const encounterStateUpdateReasonSchema = z.enum([
   'encounter_started',
+  'encounter_ended',
   'turn_advanced',
   'action_used',
   'bonus_action_used',

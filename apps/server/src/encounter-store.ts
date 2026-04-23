@@ -3,6 +3,7 @@ import type { Encounter, SessionId } from '@dnd/shared';
 
 export interface EncounterRepository {
   createEncounter(encounter: Encounter): Encounter;
+  endEncounter(encounter: Encounter): Encounter;
   findEncounterBySession(sessionId: SessionId): Encounter | null;
   getEncounterBySession(sessionId: SessionId): Encounter;
   saveEncounter(encounter: Encounter): Encounter;
@@ -30,6 +31,28 @@ export class InMemoryEncounterStore implements EncounterRepository {
     }
 
     this.encountersBySession.set(encounter.sessionId, this.clone(encounter));
+
+    return this.clone(encounter);
+  }
+
+  endEncounter(encounter: Encounter): Encounter {
+    const activeEncounter = this.encountersBySession.get(encounter.sessionId);
+
+    if (!activeEncounter) {
+      throw new EncounterStoreError(
+        'no_active_encounter',
+        `Session "${encounter.sessionId}" does not have an active encounter.`,
+      );
+    }
+
+    if (activeEncounter.id !== encounter.id) {
+      throw new EncounterStoreError(
+        'invalid_encounter_session_association',
+        `Encounter "${encounter.id}" is not the active encounter for session "${encounter.sessionId}".`,
+      );
+    }
+
+    this.encountersBySession.delete(encounter.sessionId);
 
     return this.clone(encounter);
   }

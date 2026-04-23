@@ -702,6 +702,23 @@ function dmSetCurrentTurnUsage(
   });
 }
 
+function dmEndActiveEncounter(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmEndActiveEncounter({
+    commandId: `dm-end-active-encounter-${actorParticipantId}`,
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+    },
+  });
+}
+
 function setupEncounterParticipants(
   runtime: InMemoryGameRuntime,
   options: {
@@ -1648,6 +1665,94 @@ test('dm turn usage override requires an active encounter', () => {
         reactionUsed: false,
         movementUsed: 0,
       });
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+});
+
+test('dm can end an active encounter and start a new one later', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { firstCharacter, session } = setupEncounterParticipants(runtime);
+  const activeSceneId = runtime.getSessionSnapshotForParticipant(
+    session.sessionId,
+    'dm-001',
+  ).session.activeSceneId;
+  const startedEncounter = startEncounter(runtime, session.sessionId);
+  const updates = subscribeToSession(runtime, session.sessionId);
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+  const movementUpdateCountBefore = getMovementUpdates(updates).length;
+  const combatEventCountBefore = getCombatEvents(updates).length;
+  const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
+  const recordBefore = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+
+  const endedEncounter = dmEndActiveEncounter(runtime, session.sessionId);
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBefore,
+  );
+  const recordAfter = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+  const snapshotAfterEnd = runtime.getSessionSnapshotForParticipant(
+    session.sessionId,
+    'dm-001',
+  );
+
+  assert.equal(endedEncounter.id, startedEncounter.id);
+  assert.equal(endedEncounter.status, 'ended');
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'encounter_ended');
+  assert.equal(encounterUpdates[0]?.encounter.status, 'ended');
+  assert.equal(snapshotAfterEnd.session.activeSceneId, activeSceneId);
+  assert.deepEqual(recordAfter.character.hp, recordBefore.character.hp);
+  assert.deepEqual(recordAfter.overlay.position, recordBefore.overlay.position);
+  assert.equal(getMovementUpdates(updates).length, movementUpdateCountBefore);
+  assert.equal(getCombatEvents(updates).length, combatEventCountBefore);
+  assert.equal(
+    getCharacterStateUpdates(updates).length,
+    characterUpdateCountBefore,
+  );
+  assert.throws(
+    () => {
+      getEncounterState(runtime, session.sessionId);
+    },
+    (error: unknown) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+
+  const nextEncounter = startEncounter(runtime, session.sessionId);
+
+  assert.equal(nextEncounter.status, 'active');
+  assert.notEqual(nextEncounter.id, startedEncounter.id);
+});
+
+test('players cannot end active encounters', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  startEncounter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      dmEndActiveEncounter(runtime, session.sessionId, 'player-001');
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('dm encounter end requires an active encounter', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmEndActiveEncounter(runtime, session.sessionId);
     },
     (error: unknown) =>
       error instanceof EncounterStoreError &&

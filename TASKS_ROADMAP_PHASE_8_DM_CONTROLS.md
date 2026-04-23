@@ -108,6 +108,32 @@ Reviewed:
 
 No new DM feature was added in this exit pass.
 
+## Slice 5 — DM Encounter End Foundation
+
+Status: Completed.
+
+Implemented:
+
+- Added `dm_end_active_encounter`.
+- Reused `/api/dm/command` and the existing `dm` idempotency category.
+- Restricted the command to the session DM.
+- Required an active encounter.
+- Added final `encounter_state` reason `encounter_ended`.
+- Added `ended` as a valid encounter status for the final response/SSE payload.
+- Cleared the active encounter from the in-memory encounter store after building
+  the final ended encounter state.
+- Confirmed `get_encounter_state` returns `no_active_encounter` after ending.
+- Confirmed a new encounter can be started later in the same session.
+- Confirmed ending does not reset HP, move characters, change active scene,
+  change character assignments, advance turns, or emit combat/movement/character
+  events.
+
+Design boundary:
+
+- Ending is destructive and in-memory-only for now.
+- Ended encounters are not preserved in history.
+- There is no combat summary, audit log, replay, or persistence yet.
+
 ## Acceptance Criteria
 
 - DM can set an assigned character's current HP.
@@ -126,6 +152,10 @@ No new DM feature was added in this exit pass.
 - DM turn usage override emits one `encounter_state` update with
   `dm_turn_usage_changed`.
 - DM turn usage override mutates only encounter bookkeeping state.
+- DM encounter end emits one final `encounter_state` update with
+  `encounter_ended`.
+- DM encounter end clears the active encounter without mutating scene or
+  character state.
 
 ## Tests Added
 
@@ -149,12 +179,15 @@ No new DM feature was added in this exit pass.
 - DM turn usage override authorization and no-active-encounter rejection.
 - DM turn usage override protocol validation for invalid movement usage.
 - DM turn usage override event-boundary and idempotency behavior.
+- DM encounter end success, post-end read failure, and restart behavior.
+- DM encounter end authorization and no-active-encounter rejection.
+- DM encounter end event-boundary and idempotency behavior.
 
 ## Future Slices
 
 - DM condition editing foundation after the condition model exists.
 - Explicit force/ignore-occupancy reposition override, if product needs it.
-- Encounter end command.
+- Encounter reset/history/audit flows.
 - DM encounter participant management.
 - Durable override audit trail in a later persistence phase.
 
@@ -171,7 +204,8 @@ No new DM feature was added in this exit pass.
 - There is no audit log, event replay, or durable override history yet.
 - There is no force mode or ignore-collision reposition override yet.
 - There is no condition editor yet.
-- There is no encounter end, reset, or cleanup flow yet.
+- Encounter end exists, but there is no encounter reset, history, audit, or
+  cleanup flow yet.
 - Future DM controls should continue as dedicated narrow slices instead of
   becoming a broad generic override endpoint.
 - True auditability and transaction safety require future persistence/outbox

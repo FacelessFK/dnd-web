@@ -752,6 +752,11 @@ async function handleDmCommandRequest(
           encounter: runtime.dmSetCurrentTurnUsage(command),
         };
         break;
+      case 'dm_end_active_encounter':
+        data = {
+          encounter: runtime.dmEndActiveEncounter(command),
+        };
+        break;
       default:
         throw new Error('Unsupported DM command type.');
     }

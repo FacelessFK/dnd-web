@@ -27,6 +27,7 @@ import type {
   CreateCharacterCommand,
   CreateSceneCommand,
   CreateSessionCommand,
+  DmEndActiveEncounterCommand,
   DmRepositionCharacterInActiveSceneCommand,
   DmSetCharacterCurrentHpCommand,
   DmSetCurrentTurnUsageCommand,
@@ -85,6 +86,7 @@ import {
   assertEncounterTurnActor,
   assertSceneBelongsToEncounter,
   createEncounterRecord,
+  endEncounterRecord,
   EncounterRuntimeError,
   markEncounterActionUsed,
   markEncounterBonusActionUsed,
@@ -491,6 +493,37 @@ export class InMemoryGameRuntime {
       ),
       reason: 'dm_turn_usage_changed',
     });
+  }
+
+  dmEndActiveEncounter(command: DmEndActiveEncounterCommand): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'end encounters');
+
+    const activeEncounter = this.encounters.getEncounterBySession(
+      snapshot.session.id,
+    );
+
+    assertEncounterBelongsToSession(activeEncounter, snapshot.session.id);
+
+    const endedEncounter = this.encounters.endEncounter(
+      endEncounterRecord(activeEncounter),
+    );
+
+    this.publishEncounterStateUpdate({
+      sessionId: snapshot.session.id,
+      encounter: endedEncounter,
+      reason: 'encounter_ended',
+    });
+
+    return endedEncounter;
   }
 
   createScene(command: CreateSceneCommand): Scene {

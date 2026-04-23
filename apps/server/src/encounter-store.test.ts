@@ -62,6 +62,25 @@ test('encounter store rejects duplicate active encounters for a session', () => 
   );
 });
 
+test('encounter store can clear an active encounter and return the ended record', () => {
+  const store = new InMemoryEncounterStore();
+  const active = store.createEncounter(createEncounter());
+  const ended = store.endEncounter({
+    ...active,
+    status: 'ended',
+    updatedAt: '2025-01-01T00:01:00.000Z',
+  });
+
+  assert.equal(ended.status, 'ended');
+  assert.equal(store.findEncounterBySession('ABC123'), null);
+  assert.throws(
+    () => store.getEncounterBySession('ABC123'),
+    (error) =>
+      error instanceof EncounterStoreError &&
+      error.code === 'no_active_encounter',
+  );
+});
+
 test('encounter store rejects missing active encounters on read and save', () => {
   const store = new InMemoryEncounterStore();
 

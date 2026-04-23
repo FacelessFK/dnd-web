@@ -8,7 +8,7 @@ export const rulesStrictnessLevels = [
   'dm_led',
 ] as const;
 export const characterStatuses = ['draft', 'ready'] as const;
-export const encounterStatuses = ['active'] as const;
+export const encounterStatuses = ['active', 'ended'] as const;
 export const visibilityStates = ['visible', 'hidden', 'obscured'] as const;
 export const sceneEntityTypes = [
   'player_spawn',

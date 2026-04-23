@@ -842,10 +842,21 @@ test('dm commands are accepted for narrow HP override validation', () => {
       },
     },
   });
+  const endEncounterResult = dmCommandSchema.safeParse({
+    commandId: 'dm-end-encounter-1',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
 
   assert.equal(hpResult.success, true);
   assert.equal(repositionResult.success, true);
   assert.equal(turnUsageResult.success, true);
+  assert.equal(endEncounterResult.success, true);
 });
 
 test('invalid DM turn-usage override payloads are rejected during command validation', () => {
@@ -1379,6 +1390,52 @@ test('DM turn usage override command ID conflicts do not mutate usage or emit SS
     getEncounterUpdates(updates).length,
     encounterUpdatesBeforeConflict,
   );
+});
+
+test('duplicate DM encounter end commands return cached success without duplicate encounter_state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const command = {
+    commandId: 'idempotent-dm-end-encounter-1',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  };
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'encounter_ended');
+
+  if (!first.body.ok || !('encounter' in first.body.data)) {
+    return;
+  }
+
+  assert.equal(first.body.data.encounter.status, 'ended');
 });
 
 test('command ID conflicts are rejected without runtime mutation or SSE', async () => {
