@@ -29,6 +29,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@dnd/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@dnd/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -82,6 +85,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@dnd/shared':
+        specifier: workspace:*
+        version: link:../shared
       drizzle-orm:
         specifier: ^0.36.4
         version: 0.36.4(@types/react@19.2.14)(pg@8.20.0)(react@19.2.5)

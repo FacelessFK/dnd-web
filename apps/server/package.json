@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@dnd/db": "workspace:*",
     "@dnd/protocol": "workspace:*",
     "@dnd/rules": "workspace:*",
     "@dnd/shared": "workspace:*",

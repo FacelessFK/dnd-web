@@ -267,18 +267,24 @@ paths.
 
 Reasoning:
 
-- A first `CharacterRepository` adapter can be implemented and tested behind the
-  existing interface without claiming durable event delivery.
+- A first DB character adapter can be implemented and tested without claiming
+  durable event delivery.
+- The existing runtime-facing `CharacterRepository` is synchronous, while real
+  Drizzle/Postgres access is async. If Slice 2 does not introduce a runtime
+  async boundary, it should be treated as persistence groundwork rather than
+  completed end-to-end durable runtime integration.
 - Adding an outbox before the first durable repository would be mostly
   speculative.
 - However, the design should not pretend SSE publication is transactional.
 
 Recommended sequence:
 
-1. Slice 2: implement the first durable repository with tests.
-2. Slice 3: implement durable command idempotency once it can commit with real
+1. Slice 2: implement the first DB-backed repository groundwork with tests.
+2. Slice 2B if needed: wire the live runtime to an async character repository
+   boundary without changing public API behavior.
+3. Slice 3: implement durable command idempotency once it can commit with real
    durable state changes.
-3. Add an outbox soon after any production path depends on durable writes plus
+4. Add an outbox soon after any production path depends on durable writes plus
    reliable SSE publication.
 
 Outbox should eventually cover:
@@ -298,14 +304,15 @@ Proceed with Phase 10 Slice 2: First Durable Repository Slice.
 
 Concrete target:
 
-- Implement a database-backed `CharacterRepository` while keeping
-  `InMemoryCharacterStore` available.
+- Implement DB-backed character storage while keeping `InMemoryCharacterStore`
+  available.
 
 Minimum next-slice expectations:
 
 - Add the minimal schema for `StoredCharacterRecord`.
-- Preserve the existing `CharacterRepository` interface unless implementation
-  needs a narrow extension.
+- Preserve public HTTP/protocol/SSE behavior.
+- Do not claim the live runtime can use the DB-backed character repository until
+  the sync/async `CharacterRepository` mismatch is resolved.
 - Add repository tests for create, get, save, missing character errors, and
   clone/value semantics.
 - Keep runtime command behavior unchanged.
