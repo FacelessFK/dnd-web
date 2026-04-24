@@ -303,7 +303,7 @@ Completed outcome:
 
 ### Slice 4 — Encounter-Only Transactional Baseline
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -340,7 +340,71 @@ Acceptance:
 - No claim is made that `attack` or encounter-aware movement are transactionally
   durable yet.
 
-### Slice 5 — Encounter Persistence Exit Pass
+Completed outcome:
+
+- Added `DbBackedEncounterCommandTransactionBoundary`.
+- Extended `DndDatabaseUnitOfWork` so the real DB transaction context now
+  includes active-encounter records alongside character and completed-command
+  idempotency records.
+- Added a transaction-scoped encounter runtime path that:
+  - reuses current session/scene/character validation reads,
+  - swaps in a transaction-bound `DbBackedEncounterStore`,
+  - buffers `encounter_state` SSE until commit.
+- Supported transactional encounter commands are now:
+  - `start_encounter`,
+  - `advance_turn`,
+  - `use_action`,
+  - `use_bonus_action`,
+  - `use_reaction`,
+  - `record_movement_usage`,
+  - `dm_set_current_turn_usage`,
+  - `dm_set_current_turn_participant`,
+  - `dm_end_active_encounter`.
+- Supported transactional encounter commands now perform:
+  - durable idempotency lookup/conflict check,
+  - durable encounter create/save/delete,
+  - durable completed-command success record insert
+    in one real DB transaction.
+- Duplicate successful retries now return the cached durable success response
+  without rerunning the supported encounter mutation or republishing
+  `encounter_state`.
+- `command_id_conflict` still rejects conflicting fingerprints before runtime
+  mutation.
+- Failed supported encounter commands do not persist durable success records.
+- `dm_end_active_encounter` still preserves current behavior intentionally:
+  - the runtime can return and publish a final ended snapshot,
+  - the active encounter then disappears from future reads,
+  - durable encounter history remains out of scope.
+- `attack` and encounter-aware movement remain outside this slice because they
+  still need a later cross-store transaction/publication design.
+
+### Slice 5 — Cross-Store Combat Transaction Design
+
+Status: planned.
+
+Goal:
+
+- Define the honest next transaction boundary for the combat flows that span
+  both durable encounter state and durable character state.
+
+Tasks:
+
+- Map the exact cross-store transaction needs for:
+  - `attack`,
+  - encounter-aware movement.
+- Decide whether the first cross-store transactional target should be:
+  - attack-only,
+  - movement-only,
+  - or a shared character+encounter transaction boundary.
+- Re-evaluate durable idempotency placement for those cross-store commands.
+- Decide when outbox/publication work stops being deferrable.
+
+Acceptance:
+
+- The repo has an implementation-ready design for the first cross-store combat
+  transaction slice.
+
+### Slice 6 — Encounter Persistence Exit Pass
 
 Status: planned.
 

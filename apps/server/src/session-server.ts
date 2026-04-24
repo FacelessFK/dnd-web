@@ -55,6 +55,7 @@ import {
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
+import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import {
@@ -95,8 +96,10 @@ export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
 ): {
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
   server: Server;
   runtime: GameRuntime;
@@ -110,6 +113,7 @@ export function createSessionServer(
         runtime,
         idempotency,
         characterCommandTransaction,
+        encounterCommandTransaction,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -118,6 +122,7 @@ export function createSessionServer(
 
   return {
     characterCommandTransaction,
+    encounterCommandTransaction,
     idempotency,
     server,
     runtime,
@@ -131,6 +136,7 @@ export async function handleRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -146,7 +152,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-11',
-      status: 'durable-active-encounter-groundwork',
+      status: 'transactional-encounter-baseline',
     });
     return;
   }
@@ -184,6 +190,7 @@ export async function handleRequest(
       runtime,
       idempotency,
       characterCommandTransaction,
+      encounterCommandTransaction,
     );
     return;
   }
@@ -194,6 +201,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      encounterCommandTransaction,
     );
     return;
   }
@@ -667,6 +675,7 @@ async function handleEncounterCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -701,6 +710,59 @@ async function handleEncounterCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_encounter_state' ? null : 'encounter';
+
+    if (
+      idempotencyCategory &&
+      encounterCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      })
+    ) {
+      const success = await encounterCommandTransaction.run({
+        category: idempotencyCategory,
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          let encounter: EncounterCommandSuccess['data']['encounter'];
+
+          switch (command.type) {
+            case 'start_encounter':
+              encounter = await transactionRuntime.startEncounter(command);
+              break;
+            case 'advance_turn':
+              encounter = await transactionRuntime.advanceTurn(command);
+              break;
+            case 'use_action':
+              encounter = await transactionRuntime.useAction(command);
+              break;
+            case 'use_bonus_action':
+              encounter = await transactionRuntime.useBonusAction(command);
+              break;
+            case 'use_reaction':
+              encounter = await transactionRuntime.useReaction(command);
+              break;
+            case 'record_movement_usage':
+              encounter = await transactionRuntime.recordMovementUsage(command);
+              break;
+            default:
+              throw new Error(
+                `Unsupported transactional encounter command type "${command.type}".`,
+              );
+          }
+
+          return {
+            ok: true,
+            data: {
+              encounter,
+            },
+          } satisfies EncounterCommandSuccess;
+        },
+      });
+
+      sendJson(response, 200, success, encounterCommandSuccessSchema);
+      return;
+    }
+
     const cachedSuccess = idempotencyCategory
       ? await idempotency.getCachedSuccess<EncounterCommandSuccess>({
           category: idempotencyCategory,
@@ -770,6 +832,7 @@ async function handleDmCommandRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -832,6 +895,51 @@ async function handleDmCommandRequest(
                 `Unsupported transactional DM command type "${command.type}".`,
               );
           }
+        },
+      });
+
+      sendJson(response, 200, success, dmCommandSuccessSchema);
+      return;
+    }
+
+    if (
+      encounterCommandTransaction?.supports({
+        category: 'dm',
+        command,
+      })
+    ) {
+      const success = await encounterCommandTransaction.run({
+        category: 'dm',
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          let encounter: EncounterCommandSuccess['data']['encounter'];
+
+          switch (command.type) {
+            case 'dm_set_current_turn_usage':
+              encounter =
+                await transactionRuntime.dmSetCurrentTurnUsage(command);
+              break;
+            case 'dm_set_current_turn_participant':
+              encounter =
+                await transactionRuntime.dmSetCurrentTurnParticipant(command);
+              break;
+            case 'dm_end_active_encounter':
+              encounter =
+                await transactionRuntime.dmEndActiveEncounter(command);
+              break;
+            default:
+              throw new Error(
+                `Unsupported transactional DM encounter command type "${command.type}".`,
+              );
+          }
+
+          return {
+            ok: true,
+            data: {
+              encounter,
+            },
+          } satisfies DmCommandSuccess;
         },
       });
 

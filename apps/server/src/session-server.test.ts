@@ -55,6 +55,7 @@ import {
 import { InMemoryCharacterStore } from './character-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
+import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
 import {
@@ -79,6 +80,7 @@ async function postJson<TResponse>(
   path: string,
   body: unknown,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -100,6 +102,7 @@ async function postJson<TResponse>(
     runtime,
     idempotency,
     characterCommandTransaction,
+    encounterCommandTransaction,
   );
 
   return {
@@ -435,6 +438,20 @@ class InMemoryActiveEncounterRecordDatabase implements ActiveEncounterRecordData
     return this.clone(row);
   }
 
+  cloneRows(): Map<string, ActiveEncounterRecordRow> {
+    return new Map(
+      [...this.rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+  }
+
+  replaceRows(rows: Map<string, ActiveEncounterRecordRow>): void {
+    this.rows.clear();
+
+    for (const [key, row] of rows.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
+  }
+
   private nextTimestamp(): Date {
     const timestamp = new Date(Date.UTC(2026, 3, 23, 0, 25, this.clock, 0));
 
@@ -518,6 +535,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   constructor(
     private readonly characters: InMemoryCharacterRecordDatabase,
     private readonly commandIdempotency: InMemoryCommandIdempotencyRecordDatabase,
+    private readonly encounters: InMemoryActiveEncounterRecordDatabase = new InMemoryActiveEncounterRecordDatabase(),
   ) {}
 
   async transaction<T>(
@@ -526,15 +544,18 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     const transactionalCharacters = new InMemoryCharacterRecordDatabase();
     const transactionalCommandIdempotency =
       new InMemoryCommandIdempotencyRecordDatabase();
+    const transactionalEncounters = new InMemoryActiveEncounterRecordDatabase();
 
     transactionalCharacters.replaceRows(this.characters.cloneRows());
     transactionalCommandIdempotency.replaceRows(
       this.commandIdempotency.cloneRows(),
     );
+    transactionalEncounters.replaceRows(this.encounters.cloneRows());
 
     const result = await run({
       characters: transactionalCharacters,
       commandIdempotency: transactionalCommandIdempotency,
+      encounters: transactionalEncounters,
     });
 
     if (this.failBeforeCommit) {
@@ -545,6 +566,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     this.commandIdempotency.replaceRows(
       transactionalCommandIdempotency.cloneRows(),
     );
+    this.encounters.replaceRows(transactionalEncounters.cloneRows());
     this.committedCount += 1;
 
     return result;
@@ -713,6 +735,222 @@ function setupEncounterForIdempotency(runtime: InMemoryGameRuntime) {
   });
 
   runtime.startEncounter({
+    commandId: 'setup-start-encounter',
+    type: 'start_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  return {
+    firstCharacterId: firstCharacter.character.id,
+    secondCharacterId: secondCharacter.character.id,
+    sessionId: session.sessionId,
+  };
+}
+
+async function setupDurableEncounterForIdempotency(
+  runtime: InMemoryGameRuntime,
+) {
+  const session = await runtime.createSession({
+    commandId: 'setup-create-session',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+
+  await runtime.joinSession({
+    commandId: 'setup-join-player-1',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-001',
+      displayName: 'Player One',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+  await runtime.joinSession({
+    commandId: 'setup-join-player-2',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-002',
+      displayName: 'Player Two',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  const firstCharacter = await runtime.createCharacter({
+    commandId: 'setup-create-character-player-001',
+    type: 'create_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      ownerParticipantId: 'player-001',
+      character: {
+        name: 'Aria',
+        level: 5,
+        className: 'Wizard',
+        speciesOrRace: 'Elf',
+        background: 'Sage',
+        abilities: {
+          str: 8,
+          dex: 14,
+          con: 13,
+          int: 16,
+          wis: 12,
+          cha: 10,
+        },
+        hp: {
+          max: 26,
+          current: 26,
+          temp: 0,
+        },
+        armorClass: 13,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+  const secondCharacter = await runtime.createCharacter({
+    commandId: 'setup-create-character-player-002',
+    type: 'create_character',
+    actor: {
+      participantId: 'player-002',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      ownerParticipantId: 'player-002',
+      character: {
+        name: 'Borin',
+        level: 5,
+        className: 'Fighter',
+        speciesOrRace: 'Human',
+        background: 'Guard',
+        abilities: {
+          str: 16,
+          dex: 12,
+          con: 14,
+          int: 10,
+          wis: 10,
+          cha: 8,
+        },
+        hp: {
+          max: 34,
+          current: 34,
+          temp: 0,
+        },
+        armorClass: 16,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+
+  await runtime.assignCharacterToParticipant({
+    commandId: 'setup-assign-character-player-001',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      characterId: firstCharacter.character.id,
+    },
+  });
+  await runtime.assignCharacterToParticipant({
+    commandId: 'setup-assign-character-player-002',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-002',
+      characterId: secondCharacter.character.id,
+    },
+  });
+
+  const scene = await runtime.createScene({
+    commandId: 'setup-create-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Reliability Test Arena',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  await runtime.activateSceneForSession({
+    commandId: 'setup-activate-scene',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      sceneId: scene.id,
+    },
+  });
+  await runtime.placeCharacterInActiveScene({
+    commandId: 'setup-place-character-player-001',
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 0,
+      },
+    },
+  });
+  await runtime.placeCharacterInActiveScene({
+    commandId: 'setup-place-character-player-002',
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId: 'player-002',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      participantId: 'player-002',
+      position: {
+        x: 1,
+        y: 0,
+      },
+    },
+  });
+
+  await runtime.startEncounter({
     commandId: 'setup-start-encounter',
     type: 'start_encounter',
     actor: {
@@ -2833,6 +3071,374 @@ test('db-backed active encounters can be reread after restart when durable sessi
     assert.equal(rereadEncounter.body.data.encounter.roundNumber, 1);
     assert.equal(rereadEncounter.body.data.encounter.currentTurnIndex, 0);
     assert.equal(rereadEncounter.body.data.encounter.participants.length, 2);
+  }
+});
+
+test('db-backed encounter transaction boundary returns cached success on duplicate retry and emits encounter_state only after commit', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new InMemoryCharacterStore(),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let encounterCommandTransaction =
+    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const command = {
+    commandId: 'transactional-advance-turn-1',
+    type: 'advance_turn',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  };
+  const commitMarkers: number[] = [];
+
+  runtime.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'transactional-advance-turn-marker',
+    close: () => undefined,
+    send: () => {
+      commitMarkers.push(unitOfWork.committedCount);
+    },
+  });
+
+  const markerCountBefore = commitMarkers.length;
+  const encounterUpdateCountBefore = getEncounterUpdates(updates).length;
+  const commitCountBefore = unitOfWork.committedCount;
+  const first = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+    undefined,
+    encounterCommandTransaction,
+  );
+
+  encounterCommandTransaction = new DbBackedEncounterCommandTransactionBoundary(
+    unitOfWork,
+  );
+
+  const second = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    command,
+    undefined,
+    encounterCommandTransaction,
+  );
+  const encounterUpdates = getEncounterUpdates(updates).slice(
+    encounterUpdateCountBefore,
+  );
+  const newCommitMarkers = commitMarkers.slice(markerCountBefore);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'turn_advanced');
+  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+
+  if (first.body.ok && 'encounter' in first.body.data) {
+    const reread = runtime.getEncounterState({
+      commandId: 'transactional-advance-turn-reread',
+      type: 'get_encounter_state',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+      },
+    });
+
+    assert.equal(
+      reread.currentTurnIndex,
+      first.body.data.encounter.currentTurnIndex,
+    );
+    assert.equal(reread.roundNumber, first.body.data.encounter.roundNumber);
+  }
+});
+
+test('transactional encounter command ID conflicts still reject conflicting fingerprints without mutation or SSE', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new InMemoryCharacterStore(),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const encounterCommandTransaction =
+    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const firstCommand = {
+    commandId: 'transactional-dm-turn-usage-conflict-1',
+    type: 'dm_set_current_turn_usage',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 20,
+      },
+    },
+  };
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      turnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        reactionUsed: false,
+        movementUsed: 25,
+      },
+    },
+  };
+
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    firstCommand,
+    undefined,
+    encounterCommandTransaction,
+  );
+  const encounterUpdatesBeforeConflict = getEncounterUpdates(updates).length;
+  const conflict = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    conflictingCommand,
+    undefined,
+    encounterCommandTransaction,
+  );
+  const encounter = runtime.getEncounterState({
+    commandId: 'transactional-dm-turn-usage-conflict-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+
+  if (!conflict.body.ok) {
+    assert.equal(conflict.body.error.code, 'command_id_conflict');
+  }
+
+  assert.deepEqual(encounter.currentTurnUsage, {
+    actionUsed: true,
+    bonusActionUsed: false,
+    reactionUsed: false,
+    movementUsed: 20,
+  });
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdatesBeforeConflict,
+  );
+  assert.equal(idempotencyDatabase.recordCount, 1);
+});
+
+test('failed transactional encounter commands do not persist durable success records', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new InMemoryCharacterStore(),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const encounterCommandTransaction =
+    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const encounterBefore = runtime.getEncounterState({
+    commandId: 'transactional-dm-current-turn-invalid-before',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  const failed = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    {
+      commandId: 'transactional-dm-current-turn-invalid-1',
+      type: 'dm_set_current_turn_participant',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-999',
+      },
+    },
+    undefined,
+    encounterCommandTransaction,
+  );
+  const encounterAfter = runtime.getEncounterState({
+    commandId: 'transactional-dm-current-turn-invalid-after',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.notEqual(failed.status, 200);
+  assert.equal(failed.body.ok, false);
+  assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(getEncounterUpdates(updates).length, 0);
+  assert.equal(encounterAfter.id, encounterBefore.id);
+  assert.equal(
+    encounterAfter.currentTurnIndex,
+    encounterBefore.currentTurnIndex,
+  );
+  assert.deepEqual(
+    encounterAfter.currentTurnUsage,
+    encounterBefore.currentTurnUsage,
+  );
+});
+
+test('transactional DM encounter end removes future active reads while publishing the final ended snapshot after commit', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new InMemoryCharacterStore(),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const encounterCommandTransaction =
+    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const commitMarkers: number[] = [];
+
+  runtime.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'transactional-dm-end-encounter-marker',
+    close: () => undefined,
+    send: () => {
+      commitMarkers.push(unitOfWork.committedCount);
+    },
+  });
+
+  const markerCountBefore = commitMarkers.length;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-dm-end-encounter-1',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  };
+
+  const ended = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+    undefined,
+    encounterCommandTransaction,
+  );
+  const reread = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    {
+      commandId: 'transactional-dm-end-encounter-read-after',
+      type: 'get_encounter_state',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+  const encounterUpdates = getEncounterUpdates(updates);
+  const newCommitMarkers = commitMarkers.slice(markerCountBefore);
+  const persistedEncounter =
+    await encounterDatabase.getActiveEncounterRecordBySession(sessionId);
+
+  assert.equal(ended.status, 200);
+  assert.equal(ended.body.ok, true);
+  assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
+  assert.equal(persistedEncounter, null);
+  assert.equal(reread.status, 409);
+  assert.equal(reread.body.ok, false);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(encounterUpdates[0]?.reason, 'encounter_ended');
+  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+
+  if (ended.body.ok && 'encounter' in ended.body.data) {
+    assert.equal(ended.body.data.encounter.status, 'ended');
+  }
+
+  if (!reread.body.ok) {
+    assert.equal(reread.body.error.code, 'no_active_encounter');
   }
 });
 

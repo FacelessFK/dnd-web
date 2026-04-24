@@ -142,7 +142,7 @@ test('db-backed idempotency store rejects command fingerprint conflicts', async 
   );
 });
 
-test('db-backed idempotency store keeps unsupported commands process-local', async () => {
+test('db-backed idempotency store keeps out-of-scope commands process-local', async () => {
   const database = new InMemoryCommandIdempotencyRecordDatabase();
   const firstStore = new DbBackedCommandIdempotencyStore(database, {
     fallback: new InMemoryCommandIdempotencyStore(),
@@ -151,12 +151,13 @@ test('db-backed idempotency store keeps unsupported commands process-local', asy
     category: 'encounter',
     command: {
       commandId: 'unsupported-encounter-command-1',
-      type: 'use_action',
+      type: 'attack',
       actor: {
         participantId: 'player-001',
       },
       payload: {
         sessionId: 'session-001',
+        targetParticipantId: 'player-002',
       },
     },
   };

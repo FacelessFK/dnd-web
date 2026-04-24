@@ -1,6 +1,6 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 11 Slice 3.
+This handoff summarizes the current repository state after Phase 11 Slice 4.
 It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
@@ -20,6 +20,8 @@ older planning language if details disagree.
   runtime to preserve narrow active-scene rereads after restart.
 - A DB-backed active-encounter boundary now exists and can be injected into the
   live runtime to preserve narrow `get_encounter_state` rereads after restart.
+- A DB-backed encounter transaction boundary now exists for the supported
+  encounter-only command set.
 - The web app remains a minimal shell, not a battle UI or DM panel.
 - The project is not MVP-ready because runtime-wide persistence, frontend UX,
   durable event handling, broader rules, and production posture are still
@@ -96,9 +98,9 @@ Important boundary:
   encounter through `get_encounter_state` when the DB-backed session snapshot,
   character, scene, and active-encounter stores are all injected and still
   coherent.
-- Phase 11 Slice 3 documents that the first honest transaction target is the
-  encounter-only command set, while `attack` and encounter-aware movement still
-  need a later cross-store transaction design.
+- Phase 11 Slice 4 now lets supported encounter-only commands commit the
+  durable encounter write/delete and durable completed-command success record
+  in one real DB transaction, with `encounter_state` buffered until commit.
 - Presence, most command idempotency, SSE delivery, replay, and outbox behavior
   remain non-durable.
 - Phase 10 Slice 7 closes the initial persistence foundation by documenting the
@@ -213,11 +215,11 @@ should recover current authoritative state through read models.
   - `session_id` / `scene_id` columns plus association inside persisted
     documents.
 - No command-surface-wide durable idempotency. Durable idempotency records exist
-  only for supported character-record mutation commands when the DB-backed
-  idempotency/transaction boundary is injected.
-- Encounter commands still use in-memory idempotency because the repo does not
-  yet have an encounter transaction boundary that can commit the encounter
-  write and completed-command record atomically.
+  only for supported character-record mutation commands and supported
+  encounter-only mutation commands when their DB-backed transaction boundaries
+  are injected.
+- `attack` and encounter-aware movement still do not have a cross-store
+  transaction boundary or durable idempotency path.
 - No durable event replay.
 - No global event cursor.
 - No event sourcing.
@@ -240,14 +242,14 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. Phase 11 Slice 3 now recommends an encounter-only transactional baseline as
-   the next narrow implementation slice before any cross-store combat
-   transaction work.
+1. The next narrow persistence step should be a cross-store combat transaction
+   design pass for `attack` and encounter-aware movement before any stronger
+   combat-continuity claim.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.
-3. Keep `attack` and encounter-aware movement out of the first encounter
-   transaction slice; they still need a later cross-store transaction plus
+3. Keep `attack` and encounter-aware movement out of the current encounter-only
+   transactional baseline; they still need a later cross-store transaction plus
    publication design.
 4. Add outbox/replay only as dedicated future slices once durable writes need
    reliable publication.

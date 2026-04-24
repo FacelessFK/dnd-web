@@ -135,6 +135,25 @@ export class DbBackedEncounterStore implements EncounterRepository {
     return storedEncounter;
   }
 
+  cloneEncountersBySession(): Map<SessionId, Encounter> {
+    return new Map(
+      [...this.encountersBySession.entries()].map(([sessionId, encounter]) => [
+        sessionId,
+        this.clone(encounter),
+      ]),
+    );
+  }
+
+  replaceEncountersBySession(
+    encountersBySession: Map<SessionId, Encounter>,
+  ): void {
+    this.encountersBySession.clear();
+
+    for (const [sessionId, encounter] of encountersBySession.entries()) {
+      this.encountersBySession.set(sessionId, this.clone(encounter));
+    }
+  }
+
   private toDocument(
     encounter: Encounter,
   ): StoredActiveEncounterRecordDocument {

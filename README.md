@@ -22,13 +22,13 @@ character mutations, a narrow durable session snapshot baseline for
 restart-safe reconnect, and a DB-backed scene persistence baseline for
 restart-safe active-scene rereads. Phase 11 Slice 2 now adds a DB-backed
 active-encounter repository baseline for injected restart-time
-`get_encounter_state` rereads. Phase 11 Slice 3 now maps the real encounter
-transaction boundaries and keeps combat continuity claims honest. Most live
-runtime state still remains process-local, and combat continuity is not yet
-restart-safe.
+`get_encounter_state` rereads. Phase 11 Slice 4 now adds an encounter-only
+transactional baseline with durable idempotency for supported encounter-local
+mutations on the injected DB-backed path. Most live runtime state still remains
+process-local, and combat continuity is not yet restart-safe.
 
-The next recommended persistence step is an encounter-only transactional
-baseline for encounter-local durable commands, not gameplay expansion.
+The next recommended persistence step is a cross-store combat transaction
+design pass for `attack` and encounter-aware movement, not gameplay expansion.
 
 Implemented so far:
 
@@ -60,6 +60,8 @@ Implemented so far:
 - narrow durable active-encounter baseline for restart-safe
   `get_encounter_state` recovery when DB-backed session, character, scene, and
   active-encounter stores are all injected
+- encounter-only transactional durable idempotency for supported
+  encounter-local mutation commands on the injected DB-backed path
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
@@ -202,6 +204,15 @@ Reliability notes:
 - For those supported injected DB paths, character writes and durable
   successful-command idempotency records can be committed in the same real DB
   transaction.
+- Phase 11 Slice 4 adds the same transactional durable-idempotency baseline for
+  supported encounter-local commands when the DB-backed encounter store and
+  encounter transaction boundary are injected:
+  `start_encounter`, `advance_turn`, `use_action`, `use_bonus_action`,
+  `use_reaction`, `record_movement_usage`, `dm_set_current_turn_usage`,
+  `dm_set_current_turn_participant`, and `dm_end_active_encounter`.
+- For those supported injected DB paths, the durable encounter write/delete and
+  durable completed-command success record can commit in the same real DB
+  transaction, and `encounter_state` is published only after commit.
 - Default local startup still uses in-memory session, scene, encounter, and
   stream state.
 - When the DB-backed session snapshot store is injected, session identity,
@@ -217,9 +228,8 @@ Reliability notes:
 - When the DB-backed active-encounter store is injected too, `get_encounter_state`
   can reread an active encounter after restart if durable session, scene, and
   character state still line up.
-- Encounter commands still use the in-memory idempotency path today because the
-  repo does not yet have a real encounter transaction boundary that can commit
-  the encounter write and completed-command record atomically.
+- `attack` and encounter-aware movement still do not have a real cross-store
+  transaction boundary or durable idempotency path.
 - Internal runtime/store typing still carries deliberate technical debt here:
   some runtime methods stay externally stable while returning a Promise on
   injected DB-backed paths.

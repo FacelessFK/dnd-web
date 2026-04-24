@@ -34,6 +34,7 @@ import type {
   DmSetCharacterCurrentHpCommand,
   DmSetCurrentTurnParticipantCommand,
   DmSetCurrentTurnUsageCommand,
+  EncounterStateUpdate,
   EncounterStateUpdateReason,
   FinalizeCharacterCommand,
   GetEncounterStateCommand,
@@ -195,6 +196,9 @@ export class InMemoryGameRuntime<
     private readonly characterStateUpdateSink?: (
       update: CharacterStateUpdate,
     ) => void,
+    private readonly encounterStateUpdateSink?: (
+      update: EncounterStateUpdate,
+    ) => void,
   ) {}
 
   createSession(
@@ -257,7 +261,26 @@ export class InMemoryGameRuntime<
       this.scenes,
       this.encounters,
       this.d20Roller,
-      options.characterStateUpdateSink,
+      options.characterStateUpdateSink ?? this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+    );
+  }
+
+  withEncounterRepository(
+    encounters: EncounterRepository,
+    options: {
+      encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+    } = {},
+  ): InMemoryGameRuntime<TCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      this.characters,
+      this.scenes,
+      encounters,
+      this.d20Roller,
+      this.characterStateUpdateSink,
+      options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
     );
   }
 
@@ -1959,12 +1982,19 @@ export class InMemoryGameRuntime<
     encounter: Encounter;
     reason: EncounterStateUpdateReason;
   }): void {
-    this.sessions.publishEncounterStateUpdate({
+    const update: EncounterStateUpdate = {
       type: 'encounter_state',
       reason: params.reason,
       sessionId: params.sessionId,
       encounter: params.encounter,
-    });
+    };
+
+    if (this.encounterStateUpdateSink) {
+      this.encounterStateUpdateSink(structuredClone(update));
+      return;
+    }
+
+    this.sessions.publishEncounterStateUpdate(update);
   }
 
   private publishCombatEvent(update: CombatEvent): void {
