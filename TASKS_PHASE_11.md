@@ -380,7 +380,7 @@ Completed outcome:
 
 ### Slice 5 — Cross-Store Combat Transaction Design
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -404,7 +404,152 @@ Acceptance:
 - The repo has an implementation-ready design for the first cross-store combat
   transaction slice.
 
-### Slice 6 — Encounter Persistence Exit Pass
+Completed outcome:
+
+- Mapped the exact current read/write/publication sequence for:
+  - `attack`,
+  - encounter-aware movement inside `move_character_in_active_scene`.
+- Identified the minimum real transaction participants for those flows:
+  - `character_records`,
+  - `active_encounter_records`,
+  - `completed_command_idempotency_records`.
+- Distinguished what can stay as pre-transaction reads in a first cross-store
+  slice:
+  - command parsing,
+  - idempotency-key construction,
+  - session membership lookup,
+  - active-scene definition/grid lookup,
+  - other read-model inputs that can be revalidated against transaction-local
+    character and encounter rows before mutation.
+- Made explicit which invariants become unsafe unless revalidated inside the
+  transaction:
+  - current-turn ownership and turn-usage state on the encounter row,
+  - target HP/downed state for `attack`,
+  - attacker/target active-scene placement for `attack`,
+  - moving-character origin position, speed allowance, and encounter movement
+    usage for encounter-aware movement,
+  - occupancy/blocking placements used by encounter-aware movement.
+- Chose the first honest cross-store implementation target:
+  - implement `attack` first,
+  - build it on a reusable character+encounter transaction shape,
+  - defer encounter-aware movement until after the narrower attack slice proves
+    the shared transaction pattern.
+- Clarified durable idempotency placement for cross-store combat commands:
+  - add it only when the character write, encounter write, and completed
+    command success record can commit in one real DB transaction,
+  - do not add it for encounter-aware movement until its wider occupancy and
+    placement revalidation story is accepted.
+- Clarified outbox timing for these flows:
+  - one more slice can still defer outbox work honestly if the claim stays
+    limited to atomic durable state plus durable idempotency,
+  - but the exact remaining risk is that committed combat state can still be
+    reread after clients miss best-effort post-commit `encounter_state`,
+    `movement_state`, or `combat_event` emissions.
+
+### Slice 6 — Attack-First Cross-Store Combat Transaction Baseline
+
+Status: completed.
+
+Goal:
+
+- Add the first honest cross-store combat transaction boundary by targeting
+  `attack` before the wider encounter-aware movement flow.
+
+Tasks:
+
+- Introduce a reusable character+encounter transaction path for `attack`.
+- Commit, in one real DB transaction:
+  - durable idempotency lookup/conflict check,
+  - target character HP write on hit,
+  - durable encounter usage write,
+  - durable completed-command success record insert.
+- Keep `encounter_state` and `combat_event` publication post-commit only.
+- Revalidate the mutable combat invariants inside the transaction before
+  applying the write.
+- Keep encounter-aware movement out of this slice.
+
+Acceptance:
+
+- `attack` becomes the first cross-store combat command with atomic durable
+  character state, encounter state, and durable idempotency.
+- No claim is made that encounter-aware movement, replay, or reliable event
+  delivery are solved.
+
+Completed outcome:
+
+- Added `DbBackedCombatCommandTransactionBoundary`.
+- Kept the first cross-store combat command intentionally narrow:
+  - `attack` only.
+- Reused the existing real DB unit-of-work shape so the supported injected
+  attack path now commits, in one real DB transaction:
+  - durable idempotency lookup/conflict check,
+  - target character HP write on hit,
+  - active encounter usage write,
+  - durable completed-command success record insert.
+- Added a reusable runtime combat transaction view that can swap in:
+  - a transaction-bound `DbBackedCharacterRepository`,
+  - a transaction-bound `DbBackedEncounterStore`,
+  - buffered post-commit `encounter_state`,
+  - buffered post-commit `combat_event`.
+- Kept `attack` legality and gameplay behavior unchanged:
+  - same legality-before-RNG flow,
+  - same fixed damage,
+  - same current-turn gating,
+  - same `encounter_state` then `combat_event` client ordering.
+- Revalidated the mutable combat invariants against transaction-local character
+  and encounter state before mutation:
+  - current-turn ownership,
+  - action availability,
+  - target still valid in the encounter,
+  - target HP/downed state,
+  - attacker/target active-scene placement,
+  - encounter/session/scene alignment through the existing read-model checks.
+- Kept narrow setup reads outside the mutating transaction:
+  - command parsing,
+  - idempotency-key construction,
+  - initial session membership lookup,
+  - active-scene definition lookup.
+- Duplicate successful retries now return the cached durable success response
+  for the supported injected attack path without:
+  - rerolling,
+  - reapplying damage,
+  - republishing `encounter_state`,
+  - republishing `combat_event`.
+- Failed transactional attacks do not persist durable success records.
+- `command_id_conflict` still rejects conflicting attack fingerprints before
+  runtime mutation.
+- Encounter-aware movement remains explicitly out of scope for this slice.
+- Outbox, replay, catch-up, event cursor, and durable encounter history remain
+  out of scope for this slice.
+
+### Slice 7 — Encounter-Aware Movement Cross-Store Transaction Baseline
+
+Status: planned.
+
+Goal:
+
+- Add the next honest cross-store combat transaction boundary by targeting
+  encounter-aware movement after the narrower attack slice.
+
+Tasks:
+
+- Reuse the shared character+encounter transaction shape proven by Slice 6.
+- Revalidate the wider movement-specific invariants inside the transaction:
+  - moving-character origin placement,
+  - current speed allowance,
+  - current-turn ownership when movement usage is spent,
+  - occupancy/blocking placements used for destination validation.
+- Decide whether durable idempotency can safely widen to the movement command
+  once those occupancy reads are revalidated honestly.
+- Keep outbox and replay deferred unless movement ordering guarantees become a
+  product requirement.
+
+Acceptance:
+
+- Encounter-aware movement becomes transactionally honest without implying that
+  outbox/replay or full combat continuity are solved.
+
+### Slice 8 — Encounter Persistence Exit Pass
 
 Status: planned.
 

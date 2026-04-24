@@ -24,11 +24,15 @@ restart-safe active-scene rereads. Phase 11 Slice 2 now adds a DB-backed
 active-encounter repository baseline for injected restart-time
 `get_encounter_state` rereads. Phase 11 Slice 4 now adds an encounter-only
 transactional baseline with durable idempotency for supported encounter-local
-mutations on the injected DB-backed path. Most live runtime state still remains
-process-local, and combat continuity is not yet restart-safe.
+mutations on the injected DB-backed path. Phase 11 Slice 6 now adds the first
+attack-first cross-store combat transactional baseline across durable
+character and active-encounter state on the injected DB-backed path. Most live
+runtime state still remains process-local, and combat continuity is not yet
+restart-safe.
 
-The next recommended persistence step is a cross-store combat transaction
-design pass for `attack` and encounter-aware movement, not gameplay expansion.
+The next recommended persistence step is an encounter-aware movement
+cross-store transactional slice built on the same shared
+character+encounter transaction boundary, not gameplay expansion.
 
 Implemented so far:
 
@@ -62,6 +66,9 @@ Implemented so far:
   active-encounter stores are all injected
 - encounter-only transactional durable idempotency for supported
   encounter-local mutation commands on the injected DB-backed path
+- attack-first cross-store transactional durable idempotency on the injected
+  DB-backed path for atomic target HP write + encounter usage write + durable
+  completed-command success record commit
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
@@ -228,8 +235,14 @@ Reliability notes:
 - When the DB-backed active-encounter store is injected too, `get_encounter_state`
   can reread an active encounter after restart if durable session, scene, and
   character state still line up.
-- `attack` and encounter-aware movement still do not have a real cross-store
+- Phase 11 Slice 6 now makes `attack` the first cross-store combat command
+  with atomic durable character state, encounter state, and durable
+  completed-command idempotency on the injected DB-backed path.
+- Encounter-aware movement still does not yet have a real cross-store
   transaction boundary or durable idempotency path.
+- One more slice can still defer outbox work honestly, but committed attack or
+  movement state can still be reread after clients miss best-effort
+  post-commit `encounter_state`, `movement_state`, or `combat_event` updates.
 - Internal runtime/store typing still carries deliberate technical debt here:
   some runtime methods stay externally stable while returning a Promise on
   injected DB-backed paths.

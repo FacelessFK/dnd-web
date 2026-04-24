@@ -151,6 +151,14 @@ type AttackContext = {
   targetPosition: ScenePosition;
 };
 
+export type PreparedAttackContext = {
+  activeSceneId: SceneId;
+  actor: Participant;
+  scene: Scene;
+  snapshot: SessionSnapshot;
+  targetParticipantId: ParticipantId;
+};
+
 type ResolvedAttack = {
   updatedEncounter: Encounter;
   roll: CombatEvent['roll'];
@@ -199,6 +207,7 @@ export class InMemoryGameRuntime<
     private readonly encounterStateUpdateSink?: (
       update: EncounterStateUpdate,
     ) => void,
+    private readonly combatEventSink?: (update: CombatEvent) => void,
   ) {}
 
   createSession(
@@ -263,6 +272,7 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       options.characterStateUpdateSink ?? this.characterStateUpdateSink,
       this.encounterStateUpdateSink,
+      this.combatEventSink,
     );
   }
 
@@ -281,6 +291,29 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       this.characterStateUpdateSink,
       options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
+      this.combatEventSink,
+    );
+  }
+
+  withCombatRepositories<TNextCharacters extends RuntimeCharacterRepository>(
+    characters: TNextCharacters,
+    encounters: EncounterRepository,
+    options: {
+      characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
+      combatEventSink?: (update: CombatEvent) => void;
+      encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+    } = {},
+  ): InMemoryGameRuntime<TNextCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      characters,
+      this.scenes,
+      encounters,
+      this.d20Roller,
+      options.characterStateUpdateSink ?? this.characterStateUpdateSink,
+      options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
+      options.combatEventSink ?? this.combatEventSink,
     );
   }
 
@@ -1181,8 +1214,33 @@ export class InMemoryGameRuntime<
   }
 
   attack(command: AttackCommand): Encounter {
+    return this.attackPrepared(this.prepareAttack(command));
+  }
+
+  prepareAttack(command: AttackCommand): PreparedAttackContext {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+
+    return {
+      activeSceneId,
+      actor,
+      scene,
+      snapshot,
+      targetParticipantId: command.payload.targetParticipantId,
+    };
+  }
+
+  attackPrepared(prepared: PreparedAttackContext): Encounter {
     return this.resolveRepositoryResult(
-      this.resolveAttackContext(command),
+      this.resolveAttackContext(prepared),
       (context) => {
         const resolution = this.resolveAttack(context);
 
@@ -1476,17 +1534,10 @@ export class InMemoryGameRuntime<
     };
   }
 
-  private resolveAttackContext(command: AttackCommand): AttackContext {
-    const snapshot = this.sessions.getSessionSnapshotForParticipant(
-      command.payload.sessionId,
-      command.actor.participantId,
-    );
-    const actor = this.requireParticipant(
-      snapshot,
-      command.actor.participantId,
-    );
-    const activeSceneId = requireActiveSceneId(snapshot);
-    const scene = this.scenes.getScene(activeSceneId);
+  private resolveAttackContext(prepared: PreparedAttackContext): AttackContext {
+    const { activeSceneId, actor, scene, snapshot, targetParticipantId } =
+      prepared;
+
     return this.resolveRepositoryResult(
       this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
       (encounter) => {
@@ -1500,7 +1551,7 @@ export class InMemoryGameRuntime<
         );
         const targetParticipant = this.requireParticipant(
           snapshot,
-          command.payload.targetParticipantId,
+          targetParticipantId,
         );
 
         if (targetParticipant.id === attackerParticipant.id) {
@@ -1998,6 +2049,11 @@ export class InMemoryGameRuntime<
   }
 
   private publishCombatEvent(update: CombatEvent): void {
+    if (this.combatEventSink) {
+      this.combatEventSink(structuredClone(update));
+      return;
+    }
+
     this.sessions.publishCombatEvent(update);
   }
 

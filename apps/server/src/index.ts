@@ -10,9 +10,9 @@ const { server } = createSessionServer();
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 11 encounter-only transactional baseline listening on http://${host}:${port}`,
+    `[server] Phase 11 attack-first cross-store transactional baseline listening on http://${host}:${port}`,
   );
   console.log(
-    '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, scene, and active-encounter stores now support transactional durable idempotency for supported character and encounter-only encounter mutations, without replay, outbox, or full combat continuity guarantees.',
+    '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, scene, and active-encounter stores now support transactional durable idempotency for supported character mutations, encounter-only commands, and attack on the DB-backed path, without replay, outbox, or full combat continuity guarantees.',
   );
 });

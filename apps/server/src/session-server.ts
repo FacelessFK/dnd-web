@@ -55,6 +55,7 @@ import {
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
+import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
@@ -97,7 +98,9 @@ export function createSessionServer(
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): {
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
@@ -114,6 +117,7 @@ export function createSessionServer(
         idempotency,
         characterCommandTransaction,
         encounterCommandTransaction,
+        combatCommandTransaction,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -121,6 +125,7 @@ export function createSessionServer(
   });
 
   return {
+    combatCommandTransaction,
     characterCommandTransaction,
     encounterCommandTransaction,
     idempotency,
@@ -137,6 +142,7 @@ export async function handleRequest(
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -152,7 +158,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-11',
-      status: 'transactional-encounter-baseline',
+      status: 'transactional-attack-baseline',
     });
     return;
   }
@@ -202,6 +208,7 @@ export async function handleRequest(
       runtime,
       idempotency,
       encounterCommandTransaction,
+      combatCommandTransaction,
     );
     return;
   }
@@ -676,6 +683,7 @@ async function handleEncounterCommandRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -710,6 +718,48 @@ async function handleEncounterCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_encounter_state' ? null : 'encounter';
+
+    if (
+      idempotencyCategory &&
+      combatCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      })
+    ) {
+      const success = await combatCommandTransaction.run({
+        category: idempotencyCategory,
+        command,
+        runtime,
+        prepare: (preparedRuntime) => {
+          switch (command.type) {
+            case 'attack':
+              return preparedRuntime.prepareAttack(command);
+            default:
+              throw new Error(
+                `Unsupported transactional combat command type "${command.type}".`,
+              );
+          }
+        },
+        execute: async (transactionRuntime, prepared) => {
+          switch (command.type) {
+            case 'attack':
+              return {
+                ok: true,
+                data: {
+                  encounter: await transactionRuntime.attackPrepared(prepared),
+                },
+              } satisfies EncounterCommandSuccess;
+            default:
+              throw new Error(
+                `Unsupported transactional combat command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      sendJson(response, 200, success, encounterCommandSuccessSchema);
+      return;
+    }
 
     if (
       idempotencyCategory &&

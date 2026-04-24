@@ -35,7 +35,7 @@ Durability notes:
   session snapshots and scenes now have narrow durable baselines too, but
   encounters, stream delivery, replay, and broader live runtime continuity do
   not.
-- After Phase 11 Slice 4, the narrow honest restart baseline is:
+- After Phase 11 Slice 6, the implemented narrow restart baseline is still:
   - a restarted runtime can reread persisted character state through
     `get_character` when the same DB-backed character store is injected,
   - `reconnect_session` can also recover session membership when the DB-backed
@@ -449,7 +449,7 @@ Outbox should eventually cover:
 Replay remains deferred. An outbox can support reliable publication without
 exposing a client replay/cursor contract yet.
 
-## Current Durable Baseline After Phase 11 Slice 4
+## Current Durable Baseline After Phase 11 Slice 6
 
 With DB-backed stores injected, the current narrow restart-safe read-model
 baseline is:
@@ -462,6 +462,9 @@ baseline is:
 - supported encounter-only mutations can commit durable encounter state and a
   durable completed-command success record atomically through the encounter
   transaction boundary,
+- supported injected-path `attack` commands can now commit target character HP,
+  active encounter usage, and a durable completed-command success record
+  atomically through the cross-store combat transaction boundary,
 - `get_active_scene_state` can recover only when those three persisted
   boundaries line up and character overlays already contain valid active-scene
   placement,
@@ -656,6 +659,124 @@ When outbox work stops being easy to defer:
 - when the final ended snapshot from `dm_end_active_encounter` must be
   delivered reliably instead of being only best-effort post-commit.
 
+## Attack-First Cross-Store Combat Transactional Baseline After Phase 11 Slice 6
+
+Phase 11 Slice 6 implements the first honest cross-store combat transaction
+boundary.
+
+Supported transactional cross-store combat commands:
+
+- `attack`
+
+The wider cross-store flow that still remains out of scope is:
+
+- encounter-aware movement inside `move_character_in_active_scene`
+
+Implemented transactional combat semantics for `attack`:
+
+- the server command boundary now performs durable idempotency
+  lookup/conflict check, target character HP write on hit, active encounter
+  usage write, and durable completed-command success record insert in one real
+  DB transaction,
+- `encounter_state` and `combat_event` are buffered during the transaction and
+  published only after commit,
+- duplicate successful retries return the cached durable success response
+  without rerolling, redamaging, or republishing those events,
+- the runtime reuses a shared character+encounter transaction shape rather than
+  a one-off attack-only persistence path.
+
+## Cross-Store Combat Transaction-Boundary Matrix
+
+| Flow                     | Current read/write/publication sequence                                                                                                                                                                                                                                   | Stores that must commit in one real transaction                                                   | Pre-transaction reads that can stay outside the first slice                                                                                                                                             | Invariants that become unsafe unless revalidated inside the transaction                                                                                                                                                                      | Post-commit risk if outbox stays deferred                                                                                                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attack`                 | session snapshot read -> active scene read -> active encounter read/validation -> attacker and target character reads -> roll/damage resolution -> target HP write on hit -> encounter usage write -> `encounter_state` -> `combat_event`                                 | `character_records`, `active_encounter_records`, `completed_command_idempotency_records`          | command parsing, idempotency-key construction, initial session membership lookup, active-scene definition/grid lookup, other read-model inputs that can be checked again against transaction-local rows | current-turn ownership and turn-usage state, target HP/downed state, attacker and target placement in the active scene, encounter/session/scene identity alignment, target still being a valid encounter participant                         | supported transactional path now commits state and durable idempotency atomically, but clients can still miss post-commit `encounter_state`, `combat_event`, or both because publication is still best-effort without an outbox |
+| encounter-aware movement | session snapshot read -> active scene read -> moving character read -> all blocking placement reads -> optional active encounter read/validation -> character position write -> optional encounter movement-usage write -> optional `encounter_state` -> `movement_state` | `character_records`, optional `active_encounter_records`, `completed_command_idempotency_records` | command parsing, idempotency-key construction, initial session membership lookup, active-scene definition/grid lookup, other read-model inputs that can be checked again against transaction-local rows | moving-character origin placement, current speed allowance, current-turn ownership when in encounter, occupancy/blocking placements used for destination validation, encounter/session/scene identity alignment when movement usage is spent | committed position and encounter movement usage can be reread even if clients miss `movement_state`, `encounter_state`, or both; cached retries would not republish missed events                                               |
+
+## Cross-Store Combat Transaction Result
+
+Phase 11 Slice 6 completed the recommended first cross-store target:
+
+- `attack`,
+- built on a reusable character+encounter transaction shape,
+- while keeping encounter-aware movement deferred.
+
+Why `attack` was the right first cross-store command:
+
+- its mutable write set is smaller and more explicit:
+  - target HP on the character row,
+  - current-turn usage on the active-encounter row,
+- its revalidation set is narrower:
+  - attacker and target placements,
+  - target HP/downed state,
+  - current-turn ownership and encounter membership,
+- encounter-aware movement has a wider consistency surface because occupancy
+  validation depends on the moving character plus the other placed characters
+  that can block the destination square,
+- encounter-aware movement also has an optional encounter branch, which makes
+  durable idempotency and replay-free recovery harder to narrow cleanly in the
+  first cross-store slice.
+
+What the shared transaction shape now proves:
+
+- the underlying transaction primitive should be reusable across both flows,
+- and the first command-level slice could stay attack-first so the repo proves
+  the narrower revalidation pattern before widening to occupancy and
+  movement-specific ordering risks.
+
+## Durable Idempotency Result For Cross-Store Combat
+
+Durable idempotency is now implemented for `attack` because the server can
+commit, in one real DB transaction:
+
+- durable idempotency lookup/conflict check,
+- target character write on hit,
+- durable active-encounter usage write,
+- durable completed-command success record insert.
+
+That same recommendation does not yet extend to encounter-aware movement. Its
+durable idempotency should stay deferred until the movement slice accepts the
+wider occupancy and placement revalidation set needed to make the character
+position write and optional encounter movement-usage write honest in one
+transaction.
+
+## Outbox Recommendation For Cross-Store Combat
+
+Outbox work can still stay deferred one more slice after the new attack-first
+cross-store baseline if the next slice limits its claim to:
+
+- atomic durable combat state for the command,
+- durable completed-command idempotency,
+- best-effort post-commit event publication.
+
+Exact risks that remain if outbox is still deferred for `attack`:
+
+- committed target HP loss and committed encounter action usage can survive
+  even if clients miss `encounter_state`,
+- clients can miss `combat_event` entirely and still see the mutated state only
+  through rereads,
+- clients can observe `encounter_state` without `combat_event`, or vice versa,
+  because post-commit publication is still best-effort,
+- duplicate retries served from the durable idempotency cache will not
+  republish missed transient events.
+
+Exact risks that remain if outbox is still deferred later for encounter-aware
+movement:
+
+- committed position and committed encounter movement usage can survive even if
+  clients miss `movement_state`,
+- clients can miss `encounter_state` and `movement_state` independently,
+- duplicate retries served from durable idempotency would not republish those
+  missed updates.
+
+The point where outbox work stops being easy to defer is:
+
+- when `attack` needs reliable `combat_event` delivery rather than state-only
+  reread recovery,
+- when encounter-aware movement needs reliable ordered delivery of
+  `encounter_state` followed by `movement_state`,
+- when product requirements treat the transient event stream as part of the
+  guaranteed combat record rather than best-effort UX.
+
 ## Remaining Atomicity Gaps
 
 - Character assignment still validates durable character state and then writes
@@ -665,17 +786,18 @@ When outbox work stops being easy to defer:
 - Scene writes are durable, but scene commands still use the non-durable
   idempotency path.
 - Supported encounter-only commands now have transactional durable idempotency,
-  but `attack` and encounter-aware movement still do not.
-- Attack resolution and encounter-aware movement still span character,
-  encounter, session, and event publication boundaries that are not jointly
-  durable.
+  and `attack` now has a cross-store transactional durable idempotency path,
+  but encounter-aware movement still does not.
+- Encounter-aware movement still spans character, encounter, session, and
+  event publication boundaries that are not jointly durable.
 - Encounter start, turn advancement, turn usage, current-turn overrides, and
   encounter end now operate on durable active-encounter state with
   transactional durable idempotency when the DB-backed encounter store and
   encounter transaction boundary are injected, but they still are not
   transactionally coupled to other stores or outboxed publication.
-- Outside the supported transactional DM character update path, SSE publication
-  is still post-write and non-outboxed.
+- Outside the supported transactional DM character update path, supported
+  encounter-only path, and the new transactional `attack` path, SSE
+  publication is still post-write and non-outboxed.
 
 ## Visible Persistence Technical Debt
 
@@ -712,7 +834,8 @@ Completed expectations:
 
 ## Next Slice Recommendation
 
-The next encounter persistence slice should be a **cross-store combat
-transaction design** pass for `attack` and encounter-aware movement before any
-attempt at restart-safe combat continuity, outbox delivery, or replay
-semantics.
+The next encounter persistence slice should be an **encounter-aware movement
+cross-store transactional baseline** built on the shared
+character+encounter transaction boundary proven by `attack`. Outbox, replay,
+and catch-up semantics should still stay deferred unless movement ordering
+guarantees become a stronger product requirement.
