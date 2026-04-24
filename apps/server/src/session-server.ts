@@ -158,7 +158,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-11',
-      status: 'transactional-attack-baseline',
+      status: 'transactional-movement-baseline',
     });
     return;
   }
@@ -185,7 +185,13 @@ export async function handleRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/api/movement/command') {
-    await handleMovementCommandRequest(request, response, runtime, idempotency);
+    await handleMovementCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      combatCommandTransaction,
+    );
     return;
   }
 
@@ -598,6 +604,7 @@ async function handleMovementCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -642,6 +649,58 @@ async function handleMovementCommandRequest(
     if (cachedSuccess) {
       sendJson(response, 200, cachedSuccess, movementCommandSuccessSchema);
       return;
+    }
+
+    if (
+      idempotencyCategory &&
+      combatCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      })
+    ) {
+      const success = await combatCommandTransaction.run({
+        category: idempotencyCategory,
+        command,
+        runtime,
+        prepare: (preparedRuntime) => {
+          switch (command.type) {
+            case 'move_character_in_active_scene':
+              return preparedRuntime.prepareMoveCharacterInActiveScene(command);
+            default:
+              throw new Error(
+                `Unsupported transactional combat command type "${command.type}".`,
+              );
+          }
+        },
+        execute: async (transactionRuntime, prepared) => {
+          switch (command.type) {
+            case 'move_character_in_active_scene': {
+              const moved =
+                await transactionRuntime.moveCharacterInActiveScenePrepared(
+                  prepared,
+                );
+
+              if (!moved) {
+                return null;
+              }
+
+              return {
+                ok: true,
+                data: moved,
+              } satisfies MovementCommandSuccess;
+            }
+            default:
+              throw new Error(
+                `Unsupported transactional combat command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      if (success) {
+        sendJson(response, 200, success, movementCommandSuccessSchema);
+        return;
+      }
     }
 
     let data: MovementCommandSuccess['data'];
@@ -756,6 +815,12 @@ async function handleEncounterCommandRequest(
           }
         },
       });
+
+      if (!success) {
+        throw new Error(
+          `Transactional combat command "${command.type}" unexpectedly returned no result.`,
+        );
+      }
 
       sendJson(response, 200, success, encounterCommandSuccessSchema);
       return;

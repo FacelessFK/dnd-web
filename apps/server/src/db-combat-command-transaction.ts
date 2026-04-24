@@ -2,7 +2,11 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
-import type { CombatEvent, EncounterStateUpdate } from '@dnd/protocol';
+import type {
+  CombatEvent,
+  EncounterStateUpdate,
+  MovementStateUpdate,
+} from '@dnd/protocol';
 import type { Encounter, SessionId } from '@dnd/shared';
 
 import {
@@ -21,14 +25,20 @@ import type {
 } from './game-runtime.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
-export const DURABLE_CROSS_STORE_COMBAT_COMMAND_TYPES = ['attack'] as const;
+export const DURABLE_CROSS_STORE_COMBAT_COMMAND_TYPES = [
+  'attack',
+  'move_character_in_active_scene',
+] as const;
 
 type TransactionalCommandParams = {
   category: CommandIdempotencyCategory;
   command: IdempotentCommand;
 };
 
-type CombatTransactionalPublication = CombatEvent | EncounterStateUpdate;
+type CombatTransactionalPublication =
+  | CombatEvent
+  | EncounterStateUpdate
+  | MovementStateUpdate;
 
 type TransactionalRunParams<TPrepared, TResponse> =
   TransactionalCommandParams & {
@@ -38,7 +48,7 @@ type TransactionalRunParams<TPrepared, TResponse> =
         RuntimeSessionStore
       >,
       prepared: TPrepared,
-    ) => Promise<TResponse>;
+    ) => Promise<TResponse | null>;
     prepare: (
       runtime: InMemoryGameRuntime<
         RuntimeCharacterRepository,
@@ -70,15 +80,23 @@ export class DbBackedCombatCommandTransactionBoundary {
   constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {}
 
   supports(params: TransactionalCommandParams): boolean {
-    return (
-      params.category === 'encounter' &&
-      this.durableCommandTypes.has(params.command.type)
-    );
+    if (!this.durableCommandTypes.has(params.command.type)) {
+      return false;
+    }
+
+    switch (params.command.type) {
+      case 'attack':
+        return params.category === 'encounter';
+      case 'move_character_in_active_scene':
+        return params.category === 'movement';
+      default:
+        return false;
+    }
   }
 
   async run<TPrepared, TResponse>(
     params: TransactionalRunParams<TPrepared, TResponse>,
-  ): Promise<TResponse> {
+  ): Promise<TResponse | null> {
     if (!this.supports(params)) {
       throw new Error(
         `Command "${params.command.type}" is not supported by the DB-backed combat transaction boundary.`,
@@ -121,11 +139,20 @@ export class DbBackedCombatCommandTransactionBoundary {
       ),
     );
 
+    if (!result) {
+      return null;
+    }
+
     params.runtime.encounters.replaceEncountersBySession(result.encounterCache);
 
     for (const publication of result.publications) {
       if (publication.type === 'encounter_state') {
         params.runtime.sessions.publishEncounterStateUpdate(publication);
+        continue;
+      }
+
+      if (publication.type === 'movement_state') {
+        params.runtime.sessions.publishMovementStateUpdate(publication);
         continue;
       }
 
@@ -171,7 +198,7 @@ export class DbBackedCombatCommandTransactionBoundary {
     prepared: TPrepared,
     idempotencyKey: string,
     fingerprint: string,
-  ): Promise<TransactionalRunResult<TResponse>> {
+  ): Promise<TransactionalRunResult<TResponse> | null> {
     const cached = await this.loadCachedResponse<TResponse>(
       context,
       idempotencyKey,
@@ -200,9 +227,17 @@ export class DbBackedCombatCommandTransactionBoundary {
         encounterStateUpdateSink: (update) => {
           publications.push(this.clone(update));
         },
+        movementStateUpdateSink: (update) => {
+          publications.push(this.clone(update));
+        },
       },
     );
     const response = await params.execute(transactionRuntime, prepared);
+
+    if (response === null) {
+      return null;
+    }
+
     const inserted =
       await context.commandIdempotency.insertCompletedCommandIdempotencyRecord({
         actorParticipantId: params.command.actor.participantId,

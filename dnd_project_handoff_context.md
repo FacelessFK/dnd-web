@@ -1,6 +1,6 @@
 # D&D DM Platform Handoff Context
 
-This handoff summarizes the current repository state after Phase 11 Slice 6.
+This handoff summarizes the current repository state after Phase 11 Slice 7.
 It is intentionally concise; trust implementation code and protocol schemas over
 older planning language if details disagree.
 
@@ -24,9 +24,11 @@ older planning language if details disagree.
   encounter-only command set.
 - A DB-backed cross-store combat transaction boundary now exists for the
   injected `attack` path across character and encounter state.
-- The next cross-store combat step is now narrower and more concrete:
-  revisit encounter-aware movement on top of the shared
-  character+encounter transaction boundary proven by `attack`.
+- That same shared cross-store combat transaction boundary now also covers the
+  movement-spending encounter-aware branch of
+  `move_character_in_active_scene` on the injected DB-backed path.
+- The next persistence step should now be an exit pass that closes the initial
+  encounter durability foundation honestly before any outbox or replay work.
 - The web app remains a minimal shell, not a battle UI or DM panel.
 - The project is not MVP-ready because runtime-wide persistence, frontend UX,
   durable event handling, broader rules, and production posture are still
@@ -110,6 +112,11 @@ Important boundary:
   active encounter usage mutation, and the durable completed-command success
   record in one real DB transaction, with `encounter_state` and
   `combat_event` buffered until commit.
+- Phase 11 Slice 7 now lets the movement-spending encounter-aware branch of
+  `move_character_in_active_scene` commit character position mutation, active
+  encounter movement-usage mutation, and the durable completed-command success
+  record in one real DB transaction, with `encounter_state` then
+  `movement_state` buffered until commit.
 - Presence, most command idempotency, SSE delivery, replay, and outbox behavior
   remain non-durable.
 - Phase 10 Slice 7 closes the initial persistence foundation by documenting the
@@ -255,9 +262,9 @@ should recover current authoritative state through read models.
 
 ## Likely Next Work Options
 
-1. The next narrow persistence step should be an encounter-aware movement
-   cross-store transactional slice built on the shared
-   character+encounter transaction boundary proven by `attack`.
+1. The next narrow persistence step should be a persistence exit pass that
+   confirms the implemented encounter durability baseline, non-goals, and
+   remaining atomicity gaps before any outbox or replay work.
 2. Keep durable idempotency narrow: preserve current key/fingerprint semantics,
    cache successful mutating command responses, and avoid claiming global
    restart-safe behavior for stores that are still in memory.

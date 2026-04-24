@@ -26,13 +26,15 @@ active-encounter repository baseline for injected restart-time
 transactional baseline with durable idempotency for supported encounter-local
 mutations on the injected DB-backed path. Phase 11 Slice 6 now adds the first
 attack-first cross-store combat transactional baseline across durable
-character and active-encounter state on the injected DB-backed path. Most live
-runtime state still remains process-local, and combat continuity is not yet
+character and active-encounter state on the injected DB-backed path. Phase 11
+Slice 7 now extends that shared transaction shape to the movement-spending
+encounter-aware branch of `move_character_in_active_scene`. Most live runtime
+state still remains process-local, and combat continuity is not yet
 restart-safe.
 
-The next recommended persistence step is an encounter-aware movement
-cross-store transactional slice built on the same shared
-character+encounter transaction boundary, not gameplay expansion.
+The next recommended persistence step is a persistence exit pass that closes
+the initial encounter durability foundation honestly before any outbox or
+replay work.
 
 Implemented so far:
 
@@ -69,6 +71,9 @@ Implemented so far:
 - attack-first cross-store transactional durable idempotency on the injected
   DB-backed path for atomic target HP write + encounter usage write + durable
   completed-command success record commit
+- movement-spending encounter-aware transactional durable idempotency on the
+  injected DB-backed path for atomic character position write + encounter
+  movement-usage write + durable completed-command success record commit
 - documented event/revision semantics and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
@@ -235,11 +240,15 @@ Reliability notes:
 - When the DB-backed active-encounter store is injected too, `get_encounter_state`
   can reread an active encounter after restart if durable session, scene, and
   character state still line up.
-- Phase 11 Slice 6 now makes `attack` the first cross-store combat command
-  with atomic durable character state, encounter state, and durable
-  completed-command idempotency on the injected DB-backed path.
-- Encounter-aware movement still does not yet have a real cross-store
-  transaction boundary or durable idempotency path.
+- Phase 11 Slice 6 makes `attack` the first cross-store combat command with
+  atomic durable character state, encounter state, and durable completed-command
+  idempotency on the injected DB-backed path.
+- Phase 11 Slice 7 adds the same kind of transactional durable idempotency to
+  the movement-spending encounter-aware branch of
+  `move_character_in_active_scene`.
+- Zero-cost encounter movement and no-active-encounter movement still stay on
+  the existing path intentionally; this slice does not claim the whole movement
+  command is fully transactional.
 - One more slice can still defer outbox work honestly, but committed attack or
   movement state can still be reread after clients miss best-effort
   post-commit `encounter_state`, `movement_state`, or `combat_event` updates.

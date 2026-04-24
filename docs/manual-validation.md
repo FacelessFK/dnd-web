@@ -7,9 +7,10 @@ deployment.
 
 Phase 10 added injected DB-backed character, session snapshot, and scene
 boundaries, and Phase 11 now adds injected DB-backed active-encounter,
-encounter-only transaction, and attack-first cross-store combat transaction
-boundaries. This manual curl flow still validates the default in-memory startup
-path rather than those injected durable restart or transactional paths.
+encounter-only transaction, attack-first cross-store combat transaction, and
+encounter-aware movement transaction boundaries. This manual curl flow still
+validates the default in-memory startup path rather than those injected durable
+restart or transactional paths.
 
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
@@ -48,7 +49,7 @@ Expected high-level status:
 {
   "name": "dnd-dm-platform-server",
   "phase": "phase-11",
-  "status": "transactional-attack-baseline"
+  "status": "transactional-movement-baseline"
 }
 ```
 

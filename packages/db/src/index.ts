@@ -1,5 +1,5 @@
 export const DB_PACKAGE_READY =
-  'phase-11-slice-6-attack-transactional-baseline';
+  'phase-11-slice-7-encounter-aware-movement-transactional-baseline';
 
 export * from './character-record-database.js';
 export * from './command-idempotency-record-database.js';

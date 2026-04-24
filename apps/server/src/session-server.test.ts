@@ -534,6 +534,7 @@ class InMemoryCommandIdempotencyRecordDatabase implements CommandIdempotencyReco
 class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   committedCount = 0;
   failBeforeCommit = false;
+  private transactionQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly characters: InMemoryCharacterRecordDatabase,
@@ -544,35 +545,49 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   async transaction<T>(
     run: (context: DndDatabaseUnitOfWorkContext) => Promise<T>,
   ): Promise<T> {
-    const transactionalCharacters = new InMemoryCharacterRecordDatabase();
-    const transactionalCommandIdempotency =
-      new InMemoryCommandIdempotencyRecordDatabase();
-    const transactionalEncounters = new InMemoryActiveEncounterRecordDatabase();
+    const previous = this.transactionQueue;
+    let releaseQueue!: () => void;
 
-    transactionalCharacters.replaceRows(this.characters.cloneRows());
-    transactionalCommandIdempotency.replaceRows(
-      this.commandIdempotency.cloneRows(),
-    );
-    transactionalEncounters.replaceRows(this.encounters.cloneRows());
-
-    const result = await run({
-      characters: transactionalCharacters,
-      commandIdempotency: transactionalCommandIdempotency,
-      encounters: transactionalEncounters,
+    this.transactionQueue = new Promise<void>((resolve) => {
+      releaseQueue = resolve;
     });
 
-    if (this.failBeforeCommit) {
-      throw new Error('Simulated transaction commit failure.');
+    await previous;
+
+    try {
+      const transactionalCharacters = new InMemoryCharacterRecordDatabase();
+      const transactionalCommandIdempotency =
+        new InMemoryCommandIdempotencyRecordDatabase();
+      const transactionalEncounters =
+        new InMemoryActiveEncounterRecordDatabase();
+
+      transactionalCharacters.replaceRows(this.characters.cloneRows());
+      transactionalCommandIdempotency.replaceRows(
+        this.commandIdempotency.cloneRows(),
+      );
+      transactionalEncounters.replaceRows(this.encounters.cloneRows());
+
+      const result = await run({
+        characters: transactionalCharacters,
+        commandIdempotency: transactionalCommandIdempotency,
+        encounters: transactionalEncounters,
+      });
+
+      if (this.failBeforeCommit) {
+        throw new Error('Simulated transaction commit failure.');
+      }
+
+      this.characters.replaceRows(transactionalCharacters.cloneRows());
+      this.commandIdempotency.replaceRows(
+        transactionalCommandIdempotency.cloneRows(),
+      );
+      this.encounters.replaceRows(transactionalEncounters.cloneRows());
+      this.committedCount += 1;
+
+      return result;
+    } finally {
+      releaseQueue();
     }
-
-    this.characters.replaceRows(transactionalCharacters.cloneRows());
-    this.commandIdempotency.replaceRows(
-      transactionalCommandIdempotency.cloneRows(),
-    );
-    this.encounters.replaceRows(transactionalEncounters.cloneRows());
-    this.committedCount += 1;
-
-    return result;
   }
 }
 
@@ -3784,6 +3799,647 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   if (!conflict.body.ok) {
     assert.equal(conflict.body.error.code, 'command_id_conflict');
   }
+});
+
+test('db-backed combat transaction boundary commits encounter-aware movement atomically when movement usage is spent', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const commitMarkers: number[] = [];
+
+  runtime.connectParticipant(sessionId, 'player-001', {
+    connectionId: 'transactional-movement-marker',
+    close: () => undefined,
+    send: () => {
+      commitMarkers.push(unitOfWork.committedCount);
+    },
+  });
+
+  const updateCountBefore = updates.length;
+  const markerCountBefore = commitMarkers.length;
+  const moved = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'transactional-movement-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 1,
+          y: 1,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.ok, true);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(updatedRecord.overlay.position?.x, 1);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.deepEqual(
+    updates.slice(updateCountBefore).map((update) => update.type),
+    ['encounter_state', 'movement_state'],
+  );
+  assert.equal(getEncounterUpdates(updates).at(-1)?.reason, 'movement_used');
+  assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
+  assert.deepEqual(commitMarkers.slice(markerCountBefore), [
+    unitOfWork.committedCount,
+    unitOfWork.committedCount,
+  ]);
+
+  if (moved.body.ok && 'character' in moved.body.data) {
+    assert.equal(moved.body.data.overlay.position?.x, 1);
+    assert.equal(moved.body.data.overlay.position?.y, 1);
+  }
+});
+
+test('transactional encounter-aware movement duplicate retry returns cached durable success without reapplying mutation or republishing', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  const command = {
+    commandId: 'transactional-movement-retry-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 1,
+      },
+    },
+  } as const;
+
+  const first = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+
+  combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+
+  const second = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-retry-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(updatedRecord.overlay.position?.x, 1);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
+  assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+});
+
+test('failed transactional encounter-aware movement does not persist a durable success record', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+
+  const failed = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'transactional-movement-failure-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 1,
+          y: 0,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-failure-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.notEqual(failed.status, 200);
+  assert.equal(failed.body.ok, false);
+  assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 0);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+  assert.equal(getEncounterUpdates(updates).length, 0);
+  assert.equal(getMovementUpdates(updates).length, 0);
+
+  if (!failed.body.ok) {
+    assert.equal(failed.body.error.code, 'movement_destination_blocked');
+  }
+});
+
+test('transactional encounter-aware movement command ID conflicts still reject conflicting fingerprints without mutation or SSE', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const firstCommand = {
+    commandId: 'transactional-movement-conflict-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 1,
+      },
+    },
+  } as const;
+  const conflictingCommand = {
+    ...firstCommand,
+    payload: {
+      ...firstCommand.payload,
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  } as const;
+
+  const first = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    firstCommand,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const encounterUpdatesBeforeConflict = getEncounterUpdates(updates).length;
+  const movementUpdatesBeforeConflict = getMovementUpdates(updates).length;
+  const conflict = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    conflictingCommand,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-conflict-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(conflict.status, 409);
+  assert.equal(conflict.body.ok, false);
+  assert.equal(updatedRecord.overlay.position?.x, 1);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdatesBeforeConflict,
+  );
+  assert.equal(
+    getMovementUpdates(updates).length,
+    movementUpdatesBeforeConflict,
+  );
+  assert.equal(idempotencyDatabase.recordCount, 1);
+
+  if (!conflict.body.ok) {
+    assert.equal(conflict.body.error.code, 'command_id_conflict');
+  }
+});
+
+test('zero-cost encounter movement remains on the existing non-transactional path', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const updateCountBefore = updates.length;
+
+  const moved = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'transactional-movement-zero-cost-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 0,
+          y: 0,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-zero-cost-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.ok, true);
+  assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 0);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 0);
+  assert.deepEqual(
+    updates.slice(updateCountBefore).map((update) => update.type),
+    ['movement_state'],
+  );
+});
+
+test('no-active-encounter movement remains on the existing non-transactional path', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+
+  await runtime.dmEndActiveEncounter({
+    commandId: 'transactional-movement-end-before-move',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const updateCountBefore = updates.length;
+  const moved = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'transactional-movement-no-encounter-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 0,
+          y: 1,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.ok, true);
+  assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.deepEqual(
+    updates.slice(updateCountBefore).map((update) => update.type),
+    ['movement_state'],
+  );
+});
+
+test('default in-memory movement behavior remains unchanged without the DB-backed combat transaction boundary', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const updateCountBefore = updates.length;
+
+  const moved = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'in-memory-movement-baseline-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 1,
+          y: 1,
+        },
+      },
+    },
+  );
+  const updatedRecord = runtime.characters.getCharacter(firstCharacterId);
+  const encounter = runtime.getEncounterState({
+    commandId: 'in-memory-movement-baseline-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.ok, true);
+  assert.equal(updatedRecord.overlay.position?.x, 1);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.deepEqual(
+    updates.slice(updateCountBefore).map((update) => update.type),
+    ['encounter_state', 'movement_state'],
+  );
+});
+
+test('concurrent duplicate transactional encounter-aware movement retries do not double-apply mutation or republish', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+    unitOfWork,
+  );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  const command = {
+    commandId: 'transactional-movement-concurrent-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 1,
+      },
+    },
+  };
+
+  const [first, second] = await Promise.all([
+    postJson<MovementCommandResponse>(
+      runtime,
+      idempotency,
+      '/api/movement/command',
+      command,
+      undefined,
+      undefined,
+      combatCommandTransaction,
+    ),
+    postJson<MovementCommandResponse>(
+      runtime,
+      idempotency,
+      '/api/movement/command',
+      command,
+      undefined,
+      undefined,
+      combatCommandTransaction,
+    ),
+  ]);
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-movement-concurrent-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(updatedRecord.overlay.position?.x, 1);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(encounter.currentTurnUsage.movementUsed, 10);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
+  assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
 });
 
 test('encounter success payloads are validated as authoritative turn-order responses', () => {

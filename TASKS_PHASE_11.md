@@ -524,7 +524,7 @@ Completed outcome:
 
 ### Slice 7 — Encounter-Aware Movement Cross-Store Transaction Baseline
 
-Status: planned.
+Status: completed.
 
 Goal:
 
@@ -533,21 +533,38 @@ Goal:
 
 Tasks:
 
-- Reuse the shared character+encounter transaction shape proven by Slice 6.
-- Revalidate the wider movement-specific invariants inside the transaction:
+- Reused the shared character+encounter transaction shape proven by Slice 6.
+- Added transactional coverage only for the narrow movement branch that both:
+  - mutates character position, and
+  - spends active-encounter movement usage.
+- Revalidated the movement-specific mutable invariants inside the transaction:
   - moving-character origin placement,
   - current speed allowance,
   - current-turn ownership when movement usage is spent,
-  - occupancy/blocking placements used for destination validation.
-- Decide whether durable idempotency can safely widen to the movement command
-  once those occupancy reads are revalidated honestly.
-- Keep outbox and replay deferred unless movement ordering guarantees become a
-  product requirement.
+  - actor consciousness/downed gating,
+  - occupancy/blocking placements used for destination validation,
+  - encounter/session/scene alignment through the existing read-model checks.
+- Added durable idempotency only for that covered movement-spending branch.
+- Kept zero-cost encounter movement and no-active-encounter movement on the
+  existing path intentionally.
+- Kept outbox and replay deferred.
 
 Acceptance:
 
-- Encounter-aware movement becomes transactionally honest without implying that
-  outbox/replay or full combat continuity are solved.
+- The movement-spending encounter-aware branch of
+  `move_character_in_active_scene` now commits character position mutation,
+  encounter movement-usage mutation, and durable completed-command success
+  record insertion in one real DB transaction on the injected DB-backed path.
+- Duplicate successful retries return the cached durable success response for
+  that covered branch without:
+  - double-spending movement,
+  - rewriting position differently,
+  - republishing `encounter_state`,
+  - republishing `movement_state`.
+- Zero-cost encounter movement and no-active-encounter movement remain
+  explicitly outside the transactional branch and continue to use the existing
+  path.
+- No claim is made that outbox/replay or full combat continuity are solved.
 
 ### Slice 8 — Encounter Persistence Exit Pass
 

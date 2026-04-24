@@ -43,6 +43,7 @@ import type {
   GetCharacterCommand,
   JoinSessionCommand,
   MoveCharacterInActiveSceneCommand,
+  MovementStateUpdate,
   MovementStateUpdateReason,
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
@@ -159,6 +160,15 @@ export type PreparedAttackContext = {
   targetParticipantId: ParticipantId;
 };
 
+export type PreparedMovementContext = {
+  activeSceneId: SceneId;
+  actor: Participant;
+  participant: Participant;
+  scene: Scene;
+  snapshot: SessionSnapshot;
+  targetPosition: MoveCharacterInActiveSceneCommand['payload']['position'];
+};
+
 type ResolvedAttack = {
   updatedEncounter: Encounter;
   roll: CombatEvent['roll'];
@@ -206,6 +216,9 @@ export class InMemoryGameRuntime<
     ) => void,
     private readonly encounterStateUpdateSink?: (
       update: EncounterStateUpdate,
+    ) => void,
+    private readonly movementStateUpdateSink?: (
+      update: MovementStateUpdate,
     ) => void,
     private readonly combatEventSink?: (update: CombatEvent) => void,
   ) {}
@@ -272,6 +285,7 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       options.characterStateUpdateSink ?? this.characterStateUpdateSink,
       this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
       this.combatEventSink,
     );
   }
@@ -291,6 +305,7 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       this.characterStateUpdateSink,
       options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
       this.combatEventSink,
     );
   }
@@ -302,6 +317,7 @@ export class InMemoryGameRuntime<
       characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
       combatEventSink?: (update: CombatEvent) => void;
       encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+      movementStateUpdateSink?: (update: MovementStateUpdate) => void;
     } = {},
   ): InMemoryGameRuntime<TNextCharacters, TSessions> {
     return new InMemoryGameRuntime(
@@ -313,6 +329,7 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       options.characterStateUpdateSink ?? this.characterStateUpdateSink,
       options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
+      options.movementStateUpdateSink ?? this.movementStateUpdateSink,
       options.combatEventSink ?? this.combatEventSink,
     );
   }
@@ -956,6 +973,19 @@ export class InMemoryGameRuntime<
   moveCharacterInActiveScene(
     command: MoveCharacterInActiveSceneCommand,
   ): CharacterResource {
+    return this.resolveRepositoryResult(
+      this.moveCharacterInActiveScenePrepared(
+        this.prepareMoveCharacterInActiveScene(command),
+        { transactionalBranchOnly: false },
+      ),
+      (result) =>
+        this.requireMovementResult(result, 'full movement command execution'),
+    );
+  }
+
+  prepareMoveCharacterInActiveScene(
+    command: MoveCharacterInActiveSceneCommand,
+  ): PreparedMovementContext {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
       command.actor.participantId,
@@ -974,26 +1004,45 @@ export class InMemoryGameRuntime<
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
 
+    return {
+      activeSceneId,
+      actor,
+      participant,
+      scene,
+      snapshot,
+      targetPosition: structuredClone(command.payload.position),
+    };
+  }
+
+  moveCharacterInActiveScenePrepared(
+    prepared: PreparedMovementContext,
+    options: {
+      transactionalBranchOnly: boolean;
+    } = { transactionalBranchOnly: true },
+  ): RuntimeRepositoryResult<CharacterResource | null> {
     return this.resolveRepositoryResults(
       [
-        this.requireAssignedCharacterRecord(snapshot, participant),
-        this.getResolvedSessionCharacterRecords(snapshot),
+        this.requireAssignedCharacterRecord(
+          prepared.snapshot,
+          prepared.participant,
+        ),
+        this.getResolvedSessionCharacterRecords(prepared.snapshot),
       ],
       ([record, allCharacterRecords]) => {
-        assertSceneBelongsToSession(snapshot, scene);
-        assertGridDefinitionIsValid(scene.grid);
+        assertSceneBelongsToSession(prepared.snapshot, prepared.scene);
+        assertGridDefinitionIsValid(prepared.scene.grid);
 
         const currentPosition = requireCharacterPlacedInActiveScene(
           record,
-          activeSceneId,
+          prepared.activeSceneId,
         );
         const movementCostFeet = calculateMovementDistanceFeet(
           {
             x: currentPosition.x,
             y: currentPosition.y,
           },
-          command.payload.position,
-          scene.grid.cellSizeFeet,
+          prepared.targetPosition,
+          prepared.scene.grid.cellSizeFeet,
         );
 
         assertMovementWithinAllowance({
@@ -1001,34 +1050,46 @@ export class InMemoryGameRuntime<
             x: currentPosition.x,
             y: currentPosition.y,
           },
-          target: command.payload.position,
+          target: prepared.targetPosition,
           speedFeet: record.character.speed,
-          cellSizeFeet: scene.grid.cellSizeFeet,
+          cellSizeFeet: prepared.scene.grid.cellSizeFeet,
           characterId: record.character.id,
         });
 
         return this.resolveRepositoryResult(
-          this.findActiveEncounterForParticipant(snapshot.session.id, actor.id),
+          this.findActiveEncounterForParticipant(
+            prepared.snapshot.session.id,
+            prepared.actor.id,
+          ),
           (encounter) => {
+            if (!encounter && options.transactionalBranchOnly) {
+              return null;
+            }
+
             let updatedEncounter: Encounter | null = null;
 
             if (encounter) {
               const currentTurnParticipant = assertEncounterTurnActor(
                 encounter,
-                actor.id,
+                prepared.actor.id,
               );
 
               if (
-                currentTurnParticipant.participantId !== participant.id ||
+                currentTurnParticipant.participantId !==
+                  prepared.participant.id ||
                 currentTurnParticipant.characterId !== record.character.id
               ) {
                 throw new EncounterRuntimeError(
                   'invalid_turn_actor',
-                  `Participant "${actor.id}" cannot move character "${record.character.id}" because it is not the current turn owner in encounter "${encounter.id}".`,
+                  `Participant "${prepared.actor.id}" cannot move character "${record.character.id}" because it is not the current turn owner in encounter "${encounter.id}".`,
                 );
               }
 
               this.assertCurrentTurnActorIsConscious(encounter, record);
+
+              if (movementCostFeet <= 0 && options.transactionalBranchOnly) {
+                return null;
+              }
 
               // Zero-cost movement is an encounter no-op: it still republishes
               // the authoritative movement position if requested, but it does
@@ -1043,11 +1104,11 @@ export class InMemoryGameRuntime<
             }
 
             assertCharacterDestinationAvailable({
-              scene,
+              scene: prepared.scene,
               footprint: record.overlay.footprint,
-              targetPosition: command.payload.position,
+              targetPosition: prepared.targetPosition,
               blockingOccupancies: buildMovementBlockingOccupancies({
-                scene,
+                scene: prepared.scene,
                 characterRecords: allCharacterRecords,
                 excludedCharacterId: record.character.id,
               }),
@@ -1058,36 +1119,43 @@ export class InMemoryGameRuntime<
               this.characters.saveCharacter(
                 withCharacterPlacedInScene({
                   record,
-                  sceneId: activeSceneId,
-                  position: command.payload.position,
+                  sceneId: prepared.activeSceneId,
+                  position: prepared.targetPosition,
                 }),
               ),
               (updatedRecord) => {
-                if (updatedEncounter) {
-                  this.saveAndPublishEncounter({
-                    sessionId: snapshot.session.id,
-                    encounter: updatedEncounter,
-                    reason: 'movement_used',
+                const finalizeMovement = () => {
+                  // NOTE:
+                  // `movement_state` and `encounter_state` are emitted
+                  // independently. Clients must treat them as separate
+                  // authoritative updates.
+                  this.publishMovementStateUpdate({
+                    sessionId: prepared.snapshot.session.id,
+                    activeSceneId: prepared.activeSceneId,
+                    participantId: prepared.participant.id,
+                    record: updatedRecord,
+                    reason: 'character_moved',
                   });
+
+                  return this.buildCharacterResource(
+                    updatedRecord,
+                    this.rulesProfiles.getRulesProfile(
+                      updatedRecord.character.rulesProfileId,
+                    ),
+                  );
+                };
+
+                if (!updatedEncounter) {
+                  return finalizeMovement();
                 }
 
-                // NOTE:
-                // `movement_state` and `encounter_state` are emitted
-                // independently. Clients must treat them as separate
-                // authoritative updates.
-                this.publishMovementStateUpdate({
-                  sessionId: snapshot.session.id,
-                  activeSceneId,
-                  participantId: participant.id,
-                  record: updatedRecord,
-                  reason: 'character_moved',
-                });
-
-                return this.buildCharacterResource(
-                  updatedRecord,
-                  this.rulesProfiles.getRulesProfile(
-                    updatedRecord.character.rulesProfileId,
-                  ),
+                return this.resolveRepositoryResult(
+                  this.saveAndPublishEncounter({
+                    sessionId: prepared.snapshot.session.id,
+                    encounter: updatedEncounter,
+                    reason: 'movement_used',
+                  }),
+                  () => finalizeMovement(),
                 );
               },
             );
@@ -1430,6 +1498,20 @@ export class InMemoryGameRuntime<
     }
 
     return resolve(result) as TResult;
+  }
+
+  private requireMovementResult(
+    result: CharacterResource | null,
+    context: string,
+  ): CharacterResource {
+    if (result) {
+      return result;
+    }
+
+    throw new CharacterStoreError(
+      'internal_server_error',
+      `Transactional movement branch unexpectedly returned no result during ${context}.`,
+    );
   }
 
   private isPromiseLike<T>(
@@ -2014,7 +2096,7 @@ export class InMemoryGameRuntime<
       );
     }
 
-    this.sessions.publishMovementStateUpdate({
+    const update: MovementStateUpdate = {
       sessionId: params.sessionId,
       activeSceneId: params.activeSceneId,
       participantId: params.participantId,
@@ -2025,7 +2107,15 @@ export class InMemoryGameRuntime<
       },
       footprint: params.record.overlay.footprint,
       reason: params.reason,
-    });
+      type: 'movement_state',
+    };
+
+    if (this.movementStateUpdateSink) {
+      this.movementStateUpdateSink(structuredClone(update));
+      return;
+    }
+
+    this.sessions.publishMovementStateUpdate(update);
   }
 
   private publishEncounterStateUpdate(params: {
