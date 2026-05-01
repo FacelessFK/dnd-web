@@ -165,7 +165,10 @@ export async function createBootstrappedSessionServer(
         runtime.sessions,
       );
     const characterCommandTransaction =
-      new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+      new DbBackedCharacterCommandTransactionBoundary(
+        unitOfWork,
+        commandEventOutboxDispatcher,
+      );
     const encounterCommandTransaction =
       new DbBackedEncounterCommandTransactionBoundary(
         unitOfWork,

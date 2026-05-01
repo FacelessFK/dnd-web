@@ -46,6 +46,7 @@ export type PersistedSessionSnapshotDocument = {
 export type StoredSceneRecordDocument = Scene;
 export type StoredActiveEncounterRecordDocument = Encounter;
 export type CommandEventOutboxEventType =
+  | 'character_state'
   | 'combat_event'
   | 'encounter_state'
   | 'movement_state';

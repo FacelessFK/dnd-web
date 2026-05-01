@@ -799,6 +799,21 @@ function createCombatCommandTransactionHarness(
   };
 }
 
+function createCharacterCommandTransactionHarness(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  unitOfWork: InMemoryDndDatabaseUnitOfWork,
+  outboxDatabase: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
+) {
+  return {
+    characterCommandTransaction:
+      new DbBackedCharacterCommandTransactionBoundary(
+        unitOfWork,
+        new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+      ),
+    outboxDatabase,
+  };
+}
+
 function createEncounterCommandTransactionHarness(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   unitOfWork: InMemoryDndDatabaseUnitOfWork,
@@ -1822,9 +1837,12 @@ test('invalid encounter movement-usage payloads are rejected during command vali
 test('server command paths can use the DB-backed character repository without public shape changes', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
+    undefined,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -1833,8 +1851,12 @@ test('server command paths can use the DB-backed character repository without pu
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  let characterCommandTransaction =
-    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
   const session = await postJson<SessionCommandResponse>(
     runtime,
     idempotency,
@@ -1933,9 +1955,11 @@ test('server command paths can use the DB-backed character repository without pu
     createCharacterCommand,
     characterCommandTransaction,
   );
-  characterCommandTransaction = new DbBackedCharacterCommandTransactionBoundary(
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
     unitOfWork,
-  );
+    outboxDatabase,
+  ));
   const duplicateCreated = await postJson<CharacterCommandResponse>(
     runtime,
     idempotency,
@@ -2047,9 +2071,11 @@ test('server command paths can use the DB-backed character repository without pu
     characterCommandTransaction,
   );
   const updateCountAfterHp = updates.length;
-  characterCommandTransaction = new DbBackedCharacterCommandTransactionBoundary(
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
     unitOfWork,
-  );
+    outboxDatabase,
+  ));
   const duplicateHpUpdate = await postJson<DmCommandResponse>(
     runtime,
     idempotency,
@@ -2086,6 +2112,11 @@ test('server command paths can use the DB-backed character repository without pu
   assert.equal(reread.body.ok, true);
   assert.equal(persistedRow?.record.character.hp.current, 5);
   assert.equal(idempotencyDatabase.recordCount, 3);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
   assert.deepEqual(
     newUpdates.map((update) => update.type),
     ['character_state'],
@@ -2103,6 +2134,50 @@ test('server command paths can use the DB-backed character repository without pu
     assert.equal(newUpdates[0].reason, 'dm_hp_changed');
     assert.equal(newUpdates[0].characterId, characterId);
     assert.equal(newUpdates[0].hp.current, 5);
+  }
+
+  const updateCountBeforeConditions = updates.length;
+  const dmConditionsCommand = {
+    commandId: 'db-backed-runtime-dm-conditions',
+    type: 'dm_set_character_active_conditions',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+      activeConditions: ['prone'],
+    },
+  };
+  const conditionUpdate = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    dmConditionsCommand,
+    characterCommandTransaction,
+  );
+  const updatesAfterConditions = updates.slice(updateCountBeforeConditions);
+
+  assert.equal(conditionUpdate.status, 200);
+  assert.equal(
+    dmCommandSuccessSchema.safeParse(conditionUpdate.body).success,
+    true,
+  );
+  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+  assert.deepEqual(
+    updatesAfterConditions.map((update) => update.type),
+    ['character_state'],
+  );
+
+  if (updatesAfterConditions[0]?.type === 'character_state') {
+    assert.equal(updatesAfterConditions[0].reason, 'dm_conditions_changed');
+    assert.equal(updatesAfterConditions[0].characterId, characterId);
+    assert.deepEqual(updatesAfterConditions[0].activeConditions, ['prone']);
   }
 
   const updateCountBeforeFailedCommit = updates.length;
@@ -2127,7 +2202,7 @@ test('server command paths can use the DB-backed character repository without pu
           sessionId,
           participantId: 'player-001',
           characterId,
-          activeConditions: ['prone'],
+          activeConditions: ['prone', 'marked'],
         },
       },
       characterCommandTransaction,
@@ -2145,7 +2220,7 @@ test('server command paths can use the DB-backed character repository without pu
   assert.deepEqual(
     (await characterDatabase.getCharacterRecord(characterId))?.record.overlay
       .activeConditions,
-    [],
+    ['prone'],
   );
 });
 
@@ -2163,8 +2238,8 @@ test('db-backed character state can be reread after runtime reinitialization, wh
   );
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const transactionBeforeRestart =
-    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+  const { characterCommandTransaction: transactionBeforeRestart } =
+    createCharacterCommandTransactionHarness(runtimeBeforeRestart, unitOfWork);
 
   const firstSession = await postJson<SessionCommandResponse>(
     runtimeBeforeRestart,
@@ -2446,8 +2521,8 @@ test('db-backed session snapshots and scenes survive runtime reinitialization fo
   );
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const transactionBeforeRestart =
-    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+  const { characterCommandTransaction: transactionBeforeRestart } =
+    createCharacterCommandTransactionHarness(runtimeBeforeRestart, unitOfWork);
 
   const createdSession = await postJson<SessionCommandResponse>(
     runtimeBeforeRestart,
@@ -2866,8 +2941,8 @@ test('db-backed active encounters can be reread after restart when durable sessi
   );
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const transactionBeforeRestart =
-    new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
+  const { characterCommandTransaction: transactionBeforeRestart } =
+    createCharacterCommandTransactionHarness(runtimeBeforeRestart, unitOfWork);
 
   const createdSession = await postJson<SessionCommandResponse>(
     runtimeBeforeRestart,

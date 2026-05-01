@@ -1,4 +1,5 @@
 import type {
+  CommandEventOutboxEventType,
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
@@ -17,6 +18,7 @@ import {
   DURABLE_CHARACTER_MUTATION_COMMAND_TYPES,
   type DurableCharacterMutationCommandType,
 } from './db-command-idempotency-store.js';
+import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import type {
   InMemoryGameRuntime,
   RuntimeCharacterRepository,
@@ -40,13 +42,17 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
 
 type TransactionalRunResult<TResponse> = {
   characterStateUpdates: CharacterStateUpdate[];
+  dispatchIdempotencyKey: string | null;
   response: TResponse;
 };
 
 export class DbBackedCharacterCommandTransactionBoundary {
   private readonly durableCommandTypes: ReadonlySet<string>;
 
-  constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {
+  constructor(
+    private readonly unitOfWork: DndDatabaseUnitOfWork,
+    private readonly outboxDispatcher: CommandEventOutboxDispatcherLike,
+  ) {
     this.durableCommandTypes = new Set(
       DURABLE_CHARACTER_MUTATION_COMMAND_TYPES,
     );
@@ -72,8 +78,23 @@ export class DbBackedCharacterCommandTransactionBoundary {
       this.runInTransaction(context, params),
     );
 
-    for (const update of result.characterStateUpdates) {
-      params.runtime.sessions.publishCharacterStateUpdate(update);
+    if (result.dispatchIdempotencyKey) {
+      try {
+        await this.outboxDispatcher.drainUnpublishedByIdempotencyKey(
+          result.dispatchIdempotencyKey,
+        );
+      } catch (error) {
+        console.error(
+          '[character-transaction] failed to dispatch character outbox rows after commit',
+          error,
+        );
+      }
+    }
+
+    if (!this.supportsOutboxDispatch(params.command.type)) {
+      for (const update of result.characterStateUpdates) {
+        params.runtime.sessions.publishCharacterStateUpdate(update);
+      }
     }
 
     return this.clone(result.response);
@@ -99,11 +120,15 @@ export class DbBackedCharacterCommandTransactionBoundary {
 
       return {
         characterStateUpdates: [],
+        dispatchIdempotencyKey: null,
         response: this.clone(existing.response) as TResponse,
       };
     }
 
     const characterStateUpdates: CharacterStateUpdate[] = [];
+    const outboxBackedCommand = this.supportsOutboxDispatch(
+      params.command.type,
+    );
     const transactionRuntime = params.runtime.withCharacterRepository(
       new DbBackedCharacterRepository(context.characters),
       {
@@ -126,8 +151,17 @@ export class DbBackedCharacterCommandTransactionBoundary {
       });
 
     if (inserted) {
+      if (outboxBackedCommand) {
+        await this.persistOutboxRows(
+          context,
+          idempotencyKey,
+          characterStateUpdates,
+        );
+      }
+
       return {
         characterStateUpdates,
+        dispatchIdempotencyKey: outboxBackedCommand ? idempotencyKey : null,
         response,
       };
     }
@@ -151,8 +185,47 @@ export class DbBackedCharacterCommandTransactionBoundary {
 
     return {
       characterStateUpdates: [],
+      dispatchIdempotencyKey: null,
       response: this.clone(concurrentRecord.response) as TResponse,
     };
+  }
+
+  private async persistOutboxRows(
+    context: DndDatabaseUnitOfWorkContext,
+    idempotencyKey: string,
+    updates: CharacterStateUpdate[],
+  ): Promise<void> {
+    for (const [eventOrder, update] of updates.entries()) {
+      const inserted = await context.outbox.insertCommandEventOutboxRecord({
+        eventOrder,
+        eventType: this.getEventType(update),
+        idempotencyKey,
+        outboxId: `${idempotencyKey}:${eventOrder}`,
+        payload: this.clone(update),
+        sessionId: update.sessionId,
+      });
+
+      if (inserted) {
+        continue;
+      }
+
+      throw new Error(
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for character command "${idempotencyKey}".`,
+      );
+    }
+  }
+
+  private supportsOutboxDispatch(commandType: string): boolean {
+    return (
+      commandType === 'dm_set_character_current_hp' ||
+      commandType === 'dm_set_character_active_conditions'
+    );
+  }
+
+  private getEventType(
+    update: CharacterStateUpdate,
+  ): CommandEventOutboxEventType {
+    return update.type;
   }
 
   private categoryMatchesCommandType(

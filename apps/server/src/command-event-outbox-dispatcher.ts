@@ -3,6 +3,7 @@ import type {
   CommandEventOutboxRow,
 } from '@dnd/db';
 import type {
+  CharacterStateUpdate,
   CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
@@ -72,6 +73,13 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
   }
 
   private publishRow(row: CommandEventOutboxRow): void {
+    if (row.eventType === 'character_state') {
+      this.sessions.publishCharacterStateUpdate(
+        this.clone(row.payload as CharacterStateUpdate),
+      );
+      return;
+    }
+
     if (row.eventType === 'encounter_state') {
       this.sessions.publishEncounterStateUpdate(
         this.clone(row.payload as EncounterStateUpdate),
