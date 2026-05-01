@@ -12,6 +12,9 @@ import {
   type CharacterRecordRow,
   type CharacterRecordWrite,
   type CommandIdempotencyRecordDatabase,
+  type CommandEventOutboxDatabase,
+  type CommandEventOutboxRecordWrite,
+  type CommandEventOutboxRow,
   type DndDatabaseUnitOfWork,
   type DndDatabaseUnitOfWorkContext,
   type CompletedCommandIdempotencyRecordRow,
@@ -52,6 +55,7 @@ import {
   InMemoryCommandIdempotencyStore,
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
+import { CommandEventOutboxDispatcher } from './command-event-outbox-dispatcher.js';
 import { InMemoryCharacterStore } from './character-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
@@ -531,6 +535,137 @@ class InMemoryCommandIdempotencyRecordDatabase implements CommandIdempotencyReco
   }
 }
 
+class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
+  private readonly rows = new Map<string, CommandEventOutboxRow>();
+  insertCount = 0;
+
+  get recordCount(): number {
+    return this.rows.size;
+  }
+
+  async insertCommandEventOutboxRecord(
+    write: CommandEventOutboxRecordWrite,
+  ): Promise<CommandEventOutboxRow | null> {
+    if (this.rows.has(write.outboxId)) {
+      return null;
+    }
+
+    for (const row of this.rows.values()) {
+      if (
+        row.idempotencyKey === write.idempotencyKey &&
+        row.eventOrder === write.eventOrder
+      ) {
+        return null;
+      }
+    }
+
+    const row: CommandEventOutboxRow = {
+      createdAt: new Date(Date.UTC(2026, 3, 23, 0, 5, this.insertCount, 0)),
+      eventOrder: write.eventOrder,
+      eventType: write.eventType,
+      idempotencyKey: write.idempotencyKey,
+      outboxId: write.outboxId,
+      payload: this.clone(write.payload),
+      publishedAt: null,
+      sessionId: write.sessionId,
+    };
+
+    this.insertCount += 1;
+    this.rows.set(write.outboxId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  async listUnpublishedCommandEventOutboxRecords(): Promise<
+    CommandEventOutboxRow[]
+  > {
+    return [...this.rows.values()]
+      .filter((row) => row.publishedAt === null)
+      .sort((left, right) => {
+        const createdAtDiff =
+          left.createdAt.getTime() - right.createdAt.getTime();
+
+        if (createdAtDiff !== 0) {
+          return createdAtDiff;
+        }
+
+        const idempotencyDiff = left.idempotencyKey.localeCompare(
+          right.idempotencyKey,
+        );
+
+        if (idempotencyDiff !== 0) {
+          return idempotencyDiff;
+        }
+
+        const eventOrderDiff = left.eventOrder - right.eventOrder;
+
+        if (eventOrderDiff !== 0) {
+          return eventOrderDiff;
+        }
+
+        return left.outboxId.localeCompare(right.outboxId);
+      })
+      .map((row) => this.clone(row));
+  }
+
+  async listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
+    idempotencyKey: string,
+  ): Promise<CommandEventOutboxRow[]> {
+    return [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.idempotencyKey === idempotencyKey && row.publishedAt === null,
+      )
+      .sort((left, right) => {
+        const eventOrderDiff = left.eventOrder - right.eventOrder;
+
+        if (eventOrderDiff !== 0) {
+          return eventOrderDiff;
+        }
+
+        return left.outboxId.localeCompare(right.outboxId);
+      })
+      .map((row) => this.clone(row));
+  }
+
+  async markCommandEventOutboxRecordPublished(
+    outboxId: string,
+  ): Promise<CommandEventOutboxRow | null> {
+    const row = this.rows.get(outboxId);
+
+    if (!row || row.publishedAt !== null) {
+      return null;
+    }
+
+    const updated: CommandEventOutboxRow = {
+      ...this.clone(row),
+      publishedAt: new Date(Date.UTC(2026, 3, 23, 0, 6, this.insertCount, 0)),
+    };
+
+    this.rows.set(outboxId, this.clone(updated));
+
+    return this.clone(updated);
+  }
+
+  cloneRows(): Map<string, CommandEventOutboxRow> {
+    return new Map(
+      [...this.rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+  }
+
+  replaceRows(rows: Map<string, CommandEventOutboxRow>): void {
+    this.rows.clear();
+
+    for (const [key, row] of rows.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
+  }
+
+  private clone<T>(value: T): T {
+    return structuredClone(value);
+  }
+}
+
 class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   committedCount = 0;
   failBeforeCommit = false;
@@ -540,6 +675,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly characters: InMemoryCharacterRecordDatabase,
     private readonly commandIdempotency: InMemoryCommandIdempotencyRecordDatabase,
     private readonly encounters: InMemoryActiveEncounterRecordDatabase = new InMemoryActiveEncounterRecordDatabase(),
+    private readonly outbox: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
   ) {}
 
   async transaction<T>(
@@ -560,17 +696,20 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         new InMemoryCommandIdempotencyRecordDatabase();
       const transactionalEncounters =
         new InMemoryActiveEncounterRecordDatabase();
+      const transactionalOutbox = new InMemoryCommandEventOutboxDatabase();
 
       transactionalCharacters.replaceRows(this.characters.cloneRows());
       transactionalCommandIdempotency.replaceRows(
         this.commandIdempotency.cloneRows(),
       );
       transactionalEncounters.replaceRows(this.encounters.cloneRows());
+      transactionalOutbox.replaceRows(this.outbox.cloneRows());
 
       const result = await run({
         characters: transactionalCharacters,
         commandIdempotency: transactionalCommandIdempotency,
         encounters: transactionalEncounters,
+        outbox: transactionalOutbox,
       });
 
       if (this.failBeforeCommit) {
@@ -582,6 +721,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         transactionalCommandIdempotency.cloneRows(),
       );
       this.encounters.replaceRows(transactionalEncounters.cloneRows());
+      this.outbox.replaceRows(transactionalOutbox.cloneRows());
       this.committedCount += 1;
 
       return result;
@@ -614,6 +754,20 @@ function getMovementUpdates(
   return updates.filter(
     (update): update is MovementStateUpdate => update.type === 'movement_state',
   );
+}
+
+function createCombatCommandTransactionHarness(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  unitOfWork: InMemoryDndDatabaseUnitOfWork,
+  outboxDatabase: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
+) {
+  return {
+    combatCommandTransaction: new DbBackedCombatCommandTransactionBoundary(
+      unitOfWork,
+      new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+    ),
+    outboxDatabase,
+  };
 }
 
 function setupEncounterForIdempotency(runtime: InMemoryGameRuntime) {
@@ -3479,8 +3633,11 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { secondCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3532,6 +3689,7 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   assert.equal(attack.status, 200);
   assert.equal(attack.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(target.character.hp.current, 33);
   assert.equal(encounter.currentTurnUsage.actionUsed, true);
   assert.equal(encounterUpdates.length, 1);
@@ -3552,6 +3710,10 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
     previous: 34,
     current: 33,
   });
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 });
 
 test('transactional attack duplicate retry returns cached durable success without rerolling, redamaging, or republishing', async () => {
@@ -3577,8 +3739,11 @@ test('transactional attack duplicate retry returns cached durable success withou
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  let combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  let { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { secondCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3606,9 +3771,11 @@ test('transactional attack duplicate retry returns cached durable success withou
     combatCommandTransaction,
   );
 
-  combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  ({ combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
-  );
+    outboxDatabase,
+  ));
 
   const second = await postJson<EncounterCommandResponse>(
     runtime,
@@ -3627,8 +3794,13 @@ test('transactional attack duplicate retry returns cached durable success withou
   assert.equal(rollCount, 1);
   assert.equal(target.character.hp.current, 33);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getCombatEvents(updates).length - combatEventsBefore, 1);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 });
 
 test('failed transactional attack does not persist a durable success record', async () => {
@@ -3650,8 +3822,11 @@ test('failed transactional attack does not persist a durable success record', as
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, secondCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3692,6 +3867,7 @@ test('failed transactional attack does not persist a durable success record', as
   assert.notEqual(failed.status, 200);
   assert.equal(failed.body.ok, false);
   assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(attacker.character.hp.current, 26);
   assert.equal(target.character.hp.current, 34);
   assert.equal(encounter.currentTurnUsage.actionUsed, false);
@@ -3726,8 +3902,11 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { secondCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3795,6 +3974,7 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   );
   assert.equal(getCombatEvents(updates).length, combatEventsBeforeConflict);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
 
   if (!conflict.body.ok) {
     assert.equal(conflict.body.error.code, 'command_id_conflict');
@@ -3819,8 +3999,11 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3875,6 +4058,7 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   assert.equal(moved.status, 200);
   assert.equal(moved.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(updatedRecord.overlay.position?.x, 1);
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
@@ -3893,6 +4077,11 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
     assert.equal(moved.body.data.overlay.position?.x, 1);
     assert.equal(moved.body.data.overlay.position?.y, 1);
   }
+
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 });
 
 test('transactional encounter-aware movement duplicate retry returns cached durable success without reapplying mutation or republishing', async () => {
@@ -3913,8 +4102,11 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  let combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  let { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -3947,9 +4139,11 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
     combatCommandTransaction,
   );
 
-  combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  ({ combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
-  );
+    outboxDatabase,
+  ));
 
   const second = await postJson<MovementCommandResponse>(
     runtime,
@@ -3979,8 +4173,13 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 });
 
 test('failed transactional encounter-aware movement does not persist a durable success record', async () => {
@@ -4001,8 +4200,11 @@ test('failed transactional encounter-aware movement does not persist a durable s
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -4046,6 +4248,7 @@ test('failed transactional encounter-aware movement does not persist a durable s
   assert.notEqual(failed.status, 200);
   assert.equal(failed.body.ok, false);
   assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 0);
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
@@ -4075,8 +4278,11 @@ test('transactional encounter-aware movement command ID conflicts still reject c
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -4154,6 +4360,7 @@ test('transactional encounter-aware movement command ID conflicts still reject c
     movementUpdatesBeforeConflict,
   );
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
 
   if (!conflict.body.ok) {
     assert.equal(conflict.body.error.code, 'command_id_conflict');
@@ -4178,8 +4385,11 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -4224,6 +4434,7 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
   assert.equal(moved.status, 200);
   assert.equal(moved.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 0);
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
@@ -4251,8 +4462,11 @@ test('no-active-encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -4298,6 +4512,7 @@ test('no-active-encounter movement remains on the existing non-transactional pat
   assert.equal(moved.status, 200);
   assert.equal(moved.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 1);
@@ -4375,8 +4590,11 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const combatCommandTransaction = new DbBackedCombatCommandTransactionBoundary(
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
     unitOfWork,
+    outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
@@ -4438,8 +4656,13 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 });
 
 test('encounter success payloads are validated as authoritative turn-order responses', () => {

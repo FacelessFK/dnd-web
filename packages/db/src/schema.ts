@@ -1,4 +1,11 @@
-import { jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 import type {
   Character,
@@ -38,6 +45,14 @@ export type PersistedSessionSnapshotDocument = {
 
 export type StoredSceneRecordDocument = Scene;
 export type StoredActiveEncounterRecordDocument = Encounter;
+export type CommandEventOutboxEventType =
+  | 'combat_event'
+  | 'encounter_state'
+  | 'movement_state';
+export type StoredCommandEventOutboxPayloadDocument = {
+  sessionId: SessionId;
+  type: CommandEventOutboxEventType;
+} & Record<string, unknown>;
 
 export const characterRecords = pgTable('character_records', {
   characterId: text('character_id').primaryKey().$type<CharacterId>(),
@@ -107,9 +122,33 @@ export const activeEncounterRecords = pgTable('active_encounter_records', {
     .notNull(),
 });
 
+export const commandEventOutboxRecords = pgTable(
+  'command_event_outbox_records',
+  {
+    outboxId: text('outbox_id').primaryKey(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    sessionId: text('session_id').$type<SessionId>().notNull(),
+    eventType: text('event_type').notNull(),
+    eventOrder: integer('event_order').notNull(),
+    payload: jsonb('payload')
+      .$type<StoredCommandEventOutboxPayloadDocument>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+  },
+  (table) => ({
+    uniqueCommandEventOrder: uniqueIndex(
+      'command_event_outbox_records_idempotency_key_event_order_idx',
+    ).on(table.idempotencyKey, table.eventOrder),
+  }),
+);
+
 export const dbSchema = {
   activeEncounterRecords,
   characterRecords,
+  commandEventOutboxRecords,
   completedCommandIdempotencyRecords,
   sceneRecords,
   sessionSnapshots,
@@ -119,6 +158,8 @@ export type DbSchema = typeof dbSchema;
 export type ActiveEncounterRecordRow =
   typeof activeEncounterRecords.$inferSelect;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
+export type CommandEventOutboxRow =
+  typeof commandEventOutboxRecords.$inferSelect;
 export type CompletedCommandIdempotencyRecordRow =
   typeof completedCommandIdempotencyRecords.$inferSelect;
 export type SceneRecordRow = typeof sceneRecords.$inferSelect;

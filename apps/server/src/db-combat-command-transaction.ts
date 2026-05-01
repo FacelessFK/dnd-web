@@ -1,4 +1,5 @@
 import type {
+  CommandEventOutboxEventType,
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
@@ -17,6 +18,7 @@ import {
   type CommandIdempotencyCategory,
   type IdempotentCommand,
 } from './command-idempotency-store.js';
+import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import type {
@@ -62,8 +64,8 @@ type TransactionalRunParams<TPrepared, TResponse> =
   };
 
 type TransactionalRunResult<TResponse> = {
+  dispatchIdempotencyKey: string | null;
   encounterCache: Map<SessionId, Encounter>;
-  publications: CombatTransactionalPublication[];
   response: TResponse;
 };
 
@@ -77,7 +79,10 @@ export class DbBackedCombatCommandTransactionBoundary {
     DURABLE_CROSS_STORE_COMBAT_COMMAND_TYPES,
   );
 
-  constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {}
+  constructor(
+    private readonly unitOfWork: DndDatabaseUnitOfWork,
+    private readonly outboxDispatcher: CommandEventOutboxDispatcherLike,
+  ) {}
 
   supports(params: TransactionalCommandParams): boolean {
     if (!this.durableCommandTypes.has(params.command.type)) {
@@ -145,18 +150,19 @@ export class DbBackedCombatCommandTransactionBoundary {
 
     params.runtime.encounters.replaceEncountersBySession(result.encounterCache);
 
-    for (const publication of result.publications) {
-      if (publication.type === 'encounter_state') {
-        params.runtime.sessions.publishEncounterStateUpdate(publication);
-        continue;
-      }
+    if (!result.dispatchIdempotencyKey) {
+      return this.clone(result.response);
+    }
 
-      if (publication.type === 'movement_state') {
-        params.runtime.sessions.publishMovementStateUpdate(publication);
-        continue;
-      }
-
-      params.runtime.sessions.publishCombatEvent(publication);
+    try {
+      await this.outboxDispatcher.drainUnpublishedByIdempotencyKey(
+        result.dispatchIdempotencyKey,
+      );
+    } catch (error) {
+      console.error(
+        '[combat-transaction] failed to dispatch covered combat outbox rows after commit',
+        error,
+      );
     }
 
     return this.clone(result.response);
@@ -207,8 +213,8 @@ export class DbBackedCombatCommandTransactionBoundary {
 
     if (cached) {
       return {
+        dispatchIdempotencyKey: null,
         encounterCache: cached.encounterCache,
-        publications: [],
         response: cached.response,
       };
     }
@@ -251,9 +257,11 @@ export class DbBackedCombatCommandTransactionBoundary {
       });
 
     if (inserted) {
+      await this.persistOutboxRows(context, idempotencyKey, publications);
+
       return {
+        dispatchIdempotencyKey: idempotencyKey,
         encounterCache: encounters.cloneEncountersBySession(),
-        publications,
         response,
       };
     }
@@ -276,10 +284,41 @@ export class DbBackedCombatCommandTransactionBoundary {
     );
 
     return {
+      dispatchIdempotencyKey: null,
       encounterCache: encounters.cloneEncountersBySession(),
-      publications: [],
       response: this.clone(concurrentRecord.response) as TResponse,
     };
+  }
+
+  private async persistOutboxRows(
+    context: DndDatabaseUnitOfWorkContext,
+    idempotencyKey: string,
+    publications: CombatTransactionalPublication[],
+  ): Promise<void> {
+    for (const [eventOrder, publication] of publications.entries()) {
+      const inserted = await context.outbox.insertCommandEventOutboxRecord({
+        eventOrder,
+        eventType: this.getEventType(publication),
+        idempotencyKey,
+        outboxId: `${idempotencyKey}:${eventOrder}`,
+        payload: this.clone(publication),
+        sessionId: publication.sessionId,
+      });
+
+      if (inserted) {
+        continue;
+      }
+
+      throw new Error(
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for combat command "${idempotencyKey}".`,
+      );
+    }
+  }
+
+  private getEventType(
+    publication: CombatTransactionalPublication,
+  ): CommandEventOutboxEventType {
+    return publication.type;
   }
 
   private assertSameFingerprint(

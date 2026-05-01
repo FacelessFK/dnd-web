@@ -8,6 +8,10 @@ import {
   type CommandIdempotencyRecordDatabase,
 } from './command-idempotency-record-database.js';
 import {
+  DrizzleCommandEventOutboxDatabase,
+  type CommandEventOutboxDatabase,
+} from './command-event-outbox-database.js';
+import {
   DrizzleActiveEncounterRecordDatabase,
   type ActiveEncounterRecordDatabase,
 } from './encounter-record-database.js';
@@ -16,6 +20,7 @@ export type DndDatabaseUnitOfWorkContext = {
   characters: CharacterRecordDatabase;
   commandIdempotency: CommandIdempotencyRecordDatabase;
   encounters: ActiveEncounterRecordDatabase;
+  outbox: CommandEventOutboxDatabase;
 };
 
 export interface DndDatabaseUnitOfWork {
@@ -35,6 +40,7 @@ export class DrizzleDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         characters: new DrizzleCharacterRecordDatabase(tx),
         commandIdempotency: new DrizzleCommandIdempotencyRecordDatabase(tx),
         encounters: new DrizzleActiveEncounterRecordDatabase(tx),
+        outbox: new DrizzleCommandEventOutboxDatabase(tx),
       }),
     );
   }

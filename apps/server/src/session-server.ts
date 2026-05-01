@@ -54,6 +54,7 @@ import {
   type CommandIdempotencyCategory,
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
+import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
@@ -99,12 +100,15 @@ export function createSessionServer(
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
+  commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
 ): {
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
+  commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
   server: Server;
+  startup: () => Promise<void>;
   runtime: GameRuntime;
   store: GameRuntime['sessions'];
 } {
@@ -127,9 +131,11 @@ export function createSessionServer(
   return {
     combatCommandTransaction,
     characterCommandTransaction,
+    commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
     server,
+    startup: async () => undefined,
     runtime,
     store: runtime.sessions,
   };
@@ -157,8 +163,8 @@ export async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
-      phase: 'phase-11',
-      status: 'transactional-movement-baseline',
+      phase: 'phase-12',
+      status: 'combat-outbox-foundation',
     });
     return;
   }
