@@ -17,17 +17,17 @@ server.on('close', () => {
 
 server.listen(port, host, () => {
   console.log(
-    `[server] Phase 12 combat outbox foundation listening on http://${host}:${port}`,
+    `[server] Phase 12 encounter/combat outbox foundation listening on http://${host}:${port}`,
   );
 
   if (persistenceMode === 'db') {
     console.log(
-      '[server] Opt-in DB-backed startup is enabled via SERVER_PERSISTENCE_MODE=db; the runtime now injects the existing DB-backed character, session snapshot, scene, and active-encounter stores plus the current narrow transaction boundaries and covered live-command post-commit outbox dispatch, but cold-boot unpublished rows are not auto-redelivered because SSE subscribers are process-local, without replay, multi-process coordination, or full combat continuity guarantees.',
+      '[server] Opt-in DB-backed startup is enabled via SERVER_PERSISTENCE_MODE=db; the runtime now injects the existing DB-backed character, session snapshot, scene, and active-encounter stores plus the current narrow transaction boundaries and covered encounter/combat live-command post-commit outbox dispatch, but cold-boot unpublished rows are not auto-redelivered because SSE subscribers are process-local, without replay, multi-process coordination, or full combat continuity guarantees.',
     );
     return;
   }
 
   console.log(
-    '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, scene, and active-encounter stores now support transactional durable idempotency for supported character mutations, encounter-only commands, attack, and movement-spending encounter-aware movement on the DB-backed path, plus covered live-command post-commit outbox dispatch when DB mode is enabled, but cold-boot unpublished rows are not auto-redelivered because SSE subscribers are process-local, without replay, multi-process coordination, or full combat continuity guarantees.',
+    '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, scene, and active-encounter stores now support transactional durable idempotency for supported character mutations, encounter-only commands, attack, and movement-spending encounter-aware movement on the DB-backed path, plus covered encounter/combat live-command post-commit outbox dispatch when DB mode is enabled, but cold-boot unpublished rows are not auto-redelivered because SSE subscribers are process-local, without replay, multi-process coordination, or full combat continuity guarantees.',
   );
 });

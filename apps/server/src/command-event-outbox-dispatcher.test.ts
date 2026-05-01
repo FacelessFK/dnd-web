@@ -178,7 +178,9 @@ function createSessionStoreHarness() {
   };
 }
 
-function getNonSessionStateUpdateTypes(updates: SessionStreamEvent[]): string[] {
+function getNonSessionStateUpdateTypes(
+  updates: SessionStreamEvent[],
+): string[] {
   return updates
     .filter((update) => update.type !== 'session_state')
     .map((update) => update.type);
@@ -214,252 +216,240 @@ async function insertMovementOutboxRow(
   });
 }
 
-test(
-  'command event outbox dispatcher publishes covered rows in stable order and marks them published',
-  async () => {
-    const database = new InMemoryCommandEventOutboxDatabase();
-    const { sessionId, store, updates } = createSessionStoreHarness();
-    const dispatcher = new CommandEventOutboxDispatcher(database, store);
+test('command event outbox dispatcher publishes covered rows in stable order and marks them published', async () => {
+  const database = new InMemoryCommandEventOutboxDatabase();
+  const { sessionId, store, updates } = createSessionStoreHarness();
+  const dispatcher = new CommandEventOutboxDispatcher(database, store);
 
-    await database.insertCommandEventOutboxRecord({
-      eventOrder: 1,
-      eventType: 'combat_event',
-      idempotencyKey: 'encounter:command-1',
-      outboxId: 'encounter:command-1:1',
-      payload: {
-        actorCharacterId: 'character-001',
-        actorParticipantId: 'player-001',
-        attackRoll: {
-          roll: 20,
-          total: 25,
-        },
-        damage: 1,
-        hit: true,
-        reason: 'attack_resolved',
-        sessionId,
-        targetCharacterId: 'character-002',
-        targetHp: {
-          current: 33,
-          previous: 34,
-        },
-        targetParticipantId: 'player-002',
-        type: 'combat_event',
+  await database.insertCommandEventOutboxRecord({
+    eventOrder: 1,
+    eventType: 'combat_event',
+    idempotencyKey: 'encounter:command-1',
+    outboxId: 'encounter:command-1:1',
+    payload: {
+      actorCharacterId: 'character-001',
+      actorParticipantId: 'player-001',
+      attackRoll: {
+        roll: 20,
+        total: 25,
       },
+      damage: 1,
+      hit: true,
+      reason: 'attack_resolved',
       sessionId,
-    });
-    await database.insertCommandEventOutboxRecord({
-      eventOrder: 0,
-      eventType: 'encounter_state',
-      idempotencyKey: 'encounter:command-1',
-      outboxId: 'encounter:command-1:0',
-      payload: {
-        encounter: {
-          createdAt: '2026-05-01T00:00:00.000Z',
-          id: 'encounter-001',
-          participants: [
-            {
-              characterId: 'character-001',
-              initiative: 20,
-              participantId: 'player-001',
-            },
-          ],
-          currentTurnIndex: 0,
-          roundNumber: 1,
-          sceneId: 'scene-001',
-          sessionId,
-          status: 'active',
-          currentTurnUsage: {
-            actionUsed: true,
-            bonusActionUsed: false,
-            movementUsed: 0,
-            reactionUsed: false,
+      targetCharacterId: 'character-002',
+      targetHp: {
+        current: 33,
+        previous: 34,
+      },
+      targetParticipantId: 'player-002',
+      type: 'combat_event',
+    },
+    sessionId,
+  });
+  await database.insertCommandEventOutboxRecord({
+    eventOrder: 0,
+    eventType: 'encounter_state',
+    idempotencyKey: 'encounter:command-1',
+    outboxId: 'encounter:command-1:0',
+    payload: {
+      encounter: {
+        createdAt: '2026-05-01T00:00:00.000Z',
+        id: 'encounter-001',
+        participants: [
+          {
+            characterId: 'character-001',
+            initiative: 20,
+            participantId: 'player-001',
           },
-          updatedAt: '2026-05-01T00:00:00.000Z',
-        },
-        reason: 'action_used',
+        ],
+        currentTurnIndex: 0,
+        roundNumber: 1,
+        sceneId: 'scene-001',
         sessionId,
-        type: 'encounter_state',
+        status: 'active',
+        currentTurnUsage: {
+          actionUsed: true,
+          bonusActionUsed: false,
+          movementUsed: 0,
+          reactionUsed: false,
+        },
+        updatedAt: '2026-05-01T00:00:00.000Z',
       },
+      reason: 'action_used',
       sessionId,
-    });
+      type: 'encounter_state',
+    },
+    sessionId,
+  });
 
-    await dispatcher.drainUnpublishedByIdempotencyKey('encounter:command-1');
+  await dispatcher.drainUnpublishedByIdempotencyKey('encounter:command-1');
 
-    assert.deepEqual(getNonSessionStateUpdateTypes(updates), [
-      'encounter_state',
-      'combat_event',
-    ]);
-    assert.equal(
-      (await database.listUnpublishedCommandEventOutboxRecords()).length,
-      0,
-    );
+  assert.deepEqual(getNonSessionStateUpdateTypes(updates), [
+    'encounter_state',
+    'combat_event',
+  ]);
+  assert.equal(
+    (await database.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 
-    await dispatcher.drainUnpublishedByIdempotencyKey('encounter:command-1');
+  await dispatcher.drainUnpublishedByIdempotencyKey('encounter:command-1');
 
-    assert.deepEqual(getNonSessionStateUpdateTypes(updates), [
-      'encounter_state',
-      'combat_event',
-    ]);
-  },
-);
+  assert.deepEqual(getNonSessionStateUpdateTypes(updates), [
+    'encounter_state',
+    'combat_event',
+  ]);
+});
 
-test(
-  'createSessionServer startup does not auto-drain unpublished outbox rows',
-  async () => {
-    const database = new InMemoryCommandEventOutboxDatabase();
-    const { sessionId, store, updates } = createSessionStoreHarness();
-    const dispatcher = new CommandEventOutboxDispatcher(database, store);
+test('createSessionServer startup does not auto-drain unpublished outbox rows', async () => {
+  const database = new InMemoryCommandEventOutboxDatabase();
+  const { sessionId, store, updates } = createSessionStoreHarness();
+  const dispatcher = new CommandEventOutboxDispatcher(database, store);
 
-    await insertMovementOutboxRow(database, sessionId);
+  await insertMovementOutboxRow(database, sessionId);
 
-    const dbBackedServer = createSessionServer(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      dispatcher,
-    );
+  const dbBackedServer = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    dispatcher,
+  );
 
-    await dbBackedServer.startup();
+  await dbBackedServer.startup();
 
-    assert.deepEqual(getNonSessionStateUpdateTypes(updates), []);
-    assert.equal(
-      (await database.listUnpublishedCommandEventOutboxRecords()).length,
-      1,
-    );
+  assert.deepEqual(getNonSessionStateUpdateTypes(updates), []);
+  assert.equal(
+    (await database.listUnpublishedCommandEventOutboxRecords()).length,
+    1,
+  );
 
-    let startupCount = 0;
-    const startupOnlyDispatcher: CommandEventOutboxDispatcherLike = {
-      drainAllUnpublished: async () => {
-        startupCount += 1;
-      },
-      drainUnpublishedByIdempotencyKey: async () => undefined,
-    };
-    const injectedServer = createSessionServer(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      startupOnlyDispatcher,
-    );
+  let startupCount = 0;
+  const startupOnlyDispatcher: CommandEventOutboxDispatcherLike = {
+    drainAllUnpublished: async () => {
+      startupCount += 1;
+    },
+    drainUnpublishedByIdempotencyKey: async () => undefined,
+  };
+  const injectedServer = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    startupOnlyDispatcher,
+  );
 
-    await injectedServer.startup();
-    assert.equal(startupCount, 0);
+  await injectedServer.startup();
+  assert.equal(startupCount, 0);
 
-    const inMemoryServer = createSessionServer();
+  const inMemoryServer = createSessionServer();
 
-    await inMemoryServer.startup();
-    assert.equal(startupCount, 0);
-  },
-);
+  await inMemoryServer.startup();
+  assert.equal(startupCount, 0);
+});
 
-test(
-  'concurrent drain requests do not double-publish the same row',
-  async () => {
-    const database = new InMemoryCommandEventOutboxDatabase();
-    const { sessionId, store, updates } = createSessionStoreHarness();
-    await insertMovementOutboxRow(database, sessionId);
+test('concurrent drain requests do not double-publish the same row', async () => {
+  const database = new InMemoryCommandEventOutboxDatabase();
+  const { sessionId, store, updates } = createSessionStoreHarness();
+  await insertMovementOutboxRow(database, sessionId);
 
-    const markGate = createDeferred<void>();
-    const firstMarkReached = createDeferred<void>();
-    let listByIdempotencyKeyCalls = 0;
-    const instrumentedDatabase: CommandEventOutboxDatabase = {
-      insertCommandEventOutboxRecord: (write) =>
-        database.insertCommandEventOutboxRecord(write),
-      listUnpublishedCommandEventOutboxRecords: () =>
-        database.listUnpublishedCommandEventOutboxRecords(),
-      listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
+  const markGate = createDeferred<void>();
+  const firstMarkReached = createDeferred<void>();
+  let listByIdempotencyKeyCalls = 0;
+  const instrumentedDatabase: CommandEventOutboxDatabase = {
+    insertCommandEventOutboxRecord: (write) =>
+      database.insertCommandEventOutboxRecord(write),
+    listUnpublishedCommandEventOutboxRecords: () =>
+      database.listUnpublishedCommandEventOutboxRecords(),
+    listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
+      idempotencyKey,
+    ) => {
+      listByIdempotencyKeyCalls += 1;
+      return database.listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
         idempotencyKey,
-      ) => {
-        listByIdempotencyKeyCalls += 1;
-        return database.listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
-          idempotencyKey,
-        );
-      },
-      markCommandEventOutboxRecordPublished: async (outboxId) => {
-        firstMarkReached.resolve();
-        await markGate.promise;
-        return database.markCommandEventOutboxRecordPublished(outboxId);
-      },
-    };
-    const dispatcher = new CommandEventOutboxDispatcher(
-      instrumentedDatabase,
-      store,
-    );
+      );
+    },
+    markCommandEventOutboxRecordPublished: async (outboxId) => {
+      firstMarkReached.resolve();
+      await markGate.promise;
+      return database.markCommandEventOutboxRecordPublished(outboxId);
+    },
+  };
+  const dispatcher = new CommandEventOutboxDispatcher(
+    instrumentedDatabase,
+    store,
+  );
 
-    const firstDrain = dispatcher.drainAllUnpublished();
-    await firstMarkReached.promise;
+  const firstDrain = dispatcher.drainAllUnpublished();
+  await firstMarkReached.promise;
 
-    const secondDrain =
-      dispatcher.drainUnpublishedByIdempotencyKey('movement:command-1');
+  const secondDrain =
+    dispatcher.drainUnpublishedByIdempotencyKey('movement:command-1');
 
-    await Promise.resolve();
-    assert.equal(listByIdempotencyKeyCalls, 0);
+  await Promise.resolve();
+  assert.equal(listByIdempotencyKeyCalls, 0);
 
-    markGate.resolve();
-    await Promise.all([firstDrain, secondDrain]);
+  markGate.resolve();
+  await Promise.all([firstDrain, secondDrain]);
 
-    assert.deepEqual(getNonSessionStateUpdateTypes(updates), ['movement_state']);
-    assert.equal(listByIdempotencyKeyCalls, 1);
-    assert.equal(
-      (await database.listUnpublishedCommandEventOutboxRecords()).length,
-      0,
-    );
-  },
-);
+  assert.deepEqual(getNonSessionStateUpdateTypes(updates), ['movement_state']);
+  assert.equal(listByIdempotencyKeyCalls, 1);
+  assert.equal(
+    (await database.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+});
 
-test(
-  'createSessionServer startup leaves targeted outbox drains unchanged',
-  async () => {
-    const database = new InMemoryCommandEventOutboxDatabase();
-    const { sessionId, store, updates } = createSessionStoreHarness();
-    await insertMovementOutboxRow(database, sessionId, 'movement:startup-1');
+test('createSessionServer startup leaves targeted outbox drains unchanged', async () => {
+  const database = new InMemoryCommandEventOutboxDatabase();
+  const { sessionId, store, updates } = createSessionStoreHarness();
+  await insertMovementOutboxRow(database, sessionId, 'movement:startup-1');
 
-    const callLog: string[] = [];
-    const instrumentedDatabase: CommandEventOutboxDatabase = {
-      insertCommandEventOutboxRecord: (write) =>
-        database.insertCommandEventOutboxRecord(write),
-      listUnpublishedCommandEventOutboxRecords: async () => {
-        callLog.push('list-all');
-        return database.listUnpublishedCommandEventOutboxRecords();
-      },
-      listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
+  const callLog: string[] = [];
+  const instrumentedDatabase: CommandEventOutboxDatabase = {
+    insertCommandEventOutboxRecord: (write) =>
+      database.insertCommandEventOutboxRecord(write),
+    listUnpublishedCommandEventOutboxRecords: async () => {
+      callLog.push('list-all');
+      return database.listUnpublishedCommandEventOutboxRecords();
+    },
+    listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
+      idempotencyKey,
+    ) => {
+      callLog.push(`list-by-key:${idempotencyKey}`);
+      return database.listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
         idempotencyKey,
-      ) => {
-        callLog.push(`list-by-key:${idempotencyKey}`);
-        return database.listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
-          idempotencyKey,
-        );
-      },
-      markCommandEventOutboxRecordPublished: async (outboxId) => {
-        callLog.push(`mark:${outboxId}`);
-        return database.markCommandEventOutboxRecordPublished(outboxId);
-      },
-    };
-    const dispatcher = new CommandEventOutboxDispatcher(
-      instrumentedDatabase,
-      store,
-    );
-    const server = createSessionServer(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      dispatcher,
-    );
+      );
+    },
+    markCommandEventOutboxRecordPublished: async (outboxId) => {
+      callLog.push(`mark:${outboxId}`);
+      return database.markCommandEventOutboxRecordPublished(outboxId);
+    },
+  };
+  const dispatcher = new CommandEventOutboxDispatcher(
+    instrumentedDatabase,
+    store,
+  );
+  const server = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    dispatcher,
+  );
 
-    await server.startup();
-    assert.deepEqual(callLog, []);
+  await server.startup();
+  assert.deepEqual(callLog, []);
 
-    await dispatcher.drainUnpublishedByIdempotencyKey('movement:startup-1');
+  await dispatcher.drainUnpublishedByIdempotencyKey('movement:startup-1');
 
-    assert.deepEqual(callLog, [
-      'list-by-key:movement:startup-1',
-      'mark:movement:startup-1:0',
-    ]);
-    assert.deepEqual(getNonSessionStateUpdateTypes(updates), ['movement_state']);
-  },
-);
+  assert.deepEqual(callLog, [
+    'list-by-key:movement:startup-1',
+    'mark:movement:startup-1:0',
+  ]);
+  assert.deepEqual(getNonSessionStateUpdateTypes(updates), ['movement_state']);
+});

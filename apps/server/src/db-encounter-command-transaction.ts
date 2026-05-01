@@ -1,4 +1,5 @@
 import type {
+  CommandEventOutboxEventType,
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
@@ -13,6 +14,7 @@ import {
   type CommandIdempotencyCategory,
   type IdempotentCommand,
 } from './command-idempotency-store.js';
+import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import type {
   InMemoryGameRuntime,
@@ -51,6 +53,7 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
 };
 
 type TransactionalRunResult<TResponse> = {
+  dispatchIdempotencyKey: string | null;
   encounterCache: Map<SessionId, Encounter>;
   encounterStateUpdates: EncounterStateUpdate[];
   response: TResponse;
@@ -64,7 +67,10 @@ export class DbBackedEncounterCommandTransactionBoundary {
     DURABLE_DM_ENCOUNTER_MUTATION_COMMAND_TYPES,
   );
 
-  constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {}
+  constructor(
+    private readonly unitOfWork: DndDatabaseUnitOfWork,
+    private readonly outboxDispatcher: CommandEventOutboxDispatcherLike,
+  ) {}
 
   supports(params: TransactionalCommandParams): boolean {
     return this.categoryMatchesCommandType(
@@ -94,8 +100,17 @@ export class DbBackedEncounterCommandTransactionBoundary {
 
     params.runtime.encounters.replaceEncountersBySession(result.encounterCache);
 
-    for (const update of result.encounterStateUpdates) {
-      params.runtime.sessions.publishEncounterStateUpdate(update);
+    if (result.dispatchIdempotencyKey) {
+      try {
+        await this.outboxDispatcher.drainUnpublishedByIdempotencyKey(
+          result.dispatchIdempotencyKey,
+        );
+      } catch (error) {
+        console.error(
+          '[encounter-transaction] failed to dispatch encounter outbox rows after commit',
+          error,
+        );
+      }
     }
 
     return this.clone(result.response);
@@ -124,6 +139,7 @@ export class DbBackedEncounterCommandTransactionBoundary {
       );
 
       return {
+        dispatchIdempotencyKey: null,
         encounterCache: encounters.cloneEncountersBySession(),
         encounterStateUpdates: [],
         response: this.clone(existing.response) as TResponse,
@@ -156,7 +172,14 @@ export class DbBackedEncounterCommandTransactionBoundary {
       });
 
     if (inserted) {
+      await this.persistOutboxRows(
+        context,
+        idempotencyKey,
+        encounterStateUpdates,
+      );
+
       return {
+        dispatchIdempotencyKey: idempotencyKey,
         encounterCache: encounters.cloneEncountersBySession(),
         encounterStateUpdates,
         response,
@@ -181,10 +204,42 @@ export class DbBackedEncounterCommandTransactionBoundary {
     );
 
     return {
+      dispatchIdempotencyKey: null,
       encounterCache: encounters.cloneEncountersBySession(),
       encounterStateUpdates: [],
       response: this.clone(concurrentRecord.response) as TResponse,
     };
+  }
+
+  private async persistOutboxRows(
+    context: DndDatabaseUnitOfWorkContext,
+    idempotencyKey: string,
+    updates: EncounterStateUpdate[],
+  ): Promise<void> {
+    for (const [eventOrder, update] of updates.entries()) {
+      const inserted = await context.outbox.insertCommandEventOutboxRecord({
+        eventOrder,
+        eventType: this.getEventType(update),
+        idempotencyKey,
+        outboxId: `${idempotencyKey}:${eventOrder}`,
+        payload: this.clone(update),
+        sessionId: update.sessionId,
+      });
+
+      if (inserted) {
+        continue;
+      }
+
+      throw new Error(
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for encounter command "${idempotencyKey}".`,
+      );
+    }
+  }
+
+  private getEventType(
+    update: EncounterStateUpdate,
+  ): CommandEventOutboxEventType {
+    return update.type;
   }
 
   private categoryMatchesCommandType(

@@ -164,7 +164,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-12',
-      status: 'combat-outbox-foundation',
+      status: 'encounter-combat-outbox-foundation',
     });
     return;
   }

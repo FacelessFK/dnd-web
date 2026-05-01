@@ -37,9 +37,7 @@ export interface CommandEventOutboxDatabase {
   ): Promise<CommandEventOutboxRow | null>;
 }
 
-export class DrizzleCommandEventOutboxDatabase
-  implements CommandEventOutboxDatabase
-{
+export class DrizzleCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
   constructor(private readonly db: CommandEventOutboxDatabaseClient) {}
 
   async insertCommandEventOutboxRecord(

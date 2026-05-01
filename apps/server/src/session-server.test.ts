@@ -661,6 +661,33 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
     }
   }
 
+  replaceRowsPreservingPublishedState(
+    rows: Map<string, CommandEventOutboxRow>,
+  ): void {
+    const merged = new Map(
+      [...rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+
+    for (const [key, current] of this.rows.entries()) {
+      const next = merged.get(key);
+
+      if (!next) {
+        merged.set(key, this.clone(current));
+        continue;
+      }
+
+      if (current.publishedAt !== null && next.publishedAt === null) {
+        merged.set(key, this.clone(current));
+      }
+    }
+
+    this.rows.clear();
+
+    for (const [key, row] of merged.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
+  }
+
   private clone<T>(value: T): T {
     return structuredClone(value);
   }
@@ -721,7 +748,9 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         transactionalCommandIdempotency.cloneRows(),
       );
       this.encounters.replaceRows(transactionalEncounters.cloneRows());
-      this.outbox.replaceRows(transactionalOutbox.cloneRows());
+      this.outbox.replaceRowsPreservingPublishedState(
+        transactionalOutbox.cloneRows(),
+      );
       this.committedCount += 1;
 
       return result;
@@ -766,6 +795,21 @@ function createCombatCommandTransactionHarness(
       unitOfWork,
       new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
     ),
+    outboxDatabase,
+  };
+}
+
+function createEncounterCommandTransactionHarness(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  unitOfWork: InMemoryDndDatabaseUnitOfWork,
+  outboxDatabase: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
+) {
+  return {
+    encounterCommandTransaction:
+      new DbBackedEncounterCommandTransactionBoundary(
+        unitOfWork,
+        new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+      ),
     outboxDatabase,
   };
 }
@@ -3246,14 +3290,16 @@ test('db-backed active encounters can be reread after restart when durable sessi
   }
 });
 
-test('db-backed encounter transaction boundary returns cached success on duplicate retry and emits encounter_state only after commit', async () => {
+test('db-backed encounter transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate retry', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3264,8 +3310,12 @@ test('db-backed encounter transaction boundary returns cached success on duplica
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  let encounterCommandTransaction =
-    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  let { encounterCommandTransaction } =
+    createEncounterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
   const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
   const command = {
@@ -3300,9 +3350,11 @@ test('db-backed encounter transaction boundary returns cached success on duplica
     encounterCommandTransaction,
   );
 
-  encounterCommandTransaction = new DbBackedEncounterCommandTransactionBoundary(
+  ({ encounterCommandTransaction } = createEncounterCommandTransactionHarness(
+    runtime,
     unitOfWork,
-  );
+    outboxDatabase,
+  ));
 
   const second = await postJson<EncounterCommandResponse>(
     runtime,
@@ -3321,9 +3373,14 @@ test('db-backed encounter transaction boundary returns cached success on duplica
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
   assert.equal(encounterUpdates.length, 1);
   assert.equal(encounterUpdates[0]?.reason, 'turn_advanced');
   assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 
   if (first.body.ok && 'encounter' in first.body.data) {
     const reread = runtime.getEncounterState({
@@ -3363,8 +3420,8 @@ test('transactional encounter command ID conflicts still reject conflicting fing
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const encounterCommandTransaction =
-    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { encounterCommandTransaction } =
+    createEncounterCommandTransactionHarness(runtime, unitOfWork);
   const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
   const firstCommand = {
@@ -3449,10 +3506,12 @@ test('failed transactional encounter commands do not persist durable success rec
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3463,8 +3522,12 @@ test('failed transactional encounter commands do not persist durable success rec
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const encounterCommandTransaction =
-    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { encounterCommandTransaction } =
+    createEncounterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
   const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
   const encounterBefore = runtime.getEncounterState({
@@ -3510,6 +3573,7 @@ test('failed transactional encounter commands do not persist durable success rec
   assert.notEqual(failed.status, 200);
   assert.equal(failed.body.ok, false);
   assert.equal(idempotencyDatabase.recordCount, 0);
+  assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(getEncounterUpdates(updates).length, 0);
   assert.equal(encounterAfter.id, encounterBefore.id);
   assert.equal(
@@ -3522,14 +3586,16 @@ test('failed transactional encounter commands do not persist durable success rec
   );
 });
 
-test('transactional DM encounter end removes future active reads while publishing the final ended snapshot after commit', async () => {
+test('transactional DM encounter end routes the final ended snapshot through one outbox row after commit', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3540,8 +3606,12 @@ test('transactional DM encounter end removes future active reads while publishin
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const encounterCommandTransaction =
-    new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+  const { encounterCommandTransaction } =
+    createEncounterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
   const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
   const commitMarkers: number[] = [];
@@ -3603,7 +3673,12 @@ test('transactional DM encounter end removes future active reads while publishin
   assert.equal(reread.body.ok, false);
   assert.equal(encounterUpdates.length, 1);
   assert.equal(encounterUpdates[0]?.reason, 'encounter_ended');
+  assert.equal(outboxDatabase.recordCount, 1);
   assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
 
   if (ended.body.ok && 'encounter' in ended.body.data) {
     assert.equal(ended.body.data.encounter.status, 'ended');
@@ -3618,10 +3693,12 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3633,7 +3710,6 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -3721,10 +3797,12 @@ test('transactional attack duplicate retry returns cached durable success withou
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3739,7 +3817,6 @@ test('transactional attack duplicate retry returns cached durable success withou
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   let { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -3807,10 +3884,12 @@ test('failed transactional attack does not persist a durable success record', as
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3822,7 +3901,6 @@ test('failed transactional attack does not persist a durable success record', as
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -3884,10 +3962,12 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3902,7 +3982,6 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -3985,10 +4064,12 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -3999,7 +4080,6 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4088,10 +4168,12 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4102,7 +4184,6 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   let { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4186,10 +4267,12 @@ test('failed transactional encounter-aware movement does not persist a durable s
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4200,7 +4283,6 @@ test('failed transactional encounter-aware movement does not persist a durable s
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4264,10 +4346,12 @@ test('transactional encounter-aware movement command ID conflicts still reject c
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4278,7 +4362,6 @@ test('transactional encounter-aware movement command ID conflicts still reject c
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4371,10 +4454,12 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4385,7 +4470,6 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4448,10 +4532,12 @@ test('no-active-encounter movement remains on the existing non-transactional pat
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4462,7 +4548,6 @@ test('no-active-encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
@@ -4576,10 +4661,12 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
     characterDatabase,
     idempotencyDatabase,
     encounterDatabase,
+    outboxDatabase,
   );
   const runtime = new InMemoryGameRuntime(
     new InMemorySessionStore(),
@@ -4590,7 +4677,6 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,

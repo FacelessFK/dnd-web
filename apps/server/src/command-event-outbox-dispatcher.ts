@@ -15,9 +15,7 @@ export interface CommandEventOutboxDispatcherLike {
   drainUnpublishedByIdempotencyKey(idempotencyKey: string): Promise<void>;
 }
 
-export class CommandEventOutboxDispatcher
-  implements CommandEventOutboxDispatcherLike
-{
+export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatcherLike {
   private serializedDrains: Promise<void> = Promise.resolve();
 
   constructor(

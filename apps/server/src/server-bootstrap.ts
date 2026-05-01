@@ -1,8 +1,5 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
-
 import {
-  dbSchema,
+  createNodePostgresDndDatabaseConnection,
   DrizzleActiveEncounterRecordDatabase,
   DrizzleCharacterRecordDatabase,
   DrizzleCommandIdempotencyRecordDatabase,
@@ -73,28 +70,15 @@ export type ServerBootstrapDependencies = {
 const defaultDependencies: ServerBootstrapDependencies = {
   createActiveEncounterRecordDatabase: (db) =>
     new DrizzleActiveEncounterRecordDatabase(db),
-  createCharacterRecordDatabase: (db) =>
-    new DrizzleCharacterRecordDatabase(db),
+  createCharacterRecordDatabase: (db) => new DrizzleCharacterRecordDatabase(db),
   createCommandIdempotencyRecordDatabase: (db) =>
     new DrizzleCommandIdempotencyRecordDatabase(db),
   createCommandEventOutboxDatabase: (db) =>
     new DrizzleCommandEventOutboxDatabase(db),
   createCommandEventOutboxDispatcher: (database, sessions) =>
     new CommandEventOutboxDispatcher(database, sessions),
-  createPersistenceConnection: (databaseUrl) => {
-    const pool = new Pool({
-      connectionString: databaseUrl,
-    });
-
-    return {
-      db: drizzle(pool, {
-        schema: dbSchema,
-      }),
-      close: async () => {
-        await pool.end();
-      },
-    };
-  },
+  createPersistenceConnection: (databaseUrl) =>
+    createNodePostgresDndDatabaseConnection(databaseUrl),
   createSceneRecordDatabase: (db) => new DrizzleSceneRecordDatabase(db),
   createServer: createSessionServer,
   createSessionSnapshotDatabase: (db) => new DrizzleSessionSnapshotDatabase(db),
@@ -183,7 +167,10 @@ export async function createBootstrappedSessionServer(
     const characterCommandTransaction =
       new DbBackedCharacterCommandTransactionBoundary(unitOfWork);
     const encounterCommandTransaction =
-      new DbBackedEncounterCommandTransactionBoundary(unitOfWork);
+      new DbBackedEncounterCommandTransactionBoundary(
+        unitOfWork,
+        commandEventOutboxDispatcher,
+      );
     const combatCommandTransaction =
       new DbBackedCombatCommandTransactionBoundary(
         unitOfWork,
@@ -215,7 +202,5 @@ function readRequiredDatabaseUrl(env: NodeJS.ProcessEnv): string {
     return databaseUrl;
   }
 
-  throw new Error(
-    'DATABASE_URL is required when SERVER_PERSISTENCE_MODE=db.',
-  );
+  throw new Error('DATABASE_URL is required when SERVER_PERSISTENCE_MODE=db.');
 }

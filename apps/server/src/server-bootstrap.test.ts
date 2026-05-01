@@ -48,6 +48,7 @@ class EmptySessionSnapshotDatabase implements SessionSnapshotDatabase {
   async getSessionSnapshot(
     _sessionId: string,
   ): Promise<SessionSnapshotRow | null> {
+    void _sessionId;
     return null;
   }
 
@@ -69,6 +70,7 @@ class EmptySessionSnapshotDatabase implements SessionSnapshotDatabase {
 
 class EmptySceneRecordDatabase implements SceneRecordDatabase {
   async getSceneRecord(_sceneId: string): Promise<SceneRecordRow | null> {
+    void _sceneId;
     return null;
   }
 
@@ -79,6 +81,7 @@ class EmptySceneRecordDatabase implements SceneRecordDatabase {
   async updateSceneRecord(
     _write: SceneRecordWrite,
   ): Promise<SceneRecordRow | null> {
+    void _write;
     return null;
   }
 
@@ -93,24 +96,25 @@ class EmptySceneRecordDatabase implements SceneRecordDatabase {
   }
 }
 
-class EmptyActiveEncounterRecordDatabase
-  implements ActiveEncounterRecordDatabase
-{
+class EmptyActiveEncounterRecordDatabase implements ActiveEncounterRecordDatabase {
   async deleteActiveEncounterRecord(
     _params: ActiveEncounterRecordDelete,
   ): Promise<ActiveEncounterRecordRow | null> {
+    void _params;
     return null;
   }
 
   async getActiveEncounterRecordBySession(
     _sessionId: string,
   ): Promise<ActiveEncounterRecordRow | null> {
+    void _sessionId;
     return null;
   }
 
   async insertActiveEncounterRecord(
     _write: ActiveEncounterRecordWrite,
   ): Promise<ActiveEncounterRecordRow | null> {
+    void _write;
     return null;
   }
 
@@ -121,6 +125,7 @@ class EmptyActiveEncounterRecordDatabase
   async updateActiveEncounterRecord(
     _write: ActiveEncounterRecordWrite,
   ): Promise<ActiveEncounterRecordRow | null> {
+    void _write;
     return null;
   }
 }
@@ -129,12 +134,14 @@ class EmptyCharacterRecordDatabase implements CharacterRecordDatabase {
   async getCharacterRecord(
     _characterId: string,
   ): Promise<CharacterRecordRow | null> {
+    void _characterId;
     return null;
   }
 
   async updateCharacterRecord(
     _write: CharacterRecordWrite,
   ): Promise<CharacterRecordRow | null> {
+    void _write;
     return null;
   }
 
@@ -150,12 +157,11 @@ class EmptyCharacterRecordDatabase implements CharacterRecordDatabase {
   }
 }
 
-class EmptyCommandIdempotencyRecordDatabase
-  implements CommandIdempotencyRecordDatabase
-{
+class EmptyCommandIdempotencyRecordDatabase implements CommandIdempotencyRecordDatabase {
   async getCompletedCommandIdempotencyRecord(
     _idempotencyKey: string,
   ): Promise<CompletedCommandIdempotencyRecordRow | null> {
+    void _idempotencyKey;
     return null;
   }
 
@@ -201,12 +207,14 @@ class EmptyCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
   async listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
     _idempotencyKey: string,
   ): Promise<CommandEventOutboxRow[]> {
+    void _idempotencyKey;
     return [];
   }
 
   async markCommandEventOutboxRecordPublished(
     _outboxId: string,
   ): Promise<CommandEventOutboxRow | null> {
+    void _outboxId;
     return null;
   }
 }
@@ -263,155 +271,137 @@ function createDbModeDependencies(params: {
   };
 }
 
-test(
-  'readServerPersistenceMode defaults to in-memory and accepts the db opt-in',
-  () => {
-    assert.equal(readServerPersistenceMode({}), 'in-memory');
-    assert.equal(
+test('readServerPersistenceMode defaults to in-memory and accepts the db opt-in', () => {
+  assert.equal(readServerPersistenceMode({}), 'in-memory');
+  assert.equal(
+    readServerPersistenceMode({
+      SERVER_PERSISTENCE_MODE: 'db',
+    }),
+    'db',
+  );
+  assert.throws(
+    () =>
       readServerPersistenceMode({
-        SERVER_PERSISTENCE_MODE: 'db',
+        SERVER_PERSISTENCE_MODE: 'invalid',
       }),
-      'db',
-    );
-    assert.throws(
-      () =>
-        readServerPersistenceMode({
-          SERVER_PERSISTENCE_MODE: 'invalid',
-        }),
-      /Unsupported SERVER_PERSISTENCE_MODE "invalid"/,
-    );
-  },
-);
+    /Unsupported SERVER_PERSISTENCE_MODE "invalid"/,
+  );
+});
 
-test(
-  'createBootstrappedSessionServer preserves the current in-memory default startup path',
-  async () => {
-    const bootstrap = await createBootstrappedSessionServer({
-      env: {},
-    });
+test('createBootstrappedSessionServer preserves the current in-memory default startup path', async () => {
+  const bootstrap = await createBootstrappedSessionServer({
+    env: {},
+  });
 
-    assert.equal(bootstrap.persistenceMode, 'in-memory');
-    assert.ok(bootstrap.runtime.sessions instanceof InMemorySessionStore);
-    assert.ok(bootstrap.runtime.characters instanceof InMemoryCharacterStore);
-    assert.ok(
-      bootstrap.idempotency instanceof InMemoryCommandIdempotencyStore,
-    );
-    assert.equal(bootstrap.characterCommandTransaction, undefined);
-    assert.equal(bootstrap.encounterCommandTransaction, undefined);
-    assert.equal(bootstrap.combatCommandTransaction, undefined);
-    assert.equal(bootstrap.commandEventOutboxDispatcher, undefined);
+  assert.equal(bootstrap.persistenceMode, 'in-memory');
+  assert.ok(bootstrap.runtime.sessions instanceof InMemorySessionStore);
+  assert.ok(bootstrap.runtime.characters instanceof InMemoryCharacterStore);
+  assert.ok(bootstrap.idempotency instanceof InMemoryCommandIdempotencyStore);
+  assert.equal(bootstrap.characterCommandTransaction, undefined);
+  assert.equal(bootstrap.encounterCommandTransaction, undefined);
+  assert.equal(bootstrap.combatCommandTransaction, undefined);
+  assert.equal(bootstrap.commandEventOutboxDispatcher, undefined);
 
-    await bootstrap.startup();
-    await bootstrap.closePersistence();
-  },
-);
+  await bootstrap.startup();
+  await bootstrap.closePersistence();
+});
 
-test(
-  'createBootstrappedSessionServer requires DATABASE_URL when DB-backed startup is enabled',
-  async () => {
-    await assert.rejects(
-      () =>
-        createBootstrappedSessionServer({
-          env: {
-            SERVER_PERSISTENCE_MODE: 'db',
-          },
-        }),
-      /DATABASE_URL is required when SERVER_PERSISTENCE_MODE=db/,
-    );
-  },
-);
-
-test(
-  'createBootstrappedSessionServer wires the existing DB-backed runtime and transaction boundaries when DB mode is enabled',
-  async () => {
-    const closeCount = {
-      current: 0,
-    };
-    const dispatcherStats = {
-      drainAllUnpublishedCalls: 0,
-    };
-    const bootstrap = await createBootstrappedSessionServer({
-      dependencies: createDbModeDependencies({
-        closeCount,
-        dispatcherStats,
+test('createBootstrappedSessionServer requires DATABASE_URL when DB-backed startup is enabled', async () => {
+  await assert.rejects(
+    () =>
+      createBootstrappedSessionServer({
+        env: {
+          SERVER_PERSISTENCE_MODE: 'db',
+        },
       }),
-      env: {
-        DATABASE_URL: 'postgres://example.invalid/dnd_platform',
-        SERVER_PERSISTENCE_MODE: 'db',
-      },
-    });
+    /DATABASE_URL is required when SERVER_PERSISTENCE_MODE=db/,
+  );
+});
 
-    assert.equal(bootstrap.persistenceMode, 'db');
-    assert.ok(bootstrap.runtime.sessions instanceof DbBackedSessionStore);
-    assert.ok(
-      bootstrap.runtime.characters instanceof DbBackedCharacterRepository,
-    );
-    assert.ok(bootstrap.runtime.scenes instanceof DbBackedSceneStore);
-    assert.ok(bootstrap.runtime.encounters instanceof DbBackedEncounterStore);
-    assert.ok(
-      bootstrap.idempotency instanceof DbBackedCommandIdempotencyStore,
-    );
-    assert.ok(
-      bootstrap.characterCommandTransaction instanceof
-        DbBackedCharacterCommandTransactionBoundary,
-    );
-    assert.ok(
-      bootstrap.encounterCommandTransaction instanceof
-        DbBackedEncounterCommandTransactionBoundary,
-    );
-    assert.ok(
-      bootstrap.combatCommandTransaction instanceof
-        DbBackedCombatCommandTransactionBoundary,
-    );
-    assert.ok(bootstrap.commandEventOutboxDispatcher);
+test('createBootstrappedSessionServer wires the existing DB-backed runtime and transaction boundaries when DB mode is enabled', async () => {
+  const closeCount = {
+    current: 0,
+  };
+  const dispatcherStats = {
+    drainAllUnpublishedCalls: 0,
+  };
+  const bootstrap = await createBootstrappedSessionServer({
+    dependencies: createDbModeDependencies({
+      closeCount,
+      dispatcherStats,
+    }),
+    env: {
+      DATABASE_URL: 'postgres://example.invalid/dnd_platform',
+      SERVER_PERSISTENCE_MODE: 'db',
+    },
+  });
 
-    assert.equal(closeCount.current, 0);
-    await bootstrap.startup();
-    assert.equal(dispatcherStats.drainAllUnpublishedCalls, 0);
-    await bootstrap.closePersistence();
-    await bootstrap.closePersistence();
-    assert.equal(closeCount.current, 1);
-  },
-);
+  assert.equal(bootstrap.persistenceMode, 'db');
+  assert.ok(bootstrap.runtime.sessions instanceof DbBackedSessionStore);
+  assert.ok(
+    bootstrap.runtime.characters instanceof DbBackedCharacterRepository,
+  );
+  assert.ok(bootstrap.runtime.scenes instanceof DbBackedSceneStore);
+  assert.ok(bootstrap.runtime.encounters instanceof DbBackedEncounterStore);
+  assert.ok(bootstrap.idempotency instanceof DbBackedCommandIdempotencyStore);
+  assert.ok(
+    bootstrap.characterCommandTransaction instanceof
+      DbBackedCharacterCommandTransactionBoundary,
+  );
+  assert.ok(
+    bootstrap.encounterCommandTransaction instanceof
+      DbBackedEncounterCommandTransactionBoundary,
+  );
+  assert.ok(
+    bootstrap.combatCommandTransaction instanceof
+      DbBackedCombatCommandTransactionBoundary,
+  );
+  assert.ok(bootstrap.commandEventOutboxDispatcher);
 
-test(
-  'createBootstrappedSessionServer closes persistence resources if DB-backed bootstrap fails during store hydration',
-  async () => {
-    const closeCount = {
-      current: 0,
-    };
-    const failingSessionDatabase: SessionSnapshotDatabase = {
-      async getSessionSnapshot(_sessionId) {
-        return null;
-      },
-      async listSessionSnapshots() {
-        throw new Error('list failed');
-      },
-      async upsertSessionSnapshot(write) {
-        return {
-          sessionId: write.sessionId,
-          snapshot: structuredClone(write.snapshot),
-          createdAt: new Date(0),
-          updatedAt: new Date(0),
-        };
-      },
-    };
+  assert.equal(closeCount.current, 0);
+  await bootstrap.startup();
+  assert.equal(dispatcherStats.drainAllUnpublishedCalls, 0);
+  await bootstrap.closePersistence();
+  await bootstrap.closePersistence();
+  assert.equal(closeCount.current, 1);
+});
 
-    await assert.rejects(
-      () =>
-        createBootstrappedSessionServer({
-          dependencies: createDbModeDependencies({
-            closeCount,
-            sessionDatabase: failingSessionDatabase,
-          }),
-          env: {
-            DATABASE_URL: 'postgres://example.invalid/dnd_platform',
-            SERVER_PERSISTENCE_MODE: 'db',
-          },
+test('createBootstrappedSessionServer closes persistence resources if DB-backed bootstrap fails during store hydration', async () => {
+  const closeCount = {
+    current: 0,
+  };
+  const failingSessionDatabase: SessionSnapshotDatabase = {
+    async getSessionSnapshot(_sessionId) {
+      void _sessionId;
+      return null;
+    },
+    async listSessionSnapshots() {
+      throw new Error('list failed');
+    },
+    async upsertSessionSnapshot(write) {
+      return {
+        sessionId: write.sessionId,
+        snapshot: structuredClone(write.snapshot),
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      createBootstrappedSessionServer({
+        dependencies: createDbModeDependencies({
+          closeCount,
+          sessionDatabase: failingSessionDatabase,
         }),
-      /list failed/,
-    );
+        env: {
+          DATABASE_URL: 'postgres://example.invalid/dnd_platform',
+          SERVER_PERSISTENCE_MODE: 'db',
+        },
+      }),
+    /list failed/,
+  );
 
-    assert.equal(closeCount.current, 1);
-  },
-);
+  assert.equal(closeCount.current, 1);
+});
