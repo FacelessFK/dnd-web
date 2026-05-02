@@ -80,6 +80,7 @@ export interface RuntimeSessionStore {
     sessionId: SessionId,
     sceneId: SceneId,
   ): RuntimeSessionStoreResult<SessionSnapshot>;
+  publishSessionStateUpdate(update: SessionStateUpdate): void;
   publishMovementStateUpdate(params: {
     sessionId: SessionId;
     activeSceneId: SceneId;
@@ -295,6 +296,12 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     });
 
     return this.clone(room.snapshot);
+  }
+
+  publishSessionStateUpdate(update: SessionStateUpdate): void {
+    const room = this.requireRoom(update.sessionId);
+
+    this.broadcast(room, update);
   }
 
   publishMovementStateUpdate(params: {

@@ -270,6 +270,23 @@ export class InMemoryGameRuntime<
     this.sessions.disconnectParticipant(sessionId, participantId, connectionId);
   }
 
+  withSessionStore<TNextSessions extends RuntimeSessionStore>(
+    sessions: TNextSessions,
+  ): InMemoryGameRuntime<TCharacters, TNextSessions> {
+    return new InMemoryGameRuntime(
+      sessions,
+      this.rulesProfiles,
+      this.characters,
+      this.scenes,
+      this.encounters,
+      this.d20Roller,
+      this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
+      this.combatEventSink,
+    );
+  }
+
   withCharacterRepository<TNextCharacters extends RuntimeCharacterRepository>(
     characters: TNextCharacters,
     options: {

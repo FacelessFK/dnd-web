@@ -315,6 +315,7 @@ test('createSessionServer startup does not auto-drain unpublished outbox rows', 
     undefined,
     undefined,
     undefined,
+    undefined,
     dispatcher,
   );
 
@@ -334,6 +335,7 @@ test('createSessionServer startup does not auto-drain unpublished outbox rows', 
     drainUnpublishedByIdempotencyKey: async () => undefined,
   };
   const injectedServer = createSessionServer(
+    undefined,
     undefined,
     undefined,
     undefined,
@@ -434,6 +436,7 @@ test('createSessionServer startup leaves targeted outbox drains unchanged', asyn
     store,
   );
   const server = createSessionServer(
+    undefined,
     undefined,
     undefined,
     undefined,

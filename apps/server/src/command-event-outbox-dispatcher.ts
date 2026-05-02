@@ -7,6 +7,7 @@ import type {
   CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
+  SessionStateUpdate,
 } from '@dnd/protocol';
 
 import type { RuntimeSessionStore } from './session-store.js';
@@ -73,6 +74,13 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
   }
 
   private publishRow(row: CommandEventOutboxRow): void {
+    if (row.eventType === 'session_state') {
+      this.sessions.publishSessionStateUpdate(
+        this.clone(row.payload as SessionStateUpdate),
+      );
+      return;
+    }
+
     if (row.eventType === 'character_state') {
       this.sessions.publishCharacterStateUpdate(
         this.clone(row.payload as CharacterStateUpdate),

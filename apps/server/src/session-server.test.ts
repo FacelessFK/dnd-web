@@ -61,6 +61,7 @@ import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
 import {
@@ -87,6 +88,7 @@ async function postJson<TResponse>(
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -108,6 +110,7 @@ async function postJson<TResponse>(
     runtime,
     idempotency,
     characterCommandTransaction,
+    sessionCommandTransaction,
     encounterCommandTransaction,
     combatCommandTransaction,
   );
@@ -290,6 +293,20 @@ class InMemorySessionSnapshotDatabase implements SessionSnapshotDatabase {
     this.rows.set(write.sessionId, this.clone(row));
 
     return this.clone(row);
+  }
+
+  cloneRows(): Map<SessionId, SessionSnapshotRow> {
+    return new Map(
+      [...this.rows.entries()].map(([key, row]) => [key, this.clone(row)]),
+    );
+  }
+
+  replaceRows(rows: Map<SessionId, SessionSnapshotRow>): void {
+    this.rows.clear();
+
+    for (const [key, row] of rows.entries()) {
+      this.rows.set(key, this.clone(row));
+    }
   }
 
   private nextTimestamp(): Date {
@@ -703,6 +720,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly commandIdempotency: InMemoryCommandIdempotencyRecordDatabase,
     private readonly encounters: InMemoryActiveEncounterRecordDatabase = new InMemoryActiveEncounterRecordDatabase(),
     private readonly outbox: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
+    private readonly sessions: InMemorySessionSnapshotDatabase = new InMemorySessionSnapshotDatabase(),
   ) {}
 
   async transaction<T>(
@@ -724,6 +742,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       const transactionalEncounters =
         new InMemoryActiveEncounterRecordDatabase();
       const transactionalOutbox = new InMemoryCommandEventOutboxDatabase();
+      const transactionalSessions = new InMemorySessionSnapshotDatabase();
 
       transactionalCharacters.replaceRows(this.characters.cloneRows());
       transactionalCommandIdempotency.replaceRows(
@@ -731,12 +750,14 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       );
       transactionalEncounters.replaceRows(this.encounters.cloneRows());
       transactionalOutbox.replaceRows(this.outbox.cloneRows());
+      transactionalSessions.replaceRows(this.sessions.cloneRows());
 
       const result = await run({
         characters: transactionalCharacters,
         commandIdempotency: transactionalCommandIdempotency,
         encounters: transactionalEncounters,
         outbox: transactionalOutbox,
+        sessions: transactionalSessions,
       });
 
       if (this.failBeforeCommit) {
@@ -751,6 +772,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       this.outbox.replaceRowsPreservingPublishedState(
         transactionalOutbox.cloneRows(),
       );
+      this.sessions.replaceRows(transactionalSessions.cloneRows());
       this.committedCount += 1;
 
       return result;
@@ -810,6 +832,20 @@ function createCharacterCommandTransactionHarness(
         unitOfWork,
         new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
       ),
+    outboxDatabase,
+  };
+}
+
+function createSessionCommandTransactionHarness(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  unitOfWork: InMemoryDndDatabaseUnitOfWork,
+  outboxDatabase: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
+) {
+  return {
+    sessionCommandTransaction: new DbBackedSessionCommandTransactionBoundary(
+      unitOfWork,
+      new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+    ),
     outboxDatabase,
   };
 }
@@ -1195,6 +1231,97 @@ async function setupDurableEncounterForIdempotency(
   return {
     firstCharacterId: firstCharacter.character.id,
     secondCharacterId: secondCharacter.character.id,
+    sessionId: session.sessionId,
+  };
+}
+
+async function setupDurableSessionForIdempotency(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+) {
+  const session = await runtime.createSession({
+    commandId: 'setup-session-create-session',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+
+  await runtime.joinSession({
+    commandId: 'setup-session-join-player-1',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-001',
+      displayName: 'Player One',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  const character = await runtime.createCharacter({
+    commandId: 'setup-session-create-character-player-001',
+    type: 'create_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      ownerParticipantId: 'player-001',
+      character: {
+        name: 'Aria',
+        level: 5,
+        className: 'Wizard',
+        speciesOrRace: 'Elf',
+        background: 'Sage',
+        abilities: {
+          str: 8,
+          dex: 14,
+          con: 13,
+          int: 16,
+          wis: 12,
+          cha: 10,
+        },
+        hp: {
+          max: 26,
+          current: 26,
+          temp: 0,
+        },
+        armorClass: 13,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+
+  const scene = await runtime.createScene({
+    commandId: 'setup-session-create-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Session Reliability Room',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+
+  return {
+    characterId: character.character.id,
+    sceneId: scene.id,
     sessionId: session.sessionId,
   };
 }
@@ -3363,6 +3490,200 @@ test('db-backed active encounters can be reread after restart when durable sessi
     assert.equal(rereadEncounter.body.data.encounter.currentTurnIndex, 0);
     assert.equal(rereadEncounter.body.data.encounter.participants.length, 2);
   }
+});
+
+test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate assign retry', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { characterId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const command = {
+    commandId: 'transactional-assign-character-1',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+    },
+  };
+  const markerCountBefore = commitMarkers.length;
+  const sessionUpdateCountBefore = updates.length;
+  const commitCountBefore = unitOfWork.committedCount;
+  const first = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+
+  ({ sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+  const sessionSnapshotRow =
+    await sessionDatabase.getSessionSnapshot(sessionId);
+  const sessionUpdates = updates.slice(sessionUpdateCountBefore);
+  const newCommitMarkers = commitMarkers.slice(markerCountBefore);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(sessionUpdates.length, 1);
+  assert.equal(sessionUpdates[0]?.type, 'session_state');
+  assert.equal(sessionUpdates[0]?.reason, 'participant_character_assigned');
+  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+
+  const assignedParticipant = sessionSnapshotRow?.snapshot.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(assignedParticipant?.characterId, characterId);
+});
+
+test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const command = {
+    commandId: 'transactional-activate-scene-1',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+    },
+  };
+  const markerCountBefore = commitMarkers.length;
+  const sessionUpdateCountBefore = updates.length;
+  const commitCountBefore = unitOfWork.committedCount;
+  const first = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+
+  ({ sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+  const sessionSnapshotRow =
+    await sessionDatabase.getSessionSnapshot(sessionId);
+  const sessionUpdates = updates.slice(sessionUpdateCountBefore);
+  const newCommitMarkers = commitMarkers.slice(markerCountBefore);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(sessionUpdates.length, 1);
+  assert.equal(sessionUpdates[0]?.type, 'session_state');
+  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
+  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+  assert.equal(sessionSnapshotRow?.snapshot.session.activeSceneId, sceneId);
 });
 
 test('db-backed encounter transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate retry', async () => {

@@ -58,6 +58,7 @@ import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-di
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
 import {
@@ -98,6 +99,7 @@ export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
@@ -107,6 +109,7 @@ export function createSessionServer(
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary;
   server: Server;
   startup: () => Promise<void>;
   runtime: GameRuntime;
@@ -120,6 +123,7 @@ export function createSessionServer(
         runtime,
         idempotency,
         characterCommandTransaction,
+        sessionCommandTransaction,
         encounterCommandTransaction,
         combatCommandTransaction,
       );
@@ -134,6 +138,7 @@ export function createSessionServer(
     commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
+    sessionCommandTransaction,
     server,
     startup: async () => undefined,
     runtime,
@@ -147,6 +152,7 @@ export async function handleRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
@@ -164,7 +170,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-12',
-      status: 'character-encounter-combat-outbox-foundation',
+      status: 'session-character-encounter-combat-outbox-foundation',
     });
     return;
   }
@@ -181,12 +187,19 @@ export async function handleRequest(
       runtime,
       idempotency,
       characterCommandTransaction,
+      sessionCommandTransaction,
     );
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/scenes/command') {
-    await handleSceneCommandRequest(request, response, runtime, idempotency);
+    await handleSceneCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      sessionCommandTransaction,
+    );
     return;
   }
 
@@ -351,6 +364,7 @@ async function handleCharacterCommandRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -482,6 +496,27 @@ async function handleCharacterCommandRequest(
         return;
       }
       case 'assign_character_to_participant': {
+        if (
+          sessionCommandTransaction?.supports({
+            category: 'character',
+            command,
+          })
+        ) {
+          const success: CharacterAssignmentSuccess = {
+            ok: true,
+            data: await sessionCommandTransaction.run({
+              category: 'character',
+              command,
+              execute: async (transactionRuntime) =>
+                transactionRuntime.assignCharacterToParticipant(command),
+              runtime,
+            }),
+          };
+
+          sendCharacterSuccess(response, command.type, success);
+          return;
+        }
+
         const success: CharacterAssignmentSuccess = {
           ok: true,
           data: await runtime.assignCharacterToParticipant(command),
@@ -508,6 +543,7 @@ async function handleSceneCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -584,6 +620,27 @@ async function handleSceneCommandRequest(
         return;
       }
       case 'activate_scene_for_session': {
+        if (
+          sessionCommandTransaction?.supports({
+            category: 'scene',
+            command,
+          })
+        ) {
+          const success: SceneActivationSuccess = {
+            ok: true,
+            data: await sessionCommandTransaction.run({
+              category: 'scene',
+              command,
+              execute: async (transactionRuntime) =>
+                transactionRuntime.activateSceneForSession(command),
+              runtime,
+            }),
+          };
+
+          sendSceneSuccess(response, command.type, success);
+          return;
+        }
+
         const success: SceneActivationSuccess = {
           ok: true,
           data: await runtime.activateSceneForSession(command),

@@ -15,12 +15,17 @@ import {
   DrizzleActiveEncounterRecordDatabase,
   type ActiveEncounterRecordDatabase,
 } from './encounter-record-database.js';
+import {
+  DrizzleSessionSnapshotDatabase,
+  type SessionSnapshotDatabase,
+} from './session-snapshot-database.js';
 
 export type DndDatabaseUnitOfWorkContext = {
   characters: CharacterRecordDatabase;
   commandIdempotency: CommandIdempotencyRecordDatabase;
   encounters: ActiveEncounterRecordDatabase;
   outbox: CommandEventOutboxDatabase;
+  sessions: SessionSnapshotDatabase;
 };
 
 export interface DndDatabaseUnitOfWork {
@@ -41,6 +46,7 @@ export class DrizzleDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         commandIdempotency: new DrizzleCommandIdempotencyRecordDatabase(tx),
         encounters: new DrizzleActiveEncounterRecordDatabase(tx),
         outbox: new DrizzleCommandEventOutboxDatabase(tx),
+        sessions: new DrizzleSessionSnapshotDatabase(tx),
       }),
     );
   }

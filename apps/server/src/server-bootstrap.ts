@@ -26,6 +26,7 @@ import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
 import { DbBackedSessionStore } from './db-session-store.js';
@@ -169,6 +170,11 @@ export async function createBootstrappedSessionServer(
         unitOfWork,
         commandEventOutboxDispatcher,
       );
+    const sessionCommandTransaction =
+      new DbBackedSessionCommandTransactionBoundary(
+        unitOfWork,
+        commandEventOutboxDispatcher,
+      );
     const encounterCommandTransaction =
       new DbBackedEncounterCommandTransactionBoundary(
         unitOfWork,
@@ -185,6 +191,7 @@ export async function createBootstrappedSessionServer(
         runtime,
         idempotency,
         characterCommandTransaction,
+        sessionCommandTransaction,
         encounterCommandTransaction,
         combatCommandTransaction,
         commandEventOutboxDispatcher,

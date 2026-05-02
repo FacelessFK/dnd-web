@@ -73,6 +73,19 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
     return new DbBackedSessionStore(database, rooms);
   }
 
+  forkForTransaction(database: SessionSnapshotDatabase): DbBackedSessionStore {
+    const rooms = new Map<SessionId, SessionRoomState>();
+
+    for (const [sessionId, room] of this.rooms.entries()) {
+      rooms.set(sessionId, {
+        snapshot: this.clone(room.snapshot),
+        subscribers: new Map(),
+      });
+    }
+
+    return new DbBackedSessionStore(database, rooms);
+  }
+
   async createSession(
     command: CreateSessionCommand,
   ): Promise<SessionCommandResult> {
@@ -282,6 +295,26 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
         nextSnapshot.session.activeSceneId = sceneId;
       },
     );
+  }
+
+  replaceSessionSnapshot(snapshot: SessionSnapshot): void {
+    const existing = this.rooms.get(snapshot.session.id);
+
+    if (existing) {
+      existing.snapshot = this.clone(snapshot);
+      return;
+    }
+
+    this.rooms.set(snapshot.session.id, {
+      snapshot: this.clone(snapshot),
+      subscribers: new Map(),
+    });
+  }
+
+  publishSessionStateUpdate(update: SessionStateUpdate): void {
+    const room = this.requireRoom(update.sessionId);
+
+    this.broadcast(room, update);
   }
 
   publishMovementStateUpdate(params: {
