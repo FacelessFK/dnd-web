@@ -39,6 +39,10 @@ export class DbBackedSceneStore implements SceneRepository {
     return storedScene;
   }
 
+  forkForTransaction(database: SceneRecordDatabase): DbBackedSceneStore {
+    return new DbBackedSceneStore(database, this.cloneScenes());
+  }
+
   getScene(sceneId: SceneId): Scene {
     const scene = this.scenes.get(sceneId);
 
@@ -71,6 +75,23 @@ export class DbBackedSceneStore implements SceneRepository {
     this.scenes.set(storedScene.id, this.clone(storedScene));
 
     return storedScene;
+  }
+
+  cloneScenes(): Map<SceneId, Scene> {
+    return new Map(
+      [...this.scenes.entries()].map(([sceneId, scene]) => [
+        sceneId,
+        this.clone(scene),
+      ]),
+    );
+  }
+
+  replaceScenes(scenes: Map<SceneId, Scene>): void {
+    this.scenes.clear();
+
+    for (const [sceneId, scene] of scenes.entries()) {
+      this.scenes.set(sceneId, this.clone(scene));
+    }
   }
 
   private toDocument(scene: Scene): StoredSceneRecordDocument {

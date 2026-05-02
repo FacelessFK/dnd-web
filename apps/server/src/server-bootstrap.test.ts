@@ -34,6 +34,7 @@ import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSceneCommandTransactionBoundary } from './db-scene-command-transaction.js';
 import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
@@ -229,6 +230,7 @@ class StubUnitOfWork implements DndDatabaseUnitOfWork {
       commandIdempotency: new EmptyCommandIdempotencyRecordDatabase(),
       encounters: new EmptyActiveEncounterRecordDatabase(),
       outbox: new EmptyCommandEventOutboxDatabase(),
+      scenes: new EmptySceneRecordDatabase(),
       sessions: new EmptySessionSnapshotDatabase(),
     });
   }
@@ -300,6 +302,7 @@ test('createBootstrappedSessionServer preserves the current in-memory default st
   assert.ok(bootstrap.runtime.characters instanceof InMemoryCharacterStore);
   assert.ok(bootstrap.idempotency instanceof InMemoryCommandIdempotencyStore);
   assert.equal(bootstrap.characterCommandTransaction, undefined);
+  assert.equal(bootstrap.sceneCommandTransaction, undefined);
   assert.equal(bootstrap.sessionCommandTransaction, undefined);
   assert.equal(bootstrap.encounterCommandTransaction, undefined);
   assert.equal(bootstrap.combatCommandTransaction, undefined);
@@ -350,6 +353,10 @@ test('createBootstrappedSessionServer wires the existing DB-backed runtime and t
   assert.ok(
     bootstrap.characterCommandTransaction instanceof
       DbBackedCharacterCommandTransactionBoundary,
+  );
+  assert.ok(
+    bootstrap.sceneCommandTransaction instanceof
+      DbBackedSceneCommandTransactionBoundary,
   );
   assert.ok(
     bootstrap.sessionCommandTransaction instanceof

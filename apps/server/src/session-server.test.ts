@@ -61,6 +61,7 @@ import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSceneCommandTransactionBoundary } from './db-scene-command-transaction.js';
 import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
@@ -89,6 +90,7 @@ async function postJson<TResponse>(
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -113,6 +115,7 @@ async function postJson<TResponse>(
     sessionCommandTransaction,
     encounterCommandTransaction,
     combatCommandTransaction,
+    sceneCommandTransaction,
   );
 
   return {
@@ -326,6 +329,10 @@ class InMemorySceneRecordDatabase implements SceneRecordDatabase {
   private readonly rows = new Map<string, SceneRecordRow>();
   private clock = 0;
 
+  get recordCount(): number {
+    return this.rows.size;
+  }
+
   async getSceneRecord(sceneId: string): Promise<SceneRecordRow | null> {
     const row = this.rows.get(sceneId);
 
@@ -372,6 +379,23 @@ class InMemorySceneRecordDatabase implements SceneRecordDatabase {
     this.rows.set(write.sceneId, this.clone(row));
 
     return this.clone(row);
+  }
+
+  cloneRows(): Map<string, SceneRecordRow> {
+    return new Map(
+      [...this.rows.entries()].map(([sceneId, row]) => [
+        sceneId,
+        this.clone(row),
+      ]),
+    );
+  }
+
+  replaceRows(rows: Map<string, SceneRecordRow>): void {
+    this.rows.clear();
+
+    for (const [sceneId, row] of rows.entries()) {
+      this.rows.set(sceneId, this.clone(row));
+    }
   }
 
   private nextTimestamp(): Date {
@@ -721,6 +745,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly encounters: InMemoryActiveEncounterRecordDatabase = new InMemoryActiveEncounterRecordDatabase(),
     private readonly outbox: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
     private readonly sessions: InMemorySessionSnapshotDatabase = new InMemorySessionSnapshotDatabase(),
+    private readonly scenes: InMemorySceneRecordDatabase = new InMemorySceneRecordDatabase(),
   ) {}
 
   async transaction<T>(
@@ -743,6 +768,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         new InMemoryActiveEncounterRecordDatabase();
       const transactionalOutbox = new InMemoryCommandEventOutboxDatabase();
       const transactionalSessions = new InMemorySessionSnapshotDatabase();
+      const transactionalScenes = new InMemorySceneRecordDatabase();
 
       transactionalCharacters.replaceRows(this.characters.cloneRows());
       transactionalCommandIdempotency.replaceRows(
@@ -751,12 +777,14 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       transactionalEncounters.replaceRows(this.encounters.cloneRows());
       transactionalOutbox.replaceRows(this.outbox.cloneRows());
       transactionalSessions.replaceRows(this.sessions.cloneRows());
+      transactionalScenes.replaceRows(this.scenes.cloneRows());
 
       const result = await run({
         characters: transactionalCharacters,
         commandIdempotency: transactionalCommandIdempotency,
         encounters: transactionalEncounters,
         outbox: transactionalOutbox,
+        scenes: transactionalScenes,
         sessions: transactionalSessions,
       });
 
@@ -773,6 +801,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         transactionalOutbox.cloneRows(),
       );
       this.sessions.replaceRows(transactionalSessions.cloneRows());
+      this.scenes.replaceRows(transactionalScenes.cloneRows());
       this.committedCount += 1;
 
       return result;
@@ -847,6 +876,16 @@ function createSessionCommandTransactionHarness(
       new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
     ),
     outboxDatabase,
+  };
+}
+
+function createSceneCommandTransactionHarness(
+  unitOfWork: InMemoryDndDatabaseUnitOfWork,
+) {
+  return {
+    sceneCommandTransaction: new DbBackedSceneCommandTransactionBoundary(
+      unitOfWork,
+    ),
   };
 }
 
@@ -3951,6 +3990,195 @@ test('db-backed session transaction boundary keeps no-op session mutations silen
   );
 });
 
+test('db-backed scene transaction boundary commits create_scene durably and returns cached success on duplicate retry without inventing scene outbox rows', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork);
+  const createdSession = await runtime.createSession({
+    commandId: 'transactional-scene-create-session-setup',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+  const command = {
+    commandId: 'transactional-create-scene-durable-1',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: createdSession.sessionId,
+      scene: {
+        name: 'Transactional Scene Room',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  } as const;
+
+  const first = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  ({ sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork));
+
+  const second = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const sceneRows = await sceneDatabase.listSceneRecords();
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(sceneDatabase.recordCount, 1);
+  assert.equal(sceneRows.length, 1);
+  assert.equal(outboxDatabase.recordCount, 0);
+
+  if (!first.body.ok || !('scene' in first.body.data)) {
+    return;
+  }
+
+  assert.equal(sceneRows[0]?.sceneId, first.body.data.scene.id);
+  assert.equal(sceneRows[0]?.record.name, 'Transactional Scene Room');
+});
+
+test('db-backed scene transaction boundary commits place_entity_in_scene durably and returns cached success on duplicate retry without inventing scene outbox rows', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork);
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const command = {
+    commandId: 'transactional-place-entity-durable-1',
+    type: 'place_entity_in_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entity: {
+        type: 'object',
+        name: 'Stone Pillar',
+        position: {
+          x: 2,
+          y: 2,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: true,
+        blocksVision: true,
+        hidden: false,
+      },
+    },
+  } as const;
+
+  const first = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  ({ sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork));
+
+  const second = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const persistedScene = await sceneDatabase.getSceneRecord(sceneId);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 0);
+  assert.equal(persistedScene?.record.entities.length, 1);
+  assert.equal(persistedScene?.record.entities[0]?.name, 'Stone Pillar');
+});
+
 test('db-backed encounter transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate retry', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
@@ -5457,6 +5685,108 @@ test('no-active-encounter movement writes one movement_state outbox row, dispatc
   assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
   assert.equal(commitMarkers.length, 1);
   assert.ok((commitMarkers[0] ?? 0) > commitCountBefore);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+});
+
+test('move_character_in_active_scene falls back to the character transaction boundary when no combat boundary is injected', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+    outboxDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    undefined,
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  const { firstCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+
+  await runtime.dmEndActiveEncounter({
+    commandId: 'transactional-movement-character-fallback-end-encounter',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  commitMarkers.length = 0;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-movement-character-fallback-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  } as const;
+
+  const first = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
+  );
+
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,

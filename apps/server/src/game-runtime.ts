@@ -308,6 +308,23 @@ export class InMemoryGameRuntime<
     );
   }
 
+  withSceneRepository(
+    scenes: SceneRepository,
+  ): InMemoryGameRuntime<TCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      this.characters,
+      scenes,
+      this.encounters,
+      this.d20Roller,
+      this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
+      this.combatEventSink,
+    );
+  }
+
   withEncounterRepository(
     encounters: EncounterRepository,
     options: {

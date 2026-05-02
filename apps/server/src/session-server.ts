@@ -58,6 +58,7 @@ import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-di
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
+import { DbBackedSceneCommandTransactionBoundary } from './db-scene-command-transaction.js';
 import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { EncounterRuntimeError } from './encounter-runtime.js';
 import { EncounterStoreError } from './encounter-store.js';
@@ -103,12 +104,14 @@ export function createSessionServer(
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): {
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary;
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary;
   server: Server;
   startup: () => Promise<void>;
@@ -126,6 +129,7 @@ export function createSessionServer(
         sessionCommandTransaction,
         encounterCommandTransaction,
         combatCommandTransaction,
+        sceneCommandTransaction,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -138,6 +142,7 @@ export function createSessionServer(
     commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
+    sceneCommandTransaction,
     sessionCommandTransaction,
     server,
     startup: async () => undefined,
@@ -155,6 +160,7 @@ export async function handleRequest(
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -170,7 +176,8 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-12',
-      status: 'session-character-movement-encounter-combat-outbox-foundation',
+      status:
+        'scene-transaction-plus-session-character-movement-encounter-combat-outbox-foundation',
     });
     return;
   }
@@ -205,6 +212,7 @@ export async function handleRequest(
       runtime,
       idempotency,
       sessionCommandTransaction,
+      sceneCommandTransaction,
     );
     return;
   }
@@ -598,6 +606,7 @@ async function handleSceneCommandRequest(
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -632,6 +641,41 @@ async function handleSceneCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_scene' ? null : 'scene';
+
+    if (
+      idempotencyCategory &&
+      sceneCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      })
+    ) {
+      const success: SceneCommandSuccess = {
+        ok: true,
+        data: {
+          scene: await sceneCommandTransaction.run({
+            category: idempotencyCategory,
+            command,
+            execute: async (transactionRuntime) => {
+              switch (command.type) {
+                case 'create_scene':
+                  return transactionRuntime.createScene(command);
+                case 'place_entity_in_scene':
+                  return transactionRuntime.placeEntityInScene(command);
+                default:
+                  throw new Error(
+                    `Unsupported transactional scene command type "${command.type}".`,
+                  );
+              }
+            },
+            runtime,
+          }),
+        },
+      };
+
+      sendSceneSuccess(response, command.type, success);
+      return;
+    }
+
     const cachedSuccess = idempotencyCategory
       ? await idempotency.getCachedSuccess<
           SceneActivationSuccess | SceneCommandSuccess
@@ -815,9 +859,7 @@ async function handleMovementCommandRequest(
       characterCommandTransaction?.supports({
         category: idempotencyCategory,
         command,
-      }) &&
-      (command.type !== 'move_character_in_active_scene' ||
-        combatCommandTransaction)
+      })
     ) {
       const success = await characterCommandTransaction.run({
         category: idempotencyCategory,
