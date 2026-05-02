@@ -9,10 +9,10 @@ Phase 10 added injected DB-backed character, session snapshot, and scene
 boundaries. Phase 11 added injected DB-backed active-encounter,
 encounter-only transaction, attack-first cross-store combat transaction, and
 encounter-aware movement transaction boundaries. Phase 12 now adds the narrow
-single-process session/character/encounter/combat outbox persistence
-foundation plus covered live-command post-commit dispatch for those
-already-covered DB paths. Unpublished outbox rows may remain stored after a
-restart, but they are not auto-redelivered on cold boot because SSE
+single-process session/character/movement/encounter/combat outbox
+persistence foundation plus covered live-command post-commit dispatch for
+those already-covered DB paths. Unpublished outbox rows may remain stored
+after a restart, but they are not auto-redelivered on cold boot because SSE
 subscribers are process-local and there is still no replay or catch-up
 surface. This manual curl flow still validates the default in-memory startup
 path rather than those injected durable restart or transactional paths.
@@ -54,7 +54,7 @@ Expected high-level status:
 {
   "name": "dnd-dm-platform-server",
   "phase": "phase-12",
-  "status": "session-character-encounter-combat-outbox-foundation"
+  "status": "session-character-movement-encounter-combat-outbox-foundation"
 }
 ```
 

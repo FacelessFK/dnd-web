@@ -170,7 +170,7 @@ export async function handleRequest(
     sendJson(response, 200, {
       name: 'dnd-dm-platform-server',
       phase: 'phase-12',
-      status: 'session-character-encounter-combat-outbox-foundation',
+      status: 'session-character-movement-encounter-combat-outbox-foundation',
     });
     return;
   }
@@ -215,6 +215,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      characterCommandTransaction,
       combatCommandTransaction,
     );
     return;
@@ -720,6 +721,7 @@ async function handleMovementCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
@@ -755,17 +757,6 @@ async function handleMovementCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_active_scene_state' ? null : 'movement';
-    const cachedSuccess = idempotencyCategory
-      ? await idempotency.getCachedSuccess<MovementCommandSuccess>({
-          category: idempotencyCategory,
-          command,
-        })
-      : null;
-
-    if (cachedSuccess) {
-      sendJson(response, 200, cachedSuccess, movementCommandSuccessSchema);
-      return;
-    }
 
     if (
       idempotencyCategory &&
@@ -817,6 +808,60 @@ async function handleMovementCommandRequest(
         sendJson(response, 200, success, movementCommandSuccessSchema);
         return;
       }
+    }
+
+    if (
+      idempotencyCategory &&
+      characterCommandTransaction?.supports({
+        category: idempotencyCategory,
+        command,
+      }) &&
+      (command.type !== 'move_character_in_active_scene' ||
+        combatCommandTransaction)
+    ) {
+      const success = await characterCommandTransaction.run({
+        category: idempotencyCategory,
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          let data: MovementCommandSuccess['data'];
+
+          switch (command.type) {
+            case 'place_character_in_active_scene':
+              data =
+                await transactionRuntime.placeCharacterInActiveScene(command);
+              break;
+            case 'move_character_in_active_scene':
+              data =
+                await transactionRuntime.moveCharacterInActiveScene(command);
+              break;
+            default:
+              throw new Error(
+                `Unsupported transactional movement command type "${command.type}".`,
+              );
+          }
+
+          return {
+            ok: true,
+            data,
+          } satisfies MovementCommandSuccess;
+        },
+      });
+
+      sendJson(response, 200, success, movementCommandSuccessSchema);
+      return;
+    }
+
+    const cachedSuccess = idempotencyCategory
+      ? await idempotency.getCachedSuccess<MovementCommandSuccess>({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, movementCommandSuccessSchema);
+      return;
     }
 
     let data: MovementCommandSuccess['data'];
@@ -1118,6 +1163,13 @@ async function handleDmCommandRequest(
               return {
                 ok: true,
                 data: await transactionRuntime.dmSetCharacterActiveConditions(
+                  command,
+                ),
+              } satisfies DmCommandSuccess;
+            case 'dm_reposition_character_in_active_scene':
+              return {
+                ok: true,
+                data: await transactionRuntime.dmRepositionCharacterInActiveScene(
                   command,
                 ),
               } satisfies DmCommandSuccess;

@@ -3,7 +3,7 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
-import type { CharacterStateUpdate } from '@dnd/protocol';
+import type { CharacterStateUpdate, MovementStateUpdate } from '@dnd/protocol';
 
 import {
   CommandIdempotencyError,
@@ -25,6 +25,18 @@ import type {
 } from './game-runtime.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
+const DURABLE_CHARACTER_MOVEMENT_COMMAND_TYPES = [
+  'place_character_in_active_scene',
+  'move_character_in_active_scene',
+  'dm_reposition_character_in_active_scene',
+] as const;
+
+type DurableCharacterMovementCommandType =
+  (typeof DURABLE_CHARACTER_MOVEMENT_COMMAND_TYPES)[number];
+type CharacterTransactionalPublication =
+  | CharacterStateUpdate
+  | MovementStateUpdate;
+
 type TransactionalCommandParams = {
   category: CommandIdempotencyCategory;
   command: IdempotentCommand;
@@ -43,6 +55,7 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
 type TransactionalRunResult<TResponse> = {
   characterStateUpdates: CharacterStateUpdate[];
   dispatchIdempotencyKey: string | null;
+  publications: CharacterTransactionalPublication[];
   response: TResponse;
 };
 
@@ -53,9 +66,10 @@ export class DbBackedCharacterCommandTransactionBoundary {
     private readonly unitOfWork: DndDatabaseUnitOfWork,
     private readonly outboxDispatcher: CommandEventOutboxDispatcherLike,
   ) {
-    this.durableCommandTypes = new Set(
-      DURABLE_CHARACTER_MUTATION_COMMAND_TYPES,
-    );
+    this.durableCommandTypes = new Set([
+      ...DURABLE_CHARACTER_MUTATION_COMMAND_TYPES,
+      ...DURABLE_CHARACTER_MOVEMENT_COMMAND_TYPES,
+    ] satisfies readonly string[]);
   }
 
   supports(params: TransactionalCommandParams): boolean {
@@ -121,11 +135,13 @@ export class DbBackedCharacterCommandTransactionBoundary {
       return {
         characterStateUpdates: [],
         dispatchIdempotencyKey: null,
+        publications: [],
         response: this.clone(existing.response) as TResponse,
       };
     }
 
     const characterStateUpdates: CharacterStateUpdate[] = [];
+    const publications: CharacterTransactionalPublication[] = [];
     const outboxBackedCommand = this.supportsOutboxDispatch(
       params.command.type,
     );
@@ -133,7 +149,13 @@ export class DbBackedCharacterCommandTransactionBoundary {
       new DbBackedCharacterRepository(context.characters),
       {
         characterStateUpdateSink: (update) => {
-          characterStateUpdates.push(update);
+          const clonedUpdate = this.clone(update);
+
+          characterStateUpdates.push(clonedUpdate);
+          publications.push(clonedUpdate);
+        },
+        movementStateUpdateSink: (update) => {
+          publications.push(this.clone(update));
         },
       },
     );
@@ -152,16 +174,16 @@ export class DbBackedCharacterCommandTransactionBoundary {
 
     if (inserted) {
       if (outboxBackedCommand) {
-        await this.persistOutboxRows(
-          context,
-          idempotencyKey,
-          characterStateUpdates,
-        );
+        await this.persistOutboxRows(context, idempotencyKey, publications);
       }
 
       return {
         characterStateUpdates,
-        dispatchIdempotencyKey: outboxBackedCommand ? idempotencyKey : null,
+        dispatchIdempotencyKey:
+          outboxBackedCommand && publications.length > 0
+            ? idempotencyKey
+            : null,
+        publications,
         response,
       };
     }
@@ -186,6 +208,7 @@ export class DbBackedCharacterCommandTransactionBoundary {
     return {
       characterStateUpdates: [],
       dispatchIdempotencyKey: null,
+      publications: [],
       response: this.clone(concurrentRecord.response) as TResponse,
     };
   }
@@ -193,16 +216,16 @@ export class DbBackedCharacterCommandTransactionBoundary {
   private async persistOutboxRows(
     context: DndDatabaseUnitOfWorkContext,
     idempotencyKey: string,
-    updates: CharacterStateUpdate[],
+    publications: CharacterTransactionalPublication[],
   ): Promise<void> {
-    for (const [eventOrder, update] of updates.entries()) {
+    for (const [eventOrder, publication] of publications.entries()) {
       const inserted = await context.outbox.insertCommandEventOutboxRecord({
         eventOrder,
-        eventType: this.getEventType(update),
+        eventType: this.getEventType(publication),
         idempotencyKey,
         outboxId: `${idempotencyKey}:${eventOrder}`,
-        payload: this.clone(update),
-        sessionId: update.sessionId,
+        payload: this.clone(publication),
+        sessionId: publication.sessionId,
       });
 
       if (inserted) {
@@ -218,25 +241,38 @@ export class DbBackedCharacterCommandTransactionBoundary {
   private supportsOutboxDispatch(commandType: string): boolean {
     return (
       commandType === 'dm_set_character_current_hp' ||
-      commandType === 'dm_set_character_active_conditions'
+      commandType === 'dm_set_character_active_conditions' ||
+      commandType === 'place_character_in_active_scene' ||
+      commandType === 'move_character_in_active_scene' ||
+      commandType === 'dm_reposition_character_in_active_scene'
     );
   }
 
   private getEventType(
-    update: CharacterStateUpdate,
+    publication: CharacterTransactionalPublication,
   ): CommandEventOutboxEventType {
-    return update.type;
+    return publication.type;
   }
 
   private categoryMatchesCommandType(
     category: CommandIdempotencyCategory,
     commandType: string,
-  ): commandType is DurableCharacterMutationCommandType {
+  ): commandType is
+    | DurableCharacterMutationCommandType
+    | DurableCharacterMovementCommandType {
     if (
       commandType === 'dm_set_character_current_hp' ||
-      commandType === 'dm_set_character_active_conditions'
+      commandType === 'dm_set_character_active_conditions' ||
+      commandType === 'dm_reposition_character_in_active_scene'
     ) {
       return category === 'dm';
+    }
+
+    if (
+      commandType === 'place_character_in_active_scene' ||
+      commandType === 'move_character_in_active_scene'
+    ) {
+      return category === 'movement';
     }
 
     return category === 'character';

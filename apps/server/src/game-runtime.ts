@@ -291,6 +291,7 @@ export class InMemoryGameRuntime<
     characters: TNextCharacters,
     options: {
       characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
+      movementStateUpdateSink?: (update: MovementStateUpdate) => void;
     } = {},
   ): InMemoryGameRuntime<TNextCharacters, TSessions> {
     return new InMemoryGameRuntime(
@@ -302,7 +303,7 @@ export class InMemoryGameRuntime<
       this.d20Roller,
       options.characterStateUpdateSink ?? this.characterStateUpdateSink,
       this.encounterStateUpdateSink,
-      this.movementStateUpdateSink,
+      options.movementStateUpdateSink ?? this.movementStateUpdateSink,
       this.combatEventSink,
     );
   }

@@ -1375,7 +1375,7 @@ function createCharacterForIdempotency(
 }
 
 function assignCharacterForIdempotency(
-  runtime: InMemoryGameRuntime,
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   sessionId: string,
   participantId: string,
   characterId: string,
@@ -1395,7 +1395,7 @@ function assignCharacterForIdempotency(
 }
 
 function placeCharacterForIdempotency(
-  runtime: InMemoryGameRuntime,
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   sessionId: string,
   participantId: string,
   position: {
@@ -4721,6 +4721,122 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   }
 });
 
+test('db-backed character transaction boundary writes one movement_state outbox row for place_character_in_active_scene, dispatches after commit, and returns cached success on duplicate retry', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  const { characterId, sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+
+  await runtime.assignCharacterToParticipant({
+    commandId: 'transactional-place-assign-character',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+    },
+  });
+
+  await runtime.activateSceneForSession({
+    commandId: 'transactional-place-activate-scene',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+    },
+  });
+
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  commitMarkers.length = 0;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-place-character-1',
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 0,
+      },
+    },
+  } as const;
+
+  const first = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
+  );
+
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(characterId);
+  const movementUpdates = getMovementUpdates(updates).slice(
+    movementUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 0);
+  assert.equal(movementUpdates.length, 1);
+  assert.equal(movementUpdates[0]?.reason, 'character_placed');
+  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+});
+
 test('db-backed combat transaction boundary commits encounter-aware movement atomically when movement usage is spent', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
@@ -5111,7 +5227,7 @@ test('transactional encounter-aware movement command ID conflicts still reject c
   }
 });
 
-test('zero-cost encounter movement remains on the existing non-transactional path', async () => {
+test('zero-cost encounter movement writes one movement_state outbox row, dispatches after commit, and returns cached success on duplicate retry', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
@@ -5131,36 +5247,70 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  let { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
     outboxDatabase,
   );
   const { firstCharacterId, sessionId } =
     await setupDurableEncounterForIdempotency(runtime);
-  const updates = subscribeToSessionEvents(runtime, sessionId);
-  const updateCountBefore = updates.length;
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  const encounterUpdatesBefore = getEncounterUpdates(updates).length;
+  commitMarkers.length = 0;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-movement-zero-cost-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 0,
+      },
+    },
+  } as const;
 
-  const moved = await postJson<MovementCommandResponse>(
+  const first = await postJson<MovementCommandResponse>(
     runtime,
     idempotency,
     '/api/movement/command',
-    {
-      commandId: 'transactional-movement-zero-cost-1',
-      type: 'move_character_in_active_scene',
-      actor: {
-        participantId: 'player-001',
-      },
-      payload: {
-        sessionId,
-        participantId: 'player-001',
-        position: {
-          x: 0,
-          y: 0,
-        },
-      },
-    },
+    command,
+    characterCommandTransaction,
     undefined,
+    combatCommandTransaction,
+  );
+
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+  ({ combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
     undefined,
     combatCommandTransaction,
   );
@@ -5176,20 +5326,26 @@ test('zero-cost encounter movement remains on the existing non-transactional pat
     },
   });
 
-  assert.equal(moved.status, 200);
-  assert.equal(moved.body.ok, true);
-  assert.equal(idempotencyDatabase.recordCount, 0);
-  assert.equal(outboxDatabase.recordCount, 0);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 0);
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
-  assert.deepEqual(
-    updates.slice(updateCountBefore).map((update) => update.type),
-    ['movement_state'],
+  assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 0);
+  assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+  assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
+  assert.equal(commitMarkers.length, 1);
+  assert.ok((commitMarkers[0] ?? 0) > commitCountBefore);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
   );
 });
 
-test('no-active-encounter movement remains on the existing non-transactional path', async () => {
+test('no-active-encounter movement writes one movement_state outbox row, dispatches after commit, and returns cached success on duplicate retry', async () => {
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
   const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
@@ -5209,7 +5365,13 @@ test('no-active-encounter movement remains on the existing non-transactional pat
   );
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
-  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  let { combatCommandTransaction } = createCombatCommandTransactionHarness(
     runtime,
     unitOfWork,
     outboxDatabase,
@@ -5228,43 +5390,209 @@ test('no-active-encounter movement remains on the existing non-transactional pat
     },
   });
 
-  const updates = subscribeToSessionEvents(runtime, sessionId);
-  const updateCountBefore = updates.length;
-  const moved = await postJson<MovementCommandResponse>(
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  commitMarkers.length = 0;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-movement-no-encounter-1',
+    type: 'move_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  } as const;
+
+  const first = await postJson<MovementCommandResponse>(
     runtime,
     idempotency,
     '/api/movement/command',
-    {
-      commandId: 'transactional-movement-no-encounter-1',
-      type: 'move_character_in_active_scene',
-      actor: {
-        participantId: 'player-001',
-      },
-      payload: {
-        sessionId,
-        participantId: 'player-001',
-        position: {
-          x: 0,
-          y: 1,
-        },
-      },
-    },
+    command,
+    characterCommandTransaction,
     undefined,
+    combatCommandTransaction,
+  );
+
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+  ({ combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    command,
+    characterCommandTransaction,
     undefined,
     combatCommandTransaction,
   );
   const updatedRecord = await runtime.characters.getCharacter(firstCharacterId);
 
-  assert.equal(moved.status, 200);
-  assert.equal(moved.body.ok, true);
-  assert.equal(idempotencyDatabase.recordCount, 0);
-  assert.equal(outboxDatabase.recordCount, 0);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
   assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 1);
-  assert.deepEqual(
-    updates.slice(updateCountBefore).map((update) => update.type),
-    ['movement_state'],
+  assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
+  assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
+  assert.equal(commitMarkers.length, 1);
+  assert.ok((commitMarkers[0] ?? 0) > commitCountBefore);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+});
+
+test('db-backed character transaction boundary writes one movement_state outbox row for dm_reposition_character_in_active_scene, dispatches after commit, and returns cached success on duplicate retry', async () => {
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  const { characterId, sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+
+  await runtime.assignCharacterToParticipant({
+    commandId: 'transactional-dm-reposition-assign-character',
+    type: 'assign_character_to_participant',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+    },
+  });
+
+  await runtime.activateSceneForSession({
+    commandId: 'transactional-dm-reposition-activate-scene',
+    type: 'activate_scene_for_session',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+    },
+  });
+
+  await runtime.placeCharacterInActiveScene({
+    commandId: 'transactional-dm-reposition-place-character',
+    type: 'place_character_in_active_scene',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      position: {
+        x: 0,
+        y: 0,
+      },
+    },
+  });
+
+  const commitMarkers: number[] = [];
+  const updates = subscribeToSessionEvents(runtime, sessionId, () => {
+    commitMarkers.push(unitOfWork.committedCount);
+  });
+  const movementUpdatesBefore = getMovementUpdates(updates).length;
+  commitMarkers.length = 0;
+  const commitCountBefore = unitOfWork.committedCount;
+  const command = {
+    commandId: 'transactional-dm-reposition-1',
+    type: 'dm_reposition_character_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId,
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  } as const;
+
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+    characterCommandTransaction,
+  );
+
+  ({ characterCommandTransaction } = createCharacterCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+    characterCommandTransaction,
+  );
+  const updatedRecord = await runtime.characters.getCharacter(characterId);
+  const movementUpdates = getMovementUpdates(updates).slice(
+    movementUpdatesBefore,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(updatedRecord.overlay.position?.x, 0);
+  assert.equal(updatedRecord.overlay.position?.y, 1);
+  assert.equal(movementUpdates.length, 1);
+  assert.equal(movementUpdates[0]?.reason, 'dm_character_repositioned');
+  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
   );
 });
 

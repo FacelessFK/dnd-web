@@ -1,5 +1,5 @@
 export const DB_PACKAGE_READY =
-  'phase-12-slice-4-session-character-encounter-combat-outbox-foundation';
+  'phase-12-slice-5-session-character-movement-encounter-combat-outbox-foundation';
 
 export * from './character-record-database.js';
 export * from './command-idempotency-record-database.js';
