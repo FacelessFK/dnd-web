@@ -6,6 +6,7 @@ import type {
 import type {
   CharacterAssignmentSuccess,
   SceneActivationSuccess,
+  SessionCommandSuccess,
   SessionStateUpdate,
   SessionStateUpdateReason,
 } from '@dnd/protocol';
@@ -28,6 +29,8 @@ import { DbBackedSessionStore } from './db-session-store.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
 export const DURABLE_SESSION_MUTATION_COMMAND_TYPES = [
+  'create_session',
+  'join_session',
   'assign_character_to_participant',
   'activate_scene_for_session',
 ] as const;
@@ -36,6 +39,7 @@ type DurableSessionMutationCommandType =
   (typeof DURABLE_SESSION_MUTATION_COMMAND_TYPES)[number];
 
 type SessionMutationSuccessData =
+  | SessionCommandSuccess['data']
   | CharacterAssignmentSuccess['data']
   | SceneActivationSuccess['data'];
 
@@ -83,7 +87,13 @@ export class DbBackedSessionCommandTransactionBoundary {
       return params.category === 'scene';
     }
 
-    return false;
+    return params.category === 'session';
+  }
+
+  private supportsOutboxDispatch(
+    commandType: DurableSessionMutationCommandType,
+  ): boolean {
+    return commandType !== 'create_session';
   }
 
   async run<TResponse>(
@@ -163,17 +173,18 @@ export class DbBackedSessionCommandTransactionBoundary {
     );
     const transactionRuntime =
       params.runtime.withSessionStore(transactionSessions);
-    const sessionId = getCommandSessionId(params.command);
-
-    if (!sessionId) {
-      throw new Error(
-        `Command "${params.command.type}" is missing a session id for DB-backed session transactions.`,
-      );
-    }
-
-    const initialRevision =
-      transactionSessions.getSessionSnapshot(sessionId).session.revision;
+    const commandSessionId = getCommandSessionId(params.command);
+    const initialSnapshot =
+      params.command.type === 'create_session' || !commandSessionId
+        ? null
+        : transactionSessions.getSessionSnapshot(commandSessionId);
     const response = await params.execute(transactionRuntime);
+    const nextSnapshot = this.getSessionSnapshotFromResponse(
+      response as SessionMutationSuccessData,
+    );
+    const commandType = params.command
+      .type as DurableSessionMutationCommandType;
+    const sessionId = commandSessionId ?? nextSnapshot.session.id;
     const inserted =
       await context.commandIdempotency.insertCompletedCommandIdempotencyRecord({
         actorParticipantId: params.command.actor.participantId,
@@ -187,22 +198,21 @@ export class DbBackedSessionCommandTransactionBoundary {
       });
 
     if (inserted) {
-      const nextSnapshot = this.getSessionSnapshotFromResponse(
-        response as SessionMutationSuccessData,
-      );
-      const didMutate = nextSnapshot.session.revision > initialRevision;
+      const didMutate =
+        initialSnapshot === null ||
+        nextSnapshot.session.revision > initialSnapshot.session.revision;
 
-      if (didMutate) {
-        const update = this.buildSessionStateUpdate(
-          params.command.type as DurableSessionMutationCommandType,
-          nextSnapshot,
-        );
+      if (didMutate && this.supportsOutboxDispatch(commandType)) {
+        const update = this.buildSessionStateUpdate(commandType, nextSnapshot);
 
         await this.persistOutboxRow(context, idempotencyKey, update);
       }
 
       return {
-        dispatchIdempotencyKey: didMutate ? idempotencyKey : null,
+        dispatchIdempotencyKey:
+          didMutate && this.supportsOutboxDispatch(commandType)
+            ? idempotencyKey
+            : null,
         response,
         sessionSnapshot: didMutate ? nextSnapshot : null,
       };
@@ -271,6 +281,10 @@ export class DbBackedSessionCommandTransactionBoundary {
   private getReason(
     commandType: DurableSessionMutationCommandType,
   ): SessionStateUpdateReason {
+    if (commandType === 'join_session') {
+      return 'participant_joined';
+    }
+
     if (commandType === 'assign_character_to_participant') {
       return 'participant_character_assigned';
     }

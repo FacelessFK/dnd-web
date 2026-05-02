@@ -176,7 +176,13 @@ export async function handleRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/api/session/command') {
-    await handleSessionCommandRequest(request, response, runtime, idempotency);
+    await handleSessionCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      sessionCommandTransaction,
+    );
     return;
   }
 
@@ -278,6 +284,7 @@ async function handleSessionCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -310,6 +317,52 @@ async function handleSessionCommandRequest(
 
   try {
     const command = commandResult.data;
+
+    if (
+      sessionCommandTransaction?.supports({
+        category: 'session',
+        command,
+      })
+    ) {
+      const success: SessionCommandSuccess = {
+        ok: true,
+        data: await sessionCommandTransaction.run({
+          category: 'session',
+          command,
+          execute: async (transactionRuntime) => {
+            let result;
+
+            switch (command.type) {
+              case 'create_session':
+                result = await transactionRuntime.createSession(command);
+                break;
+              case 'join_session':
+                result = await transactionRuntime.joinSession(command);
+                break;
+              default:
+                throw new Error(
+                  `Unsupported transactional session command type "${command.type}".`,
+                );
+            }
+
+            return {
+              sessionId: result.sessionId,
+              participantId: result.participantId,
+              state: result.state,
+              streamPath: buildStreamPath(
+                result.sessionId,
+                result.participantId,
+              ),
+            } satisfies SessionCommandSuccess['data'];
+          },
+          runtime,
+        }),
+      };
+
+      sendJson(response, 200, success, sessionCommandSuccessSchema);
+      return;
+    }
+
     const cachedSuccess =
       await idempotency.getCachedSuccess<SessionCommandSuccess>({
         category: 'session',
