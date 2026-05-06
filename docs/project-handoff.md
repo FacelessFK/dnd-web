@@ -31,6 +31,7 @@ The browser runtime surface lives at:
 http://localhost:3000/runtime
 ```
 
+It is a dark-fantasy tactical tabletop MVP with role-aware DM and Player modes.
 It can:
 
 - launch in DM mode or Player mode,
@@ -43,8 +44,8 @@ It can:
 - place both sample characters from DM mode,
 - start an encounter from DM mode,
 - subscribe to the session SSE stream as the active role,
-- display session, active-scene, encounter, assigned-character, and event-log
-  state,
+- display session, active-scene, encounter, assigned-character, tactical-grid,
+  and readable live combat/event-feed state,
 - recover state after refresh using session, scene, active-scene, encounter,
   and assigned-character read-model commands,
 - paste an existing session ID and clear local cockpit state without touching
@@ -120,8 +121,8 @@ server tests and smoke tests.
 - No multi-process SSE subscriber persistence or distributed coordination.
 - No opportunity attacks, out-of-turn reaction windows, full condition engine,
   death saves, spells, weapons, ranged attacks, or monster AI.
-- The runtime surface is a playable DM/player MVP, not a polished product
-  experience or production auth boundary.
+- The runtime surface is a playable DM/player MVP, not production auth or a
+  final product UX.
 - The default local server still starts with the in-memory runtime unless
   composed with DB-backed stores and transaction boundaries.
 
@@ -129,7 +130,7 @@ server tests and smoke tests.
 
 - Add a browser-oriented smoke flow if the cockpit becomes a long-lived manual
   validation surface.
-- Add product-grade player-facing views after the current runtime surface has
-  served its manual validation purpose.
+- Add product-grade player-facing views and accessibility audits after the
+  current runtime surface has served its manual validation purpose.
 - Continue persistence work only with explicit claims about which command paths
   are covered.

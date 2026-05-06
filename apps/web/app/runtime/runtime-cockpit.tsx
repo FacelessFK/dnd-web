@@ -26,20 +26,25 @@ import {
   cockpitStorageKey,
   defaultDm,
   defaultPlayer,
+  describeSessionStreamEvent,
   flag,
   formatRuntimeFailure,
   getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
+  getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
   initials,
+  isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sampleCharacters,
   samplePlayers,
   sanitizeSessionIdInput,
   type Cell,
+  type RuntimeEventSummary,
   type RuntimeMode,
+  type RuntimeNoticeTone,
   type SessionSnapshot,
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
@@ -1579,158 +1584,338 @@ export function RuntimeCockpit() {
   const activeSceneLabel = scene
     ? `${scene.name} (${scene.id})`
     : (activeScene?.activeSceneId ?? sceneId) || 'none';
+  const playerPlacement = activeScene?.placedCharacters.find(
+    (placement) => placement.participantId === playerParticipantId,
+  );
+  const playerNextStep = getPlayerNextStep({
+    hasActiveScene: Boolean(activeScene),
+    hasCharacter: Boolean(playerCharacter),
+    hasEncounter: Boolean(encounter),
+    isCurrentTurn: currentTurnParticipantId === playerParticipantId,
+    isJoined: Boolean(
+      sessionState?.participants.some(
+        (participant) => participant.id === playerParticipantId,
+      ),
+    ),
+    isPlaced: Boolean(playerPlacement),
+    sessionId,
+  });
+  const feedEntries = eventLog
+    .flatMap((entry) =>
+      isSessionStreamEvent(entry.payload)
+        ? [
+            {
+              ...entry,
+              summary: describeSessionStreamEvent(entry.payload),
+            },
+          ]
+        : [],
+    )
+    .slice(0, 8);
 
   return (
-    <main className="min-h-screen bg-[#f6f3ea] text-stone-950">
-      <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col justify-between gap-4 border-b border-stone-300 pb-5 lg:flex-row lg:items-end">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-800">
-              Developer runtime cockpit
-            </p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-              Role-Aware Runtime
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-700">
-              Browser play surface for the existing authoritative backend.
-              Commands still run through the server; SSE is live only, and
-              recovery uses read models.
-            </p>
-          </div>
-          <div className="rounded border border-stone-300 bg-white/70 px-3 py-2 text-xs text-stone-700">
-            <span className="font-semibold text-stone-950">Server</span>{' '}
-            {runtimeServerUrl}
+    <main className="relative min-h-screen overflow-hidden bg-[#120d0a] text-amber-50">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(245,158,11,0.18),transparent_34%),radial-gradient(circle_at_90%_12%,rgba(14,165,233,0.12),transparent_30%),linear-gradient(135deg,rgba(36,22,12,0.9),rgba(7,10,18,0.98))]" />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(251,191,36,0.6)_1px,transparent_1px),linear-gradient(90deg,rgba(251,191,36,0.6)_1px,transparent_1px)] [background-size:48px_48px]" />
+
+      <div className="relative mx-auto flex max-w-[1560px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+        <header className="overflow-hidden rounded-3xl border border-amber-500/25 bg-[#1c130d]/85 p-5 shadow-2xl shadow-black/40 backdrop-blur">
+          <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300/80">
+                Authoritative table surface
+              </p>
+              <h1 className="mt-2 text-4xl font-black tracking-tight text-amber-50 sm:text-5xl">
+                Runtime War Table
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-100/75">
+                A role-aware browser surface for the existing backend. The
+                server still owns truth; SSE is live-only, and recovery rebuilds
+                state from read models.
+              </p>
+            </div>
+            <div className="grid gap-2 text-xs text-amber-100/75 sm:grid-cols-3 xl:min-w-[520px]">
+              <StatusBadge
+                label={mode === 'dm' ? 'DM Mode' : 'Player Mode'}
+                tone={mode === 'dm' ? 'warning' : 'success'}
+              />
+              <StatusBadge
+                label={
+                  streamEnabled ? `Stream ${stream.status}` : 'Stream idle'
+                }
+                tone={streamEnabled ? 'success' : 'info'}
+              />
+              <StatusBadge
+                label={busyLabel ? `Busy: ${busyLabel}` : 'Ready'}
+                tone={busyLabel ? 'warning' : 'success'}
+              />
+              <div className="sm:col-span-3 rounded-2xl border border-amber-500/20 bg-black/20 px-3 py-2">
+                <span className="font-semibold text-amber-200">Server</span>{' '}
+                {runtimeServerUrl}
+              </div>
+            </div>
           </div>
         </header>
 
         {commandError ? (
-          <div className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <Notice title="Command failed" tone="danger">
             {commandError}
-          </div>
+          </Notice>
         ) : null}
         {recoveryNotes.length ? (
-          <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            <p className="font-semibold">Recovery completed with notes.</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
+          <Notice title="Recovery completed with notes" tone="warning">
+            <ul className="list-disc space-y-1 pl-5">
               {recoveryNotes.map((note) => (
                 <li key={note}>{note}</li>
               ))}
             </ul>
-          </div>
+          </Notice>
+        ) : null}
+        {mode === 'player' ? (
+          <Notice title={playerNextStep.title} tone={playerNextStep.tone}>
+            {playerNextStep.detail}
+          </Notice>
         ) : null}
 
-        <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="flex flex-col gap-5">
-            <Panel title="Runtime Launcher">
-              <div className="grid gap-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <ModeButton
-                    active={mode === 'dm'}
-                    label="DM Mode"
-                    onClick={() => switchMode('dm')}
-                  />
-                  <ModeButton
-                    active={mode === 'player'}
-                    label="Player Mode"
-                    onClick={() => switchMode('player')}
-                  />
-                </div>
+        <section className="rounded-3xl border border-amber-500/25 bg-[#24160f]/90 p-4 shadow-xl shadow-black/30">
+          <div className="grid gap-4 xl:grid-cols-[220px_minmax(220px,1fr)_minmax(220px,1fr)_auto] xl:items-end">
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
+              <ModeButton
+                active={mode === 'dm'}
+                label="DM Mode"
+                onClick={() => switchMode('dm')}
+                tone="dm"
+              />
+              <ModeButton
+                active={mode === 'player'}
+                label="Player Mode"
+                onClick={() => switchMode('player')}
+                tone="player"
+              />
+            </div>
+            <LabeledInput
+              label="Session ID"
+              onChange={switchSessionId}
+              placeholder="Paste an existing session ID to recover"
+              value={sessionId}
+            />
+            {mode === 'dm' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
                 <LabeledInput
-                  label="Session ID"
-                  onChange={switchSessionId}
-                  placeholder="Paste an existing session ID to recover"
-                  value={sessionId}
+                  label="DM participant ID"
+                  onChange={switchDmParticipantId}
+                  value={dmParticipantId}
                 />
-                {mode === 'dm' ? (
-                  <>
-                    <LabeledInput
-                      label="DM participant ID"
-                      onChange={switchDmParticipantId}
-                      value={dmParticipantId}
-                    />
-                    <LabeledInput
-                      label="DM display name"
-                      onChange={setDmDisplayName}
-                      value={dmDisplayName}
-                    />
-                  </>
-                ) : (
-                  <>
-                    <LabeledInput
-                      label="Player participant ID"
-                      onChange={switchPlayerParticipantId}
-                      value={playerParticipantId}
-                    />
-                    <LabeledInput
-                      label="Player display name"
-                      onChange={setPlayerDisplayName}
-                      value={playerDisplayName}
-                    />
-                  </>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  {mode === 'dm' ? (
-                    <ActionButton
-                      disabled={Boolean(busyLabel)}
-                      disabledReason={busyReason ?? undefined}
-                      label="Create Session"
-                      onClick={createSession}
-                    />
-                  ) : (
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.joinPlayer)}
-                      disabledReason={disabledReasons.joinPlayer ?? undefined}
-                      label="Join Session"
-                      onClick={joinCurrentPlayer}
-                    />
-                  )}
-                  <ActionButton
-                    disabled={Boolean(disabledReasons.recover)}
-                    disabledReason={
-                      disabledReasons.recover ??
-                      missingSessionReason ??
-                      busyReason ??
-                      undefined
-                    }
-                    label="Recover"
-                    onClick={recoverReadModels}
-                    variant="secondary"
-                  />
-                </div>
+                <LabeledInput
+                  label="DM display name"
+                  onChange={setDmDisplayName}
+                  value={dmDisplayName}
+                />
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <LabeledInput
+                  label="Player participant ID"
+                  onChange={switchPlayerParticipantId}
+                  value={playerParticipantId}
+                />
+                <LabeledInput
+                  label="Player display name"
+                  onChange={setPlayerDisplayName}
+                  value={playerDisplayName}
+                />
+              </div>
+            )}
+            <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[320px]">
+              {mode === 'dm' ? (
                 <ActionButton
                   disabled={Boolean(busyLabel)}
                   disabledReason={busyReason ?? undefined}
-                  label="Local Reset"
-                  onClick={resetLocalCockpit}
-                  variant="danger"
+                  label="Create Session"
+                  onClick={createSession}
                 />
-                <p className="text-xs leading-5 text-stone-600">
-                  {mode === 'dm'
-                    ? 'DM mode owns setup, scene, encounter, and override controls.'
-                    : 'Player mode can join, recover, move its own token, use its own turn resources, and attack legal targets.'}{' '}
-                  Local Reset clears this browser only.
-                </p>
+              ) : (
+                <ActionButton
+                  disabled={Boolean(disabledReasons.joinPlayer)}
+                  disabledReason={disabledReasons.joinPlayer ?? undefined}
+                  label="Join Session"
+                  onClick={joinCurrentPlayer}
+                />
+              )}
+              <ActionButton
+                disabled={Boolean(disabledReasons.recover)}
+                disabledReason={
+                  disabledReasons.recover ??
+                  missingSessionReason ??
+                  busyReason ??
+                  undefined
+                }
+                label="Recover"
+                onClick={recoverReadModels}
+                variant="secondary"
+              />
+              <ActionButton
+                disabled={Boolean(missingSessionReason)}
+                disabledReason={missingSessionReason ?? undefined}
+                label={streamEnabled ? 'Disconnect SSE' : 'Subscribe SSE'}
+                onClick={() => setStreamEnabled((current) => !current)}
+                variant={streamEnabled ? 'danger' : 'secondary'}
+              />
+              <ActionButton
+                disabled={Boolean(busyLabel)}
+                disabledReason={busyReason ?? undefined}
+                label="Local Reset"
+                onClick={resetLocalCockpit}
+                variant="danger"
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-amber-100/65">
+            Acting as {streamDisplayName} ({streamParticipantId}). Local Reset
+            clears only this browser; backend state remains untouched.{' '}
+            {stream.error ? (
+              <span className="font-semibold text-red-200">{stream.error}</span>
+            ) : null}
+          </p>
+        </section>
+
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_420px]">
+          <div className="grid content-start gap-5">
+            <Panel
+              description={`Scene ${activeSceneLabel}. Click a cell or type coordinates; movement still goes through server commands.`}
+              eyebrow={mode === 'dm' ? 'DM war table' : 'Player view'}
+              title="Tactical Grid"
+              tone={mode}
+            >
+              <TacticalGrid
+                activeScene={activeScene}
+                actingParticipantId={actingParticipantId}
+                charactersByParticipant={charactersByParticipant}
+                currentTurnParticipantId={currentTurnParticipantId}
+                grid={grid}
+                mode={mode}
+                onSelectCell={setSelectedCell}
+                selectedCell={selectedCell}
+                selectedTargetParticipantId={selectedTarget}
+              />
+              <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
+                {mode === 'dm' ? (
+                  <SelectField
+                    label="Acting token"
+                    onChange={setSelectedActor}
+                    options={playerParticipants.map((participant) => ({
+                      label: `${participant.displayName} (${participant.id})`,
+                      value: participant.id,
+                    }))}
+                    value={selectedActor}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-sky-300/20 bg-sky-950/25 px-3 py-2 text-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-200">
+                      Acting token
+                    </p>
+                    <p className="mt-1 break-all font-semibold text-amber-50">
+                      {playerDisplayName} ({playerParticipantId})
+                    </p>
+                  </div>
+                )}
+                <NumberInput
+                  label="X"
+                  onChange={(x) =>
+                    setSelectedCell((cell) => ({
+                      ...cell,
+                      x,
+                    }))
+                  }
+                  value={selectedCell.x}
+                />
+                <NumberInput
+                  label="Y"
+                  onChange={(y) =>
+                    setSelectedCell((cell) => ({
+                      ...cell,
+                      y,
+                    }))
+                  }
+                  value={selectedCell.y}
+                />
+                <div className="grid gap-2 sm:grid-cols-2 md:min-w-[260px]">
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.move)}
+                    disabledReason={disabledReasons.move ?? undefined}
+                    label={mode === 'dm' ? 'Move Actor' : 'Move Token'}
+                    onClick={moveSelectedActor}
+                    variant="secondary"
+                  />
+                  {mode === 'dm' ? (
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.dmCharacter)}
+                      disabledReason={disabledReasons.dmCharacter ?? undefined}
+                      label="DM Reposition"
+                      onClick={dmRepositionSelected}
+                    />
+                  ) : null}
+                </div>
               </div>
             </Panel>
 
+            <LatestEventFeed entries={feedEntries} />
+
+            <Panel
+              description="Raw protocol payloads stay here for debugging; the table view above is the primary surface."
+              eyebrow="Dev trace"
+              title="Debug Ledger"
+            >
+              <details>
+                <summary className="cursor-pointer text-sm font-semibold text-amber-200 outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-amber-300">
+                  Last response, session snapshot, and raw event log
+                </summary>
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                  <JsonPreview
+                    value={lastResponse ?? { status: 'No command yet' }}
+                  />
+                  <JsonPreview value={sessionState ?? { sessionId }} />
+                  <div className="max-h-96 overflow-auto rounded-2xl border border-amber-500/15 bg-black/50 p-3 text-xs text-amber-50 lg:col-span-2">
+                    {eventLog.length ? (
+                      eventLog.map((entry) => (
+                        <details
+                          className="border-b border-amber-500/10 py-2"
+                          key={entry.id}
+                        >
+                          <summary className="cursor-pointer text-amber-200">
+                            {entry.at} {entry.label}
+                          </summary>
+                          <pre className="mt-2 whitespace-pre-wrap break-words text-amber-100/80">
+                            {JSON.stringify(entry.payload, null, 2)}
+                          </pre>
+                        </details>
+                      ))
+                    ) : (
+                      <EmptyState
+                        detail="Subscribe to SSE or run commands to populate the ledger."
+                        title="No events yet"
+                      />
+                    )}
+                  </div>
+                </div>
+              </details>
+            </Panel>
+          </div>
+
+          <aside className="grid content-start gap-5">
             {mode === 'dm' ? (
-              <Panel title="DM Setup">
+              <Panel
+                description="Creates a fresh local playtest session and stops on the first failed command."
+                eyebrow="DM orchestration"
+                title="Demo Setup"
+                tone="dm"
+              >
                 <div className="grid gap-3">
                   <ActionButton
                     disabled={Boolean(busyLabel)}
                     disabledReason={busyReason ?? undefined}
                     label="Run Fresh Demo Setup"
                     onClick={runFreshDemoSetup}
-                    variant="secondary"
-                  />
-                  <ActionButton
-                    disabled={Boolean(missingSessionReason ?? busyReason)}
-                    disabledReason={
-                      missingSessionReason ?? busyReason ?? undefined
-                    }
-                    label="Join Sample Players"
-                    onClick={joinSamplePlayers}
-                    variant="secondary"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <ActionButton
@@ -1738,7 +1923,16 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Create Characters"
+                      label="Join Players"
+                      onClick={joinSamplePlayers}
+                      variant="secondary"
+                    />
+                    <ActionButton
+                      disabled={Boolean(missingSessionReason ?? busyReason)}
+                      disabledReason={
+                        missingSessionReason ?? busyReason ?? undefined
+                      }
+                      label="Create PCs"
                       onClick={createSampleCharacters}
                       variant="secondary"
                     />
@@ -1747,12 +1941,10 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Finalize + Assign"
+                      label="Assign PCs"
                       onClick={finalizeAndAssignCharacters}
                       variant="secondary"
                     />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
                     <ActionButton
                       disabled={Boolean(missingSessionReason ?? busyReason)}
                       disabledReason={
@@ -1762,6 +1954,8 @@ export function RuntimeCockpit() {
                       onClick={createAndActivateScene}
                       variant="secondary"
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
                     <ActionButton
                       disabled={Boolean(disabledReasons.placeTokens)}
                       disabledReason={disabledReasons.placeTokens ?? undefined}
@@ -1769,58 +1963,320 @@ export function RuntimeCockpit() {
                       onClick={placeSampleCharacters}
                       variant="secondary"
                     />
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.startEncounter)}
+                      disabledReason={
+                        disabledReasons.startEncounter ?? undefined
+                      }
+                      label="Start Encounter"
+                      onClick={startEncounter}
+                    />
                   </div>
-                  <ActionButton
-                    disabled={Boolean(disabledReasons.startEncounter)}
-                    disabledReason={disabledReasons.startEncounter ?? undefined}
-                    label="Start Encounter"
-                    onClick={startEncounter}
-                  />
-                  <p className="text-xs leading-5 text-stone-600">
-                    Fresh demo setup creates a new backend session and stops on
-                    the first failed command.
-                  </p>
                 </div>
               </Panel>
-            ) : null}
+            ) : (
+              <Panel
+                description={playerNextStep.detail}
+                eyebrow="Player readiness"
+                title={playerNextStep.title}
+                tone="player"
+              >
+                <div className="grid gap-3">
+                  <StatusBadge
+                    label={playerNextStep.title}
+                    tone={playerNextStep.tone}
+                  />
+                  <CharacterSummary
+                    currentTurnParticipantId={currentTurnParticipantId}
+                    participantId={playerParticipantId}
+                    resource={playerCharacter}
+                    title={`${playerDisplayName} (you)`}
+                    variant="hero"
+                  />
+                  <dl className="grid gap-2 text-sm">
+                    <StatusRow
+                      label="Placement"
+                      value={
+                        playerPlacement
+                          ? `${playerPlacement.position.x},${playerPlacement.position.y}`
+                          : 'not placed'
+                      }
+                    />
+                    <StatusRow label="Current actor" value={currentTurnName} />
+                    <StatusRow
+                      label="Selected target"
+                      value={selectedTarget || 'none'}
+                    />
+                  </dl>
+                </div>
+              </Panel>
+            )}
 
-            <Panel title="Live Stream">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">
-                    {streamEnabled ? stream.status : 'idle'}
-                  </p>
-                  <p className="mt-1 text-xs text-stone-600">
-                    {stream.error ??
-                      `Subscribes as ${streamDisplayName} (${streamParticipantId}).`}
-                  </p>
+            <Panel
+              description="Turn controls submit actor-scoped commands; disabled buttons explain missing prerequisites."
+              eyebrow="Encounter"
+              title="Turn & Target"
+            >
+              <div className="grid gap-3">
+                {encounter ? (
+                  <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
+                    <StatusRow
+                      label="Encounter"
+                      value={`${encounter.id} (${encounter.status})`}
+                    />
+                    <StatusRow
+                      label="Round"
+                      value={String(encounter.roundNumber)}
+                    />
+                    <StatusRow
+                      label="Usage"
+                      value={`${encounter.currentTurnUsage.movementUsed} ft, action ${flag(encounter.currentTurnUsage.actionUsed)}, bonus ${flag(encounter.currentTurnUsage.bonusActionUsed)}, reaction ${flag(encounter.currentTurnUsage.reactionUsed)}`}
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    detail="Start an encounter as DM or recover one from the server."
+                    title="No active encounter loaded"
+                  />
+                )}
+                <SelectField
+                  label="Target"
+                  onChange={setSelectedTarget}
+                  options={targetParticipants.map((participant) => ({
+                    label: `${participant.displayName} (${participant.id})`,
+                    value: participant.id,
+                  }))}
+                  value={selectedTarget}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabledReason={
+                      disabledReasons.actorTurnAction ?? undefined
+                    }
+                    label="Use Action"
+                    onClick={() => runEncounterCommand('use_action')}
+                    variant="secondary"
+                  />
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabledReason={
+                      disabledReasons.actorTurnAction ?? undefined
+                    }
+                    label="Use Bonus"
+                    onClick={() => runEncounterCommand('use_bonus_action')}
+                    variant="secondary"
+                  />
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabledReason={
+                      disabledReasons.actorTurnAction ?? undefined
+                    }
+                    label="Use Reaction"
+                    onClick={() => runEncounterCommand('use_reaction')}
+                    variant="secondary"
+                  />
+                  {mode === 'dm' ? (
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.dmEncounter)}
+                      disabledReason={disabledReasons.dmEncounter ?? undefined}
+                      label="Advance Turn"
+                      onClick={() => runEncounterCommand('advance_turn')}
+                      variant="secondary"
+                    />
+                  ) : null}
                 </div>
                 <ActionButton
-                  disabled={Boolean(missingSessionReason)}
-                  disabledReason={missingSessionReason ?? undefined}
-                  label={streamEnabled ? 'Disconnect' : 'Subscribe'}
-                  onClick={() => setStreamEnabled((current) => !current)}
-                  variant={streamEnabled ? 'danger' : 'secondary'}
+                  disabled={Boolean(disabledReasons.attack)}
+                  disabledReason={disabledReasons.attack ?? undefined}
+                  label="Attack Target"
+                  onClick={attackTarget}
                 />
               </div>
             </Panel>
 
-            <Panel title="Command State">
+            <Panel
+              description={
+                mode === 'dm'
+                  ? 'All joined player characters at the table.'
+                  : 'Your loaded character resource from server reads/events.'
+              }
+              eyebrow="Roster"
+              title="Characters"
+            >
+              <div className="grid gap-3">
+                {mode === 'player' ? (
+                  <CharacterSummary
+                    currentTurnParticipantId={currentTurnParticipantId}
+                    participantId={playerParticipantId}
+                    resource={playerCharacter}
+                    title={`${playerDisplayName} (you)`}
+                  />
+                ) : playerParticipants.length ? (
+                  playerParticipants.map((participant) => (
+                    <CharacterSummary
+                      currentTurnParticipantId={currentTurnParticipantId}
+                      key={participant.id}
+                      participantId={participant.id}
+                      resource={charactersByParticipant[participant.id]}
+                      title={participant.displayName}
+                    />
+                  ))
+                ) : (
+                  <EmptyState
+                    detail="Join players or run the fresh demo setup."
+                    title="No players loaded"
+                  />
+                )}
+              </div>
+            </Panel>
+
+            {mode === 'dm' ? (
+              <Panel
+                description="Administrative overrides. These are intentionally separate from normal encounter flow."
+                eyebrow="DM-only"
+                title="Overrides"
+                tone="danger"
+              >
+                <div className="grid gap-3">
+                  <SelectField
+                    label="Controlled participant"
+                    onChange={setSelectedActor}
+                    options={playerParticipants.map((participant) => ({
+                      label: `${participant.displayName} (${participant.id})`,
+                      value: participant.id,
+                    }))}
+                    value={selectedActor}
+                  />
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <LabeledInput
+                      label="Current HP"
+                      onChange={setHpDraft}
+                      value={hpDraft}
+                    />
+                    <div className="self-end">
+                      <ActionButton
+                        disabled={Boolean(disabledReasons.dmCharacter)}
+                        disabledReason={
+                          disabledReasons.dmCharacter ?? undefined
+                        }
+                        label="Set HP"
+                        onClick={dmSetCurrentHp}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <LabeledInput
+                      label="Condition tags"
+                      onChange={setConditionsDraft}
+                      value={conditionsDraft}
+                    />
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.dmCharacter)}
+                      disabledReason={disabledReasons.dmCharacter ?? undefined}
+                      label="Set Conditions"
+                      onClick={dmSetConditions}
+                      variant="secondary"
+                    />
+                  </div>
+                  <div className="grid gap-2 rounded-2xl border border-red-300/20 bg-red-950/15 p-3">
+                    <p className="text-sm font-semibold text-red-100">
+                      Turn override
+                    </p>
+                    <label className="flex items-center gap-2 text-sm text-amber-100/85">
+                      <input
+                        checked={turnUsageDraft.actionUsed}
+                        className="accent-amber-500"
+                        onChange={(event) =>
+                          setTurnUsageDraft((draft) => ({
+                            ...draft,
+                            actionUsed: event.target.checked,
+                          }))
+                        }
+                        type="checkbox"
+                      />
+                      Action used
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-amber-100/85">
+                      <input
+                        checked={turnUsageDraft.bonusActionUsed}
+                        className="accent-amber-500"
+                        onChange={(event) =>
+                          setTurnUsageDraft((draft) => ({
+                            ...draft,
+                            bonusActionUsed: event.target.checked,
+                          }))
+                        }
+                        type="checkbox"
+                      />
+                      Bonus action used
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-amber-100/85">
+                      <input
+                        checked={turnUsageDraft.reactionUsed}
+                        className="accent-amber-500"
+                        onChange={(event) =>
+                          setTurnUsageDraft((draft) => ({
+                            ...draft,
+                            reactionUsed: event.target.checked,
+                          }))
+                        }
+                        type="checkbox"
+                      />
+                      Reaction used
+                    </label>
+                    <NumberInput
+                      label="Movement used"
+                      onChange={(movementUsed) =>
+                        setTurnUsageDraft((draft) => ({
+                          ...draft,
+                          movementUsed,
+                        }))
+                      }
+                      value={turnUsageDraft.movementUsed}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <ActionButton
+                        disabled={Boolean(disabledReasons.dmEncounter)}
+                        disabledReason={
+                          disabledReasons.dmEncounter ?? undefined
+                        }
+                        label="Set Turn Actor"
+                        onClick={dmSetTurnParticipant}
+                        variant="secondary"
+                      />
+                      <ActionButton
+                        disabled={Boolean(disabledReasons.dmEncounter)}
+                        disabledReason={
+                          disabledReasons.dmEncounter ?? undefined
+                        }
+                        label="Set Usage"
+                        onClick={dmSetTurnUsage}
+                        variant="secondary"
+                      />
+                    </div>
+                  </div>
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.dmEncounter)}
+                    disabledReason={disabledReasons.dmEncounter ?? undefined}
+                    label="End Encounter"
+                    onClick={dmEndEncounter}
+                    variant="danger"
+                  />
+                </div>
+              </Panel>
+            ) : null}
+
+            <Panel
+              description="Current IDs and read models loaded into this browser."
+              eyebrow="Table status"
+              title="State"
+            >
               <dl className="grid gap-2 text-sm">
-                <StatusRow label="Busy" value={busyLabel ?? 'idle'} />
-                <StatusRow
-                  label="Mode"
-                  value={mode === 'dm' ? 'DM' : 'Player'}
-                />
-                <StatusRow
-                  label="Runtime actor"
-                  value={`${streamDisplayName} (${streamParticipantId})`}
-                />
-                <StatusRow label="Session ID" value={sessionId || 'none'} />
-                <StatusRow label="Active scene ID" value={sceneId || 'none'} />
+                <StatusRow label="Session" value={sessionId || 'none'} />
+                <StatusRow label="Active scene" value={sceneId || 'none'} />
                 <StatusRow label="Scene name" value={scene?.name ?? 'none'} />
                 <StatusRow label="Current turn" value={currentTurnName} />
-                <StatusRow label="Loaded scene" value={activeSceneLabel} />
                 <StatusRow
                   label="Encounter"
                   value={
@@ -1831,390 +2287,52 @@ export function RuntimeCockpit() {
                 />
               </dl>
             </Panel>
-          </div>
-
-          <div className="grid gap-5">
-            <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <Panel title="Scene / Map">
-                <TacticalGrid
-                  activeScene={activeScene}
-                  charactersByParticipant={charactersByParticipant}
-                  currentTurnParticipantId={currentTurnParticipantId}
-                  grid={grid}
-                  onSelectCell={setSelectedCell}
-                  selectedCell={selectedCell}
-                />
-                <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
-                  {mode === 'dm' ? (
-                    <SelectField
-                      label="Actor"
-                      onChange={setSelectedActor}
-                      options={playerParticipants.map((participant) => ({
-                        label: `${participant.displayName} (${participant.id})`,
-                        value: participant.id,
-                      }))}
-                      value={selectedActor}
-                    />
-                  ) : (
-                    <div className="rounded border border-stone-200 bg-white/70 px-3 py-2 text-sm">
-                      <p className="font-semibold text-stone-700">
-                        Acting as player
-                      </p>
-                      <p className="break-all text-stone-950">
-                        {playerDisplayName} ({playerParticipantId})
-                      </p>
-                    </div>
-                  )}
-                  <NumberInput
-                    label="X"
-                    onChange={(x) =>
-                      setSelectedCell((cell) => ({
-                        ...cell,
-                        x,
-                      }))
-                    }
-                    value={selectedCell.x}
-                  />
-                  <NumberInput
-                    label="Y"
-                    onChange={(y) =>
-                      setSelectedCell((cell) => ({
-                        ...cell,
-                        y,
-                      }))
-                    }
-                    value={selectedCell.y}
-                  />
-                  <div className="flex gap-2">
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.move)}
-                      disabledReason={disabledReasons.move ?? undefined}
-                      label="Move"
-                      onClick={moveSelectedActor}
-                      variant="secondary"
-                    />
-                    {mode === 'dm' ? (
-                      <ActionButton
-                        disabled={Boolean(disabledReasons.dmCharacter)}
-                        disabledReason={
-                          disabledReasons.dmCharacter ?? undefined
-                        }
-                        label="DM Reposition"
-                        onClick={dmRepositionSelected}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-              </Panel>
-
-              <Panel title="Encounter / Turn">
-                <div className="grid gap-3">
-                  <div className="rounded border border-stone-200 bg-white/70 p-3 text-sm">
-                    {encounter ? (
-                      <div className="space-y-2">
-                        <StatusRow
-                          label="Encounter"
-                          value={`${encounter.id} (${encounter.status})`}
-                        />
-                        <StatusRow
-                          label="Round"
-                          value={String(encounter.roundNumber)}
-                        />
-                        <StatusRow
-                          label="Turn usage"
-                          value={`${encounter.currentTurnUsage.movementUsed} ft, action ${flag(encounter.currentTurnUsage.actionUsed)}, bonus ${flag(encounter.currentTurnUsage.bonusActionUsed)}, reaction ${flag(encounter.currentTurnUsage.reactionUsed)}`}
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-stone-600">
-                        No active encounter read.
-                      </p>
-                    )}
-                  </div>
-                  <SelectField
-                    label="Target"
-                    onChange={setSelectedTarget}
-                    options={targetParticipants.map((participant) => ({
-                      label: `${participant.displayName} (${participant.id})`,
-                      value: participant.id,
-                    }))}
-                    value={selectedTarget}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.actorTurnAction)}
-                      disabledReason={
-                        disabledReasons.actorTurnAction ?? undefined
-                      }
-                      label="Use Action"
-                      onClick={() => runEncounterCommand('use_action')}
-                      variant="secondary"
-                    />
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.actorTurnAction)}
-                      disabledReason={
-                        disabledReasons.actorTurnAction ?? undefined
-                      }
-                      label="Use Bonus"
-                      onClick={() => runEncounterCommand('use_bonus_action')}
-                      variant="secondary"
-                    />
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.actorTurnAction)}
-                      disabledReason={
-                        disabledReasons.actorTurnAction ?? undefined
-                      }
-                      label="Use Reaction"
-                      onClick={() => runEncounterCommand('use_reaction')}
-                      variant="secondary"
-                    />
-                    {mode === 'dm' ? (
-                      <ActionButton
-                        disabled={Boolean(disabledReasons.dmEncounter)}
-                        disabledReason={
-                          disabledReasons.dmEncounter ?? undefined
-                        }
-                        label="Advance Turn"
-                        onClick={() => runEncounterCommand('advance_turn')}
-                        variant="secondary"
-                      />
-                    ) : null}
-                  </div>
-                  <ActionButton
-                    disabled={Boolean(disabledReasons.attack)}
-                    disabledReason={disabledReasons.attack ?? undefined}
-                    label="Attack Target"
-                    onClick={attackTarget}
-                  />
-                </div>
-              </Panel>
-            </section>
-
-            <section className="grid gap-5 lg:grid-cols-2">
-              <Panel title="Characters">
-                <div className="grid gap-3">
-                  {mode === 'player' ? (
-                    <CharacterSummary
-                      currentTurnParticipantId={currentTurnParticipantId}
-                      participantId={playerParticipantId}
-                      resource={playerCharacter}
-                      title={`${playerDisplayName} (you)`}
-                    />
-                  ) : (
-                    playerParticipants.map((participant) => (
-                      <CharacterSummary
-                        currentTurnParticipantId={currentTurnParticipantId}
-                        key={participant.id}
-                        participantId={participant.id}
-                        resource={charactersByParticipant[participant.id]}
-                        title={participant.displayName}
-                      />
-                    ))
-                  )}
-                </div>
-              </Panel>
-
-              {mode === 'dm' ? (
-                <Panel title="DM Controls">
-                  <div className="grid gap-3">
-                    <SelectField
-                      label="Controlled participant"
-                      onChange={setSelectedActor}
-                      options={playerParticipants.map((participant) => ({
-                        label: `${participant.displayName} (${participant.id})`,
-                        value: participant.id,
-                      }))}
-                      value={selectedActor}
-                    />
-                    <div className="grid grid-cols-[1fr_auto] gap-2">
-                      <LabeledInput
-                        label="Current HP"
-                        onChange={setHpDraft}
-                        value={hpDraft}
-                      />
-                      <div className="self-end">
-                        <ActionButton
-                          disabled={Boolean(disabledReasons.dmCharacter)}
-                          disabledReason={
-                            disabledReasons.dmCharacter ?? undefined
-                          }
-                          label="Set HP"
-                          onClick={dmSetCurrentHp}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <LabeledInput
-                        label="Condition tags"
-                        onChange={setConditionsDraft}
-                        value={conditionsDraft}
-                      />
-                      <ActionButton
-                        disabled={Boolean(disabledReasons.dmCharacter)}
-                        disabledReason={
-                          disabledReasons.dmCharacter ?? undefined
-                        }
-                        label="Set Conditions"
-                        onClick={dmSetConditions}
-                        variant="secondary"
-                      />
-                    </div>
-                    <div className="grid gap-2 rounded border border-stone-200 bg-white/70 p-3">
-                      <p className="text-sm font-semibold">Turn override</p>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          checked={turnUsageDraft.actionUsed}
-                          onChange={(event) =>
-                            setTurnUsageDraft((draft) => ({
-                              ...draft,
-                              actionUsed: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        />
-                        Action used
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          checked={turnUsageDraft.bonusActionUsed}
-                          onChange={(event) =>
-                            setTurnUsageDraft((draft) => ({
-                              ...draft,
-                              bonusActionUsed: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        />
-                        Bonus action used
-                      </label>
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          checked={turnUsageDraft.reactionUsed}
-                          onChange={(event) =>
-                            setTurnUsageDraft((draft) => ({
-                              ...draft,
-                              reactionUsed: event.target.checked,
-                            }))
-                          }
-                          type="checkbox"
-                        />
-                        Reaction used
-                      </label>
-                      <NumberInput
-                        label="Movement used"
-                        onChange={(movementUsed) =>
-                          setTurnUsageDraft((draft) => ({
-                            ...draft,
-                            movementUsed,
-                          }))
-                        }
-                        value={turnUsageDraft.movementUsed}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <ActionButton
-                          disabled={Boolean(disabledReasons.dmEncounter)}
-                          disabledReason={
-                            disabledReasons.dmEncounter ?? undefined
-                          }
-                          label="Set Turn Actor"
-                          onClick={dmSetTurnParticipant}
-                          variant="secondary"
-                        />
-                        <ActionButton
-                          disabled={Boolean(disabledReasons.dmEncounter)}
-                          disabledReason={
-                            disabledReasons.dmEncounter ?? undefined
-                          }
-                          label="Set Usage"
-                          onClick={dmSetTurnUsage}
-                          variant="secondary"
-                        />
-                      </div>
-                    </div>
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.dmEncounter)}
-                      disabledReason={disabledReasons.dmEncounter ?? undefined}
-                      label="End Encounter"
-                      onClick={dmEndEncounter}
-                      variant="danger"
-                    />
-                  </div>
-                </Panel>
-              ) : (
-                <Panel title="Player Controls">
-                  <div className="grid gap-3 text-sm">
-                    <p className="rounded border border-stone-200 bg-white/70 p-3 text-stone-700">
-                      Player mode only submits commands as{' '}
-                      <span className="font-semibold text-stone-950">
-                        {playerParticipantId}
-                      </span>
-                      . DM overrides and setup commands are hidden.
-                    </p>
-                    <StatusRow
-                      label="Your character"
-                      value={playerCharacter?.character.name ?? 'not loaded'}
-                    />
-                    <StatusRow label="Current actor" value={currentTurnName} />
-                    <StatusRow
-                      label="Selected target"
-                      value={selectedTarget || 'none'}
-                    />
-                  </div>
-                </Panel>
-              )}
-            </section>
-
-            <section className="grid gap-5 lg:grid-cols-2">
-              <Panel title="Session State">
-                <JsonPreview value={sessionState ?? { sessionId }} />
-              </Panel>
-              <Panel title="Developer Debug">
-                <details>
-                  <summary className="cursor-pointer text-sm font-semibold text-stone-700">
-                    Last response and live event log
-                  </summary>
-                  <div className="mt-3">
-                    <div className="mb-3">
-                      <JsonPreview
-                        value={lastResponse ?? { status: 'No command yet' }}
-                      />
-                    </div>
-                    <div className="max-h-96 overflow-auto rounded border border-stone-200 bg-stone-950 p-3 text-xs text-stone-100">
-                      {eventLog.length ? (
-                        eventLog.map((entry) => (
-                          <details
-                            className="border-b border-stone-800 py-2"
-                            key={entry.id}
-                          >
-                            <summary className="cursor-pointer text-amber-200">
-                              {entry.at} {entry.label}
-                            </summary>
-                            <pre className="mt-2 whitespace-pre-wrap break-words">
-                              {JSON.stringify(entry.payload, null, 2)}
-                            </pre>
-                          </details>
-                        ))
-                      ) : (
-                        <p className="text-stone-400">No events yet.</p>
-                      )}
-                    </div>
-                  </div>
-                </details>
-              </Panel>
-            </section>
-          </div>
+          </aside>
         </section>
       </div>
     </main>
   );
 }
 
-function Panel({ children, title }: { children: ReactNode; title: string }) {
+function Panel({
+  children,
+  description,
+  eyebrow,
+  title,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  description?: string;
+  eyebrow?: string;
+  title: string;
+  tone?: 'danger' | 'dm' | 'neutral' | 'player';
+}) {
+  const accents = {
+    danger: 'border-red-400/25 from-red-950/30',
+    dm: 'border-amber-400/30 from-amber-950/25',
+    neutral: 'border-amber-500/20 from-stone-950/30',
+    player: 'border-sky-300/25 from-sky-950/25',
+  }[tone];
+
   return (
-    <section className="rounded border border-stone-300 bg-white/85 p-4 shadow-sm">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-stone-700">
-        {title}
-      </h2>
+    <section
+      className={`rounded-3xl border bg-gradient-to-br ${accents} to-[#1c130d]/90 p-4 shadow-xl shadow-black/25 backdrop-blur`}
+    >
+      <div className="mb-4">
+        {eyebrow ? (
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300/70">
+            {eyebrow}
+          </p>
+        ) : null}
+        <h2 className="mt-1 text-lg font-black tracking-tight text-amber-50">
+          {title}
+        </h2>
+        {description ? (
+          <p className="mt-1 text-xs leading-5 text-amber-100/65">
+            {description}
+          </p>
+        ) : null}
+      </div>
       {children}
     </section>
   );
@@ -2235,16 +2353,16 @@ function ActionButton({
 }) {
   const styles = {
     danger:
-      'border-red-800 bg-red-800 text-white hover:bg-red-700 disabled:border-red-200 disabled:bg-red-100 disabled:text-red-300',
+      'border-red-400/45 bg-red-900/80 text-red-50 shadow-red-950/30 hover:bg-red-800 disabled:border-red-400/10 disabled:bg-red-950/20 disabled:text-red-100/35',
     primary:
-      'border-stone-950 bg-stone-950 text-white hover:bg-stone-800 disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400',
+      'border-amber-300/55 bg-amber-400 text-stone-950 shadow-amber-950/40 hover:bg-amber-300 disabled:border-amber-300/10 disabled:bg-amber-950/20 disabled:text-amber-100/35',
     secondary:
-      'border-stone-300 bg-white text-stone-950 hover:border-stone-500 disabled:bg-stone-100 disabled:text-stone-400',
+      'border-amber-300/25 bg-[#2d2017] text-amber-50 hover:border-amber-200/55 hover:bg-[#3c2a1d] disabled:border-amber-300/10 disabled:bg-black/20 disabled:text-amber-100/35',
   }[variant];
 
   return (
     <button
-      className={`min-h-10 rounded border px-3 py-2 text-sm font-semibold transition ${styles}`}
+      className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-bold shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 ${styles}`}
       disabled={disabled}
       onClick={() => {
         void onClick();
@@ -2264,17 +2382,24 @@ function ModeButton({
   active,
   label,
   onClick,
+  tone,
 }: {
   active: boolean;
   label: string;
   onClick: () => void;
+  tone: 'dm' | 'player';
 }) {
+  const activeStyles =
+    tone === 'dm'
+      ? 'border-amber-300 bg-amber-300 text-stone-950 shadow-amber-950/40'
+      : 'border-sky-200 bg-sky-300 text-slate-950 shadow-sky-950/40';
+
   return (
     <button
-      className={`min-h-10 rounded border px-3 py-2 text-sm font-bold transition ${
+      className={`min-h-11 rounded-2xl border px-3 py-2 text-sm font-black transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 ${
         active
-          ? 'border-amber-700 bg-amber-100 text-amber-950'
-          : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500'
+          ? activeStyles
+          : 'border-amber-400/20 bg-black/20 text-amber-100/75 hover:border-amber-300/45 hover:text-amber-50'
       }`}
       onClick={onClick}
       type="button"
@@ -2297,9 +2422,9 @@ function LabeledInput({
 }) {
   return (
     <label className="grid gap-1 text-sm">
-      <span className="font-semibold text-stone-700">{label}</span>
+      <span className="font-semibold text-amber-100/75">{label}</span>
       <input
-        className="min-h-10 rounded border border-stone-300 bg-white px-3 py-2 text-stone-950 outline-none focus:border-amber-700"
+        className="min-h-10 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-2 text-amber-50 outline-none transition placeholder:text-amber-100/30 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}
@@ -2319,9 +2444,9 @@ function NumberInput({
 }) {
   return (
     <label className="grid gap-1 text-sm">
-      <span className="font-semibold text-stone-700">{label}</span>
+      <span className="font-semibold text-amber-100/75">{label}</span>
       <input
-        className="min-h-10 w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-950 outline-none focus:border-amber-700 sm:w-24"
+        className="min-h-10 w-full rounded-xl border border-amber-300/20 bg-black/25 px-3 py-2 text-amber-50 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25 sm:w-24"
         onChange={(event) =>
           onChange(Number.parseInt(event.target.value, 10) || 0)
         }
@@ -2348,9 +2473,9 @@ function SelectField({
 }) {
   return (
     <label className="grid gap-1 text-sm">
-      <span className="font-semibold text-stone-700">{label}</span>
+      <span className="font-semibold text-amber-100/75">{label}</span>
       <select
-        className="min-h-10 rounded border border-stone-300 bg-white px-3 py-2 text-stone-950 outline-none focus:border-amber-700"
+        className="min-h-10 rounded-xl border border-amber-300/20 bg-[#1d140f] px-3 py-2 text-amber-50 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25"
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -2367,31 +2492,135 @@ function SelectField({
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <dt className="text-stone-600">{label}</dt>
-      <dd className="break-all text-right font-semibold text-stone-950">
+      <dt className="text-amber-100/55">{label}</dt>
+      <dd className="break-all text-right font-semibold text-amber-50">
         {value}
       </dd>
     </div>
   );
 }
 
+function StatusBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: RuntimeNoticeTone;
+}) {
+  const styles = {
+    danger: 'border-red-300/30 bg-red-950/35 text-red-100',
+    info: 'border-sky-200/25 bg-sky-950/25 text-sky-100',
+    success: 'border-emerald-200/25 bg-emerald-950/25 text-emerald-100',
+    warning: 'border-amber-200/30 bg-amber-950/35 text-amber-100',
+  }[tone];
+
+  return (
+    <span
+      className={`inline-flex min-h-9 items-center justify-center rounded-full border px-3 py-1 text-center text-xs font-bold uppercase tracking-[0.12em] ${styles}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Notice({
+  children,
+  title,
+  tone,
+}: {
+  children: ReactNode;
+  title: string;
+  tone: RuntimeNoticeTone;
+}) {
+  const styles = {
+    danger: 'border-red-300/35 bg-red-950/45 text-red-50',
+    info: 'border-sky-200/25 bg-sky-950/35 text-sky-50',
+    success: 'border-emerald-200/25 bg-emerald-950/35 text-emerald-50',
+    warning: 'border-amber-200/35 bg-amber-950/45 text-amber-50',
+  }[tone];
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 text-sm ${styles}`}>
+      <p className="font-bold">{title}</p>
+      <div className="mt-1 leading-6 opacity-90">{children}</div>
+    </div>
+  );
+}
+
+function EmptyState({ detail, title }: { detail: string; title: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-amber-300/20 bg-black/20 p-4 text-sm">
+      <p className="font-bold text-amber-100">{title}</p>
+      <p className="mt-1 leading-5 text-amber-100/60">{detail}</p>
+    </div>
+  );
+}
+
+function LatestEventFeed({
+  entries,
+}: {
+  entries: Array<EventLogEntry & { summary: RuntimeEventSummary }>;
+}) {
+  return (
+    <Panel
+      description="Readable summaries of live SSE updates. This is still not replay."
+      eyebrow="Live omens"
+      title="Combat & Event Feed"
+    >
+      <div className="grid gap-2">
+        {entries.length ? (
+          entries.map((entry) => (
+            <div
+              className="rounded-2xl border border-amber-500/15 bg-black/25 p-3"
+              key={entry.id}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-amber-50">
+                    {entry.summary.title}
+                  </p>
+                  <p className="mt-1 text-sm leading-5 text-amber-100/70">
+                    {entry.summary.detail}
+                  </p>
+                </div>
+                <StatusBadge label={entry.at} tone={entry.summary.tone} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyState
+            detail="Subscribe to the session stream, then move, attack, or recover to populate this feed."
+            title="No live events summarized"
+          />
+        )}
+      </div>
+    </Panel>
+  );
+}
+
 function TacticalGrid({
   activeScene,
+  actingParticipantId,
   charactersByParticipant,
   currentTurnParticipantId,
   grid,
+  mode,
   onSelectCell,
   selectedCell,
+  selectedTargetParticipantId,
 }: {
   activeScene: ActiveSceneState | null;
+  actingParticipantId: string;
   charactersByParticipant: Record<string, CharacterResource | undefined>;
   currentTurnParticipantId: string | null;
   grid: {
     height: number;
     width: number;
   };
+  mode: RuntimeMode;
   onSelectCell: (cell: Cell) => void;
   selectedCell: Cell;
+  selectedTargetParticipantId: string;
 }) {
   const cells: Cell[] = [];
 
@@ -2403,7 +2632,7 @@ function TacticalGrid({
 
   return (
     <div
-      className="grid overflow-hidden rounded border border-stone-400 bg-stone-200"
+      className="grid overflow-hidden rounded-3xl border border-amber-400/30 bg-[#110d0a] p-2 shadow-inner shadow-black/70"
       style={{
         gridTemplateColumns: `repeat(${grid.width}, minmax(0, 1fr))`,
       }}
@@ -2420,32 +2649,47 @@ function TacticalGrid({
           placement?.participantId === currentTurnParticipantId;
         const isSelected =
           selectedCell.x === cell.x && selectedCell.y === cell.y;
+        const isActingToken = placement?.participantId === actingParticipantId;
+        const isTarget =
+          placement?.participantId === selectedTargetParticipantId;
+        const isPlayerOwn =
+          mode === 'player' && placement?.participantId === actingParticipantId;
+        const tokenTone = isTarget
+          ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
+          : isPlayerOwn
+            ? 'border-sky-200 bg-sky-500 text-slate-950 shadow-sky-300/35'
+            : isCurrentTurn
+              ? 'border-amber-100 bg-amber-400 text-stone-950 shadow-amber-300/40'
+              : isActingToken
+                ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
+                : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
 
         return (
           <button
             aria-label={`Select cell ${cell.x}, ${cell.y}`}
-            className={`aspect-square min-h-10 border border-stone-300 text-xs transition ${
-              isSelected ? 'bg-amber-200' : 'bg-white hover:bg-amber-50'
+            className={`group relative aspect-square min-h-11 border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
+              isSelected
+                ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
+                : 'bg-[#211711] hover:bg-[#332316]'
             }`}
             key={`${cell.x}-${cell.y}`}
             onClick={() => onSelectCell(cell)}
             type="button"
           >
+            <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
+              {cell.x},{cell.y}
+            </span>
             {placement ? (
               <span
-                className={`mx-auto flex size-8 items-center justify-center rounded-full border text-[11px] font-bold ${
-                  isCurrentTurn
-                    ? 'border-amber-900 bg-amber-500 text-stone-950'
-                    : 'border-stone-900 bg-stone-900 text-white'
+                className={`runtime-token-pop mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
+                  isCurrentTurn ? 'animate-pulse' : ''
                 }`}
                 title={resource?.character.name ?? placement.participantId}
               >
                 {initials(resource?.character.name ?? placement.participantId)}
               </span>
             ) : (
-              <span className="text-[10px] text-stone-400">
-                {cell.x},{cell.y}
-              </span>
+              <span className="sr-only">empty</span>
             )}
           </button>
         );
@@ -2459,38 +2703,46 @@ function CharacterSummary({
   participantId,
   resource,
   title,
+  variant = 'normal',
 }: {
   currentTurnParticipantId: string | null;
   participantId: string;
   resource?: CharacterResource;
   title: string;
+  variant?: 'hero' | 'normal';
 }) {
   if (!resource) {
     return (
-      <div className="rounded border border-stone-200 bg-white/70 p-3 text-sm text-stone-600">
-        {title}: no character loaded
-      </div>
+      <EmptyState
+        detail={`${title}: no character loaded.`}
+        title="No character"
+      />
     );
   }
 
   return (
     <article
-      className={`rounded border p-3 ${
+      className={`rounded-2xl border p-3 ${
         participantId === currentTurnParticipantId
-          ? 'border-amber-600 bg-amber-50'
-          : 'border-stone-200 bg-white/70'
+          ? 'border-amber-300/45 bg-amber-950/35 shadow-lg shadow-amber-950/25'
+          : variant === 'hero'
+            ? 'border-sky-300/35 bg-sky-950/25'
+            : 'border-amber-500/15 bg-black/25'
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold">{resource.character.name}</h3>
-          <p className="text-sm text-stone-600">
+          <h3 className="font-black text-amber-50">
+            {resource.character.name}
+          </h3>
+          <p className="text-sm text-amber-100/60">
             {title} · {resource.character.className} {resource.character.level}
           </p>
         </div>
-        <span className="rounded border border-stone-300 px-2 py-1 text-xs font-bold uppercase">
-          {resource.character.status}
-        </span>
+        <StatusBadge
+          label={resource.character.status}
+          tone={participantId === currentTurnParticipantId ? 'warning' : 'info'}
+        />
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
         <Stat
@@ -2500,7 +2752,7 @@ function CharacterSummary({
         <Stat label="AC" value={String(resource.character.armorClass)} />
         <Stat label="Speed" value={`${resource.character.speed} ft`} />
       </dl>
-      <p className="mt-3 text-xs text-stone-600">
+      <p className="mt-3 text-xs text-amber-100/60">
         Conditions:{' '}
         {resource.overlay.activeConditions.length
           ? resource.overlay.activeConditions.join(', ')
@@ -2512,16 +2764,16 @@ function CharacterSummary({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-stone-200 bg-white px-2 py-2">
-      <dt className="text-xs text-stone-500">{label}</dt>
-      <dd className="font-bold">{value}</dd>
+    <div className="rounded-xl border border-amber-500/15 bg-black/25 px-2 py-2">
+      <dt className="text-xs text-amber-100/50">{label}</dt>
+      <dd className="font-black text-amber-50">{value}</dd>
     </div>
   );
 }
 
 function JsonPreview({ value }: { value: unknown }) {
   return (
-    <pre className="max-h-96 overflow-auto rounded border border-stone-200 bg-stone-950 p-3 text-xs text-stone-100">
+    <pre className="max-h-96 overflow-auto rounded-2xl border border-amber-500/15 bg-black/50 p-3 text-xs text-amber-100/85">
       {JSON.stringify(value, null, 2)}
     </pre>
   );

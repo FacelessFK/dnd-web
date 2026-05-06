@@ -2,6 +2,7 @@ import type {
   CharacterInput,
   CharacterResource,
   RuntimeErrorCode,
+  SessionStreamEvent,
   SessionCommandSuccess,
 } from '@dnd/protocol';
 
@@ -182,6 +183,20 @@ export type RuntimeDisabledReasons = {
   startEncounter: string | null;
 };
 
+export type RuntimeNoticeTone = 'danger' | 'info' | 'success' | 'warning';
+
+export type RuntimeEventSummary = {
+  detail: string;
+  title: string;
+  tone: RuntimeNoticeTone;
+};
+
+export type PlayerNextStep = {
+  detail: string;
+  title: string;
+  tone: RuntimeNoticeTone;
+};
+
 export function getRuntimeDisabledReasons({
   actingParticipantId,
   activeSceneKnown,
@@ -290,6 +305,142 @@ export function getRuntimeDisabledReasons({
         ? null
         : 'Place at least one character in the active scene first.'),
   };
+}
+
+export function getPlayerNextStep({
+  hasActiveScene,
+  hasCharacter,
+  hasEncounter,
+  isCurrentTurn,
+  isJoined,
+  isPlaced,
+  sessionId,
+}: {
+  hasActiveScene: boolean;
+  hasCharacter: boolean;
+  hasEncounter: boolean;
+  isCurrentTurn: boolean;
+  isJoined: boolean;
+  isPlaced: boolean;
+  sessionId: string;
+}): PlayerNextStep {
+  if (!sessionId) {
+    return {
+      detail: 'Paste a session ID from the DM, then join or recover.',
+      title: 'Choose a session',
+      tone: 'info',
+    };
+  }
+
+  if (!isJoined) {
+    return {
+      detail:
+        'Join the session as this participant before reading table state.',
+      title: 'Join the table',
+      tone: 'warning',
+    };
+  }
+
+  if (!hasCharacter) {
+    return {
+      detail: 'Ask the DM to assign and finalize a character, then recover.',
+      title: 'Waiting for character',
+      tone: 'warning',
+    };
+  }
+
+  if (!hasActiveScene) {
+    return {
+      detail: 'The DM has not activated a scene yet, or you need to recover.',
+      title: 'No active scene',
+      tone: 'warning',
+    };
+  }
+
+  if (!isPlaced) {
+    return {
+      detail: 'Your character has no token placement in the active scene.',
+      title: 'Token not placed',
+      tone: 'warning',
+    };
+  }
+
+  if (!hasEncounter) {
+    return {
+      detail:
+        'You can move outside combat; turn resources unlock after encounter start.',
+      title: 'Exploration mode',
+      tone: 'info',
+    };
+  }
+
+  if (!isCurrentTurn) {
+    return {
+      detail: 'Watch the current actor and prepare your target or movement.',
+      title: 'Waiting for your turn',
+      tone: 'info',
+    };
+  }
+
+  return {
+    detail:
+      'Move, attack, or spend your action economy. The server validates legality.',
+    title: 'Your turn',
+    tone: 'success',
+  };
+}
+
+export function isSessionStreamEvent(
+  input: unknown,
+): input is SessionStreamEvent {
+  if (!input || typeof input !== 'object' || !('type' in input)) {
+    return false;
+  }
+
+  return (
+    input.type === 'session_state' ||
+    input.type === 'movement_state' ||
+    input.type === 'encounter_state' ||
+    input.type === 'combat_event' ||
+    input.type === 'character_state'
+  );
+}
+
+export function describeSessionStreamEvent(
+  event: SessionStreamEvent,
+): RuntimeEventSummary {
+  switch (event.type) {
+    case 'combat_event':
+      return {
+        detail: `${event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${event.targetParticipantId} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
+        title: 'Attack resolved',
+        tone: event.hit ? 'danger' : 'warning',
+      };
+    case 'encounter_state':
+      return {
+        detail: `${event.reason.replaceAll('_', ' ')}. Round ${event.encounter.roundNumber}, turn ${event.encounter.currentTurnIndex + 1}.`,
+        title: 'Encounter state',
+        tone: 'info',
+      };
+    case 'movement_state':
+      return {
+        detail: `${event.participantId} ${event.reason.replaceAll('_', ' ')} to ${event.position.x},${event.position.y}.`,
+        title: 'Token movement',
+        tone: 'success',
+      };
+    case 'character_state':
+      return {
+        detail: `${event.characterId} HP is now ${event.hp.current}/${event.hp.max}${event.activeConditions?.length ? ` with ${event.activeConditions.join(', ')}` : ''}.`,
+        title: 'Character state',
+        tone: 'warning',
+      };
+    case 'session_state':
+      return {
+        detail: `${event.reason.replaceAll('_', ' ')}. Revision ${event.revision}.`,
+        title: 'Session state',
+        tone: 'info',
+      };
+  }
 }
 
 export function isExpectedRecoveryMiss(

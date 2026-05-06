@@ -12,14 +12,15 @@ controls, and durable persistence.
 
 ## Current Status
 
-The repository now has the first useful role-aware browser runtime surface at
-`/runtime`, plus refreshed Phase 9 API and handoff documentation. The runtime UI
-lets a DM create and seed sessions, create and activate scenes, place tokens,
-start encounters, drive turn/combat/DM controls, watch SSE events, run a fresh
-demo setup flow, reset local browser state without touching the backend, and
-recover current state through read models after refresh. Player mode can join or
-recover a session, view the assigned character, move its own token, use its own
-turn resources, and attack legal player targets.
+The repository now has a role-aware browser runtime surface at `/runtime`, plus
+refreshed Phase 9 API and handoff documentation. The runtime UI presents a dark
+fantasy tactical tabletop with DM and Player modes. A DM can create and seed
+sessions, create and activate scenes, place tokens, start encounters, drive
+turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo
+setup flow, reset local browser state without touching the backend, and recover
+current state through read models after refresh. Player mode can join or recover
+a session, view the assigned character, move its own token, use its own turn
+resources, and attack legal player targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -82,7 +83,7 @@ Not implemented yet:
   distributed coordination beyond the currently covered DB-backed slices
 - full transaction/outbox persistence boundaries across every command path
 - character builder/library product UI
-- product-grade player UX, map/adventure editor, or polished DM panel
+- production-grade player UX, map/adventure editor, or authenticated DM panel
 - opportunity attacks or out-of-turn reaction windows
 - full condition engine, death saves, spells, weapons, ranged attacks, or monster
   AI

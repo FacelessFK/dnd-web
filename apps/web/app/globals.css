@@ -3,19 +3,43 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(15, 23, 42, 0.08), transparent 40%),
-    #f8fafc;
-  color: #0f172a;
-  font-family: 'Segoe UI', sans-serif;
+    radial-gradient(circle at top left, rgba(180, 83, 9, 0.2), transparent 38%),
+    radial-gradient(
+      circle at top right,
+      rgba(14, 116, 144, 0.14),
+      transparent 34%
+    ),
+    linear-gradient(135deg, #130d0a 0%, #0c111d 60%, #080706 100%);
+  color: #fef3c7;
+  font-family:
+    'Spectral', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+@keyframes runtime-token-pop {
+  0% {
+    transform: scale(0.88);
+  }
+
+  60% {
+    transform: scale(1.08);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.runtime-token-pop {
+  animation: runtime-token-pop 360ms ease-out;
 }

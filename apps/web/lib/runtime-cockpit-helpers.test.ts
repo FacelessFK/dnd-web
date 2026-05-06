@@ -5,12 +5,15 @@ import type { CharacterResource } from '@dnd/protocol';
 
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
+  describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
+  getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
+  isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
 } from './runtime-cockpit-helpers';
@@ -162,6 +165,75 @@ describe('runtime cockpit helpers', () => {
     assert.equal(
       reasons.actorTurnAction,
       'Start or recover an encounter first.',
+    );
+  });
+
+  it('summarizes stream events for the readable combat feed', () => {
+    const summary = describeSessionStreamEvent({
+      attackerCharacterId: 'CHAR-001',
+      attackerParticipantId: 'player-001',
+      damage: 1,
+      encounterId: 'ENC-001',
+      hit: true,
+      reason: 'attack_resolved',
+      roll: {
+        d20: 12,
+        modifier: 5,
+        total: 17,
+      },
+      sessionId: 'SESSION-001',
+      targetArmorClass: 13,
+      targetCharacterId: 'CHAR-002',
+      targetHp: {
+        current: 0,
+        previous: 1,
+      },
+      targetParticipantId: 'player-002',
+      type: 'combat_event',
+    });
+
+    assert.equal(summary.title, 'Attack resolved');
+    assert.equal(summary.tone, 'danger');
+    assert.match(summary.detail, /player-001 rolled 17/);
+    assert.equal(
+      isSessionStreamEvent({
+        type: 'movement_state',
+      }),
+      true,
+    );
+    assert.equal(isSessionStreamEvent({ type: 'unknown_event' }), false);
+  });
+
+  it('explains the next player step from loaded read models', () => {
+    assert.deepEqual(
+      getPlayerNextStep({
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: true,
+        isCurrentTurn: true,
+        isJoined: true,
+        isPlaced: true,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          'Move, attack, or spend your action economy. The server validates legality.',
+        title: 'Your turn',
+        tone: 'success',
+      },
+    );
+
+    assert.equal(
+      getPlayerNextStep({
+        hasActiveScene: false,
+        hasCharacter: false,
+        hasEncounter: false,
+        isCurrentTurn: false,
+        isJoined: false,
+        isPlaced: false,
+        sessionId: 'SESSION-001',
+      }).title,
+      'Join the table',
     );
   });
 });
