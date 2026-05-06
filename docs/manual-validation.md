@@ -27,9 +27,12 @@ have `jq`, run the same `curl` commands and copy the returned IDs into the
 environment variables manually.
 
 For browser-driven local playtesting, start the server and web app with
-`pnpm dev`, open `/runtime`, and use the cockpit's fresh demo setup, Recover,
-and Local Reset controls. Local Reset clears browser cockpit state only; it does
-not delete backend sessions or runtime state.
+`pnpm dev`, open `/runtime`, and choose DM mode or Player mode. DM mode exposes
+fresh demo setup, scene setup, encounter, and override controls. Player mode can
+join or recover a session, view its assigned character, move its own token, use
+its own turn resources, and attack selected player targets. Local Reset clears
+browser runtime state only; it does not delete backend sessions or runtime
+state.
 
 ## What This Covers
 

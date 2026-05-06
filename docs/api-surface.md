@@ -234,13 +234,20 @@ and the Recover button rereads authoritative state through command read models.
 Expected empty-read cases such as `no_active_scene` and `no_active_encounter`
 are treated as recoverable local state, not failed recovery.
 
-## Browser Runtime Cockpit
+## Browser Runtime Surface
 
-The developer cockpit at `/runtime` uses this API surface directly. It can run a
-fresh demo setup, paste and recover an existing session ID, and locally reset
-browser state without deleting server state. The cockpit still treats the
-server as authoritative: grid, encounter, character, and session state are
-rendered from command responses, read-model recovery, or live SSE updates.
+The role-aware runtime surface at `/runtime` uses this API surface directly. The
+launcher supports DM mode and Player mode. DM mode can run a fresh demo setup,
+seed the sample session, operate scene/encounter controls, and use explicit DM
+override commands. Player mode can join or recover an existing session, read its
+assigned character, move only its own token, use turn resources as itself, and
+attack selected player targets. Debug/event details remain available but are
+secondary to the play surface.
+
+The browser still treats the server as authoritative: grid, encounter,
+character, and session state are rendered from command responses, read-model
+recovery, or live SSE updates. Local Reset only clears browser state; it does not
+delete backend sessions or runtime state.
 
 ## Known Limitations
 

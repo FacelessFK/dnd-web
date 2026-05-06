@@ -14,10 +14,15 @@ export type Cell = {
   y: number;
 };
 
+export type RuntimeMode = 'dm' | 'player';
+
 export type StoredCockpitState = {
   charactersByParticipant?: Record<string, string>;
   dmDisplayName?: string;
   dmParticipantId?: string;
+  mode?: RuntimeMode;
+  playerDisplayName?: string;
+  playerParticipantId?: string;
   sceneId?: string;
   sessionId?: string;
 };
@@ -39,6 +44,8 @@ export const samplePlayers = [
     participantId: 'player-002',
   },
 ] as const;
+
+export const defaultPlayer = samplePlayers[0];
 
 export const sampleCharacters: Record<string, CharacterInput> = {
   'player-001': {
@@ -149,6 +156,140 @@ export function getPlayerParticipantIds(
   return participants
     .filter((participant) => participant.role === 'player')
     .map((participant) => participant.id);
+}
+
+export function getActingParticipantId({
+  mode,
+  playerParticipantId,
+  selectedActor,
+}: {
+  mode: RuntimeMode;
+  playerParticipantId: string;
+  selectedActor: string;
+}): string {
+  return mode === 'player' ? playerParticipantId : selectedActor;
+}
+
+export type RuntimeDisabledReasons = {
+  actorTurnAction: string | null;
+  attack: string | null;
+  dmCharacter: string | null;
+  dmEncounter: string | null;
+  joinPlayer: string | null;
+  move: string | null;
+  placeTokens: string | null;
+  recover: string | null;
+  startEncounter: string | null;
+};
+
+export function getRuntimeDisabledReasons({
+  actingParticipantId,
+  activeSceneKnown,
+  activeSceneLoaded,
+  activeScenePlacementCount,
+  busyLabel,
+  encounterLoaded,
+  mode,
+  playerDisplayName,
+  playerParticipantId,
+  playerParticipantIds,
+  selectedActorHasCharacter,
+  sessionId,
+  targetParticipantId,
+}: {
+  actingParticipantId: string;
+  activeSceneKnown: boolean;
+  activeSceneLoaded: boolean;
+  activeScenePlacementCount: number;
+  busyLabel: string | null;
+  encounterLoaded: boolean;
+  mode: RuntimeMode;
+  playerDisplayName: string;
+  playerParticipantId: string;
+  playerParticipantIds: string[];
+  selectedActorHasCharacter: boolean;
+  sessionId: string;
+  targetParticipantId: string;
+}): RuntimeDisabledReasons {
+  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
+  const missingSessionReason = sessionId
+    ? null
+    : 'Create, paste, or recover a session first.';
+  const missingActiveSceneReason = activeSceneLoaded
+    ? null
+    : 'Create/recover an active scene before moving or starting combat.';
+  const missingEncounterReason = encounterLoaded
+    ? null
+    : 'Start or recover an encounter first.';
+  const invalidActorReason = playerParticipantIds.includes(actingParticipantId)
+    ? null
+    : 'Choose a joined player participant as the acting character.';
+  const invalidTargetReason = playerParticipantIds.includes(targetParticipantId)
+    ? actingParticipantId === targetParticipantId
+      ? 'Choose a different target participant.'
+      : null
+    : 'Choose a joined player participant as the target.';
+  const dmOnlyReason =
+    mode === 'dm' ? null : 'Switch to DM mode for this control.';
+  const playerJoinReason =
+    mode === 'player'
+      ? null
+      : 'Switch to Player mode to join as the configured player.';
+  const missingPlayerIdentityReason =
+    playerParticipantId && playerDisplayName
+      ? null
+      : 'Enter a player participant ID and display name.';
+
+  return {
+    actorTurnAction:
+      busyReason ??
+      missingSessionReason ??
+      missingEncounterReason ??
+      invalidActorReason,
+    attack:
+      busyReason ??
+      missingSessionReason ??
+      missingEncounterReason ??
+      invalidActorReason ??
+      invalidTargetReason,
+    dmCharacter:
+      busyReason ??
+      missingSessionReason ??
+      dmOnlyReason ??
+      invalidActorReason ??
+      (selectedActorHasCharacter
+        ? null
+        : 'Load or assign this character first.'),
+    dmEncounter:
+      busyReason ??
+      missingSessionReason ??
+      dmOnlyReason ??
+      missingEncounterReason,
+    joinPlayer:
+      busyReason ??
+      missingSessionReason ??
+      playerJoinReason ??
+      missingPlayerIdentityReason,
+    move:
+      busyReason ??
+      missingSessionReason ??
+      missingActiveSceneReason ??
+      invalidActorReason,
+    placeTokens:
+      busyReason ??
+      missingSessionReason ??
+      dmOnlyReason ??
+      (activeSceneKnown ? null : 'Create or recover an active scene first.'),
+    recover: busyReason ?? missingSessionReason,
+    startEncounter:
+      busyReason ??
+      missingSessionReason ??
+      dmOnlyReason ??
+      missingActiveSceneReason ??
+      (activeScenePlacementCount
+        ? null
+        : 'Place at least one character in the active scene first.'),
+  };
 }
 
 export function isExpectedRecoveryMiss(

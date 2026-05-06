@@ -5,7 +5,7 @@
 The repository is a TypeScript pnpm monorepo with:
 
 - `apps/server`: authoritative Node runtime and HTTP/SSE command surface.
-- `apps/web`: Next.js runtime cockpit.
+- `apps/web`: Next.js role-aware runtime surface.
 - `packages/protocol`: shared Zod schemas and inferred protocol types.
 - `packages/shared`: shared domain primitives.
 - `packages/rules`: deterministic rules and derived-stat helpers.
@@ -23,9 +23,9 @@ Cold boot remains honest: the server does not auto-drain unpublished outbox rows
 because current SSE subscribers are process-local and there is no replay or
 catch-up surface.
 
-## Runtime Cockpit
+## Runtime Surface
 
-The cockpit lives at:
+The browser runtime surface lives at:
 
 ```text
 http://localhost:3000/runtime
@@ -33,26 +33,31 @@ http://localhost:3000/runtime
 
 It can:
 
-- configure the DM participant ID and display name,
-- create a session,
-- join two sample players,
-- create, finalize, and assign sample characters,
-- create and activate an 8x8 scene,
-- place both sample characters,
-- start an encounter,
-- subscribe to the session SSE stream,
-- display session, active-scene, encounter, character, and event-log state,
-- run a fresh demo setup flow for local playtesting,
+- launch in DM mode or Player mode,
+- configure the active role participant ID and display name,
+- create a DM-owned session,
+- join a player to an existing session,
+- run a DM-only fresh demo setup flow for local playtesting,
+- seed sample players and characters from DM mode,
+- create and activate an 8x8 scene from DM mode,
+- place both sample characters from DM mode,
+- start an encounter from DM mode,
+- subscribe to the session SSE stream as the active role,
+- display session, active-scene, encounter, assigned-character, and event-log
+  state,
 - recover state after refresh using session, scene, active-scene, encounter,
   and assigned-character read-model commands,
 - paste an existing session ID and clear local cockpit state without touching
   backend state,
-- trigger action, bonus action, reaction, turn advance, attack, movement, DM HP,
-  DM reposition, condition tags, turn actor override, turn usage override, and
-  encounter end.
+- let players move only their own token, use their own action/bonus/reaction,
+  and attack selected player targets,
+- let DMs trigger turn advance, attack/movement for selected player actors, HP
+  overrides, reposition, condition tags, turn actor override, turn usage
+  override, and encounter end.
 
 The UI intentionally submits commands to the authoritative server instead of
-treating browser state as truth.
+treating browser state as truth. It is role-aware, but it is not production
+authentication or authorization.
 
 ## Running Locally
 
@@ -115,8 +120,8 @@ server tests and smoke tests.
 - No multi-process SSE subscriber persistence or distributed coordination.
 - No opportunity attacks, out-of-turn reaction windows, full condition engine,
   death saves, spells, weapons, ranged attacks, or monster AI.
-- The cockpit is a developer/DM runtime tool, not a polished player product
-  experience.
+- The runtime surface is a playable DM/player MVP, not a polished product
+  experience or production auth boundary.
 - The default local server still starts with the in-memory runtime unless
   composed with DB-backed stores and transaction boundaries.
 
@@ -124,7 +129,7 @@ server tests and smoke tests.
 
 - Add a browser-oriented smoke flow if the cockpit becomes a long-lived manual
   validation surface.
-- Add product-grade player-facing views after the current runtime cockpit has
+- Add product-grade player-facing views after the current runtime surface has
   served its manual validation purpose.
 - Continue persistence work only with explicit claims about which command paths
   are covered.

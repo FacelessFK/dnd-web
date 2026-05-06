@@ -25,17 +25,21 @@ import {
 import {
   cockpitStorageKey,
   defaultDm,
+  defaultPlayer,
   flag,
   formatRuntimeFailure,
+  getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
   getPlayerParticipantIds,
+  getRuntimeDisabledReasons,
   initials,
   isExpectedRecoveryMiss,
   sampleCharacters,
   samplePlayers,
   sanitizeSessionIdInput,
   type Cell,
+  type RuntimeMode,
   type SessionSnapshot,
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
@@ -67,6 +71,13 @@ export function RuntimeCockpit() {
   );
   const [dmDisplayName, setDmDisplayName] = useState<string>(
     defaultDm.displayName,
+  );
+  const [mode, setMode] = useState<RuntimeMode>('dm');
+  const [playerParticipantId, setPlayerParticipantId] = useState<string>(
+    defaultPlayer.participantId,
+  );
+  const [playerDisplayName, setPlayerDisplayName] = useState<string>(
+    defaultPlayer.displayName,
   );
   const [sessionId, setSessionId] = useState('');
   const [sceneId, setSceneId] = useState('');
@@ -111,6 +122,15 @@ export function RuntimeCockpit() {
     () => getPlayerParticipantIds(sessionState),
     [sessionState],
   );
+  const actingParticipantId = getActingParticipantId({
+    mode,
+    playerParticipantId,
+    selectedActor,
+  });
+  const streamParticipantId =
+    mode === 'dm' ? dmParticipantId : playerParticipantId;
+  const streamDisplayName = mode === 'dm' ? dmDisplayName : playerDisplayName;
+  const streamRole = mode === 'dm' ? 'dm' : 'player';
   const participants = sessionState?.participants ?? [
     {
       characterId: null,
@@ -130,6 +150,21 @@ export function RuntimeCockpit() {
       lastSeenAt: '',
       role: 'player' as const,
     })),
+    ...(samplePlayers.some(
+      (player) => player.participantId === playerParticipantId,
+    )
+      ? []
+      : [
+          {
+            characterId: knownCharacterIds[playerParticipantId] ?? null,
+            connectionStatus: 'disconnected' as const,
+            displayName: playerDisplayName || playerParticipantId,
+            id: playerParticipantId,
+            joinedAt: '',
+            lastSeenAt: '',
+            role: 'player' as const,
+          },
+        ]),
   ];
 
   const stream = useSessionStream({
@@ -138,7 +173,7 @@ export function RuntimeCockpit() {
       applyStreamEvent(event);
       pushLog(event.type, event);
     },
-    participantId: dmParticipantId,
+    participantId: streamParticipantId,
     sessionId: sessionId || null,
   });
 
@@ -154,6 +189,13 @@ export function RuntimeCockpit() {
 
       setDmParticipantId(stored.dmParticipantId ?? defaultDm.participantId);
       setDmDisplayName(stored.dmDisplayName ?? defaultDm.displayName);
+      setMode(stored.mode ?? 'dm');
+      setPlayerParticipantId(
+        stored.playerParticipantId ?? defaultPlayer.participantId,
+      );
+      setPlayerDisplayName(
+        stored.playerDisplayName ?? defaultPlayer.displayName,
+      );
       setSessionId(stored.sessionId ?? '');
       setSceneId(stored.sceneId ?? '');
     } catch {
@@ -162,7 +204,7 @@ export function RuntimeCockpit() {
   }, []);
 
   useEffect(() => {
-    if (!playerParticipantIds.length) {
+    if (mode !== 'dm' || !playerParticipantIds.length) {
       return;
     }
 
@@ -177,17 +219,29 @@ export function RuntimeCockpit() {
         ? current
         : firstPlayerParticipantId,
     );
-    setSelectedTarget((current) => {
-      const fallbackTarget =
-        playerParticipantIds.find(
-          (participantId) => participantId !== selectedActor,
-        ) ?? firstPlayerParticipantId;
+  }, [mode, playerParticipantIds]);
 
-      return playerParticipantIds.includes(current) && current !== selectedActor
+  useEffect(() => {
+    if (!playerParticipantIds.length) {
+      return;
+    }
+
+    const firstTargetParticipantId =
+      playerParticipantIds.find(
+        (participantId) => participantId !== actingParticipantId,
+      ) ?? playerParticipantIds[0];
+
+    if (!firstTargetParticipantId) {
+      return;
+    }
+
+    setSelectedTarget((current) => {
+      return playerParticipantIds.includes(current) &&
+        current !== actingParticipantId
         ? current
-        : fallbackTarget;
+        : firstTargetParticipantId;
     });
-  }, [playerParticipantIds, selectedActor]);
+  }, [actingParticipantId, playerParticipantIds]);
 
   useEffect(() => {
     const stored: StoredCockpitState = {
@@ -199,6 +253,9 @@ export function RuntimeCockpit() {
       ),
       dmDisplayName,
       dmParticipantId,
+      mode,
+      playerDisplayName,
+      playerParticipantId,
       sceneId,
       sessionId,
     };
@@ -208,6 +265,9 @@ export function RuntimeCockpit() {
     charactersByParticipant,
     dmDisplayName,
     dmParticipantId,
+    mode,
+    playerDisplayName,
+    playerParticipantId,
     sceneId,
     sessionId,
   ]);
@@ -284,10 +344,34 @@ export function RuntimeCockpit() {
     setEventLog([]);
   }
 
+  function switchMode(nextMode: RuntimeMode): void {
+    setMode(nextMode);
+    setStreamEnabled(false);
+    setCommandError(null);
+    setRecoveryNotes([]);
+  }
+
+  function switchPlayerParticipantId(nextParticipantId: string): void {
+    setStreamEnabled(false);
+    setPlayerParticipantId(nextParticipantId.trim());
+    setCommandError(null);
+    setRecoveryNotes([]);
+  }
+
+  function switchDmParticipantId(nextParticipantId: string): void {
+    setStreamEnabled(false);
+    setDmParticipantId(nextParticipantId.trim());
+    setCommandError(null);
+    setRecoveryNotes([]);
+  }
+
   function resetLocalCockpit(): void {
     localStorage.removeItem(cockpitStorageKey);
     setDmParticipantId(defaultDm.participantId);
     setDmDisplayName(defaultDm.displayName);
+    setMode('dm');
+    setPlayerParticipantId(defaultPlayer.participantId);
+    setPlayerDisplayName(defaultPlayer.displayName);
     setSessionId('');
     setStreamEnabled(false);
     clearRuntimeReadModels();
@@ -407,9 +491,9 @@ export function RuntimeCockpit() {
         'create_session',
         sendSessionCommand({
           actor: {
-            displayName: dmDisplayName,
-            participantId: dmParticipantId,
-            role: 'dm',
+            displayName: streamDisplayName,
+            participantId: streamParticipantId,
+            role: streamRole,
           },
           commandId: createCommandId('create-session'),
           payload: {
@@ -421,6 +505,32 @@ export function RuntimeCockpit() {
 
       setStreamEnabled(false);
       clearRuntimeReadModels();
+      applySessionSnapshot(response.data.state);
+
+      return response;
+    });
+  }
+
+  async function joinCurrentPlayer(): Promise<void> {
+    await runTask('join current player', async () => {
+      assertSession();
+
+      const response = await unwrap(
+        `join_session ${playerParticipantId}`,
+        sendSessionCommand({
+          actor: {
+            displayName: playerDisplayName,
+            participantId: playerParticipantId,
+            role: 'player',
+          },
+          commandId: createCommandId(`join-${playerParticipantId}`),
+          payload: {
+            sessionId,
+          },
+          type: 'join_session',
+        }),
+      );
+
       applySessionSnapshot(response.data.state);
 
       return response;
@@ -568,7 +678,7 @@ export function RuntimeCockpit() {
         'create_scene',
         sendSceneCommand({
           actor: {
-            participantId: dmParticipantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId('demo-create-scene'),
           payload: {
@@ -597,7 +707,7 @@ export function RuntimeCockpit() {
         'activate_scene_for_session',
         sendSceneCommand({
           actor: {
-            participantId: dmParticipantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId('demo-activate-scene'),
           payload: {
@@ -954,9 +1064,9 @@ export function RuntimeCockpit() {
         'reconnect_session',
         sendSessionCommand({
           actor: {
-            displayName: dmDisplayName,
-            participantId: dmParticipantId,
-            role: 'dm',
+            displayName: streamDisplayName,
+            participantId: streamParticipantId,
+            role: streamRole,
           },
           commandId: createCommandId('reconnect'),
           payload: {
@@ -977,7 +1087,7 @@ export function RuntimeCockpit() {
       if (recoveredActiveSceneId) {
         const sceneResult = await sendSceneCommand({
           actor: {
-            participantId: dmParticipantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId('get-scene'),
           payload: {
@@ -1005,7 +1115,7 @@ export function RuntimeCockpit() {
 
         const activeSceneResult = await sendMovementCommand({
           actor: {
-            participantId: dmParticipantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId('get-active-scene'),
           payload: {
@@ -1050,7 +1160,7 @@ export function RuntimeCockpit() {
 
       const encounterResult = await sendEncounterCommand({
         actor: {
-          participantId: dmParticipantId,
+          participantId: streamParticipantId,
         },
         commandId: createCommandId('get-encounter'),
         payload: {
@@ -1086,7 +1196,7 @@ export function RuntimeCockpit() {
       )) {
         const characterResult = await sendCharacterCommand({
           actor: {
-            participantId: participant.participantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId(
             `get-character-${participant.participantId}`,
@@ -1141,7 +1251,7 @@ export function RuntimeCockpit() {
         label,
         sendMovementCommand({
           actor: {
-            participantId: dmParticipantId,
+            participantId: streamParticipantId,
           },
           commandId: createCommandId('get-active-scene'),
           payload: {
@@ -1175,7 +1285,7 @@ export function RuntimeCockpit() {
       assertSession();
 
       const actorParticipantId =
-        type === 'advance_turn' ? dmParticipantId : selectedActor;
+        type === 'advance_turn' ? dmParticipantId : actingParticipantId;
       const response = await unwrap(
         type,
         sendEncounterCommand({
@@ -1205,7 +1315,7 @@ export function RuntimeCockpit() {
         'attack',
         sendEncounterCommand({
           actor: {
-            participantId: selectedActor,
+            participantId: actingParticipantId,
           },
           commandId: createCommandId('attack'),
           payload: {
@@ -1231,11 +1341,11 @@ export function RuntimeCockpit() {
         'move_character_in_active_scene',
         sendMovementCommand({
           actor: {
-            participantId: selectedActor,
+            participantId: actingParticipantId,
           },
           commandId: createCommandId('move-character'),
           payload: {
-            participantId: selectedActor,
+            participantId: actingParticipantId,
             position: selectedCell,
             sessionId,
           },
@@ -1434,12 +1544,10 @@ export function RuntimeCockpit() {
     height: 8,
     width: 8,
   };
-  const selectedCharacter = charactersByParticipant[selectedActor];
+  const playerCharacter = charactersByParticipant[playerParticipantId];
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
   );
-  const selectedActorIsPlayer = playerParticipantIds.includes(selectedActor);
-  const selectedTargetIsPlayer = playerParticipantIds.includes(selectedTarget);
   const currentTurnName = currentTurnParticipantId
     ? getParticipantName(participants, currentTurnParticipantId)
     : 'No active turn';
@@ -1447,50 +1555,27 @@ export function RuntimeCockpit() {
   const missingSessionReason = !canUseSession
     ? 'Create, paste, or recover a session first.'
     : null;
-  const missingActiveSceneReason = !activeScene
-    ? 'Create/recover an active scene before moving or starting combat.'
-    : null;
-  const missingEncounterReason = !encounter
-    ? 'Start or recover an encounter first.'
-    : null;
-  const invalidActorReason = !selectedActorIsPlayer
-    ? 'Choose a player participant as the acting character.'
-    : null;
-  const invalidTargetReason = !selectedTargetIsPlayer
-    ? 'Choose a player participant as the target.'
-    : selectedActor === selectedTarget
-      ? 'Choose a different target participant.'
-      : null;
-  const startEncounterDisabledReason =
-    busyReason ??
-    missingSessionReason ??
-    missingActiveSceneReason ??
-    (activeScene?.placedCharacters.length
-      ? null
-      : 'Place at least one character in the active scene first.');
-  const placeTokensDisabledReason =
-    busyReason ??
-    missingSessionReason ??
-    (sceneId ? null : 'Create or recover an active scene first.');
-  const playerActionDisabledReason =
-    busyReason ??
-    missingSessionReason ??
-    missingEncounterReason ??
-    invalidActorReason;
-  const attackDisabledReason =
-    playerActionDisabledReason ?? invalidTargetReason;
-  const movementDisabledReason =
-    busyReason ??
-    missingSessionReason ??
-    missingActiveSceneReason ??
-    invalidActorReason;
-  const dmCharacterDisabledReason =
-    busyReason ??
-    missingSessionReason ??
-    invalidActorReason ??
-    (selectedCharacter ? null : 'Load or assign this character first.');
-  const dmEncounterDisabledReason =
-    busyReason ?? missingSessionReason ?? missingEncounterReason;
+  const disabledReasons = getRuntimeDisabledReasons({
+    actingParticipantId,
+    activeSceneKnown: Boolean(activeScene || sceneId),
+    activeSceneLoaded: Boolean(activeScene),
+    activeScenePlacementCount: activeScene?.placedCharacters.length ?? 0,
+    busyLabel,
+    encounterLoaded: Boolean(encounter),
+    mode,
+    playerDisplayName,
+    playerParticipantId,
+    playerParticipantIds,
+    selectedActorHasCharacter: Boolean(
+      knownCharacterIds[actingParticipantId] ??
+      charactersByParticipant[actingParticipantId]?.character.id,
+    ),
+    sessionId,
+    targetParticipantId: selectedTarget,
+  });
+  const targetParticipants = playerParticipants.filter(
+    (participant) => participant.id !== actingParticipantId,
+  );
   const activeSceneLabel = scene
     ? `${scene.name} (${scene.id})`
     : (activeScene?.activeSceneId ?? sceneId) || 'none';
@@ -1504,12 +1589,12 @@ export function RuntimeCockpit() {
               Developer runtime cockpit
             </p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-              D&amp;D DM-Driven Platform
+              Role-Aware Runtime
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-700">
-              Browser controls for the existing authoritative backend. Commands
-              still run through the server; SSE is live only, and recovery uses
-              read models.
+              Browser play surface for the existing authoritative backend.
+              Commands still run through the server; SSE is live only, and
+              recovery uses read models.
             </p>
           </div>
           <div className="rounded border border-stone-300 bg-white/70 px-3 py-2 text-xs text-stone-700">
@@ -1536,34 +1621,76 @@ export function RuntimeCockpit() {
 
         <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="flex flex-col gap-5">
-            <Panel title="Session Setup">
+            <Panel title="Runtime Launcher">
               <div className="grid gap-3">
-                <LabeledInput
-                  label="DM participant ID"
-                  onChange={setDmParticipantId}
-                  value={dmParticipantId}
-                />
-                <LabeledInput
-                  label="DM display name"
-                  onChange={setDmDisplayName}
-                  value={dmDisplayName}
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <ModeButton
+                    active={mode === 'dm'}
+                    label="DM Mode"
+                    onClick={() => switchMode('dm')}
+                  />
+                  <ModeButton
+                    active={mode === 'player'}
+                    label="Player Mode"
+                    onClick={() => switchMode('player')}
+                  />
+                </div>
                 <LabeledInput
                   label="Session ID"
                   onChange={switchSessionId}
                   placeholder="Paste an existing session ID to recover"
                   value={sessionId}
                 />
+                {mode === 'dm' ? (
+                  <>
+                    <LabeledInput
+                      label="DM participant ID"
+                      onChange={switchDmParticipantId}
+                      value={dmParticipantId}
+                    />
+                    <LabeledInput
+                      label="DM display name"
+                      onChange={setDmDisplayName}
+                      value={dmDisplayName}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <LabeledInput
+                      label="Player participant ID"
+                      onChange={switchPlayerParticipantId}
+                      value={playerParticipantId}
+                    />
+                    <LabeledInput
+                      label="Player display name"
+                      onChange={setPlayerDisplayName}
+                      value={playerDisplayName}
+                    />
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-2">
+                  {mode === 'dm' ? (
+                    <ActionButton
+                      disabled={Boolean(busyLabel)}
+                      disabledReason={busyReason ?? undefined}
+                      label="Create Session"
+                      onClick={createSession}
+                    />
+                  ) : (
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.joinPlayer)}
+                      disabledReason={disabledReasons.joinPlayer ?? undefined}
+                      label="Join Session"
+                      onClick={joinCurrentPlayer}
+                    />
+                  )}
                   <ActionButton
-                    disabled={Boolean(busyLabel)}
-                    label="Create Session"
-                    onClick={createSession}
-                  />
-                  <ActionButton
-                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabled={Boolean(disabledReasons.recover)}
                     disabledReason={
-                      missingSessionReason ?? busyReason ?? undefined
+                      disabledReasons.recover ??
+                      missingSessionReason ??
+                      busyReason ??
+                      undefined
                     }
                     label="Recover"
                     onClick={recoverReadModels}
@@ -1572,75 +1699,90 @@ export function RuntimeCockpit() {
                 </div>
                 <ActionButton
                   disabled={Boolean(busyLabel)}
-                  label="Run Fresh Demo Setup"
-                  onClick={runFreshDemoSetup}
-                  variant="secondary"
-                />
-                <ActionButton
-                  disabled={Boolean(missingSessionReason ?? busyReason)}
-                  disabledReason={
-                    missingSessionReason ?? busyReason ?? undefined
-                  }
-                  label="Join Sample Players"
-                  onClick={joinSamplePlayers}
-                  variant="secondary"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <ActionButton
-                    disabled={Boolean(missingSessionReason ?? busyReason)}
-                    disabledReason={
-                      missingSessionReason ?? busyReason ?? undefined
-                    }
-                    label="Create Characters"
-                    onClick={createSampleCharacters}
-                    variant="secondary"
-                  />
-                  <ActionButton
-                    disabled={Boolean(missingSessionReason ?? busyReason)}
-                    disabledReason={
-                      missingSessionReason ?? busyReason ?? undefined
-                    }
-                    label="Finalize + Assign"
-                    onClick={finalizeAndAssignCharacters}
-                    variant="secondary"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <ActionButton
-                    disabled={Boolean(missingSessionReason ?? busyReason)}
-                    disabledReason={
-                      missingSessionReason ?? busyReason ?? undefined
-                    }
-                    label="Create Scene"
-                    onClick={createAndActivateScene}
-                    variant="secondary"
-                  />
-                  <ActionButton
-                    disabled={Boolean(placeTokensDisabledReason)}
-                    disabledReason={placeTokensDisabledReason ?? undefined}
-                    label="Place Tokens"
-                    onClick={placeSampleCharacters}
-                    variant="secondary"
-                  />
-                </div>
-                <ActionButton
-                  disabled={Boolean(startEncounterDisabledReason)}
-                  disabledReason={startEncounterDisabledReason ?? undefined}
-                  label="Start Encounter"
-                  onClick={startEncounter}
-                />
-                <ActionButton
-                  disabled={Boolean(busyLabel)}
+                  disabledReason={busyReason ?? undefined}
                   label="Local Reset"
                   onClick={resetLocalCockpit}
                   variant="danger"
                 />
                 <p className="text-xs leading-5 text-stone-600">
-                  Demo setup creates a fresh backend session. Local reset only
-                  clears this browser cockpit; it does not delete server state.
+                  {mode === 'dm'
+                    ? 'DM mode owns setup, scene, encounter, and override controls.'
+                    : 'Player mode can join, recover, move its own token, use its own turn resources, and attack legal targets.'}{' '}
+                  Local Reset clears this browser only.
                 </p>
               </div>
             </Panel>
+
+            {mode === 'dm' ? (
+              <Panel title="DM Setup">
+                <div className="grid gap-3">
+                  <ActionButton
+                    disabled={Boolean(busyLabel)}
+                    disabledReason={busyReason ?? undefined}
+                    label="Run Fresh Demo Setup"
+                    onClick={runFreshDemoSetup}
+                    variant="secondary"
+                  />
+                  <ActionButton
+                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabledReason={
+                      missingSessionReason ?? busyReason ?? undefined
+                    }
+                    label="Join Sample Players"
+                    onClick={joinSamplePlayers}
+                    variant="secondary"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <ActionButton
+                      disabled={Boolean(missingSessionReason ?? busyReason)}
+                      disabledReason={
+                        missingSessionReason ?? busyReason ?? undefined
+                      }
+                      label="Create Characters"
+                      onClick={createSampleCharacters}
+                      variant="secondary"
+                    />
+                    <ActionButton
+                      disabled={Boolean(missingSessionReason ?? busyReason)}
+                      disabledReason={
+                        missingSessionReason ?? busyReason ?? undefined
+                      }
+                      label="Finalize + Assign"
+                      onClick={finalizeAndAssignCharacters}
+                      variant="secondary"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <ActionButton
+                      disabled={Boolean(missingSessionReason ?? busyReason)}
+                      disabledReason={
+                        missingSessionReason ?? busyReason ?? undefined
+                      }
+                      label="Create Scene"
+                      onClick={createAndActivateScene}
+                      variant="secondary"
+                    />
+                    <ActionButton
+                      disabled={Boolean(disabledReasons.placeTokens)}
+                      disabledReason={disabledReasons.placeTokens ?? undefined}
+                      label="Place Tokens"
+                      onClick={placeSampleCharacters}
+                      variant="secondary"
+                    />
+                  </div>
+                  <ActionButton
+                    disabled={Boolean(disabledReasons.startEncounter)}
+                    disabledReason={disabledReasons.startEncounter ?? undefined}
+                    label="Start Encounter"
+                    onClick={startEncounter}
+                  />
+                  <p className="text-xs leading-5 text-stone-600">
+                    Fresh demo setup creates a new backend session and stops on
+                    the first failed command.
+                  </p>
+                </div>
+              </Panel>
+            ) : null}
 
             <Panel title="Live Stream">
               <div className="flex items-center justify-between gap-3">
@@ -1649,7 +1791,8 @@ export function RuntimeCockpit() {
                     {streamEnabled ? stream.status : 'idle'}
                   </p>
                   <p className="mt-1 text-xs text-stone-600">
-                    {stream.error ?? 'Subscribes as the configured DM.'}
+                    {stream.error ??
+                      `Subscribes as ${streamDisplayName} (${streamParticipantId}).`}
                   </p>
                 </div>
                 <ActionButton
@@ -1665,6 +1808,14 @@ export function RuntimeCockpit() {
             <Panel title="Command State">
               <dl className="grid gap-2 text-sm">
                 <StatusRow label="Busy" value={busyLabel ?? 'idle'} />
+                <StatusRow
+                  label="Mode"
+                  value={mode === 'dm' ? 'DM' : 'Player'}
+                />
+                <StatusRow
+                  label="Runtime actor"
+                  value={`${streamDisplayName} (${streamParticipantId})`}
+                />
                 <StatusRow label="Session ID" value={sessionId || 'none'} />
                 <StatusRow label="Active scene ID" value={sceneId || 'none'} />
                 <StatusRow label="Scene name" value={scene?.name ?? 'none'} />
@@ -1694,15 +1845,26 @@ export function RuntimeCockpit() {
                   selectedCell={selectedCell}
                 />
                 <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
-                  <SelectField
-                    label="Actor"
-                    onChange={setSelectedActor}
-                    options={playerParticipants.map((participant) => ({
-                      label: `${participant.displayName} (${participant.id})`,
-                      value: participant.id,
-                    }))}
-                    value={selectedActor}
-                  />
+                  {mode === 'dm' ? (
+                    <SelectField
+                      label="Actor"
+                      onChange={setSelectedActor}
+                      options={playerParticipants.map((participant) => ({
+                        label: `${participant.displayName} (${participant.id})`,
+                        value: participant.id,
+                      }))}
+                      value={selectedActor}
+                    />
+                  ) : (
+                    <div className="rounded border border-stone-200 bg-white/70 px-3 py-2 text-sm">
+                      <p className="font-semibold text-stone-700">
+                        Acting as player
+                      </p>
+                      <p className="break-all text-stone-950">
+                        {playerDisplayName} ({playerParticipantId})
+                      </p>
+                    </div>
+                  )}
                   <NumberInput
                     label="X"
                     onChange={(x) =>
@@ -1725,18 +1887,22 @@ export function RuntimeCockpit() {
                   />
                   <div className="flex gap-2">
                     <ActionButton
-                      disabled={Boolean(movementDisabledReason)}
-                      disabledReason={movementDisabledReason ?? undefined}
+                      disabled={Boolean(disabledReasons.move)}
+                      disabledReason={disabledReasons.move ?? undefined}
                       label="Move"
                       onClick={moveSelectedActor}
                       variant="secondary"
                     />
-                    <ActionButton
-                      disabled={Boolean(dmCharacterDisabledReason)}
-                      disabledReason={dmCharacterDisabledReason ?? undefined}
-                      label="DM Reposition"
-                      onClick={dmRepositionSelected}
-                    />
+                    {mode === 'dm' ? (
+                      <ActionButton
+                        disabled={Boolean(disabledReasons.dmCharacter)}
+                        disabledReason={
+                          disabledReasons.dmCharacter ?? undefined
+                        }
+                        label="DM Reposition"
+                        onClick={dmRepositionSelected}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </Panel>
@@ -1768,7 +1934,7 @@ export function RuntimeCockpit() {
                   <SelectField
                     label="Target"
                     onChange={setSelectedTarget}
-                    options={playerParticipants.map((participant) => ({
+                    options={targetParticipants.map((participant) => ({
                       label: `${participant.displayName} (${participant.id})`,
                       value: participant.id,
                     }))}
@@ -1776,37 +1942,47 @@ export function RuntimeCockpit() {
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <ActionButton
-                      disabled={Boolean(playerActionDisabledReason)}
-                      disabledReason={playerActionDisabledReason ?? undefined}
+                      disabled={Boolean(disabledReasons.actorTurnAction)}
+                      disabledReason={
+                        disabledReasons.actorTurnAction ?? undefined
+                      }
                       label="Use Action"
                       onClick={() => runEncounterCommand('use_action')}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={Boolean(playerActionDisabledReason)}
-                      disabledReason={playerActionDisabledReason ?? undefined}
+                      disabled={Boolean(disabledReasons.actorTurnAction)}
+                      disabledReason={
+                        disabledReasons.actorTurnAction ?? undefined
+                      }
                       label="Use Bonus"
                       onClick={() => runEncounterCommand('use_bonus_action')}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={Boolean(playerActionDisabledReason)}
-                      disabledReason={playerActionDisabledReason ?? undefined}
+                      disabled={Boolean(disabledReasons.actorTurnAction)}
+                      disabledReason={
+                        disabledReasons.actorTurnAction ?? undefined
+                      }
                       label="Use Reaction"
                       onClick={() => runEncounterCommand('use_reaction')}
                       variant="secondary"
                     />
-                    <ActionButton
-                      disabled={Boolean(dmEncounterDisabledReason)}
-                      disabledReason={dmEncounterDisabledReason ?? undefined}
-                      label="Advance Turn"
-                      onClick={() => runEncounterCommand('advance_turn')}
-                      variant="secondary"
-                    />
+                    {mode === 'dm' ? (
+                      <ActionButton
+                        disabled={Boolean(disabledReasons.dmEncounter)}
+                        disabledReason={
+                          disabledReasons.dmEncounter ?? undefined
+                        }
+                        label="Advance Turn"
+                        onClick={() => runEncounterCommand('advance_turn')}
+                        variant="secondary"
+                      />
+                    ) : null}
                   </div>
                   <ActionButton
-                    disabled={Boolean(attackDisabledReason)}
-                    disabledReason={attackDisabledReason ?? undefined}
+                    disabled={Boolean(disabledReasons.attack)}
+                    disabledReason={disabledReasons.attack ?? undefined}
                     label="Attack Target"
                     onClick={attackTarget}
                   />
@@ -1817,9 +1993,15 @@ export function RuntimeCockpit() {
             <section className="grid gap-5 lg:grid-cols-2">
               <Panel title="Characters">
                 <div className="grid gap-3">
-                  {participants
-                    .filter((participant) => participant.role === 'player')
-                    .map((participant) => (
+                  {mode === 'player' ? (
+                    <CharacterSummary
+                      currentTurnParticipantId={currentTurnParticipantId}
+                      participantId={playerParticipantId}
+                      resource={playerCharacter}
+                      title={`${playerDisplayName} (you)`}
+                    />
+                  ) : (
+                    playerParticipants.map((participant) => (
                       <CharacterSummary
                         currentTurnParticipantId={currentTurnParticipantId}
                         key={participant.id}
@@ -1827,158 +2009,197 @@ export function RuntimeCockpit() {
                         resource={charactersByParticipant[participant.id]}
                         title={participant.displayName}
                       />
-                    ))}
+                    ))
+                  )}
                 </div>
               </Panel>
 
-              <Panel title="DM Controls">
-                <div className="grid gap-3">
-                  <SelectField
-                    label="Controlled participant"
-                    onChange={setSelectedActor}
-                    options={playerParticipants.map((participant) => ({
-                      label: `${participant.displayName} (${participant.id})`,
-                      value: participant.id,
-                    }))}
-                    value={selectedActor}
-                  />
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
-                    <LabeledInput
-                      label="Current HP"
-                      onChange={setHpDraft}
-                      value={hpDraft}
+              {mode === 'dm' ? (
+                <Panel title="DM Controls">
+                  <div className="grid gap-3">
+                    <SelectField
+                      label="Controlled participant"
+                      onChange={setSelectedActor}
+                      options={playerParticipants.map((participant) => ({
+                        label: `${participant.displayName} (${participant.id})`,
+                        value: participant.id,
+                      }))}
+                      value={selectedActor}
                     />
-                    <div className="self-end">
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <LabeledInput
+                        label="Current HP"
+                        onChange={setHpDraft}
+                        value={hpDraft}
+                      />
+                      <div className="self-end">
+                        <ActionButton
+                          disabled={Boolean(disabledReasons.dmCharacter)}
+                          disabledReason={
+                            disabledReasons.dmCharacter ?? undefined
+                          }
+                          label="Set HP"
+                          onClick={dmSetCurrentHp}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <LabeledInput
+                        label="Condition tags"
+                        onChange={setConditionsDraft}
+                        value={conditionsDraft}
+                      />
                       <ActionButton
-                        disabled={Boolean(dmCharacterDisabledReason)}
-                        disabledReason={dmCharacterDisabledReason ?? undefined}
-                        label="Set HP"
-                        onClick={dmSetCurrentHp}
+                        disabled={Boolean(disabledReasons.dmCharacter)}
+                        disabledReason={
+                          disabledReasons.dmCharacter ?? undefined
+                        }
+                        label="Set Conditions"
+                        onClick={dmSetConditions}
+                        variant="secondary"
                       />
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <LabeledInput
-                      label="Condition tags"
-                      onChange={setConditionsDraft}
-                      value={conditionsDraft}
-                    />
+                    <div className="grid gap-2 rounded border border-stone-200 bg-white/70 p-3">
+                      <p className="text-sm font-semibold">Turn override</p>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          checked={turnUsageDraft.actionUsed}
+                          onChange={(event) =>
+                            setTurnUsageDraft((draft) => ({
+                              ...draft,
+                              actionUsed: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        Action used
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          checked={turnUsageDraft.bonusActionUsed}
+                          onChange={(event) =>
+                            setTurnUsageDraft((draft) => ({
+                              ...draft,
+                              bonusActionUsed: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        Bonus action used
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          checked={turnUsageDraft.reactionUsed}
+                          onChange={(event) =>
+                            setTurnUsageDraft((draft) => ({
+                              ...draft,
+                              reactionUsed: event.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        Reaction used
+                      </label>
+                      <NumberInput
+                        label="Movement used"
+                        onChange={(movementUsed) =>
+                          setTurnUsageDraft((draft) => ({
+                            ...draft,
+                            movementUsed,
+                          }))
+                        }
+                        value={turnUsageDraft.movementUsed}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <ActionButton
+                          disabled={Boolean(disabledReasons.dmEncounter)}
+                          disabledReason={
+                            disabledReasons.dmEncounter ?? undefined
+                          }
+                          label="Set Turn Actor"
+                          onClick={dmSetTurnParticipant}
+                          variant="secondary"
+                        />
+                        <ActionButton
+                          disabled={Boolean(disabledReasons.dmEncounter)}
+                          disabledReason={
+                            disabledReasons.dmEncounter ?? undefined
+                          }
+                          label="Set Usage"
+                          onClick={dmSetTurnUsage}
+                          variant="secondary"
+                        />
+                      </div>
+                    </div>
                     <ActionButton
-                      disabled={Boolean(dmCharacterDisabledReason)}
-                      disabledReason={dmCharacterDisabledReason ?? undefined}
-                      label="Set Conditions"
-                      onClick={dmSetConditions}
-                      variant="secondary"
+                      disabled={Boolean(disabledReasons.dmEncounter)}
+                      disabledReason={disabledReasons.dmEncounter ?? undefined}
+                      label="End Encounter"
+                      onClick={dmEndEncounter}
+                      variant="danger"
                     />
                   </div>
-                  <div className="grid gap-2 rounded border border-stone-200 bg-white/70 p-3">
-                    <p className="text-sm font-semibold">Turn override</p>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        checked={turnUsageDraft.actionUsed}
-                        onChange={(event) =>
-                          setTurnUsageDraft((draft) => ({
-                            ...draft,
-                            actionUsed: event.target.checked,
-                          }))
-                        }
-                        type="checkbox"
-                      />
-                      Action used
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        checked={turnUsageDraft.bonusActionUsed}
-                        onChange={(event) =>
-                          setTurnUsageDraft((draft) => ({
-                            ...draft,
-                            bonusActionUsed: event.target.checked,
-                          }))
-                        }
-                        type="checkbox"
-                      />
-                      Bonus action used
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        checked={turnUsageDraft.reactionUsed}
-                        onChange={(event) =>
-                          setTurnUsageDraft((draft) => ({
-                            ...draft,
-                            reactionUsed: event.target.checked,
-                          }))
-                        }
-                        type="checkbox"
-                      />
-                      Reaction used
-                    </label>
-                    <NumberInput
-                      label="Movement used"
-                      onChange={(movementUsed) =>
-                        setTurnUsageDraft((draft) => ({
-                          ...draft,
-                          movementUsed,
-                        }))
-                      }
-                      value={turnUsageDraft.movementUsed}
+                </Panel>
+              ) : (
+                <Panel title="Player Controls">
+                  <div className="grid gap-3 text-sm">
+                    <p className="rounded border border-stone-200 bg-white/70 p-3 text-stone-700">
+                      Player mode only submits commands as{' '}
+                      <span className="font-semibold text-stone-950">
+                        {playerParticipantId}
+                      </span>
+                      . DM overrides and setup commands are hidden.
+                    </p>
+                    <StatusRow
+                      label="Your character"
+                      value={playerCharacter?.character.name ?? 'not loaded'}
                     />
-                    <div className="grid grid-cols-2 gap-2">
-                      <ActionButton
-                        disabled={Boolean(dmEncounterDisabledReason)}
-                        disabledReason={dmEncounterDisabledReason ?? undefined}
-                        label="Set Turn Actor"
-                        onClick={dmSetTurnParticipant}
-                        variant="secondary"
-                      />
-                      <ActionButton
-                        disabled={Boolean(dmEncounterDisabledReason)}
-                        disabledReason={dmEncounterDisabledReason ?? undefined}
-                        label="Set Usage"
-                        onClick={dmSetTurnUsage}
-                        variant="secondary"
-                      />
-                    </div>
+                    <StatusRow label="Current actor" value={currentTurnName} />
+                    <StatusRow
+                      label="Selected target"
+                      value={selectedTarget || 'none'}
+                    />
                   </div>
-                  <ActionButton
-                    disabled={Boolean(dmEncounterDisabledReason)}
-                    disabledReason={dmEncounterDisabledReason ?? undefined}
-                    label="End Encounter"
-                    onClick={dmEndEncounter}
-                    variant="danger"
-                  />
-                </div>
-              </Panel>
+                </Panel>
+              )}
             </section>
 
             <section className="grid gap-5 lg:grid-cols-2">
               <Panel title="Session State">
                 <JsonPreview value={sessionState ?? { sessionId }} />
               </Panel>
-              <Panel title="Event Stream / Debug Log">
-                <div className="mb-3">
-                  <JsonPreview
-                    value={lastResponse ?? { status: 'No command yet' }}
-                  />
-                </div>
-                <div className="max-h-96 overflow-auto rounded border border-stone-200 bg-stone-950 p-3 text-xs text-stone-100">
-                  {eventLog.length ? (
-                    eventLog.map((entry) => (
-                      <details
-                        className="border-b border-stone-800 py-2"
-                        key={entry.id}
-                      >
-                        <summary className="cursor-pointer text-amber-200">
-                          {entry.at} {entry.label}
-                        </summary>
-                        <pre className="mt-2 whitespace-pre-wrap break-words">
-                          {JSON.stringify(entry.payload, null, 2)}
-                        </pre>
-                      </details>
-                    ))
-                  ) : (
-                    <p className="text-stone-400">No events yet.</p>
-                  )}
-                </div>
+              <Panel title="Developer Debug">
+                <details>
+                  <summary className="cursor-pointer text-sm font-semibold text-stone-700">
+                    Last response and live event log
+                  </summary>
+                  <div className="mt-3">
+                    <div className="mb-3">
+                      <JsonPreview
+                        value={lastResponse ?? { status: 'No command yet' }}
+                      />
+                    </div>
+                    <div className="max-h-96 overflow-auto rounded border border-stone-200 bg-stone-950 p-3 text-xs text-stone-100">
+                      {eventLog.length ? (
+                        eventLog.map((entry) => (
+                          <details
+                            className="border-b border-stone-800 py-2"
+                            key={entry.id}
+                          >
+                            <summary className="cursor-pointer text-amber-200">
+                              {entry.at} {entry.label}
+                            </summary>
+                            <pre className="mt-2 whitespace-pre-wrap break-words">
+                              {JSON.stringify(entry.payload, null, 2)}
+                            </pre>
+                          </details>
+                        ))
+                      ) : (
+                        <p className="text-stone-400">No events yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </details>
               </Panel>
             </section>
           </div>
@@ -2035,6 +2256,30 @@ function ActionButton({
       {disabled && disabledReason ? (
         <span className="sr-only">: {disabledReason}</span>
       ) : null}
+    </button>
+  );
+}
+
+function ModeButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`min-h-10 rounded border px-3 py-2 text-sm font-bold transition ${
+        active
+          ? 'border-amber-700 bg-amber-100 text-amber-950'
+          : 'border-stone-300 bg-white text-stone-700 hover:border-stone-500'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
     </button>
   );
 }

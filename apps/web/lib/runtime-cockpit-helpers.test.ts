@@ -6,9 +6,11 @@ import type { CharacterResource } from '@dnd/protocol';
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
   formatRuntimeFailure,
+  getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
   getPlayerParticipantIds,
+  getRuntimeDisabledReasons,
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
 } from './runtime-cockpit-helpers';
@@ -91,5 +93,75 @@ describe('runtime cockpit helpers', () => {
   it('normalizes pasted session IDs and exposes player IDs', () => {
     assert.equal(sanitizeSessionIdInput(' session-001 '), 'SESSION-001');
     assert.deepEqual(getPlayerParticipantIds(sessionState), ['player-001']);
+  });
+
+  it('selects the authoritative actor from role mode', () => {
+    assert.equal(
+      getActingParticipantId({
+        mode: 'player',
+        playerParticipantId: 'player-002',
+        selectedActor: 'player-001',
+      }),
+      'player-002',
+    );
+    assert.equal(
+      getActingParticipantId({
+        mode: 'dm',
+        playerParticipantId: 'player-002',
+        selectedActor: 'player-001',
+      }),
+      'player-001',
+    );
+  });
+
+  it('guards DM-only controls from player mode', () => {
+    const reasons = getRuntimeDisabledReasons({
+      actingParticipantId: 'player-001',
+      activeSceneKnown: true,
+      activeSceneLoaded: true,
+      activeScenePlacementCount: 2,
+      busyLabel: null,
+      encounterLoaded: true,
+      mode: 'player',
+      playerDisplayName: 'Player One',
+      playerParticipantId: 'player-001',
+      playerParticipantIds: ['player-001', 'player-002'],
+      selectedActorHasCharacter: true,
+      sessionId: 'ABC123',
+      targetParticipantId: 'player-002',
+    });
+
+    assert.equal(reasons.move, null);
+    assert.equal(reasons.actorTurnAction, null);
+    assert.equal(reasons.attack, null);
+    assert.equal(reasons.dmEncounter, 'Switch to DM mode for this control.');
+    assert.equal(reasons.dmCharacter, 'Switch to DM mode for this control.');
+  });
+
+  it('explains player prerequisite failures', () => {
+    const reasons = getRuntimeDisabledReasons({
+      actingParticipantId: 'player-999',
+      activeSceneKnown: false,
+      activeSceneLoaded: false,
+      activeScenePlacementCount: 0,
+      busyLabel: null,
+      encounterLoaded: false,
+      mode: 'player',
+      playerDisplayName: 'Player Missing',
+      playerParticipantId: 'player-999',
+      playerParticipantIds: ['player-001'],
+      selectedActorHasCharacter: false,
+      sessionId: 'ABC123',
+      targetParticipantId: 'player-001',
+    });
+
+    assert.equal(
+      reasons.move,
+      'Create/recover an active scene before moving or starting combat.',
+    );
+    assert.equal(
+      reasons.actorTurnAction,
+      'Start or recover an encounter first.',
+    );
   });
 });

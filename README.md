@@ -12,14 +12,14 @@ controls, and durable persistence.
 
 ## Current Status
 
-The repository now has the first useful browser runtime cockpit at
-`/runtime`, plus refreshed Phase 9 API and handoff documentation. The cockpit
-lets a developer or DM manually operate the existing authoritative backend:
-create a session, seed sample players and characters, create and activate a
-scene, place tokens, start an encounter, drive turn/combat/DM controls, watch
-SSE events, run a fresh demo setup flow, reset local cockpit state without
-touching the backend, and recover current state through read models after
-refresh.
+The repository now has the first useful role-aware browser runtime surface at
+`/runtime`, plus refreshed Phase 9 API and handoff documentation. The runtime UI
+lets a DM create and seed sessions, create and activate scenes, place tokens,
+start encounters, drive turn/combat/DM controls, watch SSE events, run a fresh
+demo setup flow, reset local browser state without touching the backend, and
+recover current state through read models after refresh. Player mode can join or
+recover a session, view the assigned character, move its own token, use its own
+turn resources, and attack legal player targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -33,7 +33,7 @@ Implemented so far:
 
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
   database packages
-- Next.js runtime cockpit at `/runtime`
+- Next.js role-aware runtime surface at `/runtime`
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -195,8 +195,9 @@ encounter start, reaction/attack usage, reconnect recovery, read-model checks,
 downed actor gating, DM override commands, and idempotent retry behavior.
 
 For browser-based manual operation, start both apps and open
-`http://localhost:3000/runtime`. The cockpit has a fresh demo setup action for
-local playtesting and a local reset action that clears browser state only.
+`http://localhost:3000/runtime`. The launcher offers DM mode and Player mode.
+DM mode has the fresh demo setup action for local playtesting; Local Reset
+clears browser state only.
 
 Quick smoke flow:
 
