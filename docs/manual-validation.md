@@ -19,6 +19,9 @@ subscribers are process-local and there is still no replay or catch-up
 surface. This manual curl flow still validates the default in-memory startup
 path rather than those injected durable restart or transactional paths.
 
+For browser-based manual operation of the same runtime surface, start both apps
+with `pnpm dev` and open `http://localhost:3000/runtime`.
+
 The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
 environment variables manually.

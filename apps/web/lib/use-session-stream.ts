@@ -1,0 +1,101 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+
+import {
+  sessionStreamEventSchema,
+  type SessionStreamEvent,
+} from '@dnd/protocol';
+
+import { buildSessionStreamUrl } from './runtime-api';
+
+const streamEventTypes: SessionStreamEvent['type'][] = [
+  'session_state',
+  'movement_state',
+  'encounter_state',
+  'combat_event',
+  'character_state',
+];
+
+export type SessionStreamStatus = 'connected' | 'idle' | 'reconnecting';
+
+type UseSessionStreamParams = {
+  enabled: boolean;
+  onEvent: (event: SessionStreamEvent) => void;
+  participantId: string | null;
+  sessionId: string | null;
+};
+
+export function useSessionStream({
+  enabled,
+  onEvent,
+  participantId,
+  sessionId,
+}: UseSessionStreamParams): {
+  error: string | null;
+  status: SessionStreamStatus;
+} {
+  const [status, setStatus] = useState<SessionStreamStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const onEventRef = useRef(onEvent);
+
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    if (!enabled || !sessionId || !participantId) {
+      setStatus('idle');
+      setError(null);
+      return undefined;
+    }
+
+    const source = new EventSource(
+      buildSessionStreamUrl(sessionId, participantId),
+    );
+
+    const handleTypedEvent = (message: MessageEvent<string>): void => {
+      try {
+        const parsed = sessionStreamEventSchema.safeParse(
+          JSON.parse(message.data) as unknown,
+        );
+
+        if (!parsed.success) {
+          setError(
+            parsed.error.issues[0]?.message ??
+              'Received an unexpected stream event.',
+          );
+          return;
+        }
+
+        onEventRef.current(parsed.data);
+      } catch {
+        setError('Received a stream event that was not valid JSON.');
+      }
+    };
+
+    source.onopen = () => {
+      setError(null);
+      setStatus('connected');
+    };
+
+    source.onerror = () => {
+      setStatus('reconnecting');
+      setError('Stream disconnected. The browser will retry while subscribed.');
+    };
+
+    for (const eventType of streamEventTypes) {
+      source.addEventListener(eventType, handleTypedEvent);
+    }
+
+    return () => {
+      source.close();
+      setStatus('idle');
+    };
+  }, [enabled, participantId, sessionId]);
+
+  return {
+    error,
+    status,
+  };
+}

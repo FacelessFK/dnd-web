@@ -12,35 +12,26 @@ controls, and durable persistence.
 
 ## Current Status
 
-The backend runtime foundation is complete through **Phase 8 — Runtime
-Reliability & Reconnect Readiness**. **Phase 9 — Runtime/API Surface Cleanup &
-Manual Validation Readiness** refreshed API/manual-validation docs, and backend
-Roadmap Phase 8 DM controls are implemented as narrow server-authoritative
-commands. Phase 10 persistence work now includes a DB-backed character
-repository boundary, transactional durable idempotency for supported
-character mutations, a narrow durable session snapshot baseline for
-restart-safe reconnect, and a DB-backed scene persistence baseline for
-restart-safe active-scene rereads. Phase 11 Slice 2 now adds a DB-backed
-active-encounter repository baseline for injected restart-time
-`get_encounter_state` rereads. Phase 11 Slice 4 now adds an encounter-only
-transactional baseline with durable idempotency for supported encounter-local
-mutations on the injected DB-backed path. Phase 11 Slice 6 now adds the first
-attack-first cross-store combat transactional baseline across durable
-character and active-encounter state on the injected DB-backed path. Phase 11
-Slice 7 now extends that shared transaction shape to the movement-spending
-encounter-aware branch of `move_character_in_active_scene`. Most live runtime
-state still remains process-local, and combat continuity is not yet
-restart-safe.
+The repository now has the first useful browser runtime cockpit at
+`/runtime`, plus refreshed Phase 9 API and handoff documentation. The cockpit
+lets a developer or DM manually operate the existing authoritative backend:
+create a session, seed sample players and characters, create and activate a
+scene, place tokens, start an encounter, drive turn/combat/DM controls, watch
+SSE events, and recover current state through read models after refresh.
 
-The next recommended persistence step is a persistence exit pass that closes
-the initial encounter durability foundation honestly before any outbox or
-replay work.
+The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
+work includes DB-backed character, session snapshot, scene, active-encounter,
+encounter-only transaction, combat transaction, movement, scene transaction,
+pre-execution idempotency claim, and single-process outbox foundations for
+covered DB-backed paths. Default local startup still uses the in-memory
+runtime, and live SSE subscribers remain process-local. There is still no event
+replay, stream cursor, catch-up API, or distributed coordination.
 
 Implemented so far:
 
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
   database packages
-- minimal Next.js web app shell
+- Next.js runtime cockpit at `/runtime`
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -74,7 +65,8 @@ Implemented so far:
 - movement-spending encounter-aware transactional durable idempotency on the
   injected DB-backed path for atomic character position write + encounter
   movement-usage write + durable completed-command success record commit
-- documented event/revision semantics and transaction-boundary limitations
+- documented API surface, event/revision semantics, reconnect guidance,
+  cockpit usage, and transaction-boundary limitations
 - Drizzle/Postgres character persistence and idempotency boundaries for the
   currently supported narrow scope, plus DB-backed session snapshot
   persistence boundary, DB-backed scene persistence boundary, and DB-backed
@@ -83,13 +75,12 @@ Implemented so far:
 
 Not implemented yet:
 
-- fully persistence-backed runtime storage for movement state, streams, and
-  broad live tactical continuity
+- fully persistence-backed stream delivery and broad live tactical continuity
 - command-surface-wide durable idempotency, event replay, event cursors, or
-  distributed coordination
-- full transaction/outbox persistence boundaries
+  distributed coordination beyond the currently covered DB-backed slices
+- full transaction/outbox persistence boundaries across every command path
 - character builder/library product UI
-- top-down tactical battle UX, map/adventure editor, or frontend DM panel
+- product-grade player UX, map/adventure editor, or polished DM panel
 - opportunity attacks or out-of-turn reaction windows
 - full condition engine, death saves, spells, weapons, ranged attacks, or monster
   AI
@@ -142,6 +133,7 @@ Default local URLs:
 
 - Web: `http://localhost:3000`
 - Server: `http://localhost:2567`
+- Runtime cockpit: `http://localhost:3000/runtime`
 
 Run only the server:
 
@@ -151,7 +143,8 @@ pnpm --filter @dnd/server dev
 
 ## API Surface
 
-Current command endpoints:
+See [docs/api-surface.md](docs/api-surface.md) for the detailed endpoint,
+command, SSE, idempotency, and recovery surface. Current command endpoints:
 
 - `POST /api/session/command`
 - `POST /api/characters/command`
@@ -164,16 +157,16 @@ Current stream endpoint:
 
 - `GET /api/sessions/:sessionId/stream?participantId=:participantId`
 
-Current command groups:
+Current high-level command groups:
 
-| Endpoint                  | Mutating commands                                                                                                                                                                                         | Read-only commands       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| `/api/session/command`    | `create_session`, `join_session`, `reconnect_session`                                                                                                                                                     | none                     |
-| `/api/characters/command` | `create_character`, `update_character`, `finalize_character`, `assign_character_to_participant`                                                                                                           | `get_character`          |
-| `/api/scenes/command`     | `create_scene`, `activate_scene_for_session`, `place_entity_in_scene`                                                                                                                                     | `get_scene`              |
-| `/api/movement/command`   | `place_character_in_active_scene`, `move_character_in_active_scene`                                                                                                                                       | `get_active_scene_state` |
-| `/api/encounters/command` | `start_encounter`, `advance_turn`, `use_action`, `use_bonus_action`, `use_reaction`, `record_movement_usage`, `attack`                                                                                    | `get_encounter_state`    |
-| `/api/dm/command`         | `dm_set_character_current_hp`, `dm_set_character_active_conditions`, `dm_reposition_character_in_active_scene`, `dm_set_current_turn_usage`, `dm_set_current_turn_participant`, `dm_end_active_encounter` | none                     |
+| Endpoint                  | Main commands                                        | Read commands            |
+| ------------------------- | ---------------------------------------------------- | ------------------------ |
+| `/api/session/command`    | create, join, reconnect                              | reconnect recovery       |
+| `/api/characters/command` | create, update, finalize, assign                     | `get_character`          |
+| `/api/scenes/command`     | create, activate, place scene entity                 | `get_scene`              |
+| `/api/movement/command`   | place character, move character                      | `get_active_scene_state` |
+| `/api/encounters/command` | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
+| `/api/dm/command`         | HP, conditions, reposition, turn overrides, end      | none                     |
 
 Current SSE event types:
 
@@ -182,92 +175,14 @@ Current SSE event types:
   session revision change.
 - `movement_state`: live partial movement/placement/reposition update, not a
   durable full-scene snapshot.
-- `combat_event`: transient combat result notification, currently used for
-  resolved attacks.
+- `combat_event`: transient combat result notification for resolved attacks.
 - `character_state`: live partial character update for DM HP and condition-tag
-  changes. Payloads always include authoritative HP and may include
-  `activeConditions`.
+  changes.
 
-Current response/error behavior:
-
-- Successful command responses use `{ "ok": true, "data": ... }`.
-- Failed command responses use `{ "ok": false, "error": { "code", "message" } }`.
-- Validation problems generally return `400`.
-- Missing resources generally return `404`.
-- Valid commands rejected by current authoritative state generally return `409`.
-- Role/DM authorization failures return `403`.
-- Unexpected internal failures return `500`.
-
-Reliability notes:
-
-- Mutating commands use `commandId` and are protected by in-memory idempotency by
-  default.
-- Duplicate successful mutating command retries return the cached success
-  response without repeating side effects.
-- Failed command responses are not cached.
-- Read commands are intentionally not cached by idempotency.
-- Command idempotency is scoped by command category, command type, command ID,
-  actor participant ID, and session ID when available.
-- Phase 10 adds a DB-backed idempotency record boundary for supported
-  character-record mutation commands when the DB-backed stores are injected:
-  `create_character`, `update_character`, `finalize_character`,
-  `dm_set_character_current_hp`, and
-  `dm_set_character_active_conditions`.
-- For those supported injected DB paths, character writes and durable
-  successful-command idempotency records can be committed in the same real DB
-  transaction.
-- Phase 11 Slice 4 adds the same transactional durable-idempotency baseline for
-  supported encounter-local commands when the DB-backed encounter store and
-  encounter transaction boundary are injected:
-  `start_encounter`, `advance_turn`, `use_action`, `use_bonus_action`,
-  `use_reaction`, `record_movement_usage`, `dm_set_current_turn_usage`,
-  `dm_set_current_turn_participant`, and `dm_end_active_encounter`.
-- For those supported injected DB paths, the durable encounter write/delete and
-  durable completed-command success record can commit in the same real DB
-  transaction, and `encounter_state` is published only after commit.
-- Default local startup still uses in-memory session, scene, encounter, and
-  stream state.
-- When the DB-backed session snapshot store is injected, session identity,
-  participant membership, participant roles/display names, assigned character
-  IDs, and the stored `activeSceneId` can survive runtime reinitialization and
-  allow `reconnect_session` to succeed.
-- When the DB-backed scene store is injected too, scene definitions can survive
-  runtime reinitialization and `get_scene` can reread them after restart.
-- When the DB-backed character store, DB-backed session snapshot store, and
-  DB-backed scene store are all injected, `get_active_scene_state` can reread a
-  narrow active-scene snapshot after restart if character overlays already
-  contain valid active-scene placement.
-- When the DB-backed active-encounter store is injected too, `get_encounter_state`
-  can reread an active encounter after restart if durable session, scene, and
-  character state still line up.
-- Phase 11 Slice 6 makes `attack` the first cross-store combat command with
-  atomic durable character state, encounter state, and durable completed-command
-  idempotency on the injected DB-backed path.
-- Phase 11 Slice 7 adds the same kind of transactional durable idempotency to
-  the movement-spending encounter-aware branch of
-  `move_character_in_active_scene`.
-- Zero-cost encounter movement and no-active-encounter movement still stay on
-  the existing path intentionally; this slice does not claim the whole movement
-  command is fully transactional.
-- One more slice can still defer outbox work honestly, but committed attack or
-  movement state can still be reread after clients miss best-effort
-  post-commit `encounter_state`, `movement_state`, or `combat_event` updates.
-- Internal runtime/store typing still carries deliberate technical debt here:
-  some runtime methods stay externally stable while returning a Promise on
-  injected DB-backed paths.
-- Presence, subscriber state, encounter continuity beyond rereads, stream
-  delivery, replay, and catch-up semantics remain non-durable; do not treat the
-  whole command surface as restart-safe.
-- Session snapshots and scene records duplicate some invariants in both row
-  columns and JSON payloads today; that is intentional for this narrow baseline
-  but still a cleanup target for a later persistence phase.
-- Active encounter records now duplicate the same kind of invariants too:
-  row keys plus IDs inside JSON payloads and `session_id` / `scene_id` columns
-  alongside the persisted encounter document.
-- Missed transient SSE events are not replayed.
-- After reconnect, clients should recover current authoritative state through
-  read models: reconnect/session snapshot, `get_active_scene_state`,
-  `get_encounter_state`, and `get_character`.
+Missed transient SSE events are not replayed. After reconnect, clients should
+recover current authoritative state through read models:
+`reconnect_session`, `get_active_scene_state`, `get_encounter_state`, and
+`get_character`.
 
 ## Manual Validation
 
@@ -276,6 +191,9 @@ For the complete copy-pasteable scenario, see
 creation, SSE subscription, character setup, scene activation, placement,
 encounter start, reaction/attack usage, reconnect recovery, read-model checks,
 downed actor gating, DM override commands, and idempotent retry behavior.
+
+For browser-based manual operation, start both apps and open
+`http://localhost:3000/runtime`.
 
 Quick smoke flow:
 
@@ -321,6 +239,7 @@ baseline includes:
 - `DATABASE_URL`
 - `SERVER_PORT`
 - `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SERVER_URL`
 
 The server loads environment variables at startup via `dotenv/config`, so a
 repo-root `.env` file works for local development.
@@ -336,6 +255,8 @@ repo-root `.env` file works for local development.
 - [04_CHARACTER_AND_CONTENT_STRATEGY.md](04_CHARACTER_AND_CONTENT_STRATEGY.md)
 - [05_REVISED_PRODUCT_ROADMAP.md](05_REVISED_PRODUCT_ROADMAP.md)
 - [docs/manual-validation.md](docs/manual-validation.md)
+- [docs/api-surface.md](docs/api-surface.md)
+- [docs/project-handoff.md](docs/project-handoff.md)
 - [dnd_project_handoff_context.md](dnd_project_handoff_context.md)
 - [TASKS_PHASE_0.md](TASKS_PHASE_0.md)
 - [TASKS_PHASE_1.md](TASKS_PHASE_1.md)

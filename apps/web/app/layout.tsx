@@ -4,7 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'D&D DM-Driven Platform',
   description:
-    'Phase 0 workspace foundation for the DM-authoritative platform.',
+    'DM-authoritative runtime and developer cockpit for the D&D platform.',
 };
 
 type RootLayoutProps = {

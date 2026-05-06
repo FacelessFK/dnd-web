@@ -6,6 +6,10 @@ Make the current authoritative runtime easier to operate, inspect, manually
 validate, and hand off before adding more gameplay systems or frontend battle
 work.
 
+Milestone update: Phase 9 handoff cleanup is now paired with a developer-facing
+runtime cockpit at `/runtime`. The cockpit is an operational validation tool for
+the existing backend command surface, not a polished player battle UX.
+
 Phase 9 should refresh the project-facing documentation and manual validation
 surface so it reflects the runtime through Phase 8: combat foundation, combat
 state foundation, command idempotency, reconnect read-model recovery,
@@ -194,6 +198,20 @@ event/revision semantics, and transaction boundary limitations.
 - Updated manual validation notes to include the current backend DM command
   surface.
 - No runtime, protocol, or gameplay behavior changed.
+
+### Slice 5 — Frontend Runtime Cockpit
+
+- Status: completed.
+- Added a browser cockpit at `/runtime`.
+- Added a typed web API layer for the current command endpoints.
+- Added SSE subscription handling for the current session stream event types.
+- Added read-model recovery controls using `reconnect_session`,
+  `get_active_scene_state`, `get_encounter_state`, and `get_character`.
+- Added a simple DOM tactical grid for active-scene character placement.
+- Kept server authority intact: the UI submits commands and displays
+  authoritative responses/events.
+- Did not add replay, cursors, authentication, production deployment, or new
+  gameplay systems.
 
 ## Slice 4 Detailed Task List
 
