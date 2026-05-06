@@ -26,6 +26,11 @@ The examples below use `bash`, `curl`, and `jq` for capturing IDs. If you do not
 have `jq`, run the same `curl` commands and copy the returned IDs into the
 environment variables manually.
 
+For browser-driven local playtesting, start the server and web app with
+`pnpm dev`, open `/runtime`, and use the cockpit's fresh demo setup, Recover,
+and Local Reset controls. Local Reset clears browser cockpit state only; it does
+not delete backend sessions or runtime state.
+
 ## What This Covers
 
 - Session create, join, reconnect, and SSE subscription.

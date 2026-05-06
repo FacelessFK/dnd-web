@@ -224,12 +224,23 @@ event replay, stream cursors, or catch-up APIs.
 After refresh or reconnect, clients should rebuild state with:
 
 - `reconnect_session`
+- `get_scene` when the recovered session has `activeSceneId`
 - `get_active_scene_state`
 - `get_encounter_state`
 - `get_character` for assigned or locally known character IDs
 
 The browser cockpit follows this model: SSE updates live state when connected,
 and the Recover button rereads authoritative state through command read models.
+Expected empty-read cases such as `no_active_scene` and `no_active_encounter`
+are treated as recoverable local state, not failed recovery.
+
+## Browser Runtime Cockpit
+
+The developer cockpit at `/runtime` uses this API surface directly. It can run a
+fresh demo setup, paste and recover an existing session ID, and locally reset
+browser state without deleting server state. The cockpit still treats the
+server as authoritative: grid, encounter, character, and session state are
+rendered from command responses, read-model recovery, or live SSE updates.
 
 ## Known Limitations
 

@@ -211,6 +211,14 @@ async function postCommand<TResponse extends CommandResponse>(
     };
   }
 
+  return parseRuntimeCommandResponse(response.status, body, schema);
+}
+
+export function parseRuntimeCommandResponse<TResponse extends CommandResponse>(
+  status: number,
+  body: unknown,
+  schema: ResponseSchema<TResponse>,
+): RuntimeApiResult<Extract<TResponse, { ok: true }>> {
   const parsed = schema.safeParse(body);
 
   if (!parsed.success) {
@@ -219,7 +227,7 @@ async function postCommand<TResponse extends CommandResponse>(
         message:
           parsed.error.issues[0]?.message ??
           'Runtime server returned an unexpected response shape.',
-        status: response.status,
+        status,
       },
       ok: false,
     };
@@ -232,7 +240,7 @@ async function postCommand<TResponse extends CommandResponse>(
       error: {
         code: commandError.error.code,
         message: commandError.error.message,
-        status: response.status,
+        status,
       },
       ok: false,
     };

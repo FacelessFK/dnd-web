@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {
   ActiveSceneState,
-  CharacterInput,
   CharacterResource,
   DmCommand,
   Encounter,
@@ -22,87 +21,31 @@ import {
   sendSceneCommand,
   sendSessionCommand,
   type RuntimeApiResult,
-  type SessionCommandSuccessResponse,
 } from '../../lib/runtime-api';
+import {
+  cockpitStorageKey,
+  defaultDm,
+  flag,
+  formatRuntimeFailure,
+  getAssignedCharacterRefs,
+  getKnownCharacterIds,
+  getPlayerParticipantIds,
+  initials,
+  isExpectedRecoveryMiss,
+  sampleCharacters,
+  samplePlayers,
+  sanitizeSessionIdInput,
+  type Cell,
+  type SessionSnapshot,
+  type StoredCockpitState,
+} from '../../lib/runtime-cockpit-helpers';
 import { useSessionStream } from '../../lib/use-session-stream';
 
-type SessionSnapshot = SessionCommandSuccessResponse['data']['state'];
 type SimpleEncounterCommandType =
   | 'advance_turn'
   | 'use_action'
   | 'use_bonus_action'
   | 'use_reaction';
-
-const defaultDm = {
-  displayName: 'Dungeon Master',
-  participantId: 'dm-001',
-};
-
-const samplePlayers = [
-  {
-    displayName: 'Player One',
-    participantId: 'player-001',
-  },
-  {
-    displayName: 'Player Two',
-    participantId: 'player-002',
-  },
-] as const;
-
-const sampleCharacters: Record<string, CharacterInput> = {
-  'player-001': {
-    abilities: {
-      cha: 10,
-      con: 13,
-      dex: 14,
-      int: 16,
-      str: 8,
-      wis: 12,
-    },
-    armorClass: 13,
-    background: 'Sage',
-    className: 'Wizard',
-    hp: {
-      current: 26,
-      max: 26,
-      temp: 0,
-    },
-    level: 5,
-    name: 'Aria',
-    speed: 30,
-    speciesOrRace: 'Elf',
-  },
-  'player-002': {
-    abilities: {
-      cha: 8,
-      con: 14,
-      dex: 12,
-      int: 10,
-      str: 16,
-      wis: 10,
-    },
-    armorClass: 0,
-    background: 'Guard',
-    className: 'Fighter',
-    hp: {
-      current: 1,
-      max: 1,
-      temp: 0,
-    },
-    level: 5,
-    name: 'Borin',
-    speed: 30,
-    speciesOrRace: 'Dwarf',
-  },
-};
-
-type StoredCockpitState = {
-  charactersByParticipant?: Record<string, string>;
-  dmDisplayName?: string;
-  dmParticipantId?: string;
-  sceneId?: string;
-  sessionId?: string;
-};
 
 type EventLogEntry = {
   at: string;
@@ -116,20 +59,15 @@ type LastResponse = {
   payload: unknown;
 };
 
-type Cell = {
-  x: number;
-  y: number;
-};
-
 type TurnUsageDraft = Encounter['currentTurnUsage'];
 
-const cockpitStorageKey = 'dnd-runtime-cockpit';
-
 export function RuntimeCockpit() {
-  const [dmParticipantId, setDmParticipantId] = useState(
+  const [dmParticipantId, setDmParticipantId] = useState<string>(
     defaultDm.participantId,
   );
-  const [dmDisplayName, setDmDisplayName] = useState(defaultDm.displayName);
+  const [dmDisplayName, setDmDisplayName] = useState<string>(
+    defaultDm.displayName,
+  );
   const [sessionId, setSessionId] = useState('');
   const [sceneId, setSceneId] = useState('');
   const [sessionState, setSessionState] = useState<SessionSnapshot | null>(
@@ -144,6 +82,7 @@ export function RuntimeCockpit() {
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<LastResponse | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
+  const [recoveryNotes, setRecoveryNotes] = useState<string[]>([]);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [streamEnabled, setStreamEnabled] = useState(false);
   const [selectedActor, setSelectedActor] = useState<string>(
@@ -167,6 +106,10 @@ export function RuntimeCockpit() {
   const knownCharacterIds = getKnownCharacterIds(
     sessionState,
     charactersByParticipant,
+  );
+  const playerParticipantIds = useMemo(
+    () => getPlayerParticipantIds(sessionState),
+    [sessionState],
   );
   const participants = sessionState?.participants ?? [
     {
@@ -219,6 +162,34 @@ export function RuntimeCockpit() {
   }, []);
 
   useEffect(() => {
+    if (!playerParticipantIds.length) {
+      return;
+    }
+
+    const firstPlayerParticipantId = playerParticipantIds[0];
+
+    if (!firstPlayerParticipantId) {
+      return;
+    }
+
+    setSelectedActor((current) =>
+      playerParticipantIds.includes(current)
+        ? current
+        : firstPlayerParticipantId,
+    );
+    setSelectedTarget((current) => {
+      const fallbackTarget =
+        playerParticipantIds.find(
+          (participantId) => participantId !== selectedActor,
+        ) ?? firstPlayerParticipantId;
+
+      return playerParticipantIds.includes(current) && current !== selectedActor
+        ? current
+        : fallbackTarget;
+    });
+  }, [playerParticipantIds, selectedActor]);
+
+  useEffect(() => {
     const stored: StoredCockpitState = {
       charactersByParticipant: Object.fromEntries(
         Object.entries(charactersByParticipant).flatMap(
@@ -267,14 +238,7 @@ export function RuntimeCockpit() {
     const response = await result;
 
     if (!response.ok) {
-      const status = response.error.status
-        ? `HTTP ${response.error.status}: `
-        : '';
-      const code = response.error.code ? `${response.error.code}: ` : '';
-
-      throw new Error(
-        `${label} failed. ${status}${code}${response.error.message}`,
-      );
+      throw new Error(formatRuntimeFailure(label, response.error));
     }
 
     return response.response;
@@ -294,12 +258,52 @@ export function RuntimeCockpit() {
     );
   }
 
+  function clearRuntimeReadModels(): void {
+    setSceneId('');
+    setSessionState(null);
+    setScene(null);
+    setActiveScene(null);
+    setEncounter(null);
+    setCharactersByParticipant({});
+    setLastResponse(null);
+    setCommandError(null);
+    setRecoveryNotes([]);
+    setTurnUsageDraft({
+      actionUsed: false,
+      bonusActionUsed: false,
+      movementUsed: 0,
+      reactionUsed: false,
+    });
+    setSelectedCell({ x: 0, y: 0 });
+  }
+
+  function switchSessionId(nextSessionId: string): void {
+    setStreamEnabled(false);
+    setSessionId(sanitizeSessionIdInput(nextSessionId));
+    clearRuntimeReadModels();
+    setEventLog([]);
+  }
+
+  function resetLocalCockpit(): void {
+    localStorage.removeItem(cockpitStorageKey);
+    setDmParticipantId(defaultDm.participantId);
+    setDmDisplayName(defaultDm.displayName);
+    setSessionId('');
+    setStreamEnabled(false);
+    clearRuntimeReadModels();
+    setEventLog([]);
+  }
+
   function applySessionSnapshot(state: SessionSnapshot): void {
     setSessionState(state);
     setSessionId(state.session.id);
 
     if (state.session.activeSceneId) {
       setSceneId(state.session.activeSceneId);
+    } else {
+      setSceneId('');
+      setScene(null);
+      setActiveScene(null);
     }
   }
 
@@ -415,9 +419,261 @@ export function RuntimeCockpit() {
         }),
       );
 
+      setStreamEnabled(false);
+      clearRuntimeReadModels();
       applySessionSnapshot(response.data.state);
 
       return response;
+    });
+  }
+
+  async function runFreshDemoSetup(): Promise<void> {
+    await runTask('run fresh demo setup', async () => {
+      setStreamEnabled(false);
+
+      const createdSession = await unwrap(
+        'create_session',
+        sendSessionCommand({
+          actor: {
+            displayName: dmDisplayName,
+            participantId: dmParticipantId,
+            role: 'dm',
+          },
+          commandId: createCommandId('demo-create-session'),
+          payload: {
+            rulesProfileId: 'dnd5e-2024-core',
+          },
+          type: 'create_session',
+        }),
+      );
+      const activeSessionId = createdSession.data.sessionId;
+      let latestState = createdSession.data.state;
+
+      clearRuntimeReadModels();
+      setEventLog([]);
+      applySessionSnapshot(latestState);
+
+      for (const player of samplePlayers) {
+        const joined = await unwrap(
+          `join_session ${player.participantId}`,
+          sendSessionCommand({
+            actor: {
+              displayName: player.displayName,
+              participantId: player.participantId,
+              role: 'player',
+            },
+            commandId: createCommandId(`demo-join-${player.participantId}`),
+            payload: {
+              sessionId: activeSessionId,
+            },
+            type: 'join_session',
+          }),
+        );
+
+        latestState = joined.data.state;
+        applySessionSnapshot(latestState);
+      }
+
+      const createdCharacters: Record<string, CharacterResource> = {};
+
+      for (const player of samplePlayers) {
+        const characterInput = sampleCharacters[player.participantId];
+
+        if (!characterInput) {
+          throw new Error(
+            `No sample character is defined for ${player.participantId}.`,
+          );
+        }
+
+        const created = await unwrap(
+          `create_character ${player.participantId}`,
+          sendCharacterCommand({
+            actor: {
+              participantId: player.participantId,
+            },
+            commandId: createCommandId(
+              `demo-create-character-${player.participantId}`,
+            ),
+            payload: {
+              character: characterInput,
+              ownerParticipantId: player.participantId,
+              sessionId: activeSessionId,
+            },
+            type: 'create_character',
+          }),
+        );
+
+        if (!('character' in created.data)) {
+          throw new Error(
+            'create_character returned a non-character response.',
+          );
+        }
+
+        createdCharacters[player.participantId] = created.data;
+        rememberCharacter(created.data);
+      }
+
+      for (const player of samplePlayers) {
+        const characterId =
+          createdCharacters[player.participantId]?.character.id;
+
+        if (!characterId) {
+          throw new Error(
+            `No sample character was created for ${player.participantId}.`,
+          );
+        }
+
+        const finalized = await unwrap(
+          `finalize_character ${player.participantId}`,
+          sendCharacterCommand({
+            actor: {
+              participantId: player.participantId,
+            },
+            commandId: createCommandId(`demo-finalize-${player.participantId}`),
+            payload: {
+              characterId,
+              sessionId: activeSessionId,
+            },
+            type: 'finalize_character',
+          }),
+        );
+
+        if ('character' in finalized.data) {
+          rememberCharacter(finalized.data);
+        }
+
+        const assigned = await unwrap(
+          `assign_character_to_participant ${player.participantId}`,
+          sendCharacterCommand({
+            actor: {
+              participantId: dmParticipantId,
+            },
+            commandId: createCommandId(`demo-assign-${player.participantId}`),
+            payload: {
+              characterId,
+              participantId: player.participantId,
+              sessionId: activeSessionId,
+            },
+            type: 'assign_character_to_participant',
+          }),
+        );
+
+        if ('state' in assigned.data) {
+          latestState = assigned.data.state;
+          applySessionSnapshot(latestState);
+        }
+      }
+
+      const createdScene = await unwrap(
+        'create_scene',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('demo-create-scene'),
+          payload: {
+            scene: {
+              grid: {
+                cellSizeFeet: 5,
+                height: 8,
+                width: 8,
+              },
+              name: 'Training Room',
+            },
+            sessionId: activeSessionId,
+          },
+          type: 'create_scene',
+        }),
+      );
+
+      if (!('scene' in createdScene.data)) {
+        throw new Error('create_scene returned a non-scene response.');
+      }
+
+      setScene(createdScene.data.scene);
+      setSceneId(createdScene.data.scene.id);
+
+      const activated = await unwrap(
+        'activate_scene_for_session',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('demo-activate-scene'),
+          payload: {
+            sceneId: createdScene.data.scene.id,
+            sessionId: activeSessionId,
+          },
+          type: 'activate_scene_for_session',
+        }),
+      );
+
+      if ('state' in activated.data) {
+        latestState = activated.data.state;
+        applySessionSnapshot(latestState);
+      }
+
+      const positions: Record<string, Cell> = {
+        'player-001': { x: 0, y: 0 },
+        'player-002': { x: 1, y: 0 },
+      };
+
+      for (const player of samplePlayers) {
+        const position = positions[player.participantId];
+
+        if (!position) {
+          throw new Error(
+            `No sample position is defined for ${player.participantId}.`,
+          );
+        }
+
+        const placed = await unwrap(
+          `place_character_in_active_scene ${player.participantId}`,
+          sendMovementCommand({
+            actor: {
+              participantId: player.participantId,
+            },
+            commandId: createCommandId(`demo-place-${player.participantId}`),
+            payload: {
+              participantId: player.participantId,
+              position,
+              sessionId: activeSessionId,
+            },
+            type: 'place_character_in_active_scene',
+          }),
+        );
+
+        if ('character' in placed.data) {
+          rememberCharacter(placed.data);
+        }
+      }
+
+      const activeSceneState = await unwrap(
+        'get_active_scene_state',
+        sendMovementCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('demo-get-active-scene'),
+          payload: {
+            sessionId: activeSessionId,
+          },
+          type: 'get_active_scene_state',
+        }),
+      );
+
+      if ('placedCharacters' in activeSceneState.data) {
+        setActiveScene(activeSceneState.data);
+      }
+
+      return {
+        activeScene: activeSceneState.data,
+        characters: Object.values(createdCharacters).map(
+          (resource) => resource.character.id,
+        ),
+        scene: createdScene.data.scene,
+        session: latestState,
+      };
     });
   }
 
@@ -692,6 +948,8 @@ export function RuntimeCockpit() {
     await runTask('recover read models', async () => {
       assertSession();
 
+      const activeSessionId = sessionId;
+      const notes: string[] = [];
       const recovered = await unwrap(
         'reconnect_session',
         sendSessionCommand({
@@ -702,30 +960,92 @@ export function RuntimeCockpit() {
           },
           commandId: createCommandId('reconnect'),
           payload: {
-            sessionId,
+            sessionId: activeSessionId,
           },
           type: 'reconnect_session',
         }),
       );
 
+      clearRuntimeReadModels();
       applySessionSnapshot(recovered.data.state);
 
-      const activeSceneResult = await sendMovementCommand({
-        actor: {
-          participantId: dmParticipantId,
-        },
-        commandId: createCommandId('get-active-scene'),
-        payload: {
-          sessionId,
-        },
-        type: 'get_active_scene_state',
-      });
+      const recoveredActiveSceneId = recovered.data.state.session.activeSceneId;
+      let recoveredScene: Scene | null = null;
+      let recoveredActiveScene: ActiveSceneState | null = null;
+      let recoveredEncounter: Encounter | null = null;
 
-      if (
-        activeSceneResult.ok &&
-        'placedCharacters' in activeSceneResult.response.data
-      ) {
-        setActiveScene(activeSceneResult.response.data);
+      if (recoveredActiveSceneId) {
+        const sceneResult = await sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('get-scene'),
+          payload: {
+            sceneId: recoveredActiveSceneId,
+            sessionId: activeSessionId,
+          },
+          type: 'get_scene',
+        });
+
+        if (sceneResult.ok && 'scene' in sceneResult.response.data) {
+          recoveredScene = sceneResult.response.data.scene;
+          setScene(recoveredScene);
+          setSceneId(recoveredScene.id);
+        } else if (!sceneResult.ok) {
+          if (!isExpectedRecoveryMiss(sceneResult.error.code)) {
+            throw new Error(
+              formatRuntimeFailure('get_scene', sceneResult.error),
+            );
+          }
+
+          notes.push(formatRuntimeFailure('get_scene', sceneResult.error));
+          pushLog('recover skipped get_scene', sceneResult.error);
+          setScene(null);
+        }
+
+        const activeSceneResult = await sendMovementCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('get-active-scene'),
+          payload: {
+            sessionId: activeSessionId,
+          },
+          type: 'get_active_scene_state',
+        });
+
+        if (
+          activeSceneResult.ok &&
+          'placedCharacters' in activeSceneResult.response.data
+        ) {
+          recoveredActiveScene = activeSceneResult.response.data;
+          setActiveScene(recoveredActiveScene);
+        } else if (!activeSceneResult.ok) {
+          if (!isExpectedRecoveryMiss(activeSceneResult.error.code)) {
+            throw new Error(
+              formatRuntimeFailure(
+                'get_active_scene_state',
+                activeSceneResult.error,
+              ),
+            );
+          }
+
+          notes.push(
+            formatRuntimeFailure(
+              'get_active_scene_state',
+              activeSceneResult.error,
+            ),
+          );
+          pushLog(
+            'recover skipped get_active_scene_state',
+            activeSceneResult.error,
+          );
+          setActiveScene(null);
+        }
+      } else {
+        setSceneId('');
+        setScene(null);
+        setActiveScene(null);
       }
 
       const encounterResult = await sendEncounterCommand({
@@ -734,31 +1054,46 @@ export function RuntimeCockpit() {
         },
         commandId: createCommandId('get-encounter'),
         payload: {
-          sessionId,
+          sessionId: activeSessionId,
         },
         type: 'get_encounter_state',
       });
 
       if (encounterResult.ok) {
-        setEncounter(encounterResult.response.data.encounter);
-        setTurnUsageDraft(
-          encounterResult.response.data.encounter.currentTurnUsage,
+        recoveredEncounter = encounterResult.response.data.encounter;
+        setEncounter(recoveredEncounter);
+        setTurnUsageDraft(recoveredEncounter.currentTurnUsage);
+      } else if (isExpectedRecoveryMiss(encounterResult.error.code)) {
+        notes.push(
+          formatRuntimeFailure('get_encounter_state', encounterResult.error),
+        );
+        pushLog('recover skipped get_encounter_state', encounterResult.error);
+        setEncounter(null);
+        setTurnUsageDraft({
+          actionUsed: false,
+          bonusActionUsed: false,
+          movementUsed: 0,
+          reactionUsed: false,
+        });
+      } else {
+        throw new Error(
+          formatRuntimeFailure('get_encounter_state', encounterResult.error),
         );
       }
 
-      for (const participant of recovered.data.state.participants) {
-        if (!participant.characterId) {
-          continue;
-        }
-
+      for (const participant of getAssignedCharacterRefs(
+        recovered.data.state,
+      )) {
         const characterResult = await sendCharacterCommand({
           actor: {
-            participantId: participant.id,
+            participantId: participant.participantId,
           },
-          commandId: createCommandId(`get-character-${participant.id}`),
+          commandId: createCommandId(
+            `get-character-${participant.participantId}`,
+          ),
           payload: {
             characterId: participant.characterId,
-            sessionId,
+            sessionId: activeSessionId,
           },
           type: 'get_character',
         });
@@ -768,18 +1103,30 @@ export function RuntimeCockpit() {
           'character' in characterResult.response.data
         ) {
           rememberCharacter(characterResult.response.data);
+        } else if (!characterResult.ok) {
+          if (!isExpectedRecoveryMiss(characterResult.error.code)) {
+            throw new Error(
+              formatRuntimeFailure('get_character', characterResult.error),
+            );
+          }
+
+          notes.push(
+            formatRuntimeFailure('get_character', characterResult.error),
+          );
+          pushLog('recover skipped get_character', {
+            error: characterResult.error,
+            participant,
+          });
         }
       }
 
+      setRecoveryNotes(notes);
+
       return {
-        activeScene:
-          activeSceneResult.ok &&
-          'placedCharacters' in activeSceneResult.response.data
-            ? activeSceneResult.response.data
-            : null,
-        encounter: encounterResult.ok
-          ? encounterResult.response.data.encounter
-          : null,
+        activeScene: recoveredActiveScene,
+        encounter: recoveredEncounter,
+        notes,
+        scene: recoveredScene,
         session: recovered.data.state,
       };
     });
@@ -1088,9 +1435,65 @@ export function RuntimeCockpit() {
     width: 8,
   };
   const selectedCharacter = charactersByParticipant[selectedActor];
+  const playerParticipants = participants.filter(
+    (participant) => participant.role === 'player',
+  );
+  const selectedActorIsPlayer = playerParticipantIds.includes(selectedActor);
+  const selectedTargetIsPlayer = playerParticipantIds.includes(selectedTarget);
   const currentTurnName = currentTurnParticipantId
     ? getParticipantName(participants, currentTurnParticipantId)
     : 'No active turn';
+  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
+  const missingSessionReason = !canUseSession
+    ? 'Create, paste, or recover a session first.'
+    : null;
+  const missingActiveSceneReason = !activeScene
+    ? 'Create/recover an active scene before moving or starting combat.'
+    : null;
+  const missingEncounterReason = !encounter
+    ? 'Start or recover an encounter first.'
+    : null;
+  const invalidActorReason = !selectedActorIsPlayer
+    ? 'Choose a player participant as the acting character.'
+    : null;
+  const invalidTargetReason = !selectedTargetIsPlayer
+    ? 'Choose a player participant as the target.'
+    : selectedActor === selectedTarget
+      ? 'Choose a different target participant.'
+      : null;
+  const startEncounterDisabledReason =
+    busyReason ??
+    missingSessionReason ??
+    missingActiveSceneReason ??
+    (activeScene?.placedCharacters.length
+      ? null
+      : 'Place at least one character in the active scene first.');
+  const placeTokensDisabledReason =
+    busyReason ??
+    missingSessionReason ??
+    (sceneId ? null : 'Create or recover an active scene first.');
+  const playerActionDisabledReason =
+    busyReason ??
+    missingSessionReason ??
+    missingEncounterReason ??
+    invalidActorReason;
+  const attackDisabledReason =
+    playerActionDisabledReason ?? invalidTargetReason;
+  const movementDisabledReason =
+    busyReason ??
+    missingSessionReason ??
+    missingActiveSceneReason ??
+    invalidActorReason;
+  const dmCharacterDisabledReason =
+    busyReason ??
+    missingSessionReason ??
+    invalidActorReason ??
+    (selectedCharacter ? null : 'Load or assign this character first.');
+  const dmEncounterDisabledReason =
+    busyReason ?? missingSessionReason ?? missingEncounterReason;
+  const activeSceneLabel = scene
+    ? `${scene.name} (${scene.id})`
+    : (activeScene?.activeSceneId ?? sceneId) || 'none';
 
   return (
     <main className="min-h-screen bg-[#f6f3ea] text-stone-950">
@@ -1120,6 +1523,16 @@ export function RuntimeCockpit() {
             {commandError}
           </div>
         ) : null}
+        {recoveryNotes.length ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold">Recovery completed with notes.</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {recoveryNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <div className="flex flex-col gap-5">
@@ -1137,8 +1550,8 @@ export function RuntimeCockpit() {
                 />
                 <LabeledInput
                   label="Session ID"
-                  onChange={setSessionId}
-                  placeholder="Create or paste a session ID"
+                  onChange={switchSessionId}
+                  placeholder="Paste an existing session ID to recover"
                   value={sessionId}
                 />
                 <div className="grid grid-cols-2 gap-2">
@@ -1148,27 +1561,45 @@ export function RuntimeCockpit() {
                     onClick={createSession}
                   />
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabledReason={
+                      missingSessionReason ?? busyReason ?? undefined
+                    }
                     label="Recover"
                     onClick={recoverReadModels}
                     variant="secondary"
                   />
                 </div>
                 <ActionButton
-                  disabled={!canUseSession || Boolean(busyLabel)}
+                  disabled={Boolean(busyLabel)}
+                  label="Run Fresh Demo Setup"
+                  onClick={runFreshDemoSetup}
+                  variant="secondary"
+                />
+                <ActionButton
+                  disabled={Boolean(missingSessionReason ?? busyReason)}
+                  disabledReason={
+                    missingSessionReason ?? busyReason ?? undefined
+                  }
                   label="Join Sample Players"
                   onClick={joinSamplePlayers}
                   variant="secondary"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabledReason={
+                      missingSessionReason ?? busyReason ?? undefined
+                    }
                     label="Create Characters"
                     onClick={createSampleCharacters}
                     variant="secondary"
                   />
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabledReason={
+                      missingSessionReason ?? busyReason ?? undefined
+                    }
                     label="Finalize + Assign"
                     onClick={finalizeAndAssignCharacters}
                     variant="secondary"
@@ -1176,23 +1607,38 @@ export function RuntimeCockpit() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(missingSessionReason ?? busyReason)}
+                    disabledReason={
+                      missingSessionReason ?? busyReason ?? undefined
+                    }
                     label="Create Scene"
                     onClick={createAndActivateScene}
                     variant="secondary"
                   />
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(placeTokensDisabledReason)}
+                    disabledReason={placeTokensDisabledReason ?? undefined}
                     label="Place Tokens"
                     onClick={placeSampleCharacters}
                     variant="secondary"
                   />
                 </div>
                 <ActionButton
-                  disabled={!canUseSession || Boolean(busyLabel)}
+                  disabled={Boolean(startEncounterDisabledReason)}
+                  disabledReason={startEncounterDisabledReason ?? undefined}
                   label="Start Encounter"
                   onClick={startEncounter}
                 />
+                <ActionButton
+                  disabled={Boolean(busyLabel)}
+                  label="Local Reset"
+                  onClick={resetLocalCockpit}
+                  variant="danger"
+                />
+                <p className="text-xs leading-5 text-stone-600">
+                  Demo setup creates a fresh backend session. Local reset only
+                  clears this browser cockpit; it does not delete server state.
+                </p>
               </div>
             </Panel>
 
@@ -1207,7 +1653,8 @@ export function RuntimeCockpit() {
                   </p>
                 </div>
                 <ActionButton
-                  disabled={!canUseSession}
+                  disabled={Boolean(missingSessionReason)}
+                  disabledReason={missingSessionReason ?? undefined}
                   label={streamEnabled ? 'Disconnect' : 'Subscribe'}
                   onClick={() => setStreamEnabled((current) => !current)}
                   variant={streamEnabled ? 'danger' : 'secondary'}
@@ -1218,11 +1665,11 @@ export function RuntimeCockpit() {
             <Panel title="Command State">
               <dl className="grid gap-2 text-sm">
                 <StatusRow label="Busy" value={busyLabel ?? 'idle'} />
+                <StatusRow label="Session ID" value={sessionId || 'none'} />
+                <StatusRow label="Active scene ID" value={sceneId || 'none'} />
+                <StatusRow label="Scene name" value={scene?.name ?? 'none'} />
                 <StatusRow label="Current turn" value={currentTurnName} />
-                <StatusRow
-                  label="Active scene"
-                  value={activeScene?.activeSceneId ?? (sceneId || 'none')}
-                />
+                <StatusRow label="Loaded scene" value={activeSceneLabel} />
                 <StatusRow
                   label="Encounter"
                   value={
@@ -1250,7 +1697,7 @@ export function RuntimeCockpit() {
                   <SelectField
                     label="Actor"
                     onChange={setSelectedActor}
-                    options={participants.map((participant) => ({
+                    options={playerParticipants.map((participant) => ({
                       label: `${participant.displayName} (${participant.id})`,
                       value: participant.id,
                     }))}
@@ -1278,13 +1725,15 @@ export function RuntimeCockpit() {
                   />
                   <div className="flex gap-2">
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(movementDisabledReason)}
+                      disabledReason={movementDisabledReason ?? undefined}
                       label="Move"
                       onClick={moveSelectedActor}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(dmCharacterDisabledReason)}
+                      disabledReason={dmCharacterDisabledReason ?? undefined}
                       label="DM Reposition"
                       onClick={dmRepositionSelected}
                     />
@@ -1319,42 +1768,45 @@ export function RuntimeCockpit() {
                   <SelectField
                     label="Target"
                     onChange={setSelectedTarget}
-                    options={participants
-                      .filter((participant) => participant.role === 'player')
-                      .map((participant) => ({
-                        label: `${participant.displayName} (${participant.id})`,
-                        value: participant.id,
-                      }))}
+                    options={playerParticipants.map((participant) => ({
+                      label: `${participant.displayName} (${participant.id})`,
+                      value: participant.id,
+                    }))}
                     value={selectedTarget}
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(playerActionDisabledReason)}
+                      disabledReason={playerActionDisabledReason ?? undefined}
                       label="Use Action"
                       onClick={() => runEncounterCommand('use_action')}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(playerActionDisabledReason)}
+                      disabledReason={playerActionDisabledReason ?? undefined}
                       label="Use Bonus"
                       onClick={() => runEncounterCommand('use_bonus_action')}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(playerActionDisabledReason)}
+                      disabledReason={playerActionDisabledReason ?? undefined}
                       label="Use Reaction"
                       onClick={() => runEncounterCommand('use_reaction')}
                       variant="secondary"
                     />
                     <ActionButton
-                      disabled={!canUseSession || Boolean(busyLabel)}
+                      disabled={Boolean(dmEncounterDisabledReason)}
+                      disabledReason={dmEncounterDisabledReason ?? undefined}
                       label="Advance Turn"
                       onClick={() => runEncounterCommand('advance_turn')}
                       variant="secondary"
                     />
                   </div>
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(attackDisabledReason)}
+                    disabledReason={attackDisabledReason ?? undefined}
                     label="Attack Target"
                     onClick={attackTarget}
                   />
@@ -1384,12 +1836,10 @@ export function RuntimeCockpit() {
                   <SelectField
                     label="Controlled participant"
                     onChange={setSelectedActor}
-                    options={participants
-                      .filter((participant) => participant.role === 'player')
-                      .map((participant) => ({
-                        label: `${participant.displayName} (${participant.id})`,
-                        value: participant.id,
-                      }))}
+                    options={playerParticipants.map((participant) => ({
+                      label: `${participant.displayName} (${participant.id})`,
+                      value: participant.id,
+                    }))}
                     value={selectedActor}
                   />
                   <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -1400,7 +1850,8 @@ export function RuntimeCockpit() {
                     />
                     <div className="self-end">
                       <ActionButton
-                        disabled={!selectedCharacter || Boolean(busyLabel)}
+                        disabled={Boolean(dmCharacterDisabledReason)}
+                        disabledReason={dmCharacterDisabledReason ?? undefined}
                         label="Set HP"
                         onClick={dmSetCurrentHp}
                       />
@@ -1413,7 +1864,8 @@ export function RuntimeCockpit() {
                       value={conditionsDraft}
                     />
                     <ActionButton
-                      disabled={!selectedCharacter || Boolean(busyLabel)}
+                      disabled={Boolean(dmCharacterDisabledReason)}
+                      disabledReason={dmCharacterDisabledReason ?? undefined}
                       label="Set Conditions"
                       onClick={dmSetConditions}
                       variant="secondary"
@@ -1472,13 +1924,15 @@ export function RuntimeCockpit() {
                     />
                     <div className="grid grid-cols-2 gap-2">
                       <ActionButton
-                        disabled={!canUseSession || Boolean(busyLabel)}
+                        disabled={Boolean(dmEncounterDisabledReason)}
+                        disabledReason={dmEncounterDisabledReason ?? undefined}
                         label="Set Turn Actor"
                         onClick={dmSetTurnParticipant}
                         variant="secondary"
                       />
                       <ActionButton
-                        disabled={!canUseSession || Boolean(busyLabel)}
+                        disabled={Boolean(dmEncounterDisabledReason)}
+                        disabledReason={dmEncounterDisabledReason ?? undefined}
                         label="Set Usage"
                         onClick={dmSetTurnUsage}
                         variant="secondary"
@@ -1486,7 +1940,8 @@ export function RuntimeCockpit() {
                     </div>
                   </div>
                   <ActionButton
-                    disabled={!canUseSession || Boolean(busyLabel)}
+                    disabled={Boolean(dmEncounterDisabledReason)}
+                    disabledReason={dmEncounterDisabledReason ?? undefined}
                     label="End Encounter"
                     onClick={dmEndEncounter}
                     variant="danger"
@@ -1546,11 +2001,13 @@ function Panel({ children, title }: { children: ReactNode; title: string }) {
 
 function ActionButton({
   disabled,
+  disabledReason,
   label,
   onClick,
   variant = 'primary',
 }: {
   disabled?: boolean;
+  disabledReason?: string;
   label: string;
   onClick: () => void | Promise<void>;
   variant?: 'danger' | 'primary' | 'secondary';
@@ -1571,9 +2028,13 @@ function ActionButton({
       onClick={() => {
         void onClick();
       }}
+      title={disabled ? disabledReason : undefined}
       type="button"
     >
       {label}
+      {disabled && disabledReason ? (
+        <span className="sr-only">: {disabledReason}</span>
+      ) : null}
     </button>
   );
 }
@@ -1821,29 +2282,6 @@ function JsonPreview({ value }: { value: unknown }) {
   );
 }
 
-function getKnownCharacterIds(
-  sessionState: SessionSnapshot | null,
-  charactersByParticipant: Record<string, CharacterResource | undefined>,
-): Record<string, string> {
-  const ids: Record<string, string> = {};
-
-  for (const [participantId, resource] of Object.entries(
-    charactersByParticipant,
-  )) {
-    if (resource) {
-      ids[participantId] = resource.character.id;
-    }
-  }
-
-  for (const participant of sessionState?.participants ?? []) {
-    if (participant.characterId) {
-      ids[participant.id] = participant.characterId;
-    }
-  }
-
-  return ids;
-}
-
 function getParticipantName(
   participants: SessionSnapshot['participants'],
   participantId: string,
@@ -1852,17 +2290,4 @@ function getParticipantName(
     participants.find((participant) => participant.id === participantId)
       ?.displayName ?? participantId
   );
-}
-
-function initials(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2);
-}
-
-function flag(value: boolean): string {
-  return value ? 'yes' : 'no';
 }

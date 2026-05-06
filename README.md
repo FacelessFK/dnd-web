@@ -17,7 +17,9 @@ The repository now has the first useful browser runtime cockpit at
 lets a developer or DM manually operate the existing authoritative backend:
 create a session, seed sample players and characters, create and activate a
 scene, place tokens, start an encounter, drive turn/combat/DM controls, watch
-SSE events, and recover current state through read models after refresh.
+SSE events, run a fresh demo setup flow, reset local cockpit state without
+touching the backend, and recover current state through read models after
+refresh.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -181,8 +183,8 @@ Current SSE event types:
 
 Missed transient SSE events are not replayed. After reconnect, clients should
 recover current authoritative state through read models:
-`reconnect_session`, `get_active_scene_state`, `get_encounter_state`, and
-`get_character`.
+`reconnect_session`, `get_scene`, `get_active_scene_state`,
+`get_encounter_state`, and `get_character`.
 
 ## Manual Validation
 
@@ -193,7 +195,8 @@ encounter start, reaction/attack usage, reconnect recovery, read-model checks,
 downed actor gating, DM override commands, and idempotent retry behavior.
 
 For browser-based manual operation, start both apps and open
-`http://localhost:3000/runtime`.
+`http://localhost:3000/runtime`. The cockpit has a fresh demo setup action for
+local playtesting and a local reset action that clears browser state only.
 
 Quick smoke flow:
 
@@ -228,7 +231,8 @@ curl -X POST http://127.0.0.1:2567/api/session/command \
 - `pnpm lint` runs ESLint across the workspace
 - `pnpm format` formats the repository with Prettier
 - `pnpm format:check` checks formatting without writing changes
-- `pnpm test` runs the server runtime tests and repo smoke test
+- `pnpm test` runs the server runtime tests, web helper tests, and repo smoke
+  test
 - `pnpm typecheck` runs TypeScript checks for workspace packages that define it
 
 ## Environment Variables

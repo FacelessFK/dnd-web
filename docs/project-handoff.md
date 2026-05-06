@@ -42,7 +42,11 @@ It can:
 - start an encounter,
 - subscribe to the session SSE stream,
 - display session, active-scene, encounter, character, and event-log state,
-- recover state after refresh using read-model commands,
+- run a fresh demo setup flow for local playtesting,
+- recover state after refresh using session, scene, active-scene, encounter,
+  and assigned-character read-model commands,
+- paste an existing session ID and clear local cockpit state without touching
+  backend state,
 - trigger action, bonus action, reaction, turn advance, attack, movement, DM HP,
   DM reposition, condition tags, turn actor override, turn usage override, and
   encounter end.
@@ -92,8 +96,8 @@ pnpm typecheck
 pnpm format:check
 ```
 
-There is no dedicated frontend test runner yet. The cockpit is covered by
-TypeScript and linting, while backend behavior remains covered by the existing
+The web package has lightweight Node test coverage for runtime API parsing and
+cockpit recovery helpers. Backend behavior remains covered by the existing
 server tests and smoke tests.
 
 ## Useful Docs
@@ -118,10 +122,8 @@ server tests and smoke tests.
 
 ## Recommended Next Work
 
-- Add a small browser-oriented smoke flow once there is an agreed frontend test
-  tool.
-- Improve cockpit ergonomics around loading an existing session without local
-  storage.
+- Add a browser-oriented smoke flow if the cockpit becomes a long-lived manual
+  validation surface.
 - Add product-grade player-facing views after the current runtime cockpit has
   served its manual validation purpose.
 - Continue persistence work only with explicit claims about which command paths
