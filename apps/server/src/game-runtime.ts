@@ -169,6 +169,8 @@ export type PreparedMovementContext = {
   targetPosition: MoveCharacterInActiveSceneCommand['payload']['position'];
 };
 
+export type MoveCharacterInActiveSceneBranch = 'character' | 'combat';
+
 type ResolvedAttack = {
   updatedEncounter: Encounter;
   roll: CombatEvent['roll'];
@@ -1052,6 +1054,7 @@ export class InMemoryGameRuntime<
   moveCharacterInActiveScenePrepared(
     prepared: PreparedMovementContext,
     options: {
+      rejectEncounterSideEffects?: boolean;
       transactionalBranchOnly: boolean;
     } = { transactionalBranchOnly: true },
   ): RuntimeRepositoryResult<CharacterResource | null> {
@@ -1104,6 +1107,13 @@ export class InMemoryGameRuntime<
             let updatedEncounter: Encounter | null = null;
 
             if (encounter) {
+              if (
+                movementCostFeet > 0 &&
+                options.rejectEncounterSideEffects === true
+              ) {
+                return null;
+              }
+
               const currentTurnParticipant = assertEncounterTurnActor(
                 encounter,
                 prepared.actor.id,
@@ -1195,6 +1205,54 @@ export class InMemoryGameRuntime<
               },
             );
           },
+        );
+      },
+    );
+  }
+
+  resolveMoveCharacterInActiveSceneBranchPrepared(
+    prepared: PreparedMovementContext,
+  ): RuntimeRepositoryResult<MoveCharacterInActiveSceneBranch> {
+    return this.resolveRepositoryResult(
+      this.requireAssignedCharacterRecord(
+        prepared.snapshot,
+        prepared.participant,
+      ),
+      (record) => {
+        assertSceneBelongsToSession(prepared.snapshot, prepared.scene);
+        assertGridDefinitionIsValid(prepared.scene.grid);
+
+        const currentPosition = requireCharacterPlacedInActiveScene(
+          record,
+          prepared.activeSceneId,
+        );
+        const movementCostFeet = calculateMovementDistanceFeet(
+          {
+            x: currentPosition.x,
+            y: currentPosition.y,
+          },
+          prepared.targetPosition,
+          prepared.scene.grid.cellSizeFeet,
+        );
+
+        assertMovementWithinAllowance({
+          origin: {
+            x: currentPosition.x,
+            y: currentPosition.y,
+          },
+          target: prepared.targetPosition,
+          speedFeet: record.character.speed,
+          cellSizeFeet: prepared.scene.grid.cellSizeFeet,
+          characterId: record.character.id,
+        });
+
+        return this.resolveRepositoryResult(
+          this.findActiveEncounterForParticipant(
+            prepared.snapshot.session.id,
+            prepared.actor.id,
+          ),
+          (encounter) =>
+            encounter && movementCostFeet > 0 ? 'combat' : 'character',
         );
       },
     );

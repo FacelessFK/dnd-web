@@ -3,6 +3,7 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
+import { calculateMovementDistanceFeet } from '@dnd/rules';
 import type {
   CombatEvent,
   EncounterStateUpdate,
@@ -21,8 +22,10 @@ import {
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
+import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
 import type {
   InMemoryGameRuntime,
+  PreparedMovementContext,
   RuntimeCharacterRepository,
 } from './game-runtime.js';
 import type { RuntimeSessionStore } from './session-store.js';
@@ -134,6 +137,11 @@ export class DbBackedCombatCommandTransactionBoundary {
     }
 
     const prepared = await params.prepare(params.runtime);
+
+    if (!(await this.shouldClaimAndExecute(params, prepared))) {
+      return null;
+    }
+
     const result = await this.unitOfWork.transaction((context) =>
       this.runInTransaction(
         context,
@@ -166,6 +174,51 @@ export class DbBackedCombatCommandTransactionBoundary {
     }
 
     return this.clone(result.response);
+  }
+
+  private async shouldClaimAndExecute<TPrepared, TResponse>(
+    params: TransactionalRunParams<TPrepared, TResponse>,
+    prepared: TPrepared,
+  ): Promise<boolean> {
+    if (params.command.type !== 'move_character_in_active_scene') {
+      return true;
+    }
+
+    const movement = prepared as PreparedMovementContext;
+    const encounter = params.runtime.encounters.findEncounterBySession(
+      movement.snapshot.session.id,
+    );
+
+    if (!encounter) {
+      return false;
+    }
+
+    const characterId = movement.participant.characterId;
+
+    if (!characterId) {
+      return true;
+    }
+
+    const record = await params.runtime.characters.getCharacter(characterId);
+    const currentPlacement = record.overlay.position;
+
+    if (
+      !currentPlacement ||
+      currentPlacement.sceneId !== movement.activeSceneId
+    ) {
+      return true;
+    }
+
+    return (
+      calculateMovementDistanceFeet(
+        {
+          x: currentPlacement.x,
+          y: currentPlacement.y,
+        },
+        movement.targetPosition,
+        movement.scene.grid.cellSizeFeet,
+      ) > 0
+    );
   }
 
   private async loadCachedResponse<TResponse>(
@@ -205,17 +258,24 @@ export class DbBackedCombatCommandTransactionBoundary {
     idempotencyKey: string,
     fingerprint: string,
   ): Promise<TransactionalRunResult<TResponse> | null> {
-    const cached = await this.loadCachedResponse<TResponse>(
-      context,
-      idempotencyKey,
+    const claim = await acquireTransactionalIdempotencyClaim<TResponse>({
+      category: params.category,
+      claims: context.commandIdempotencyClaims,
+      command: params.command,
+      completed: context.commandIdempotency,
       fingerprint,
-    );
+      idempotencyKey,
+    });
 
-    if (cached) {
+    if (claim.kind === 'cached') {
+      const encounters = await DbBackedEncounterStore.fromDatabase(
+        context.encounters,
+      );
+
       return {
         dispatchIdempotencyKey: null,
-        encounterCache: cached.encounterCache,
-        response: cached.response,
+        encounterCache: encounters.cloneEncountersBySession(),
+        response: this.clone(claim.response),
       };
     }
 

@@ -84,6 +84,22 @@ export const completedCommandIdempotencyRecords = pgTable(
   },
 );
 
+export const commandIdempotencyClaimRecords = pgTable(
+  'command_idempotency_claim_records',
+  {
+    idempotencyKey: text('idempotency_key').primaryKey(),
+    category: text('category').notNull(),
+    commandType: text('command_type').notNull(),
+    commandId: text('command_id').notNull(),
+    actorParticipantId: text('actor_participant_id').notNull(),
+    sessionId: text('session_id'),
+    fingerprint: text('fingerprint').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+);
+
 export const sessionSnapshots = pgTable('session_snapshots', {
   sessionId: text('session_id').primaryKey().$type<SessionId>(),
   snapshot: jsonb('snapshot')
@@ -150,6 +166,7 @@ export const commandEventOutboxRecords = pgTable(
 export const dbSchema = {
   activeEncounterRecords,
   characterRecords,
+  commandIdempotencyClaimRecords,
   commandEventOutboxRecords,
   completedCommandIdempotencyRecords,
   sceneRecords,
@@ -162,6 +179,8 @@ export type ActiveEncounterRecordRow =
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
 export type CommandEventOutboxRow =
   typeof commandEventOutboxRecords.$inferSelect;
+export type CommandIdempotencyClaimRecordRow =
+  typeof commandIdempotencyClaimRecords.$inferSelect;
 export type CompletedCommandIdempotencyRecordRow =
   typeof completedCommandIdempotencyRecords.$inferSelect;
 export type SceneRecordRow = typeof sceneRecords.$inferSelect;

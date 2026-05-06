@@ -9,6 +9,9 @@ import type {
   CharacterRecordDatabase,
   CharacterRecordRow,
   CharacterRecordWrite,
+  CommandIdempotencyClaimRecordDatabase,
+  CommandIdempotencyClaimRecordRow,
+  CommandIdempotencyClaimRecordWrite,
   CommandIdempotencyRecordDatabase,
   CommandEventOutboxDatabase,
   CommandEventOutboxRecordWrite,
@@ -184,6 +187,30 @@ class EmptyCommandIdempotencyRecordDatabase implements CommandIdempotencyRecordD
   }
 }
 
+class EmptyCommandIdempotencyClaimRecordDatabase implements CommandIdempotencyClaimRecordDatabase {
+  async getCommandIdempotencyClaimRecord(
+    _idempotencyKey: string,
+  ): Promise<CommandIdempotencyClaimRecordRow | null> {
+    void _idempotencyKey;
+    return null;
+  }
+
+  async insertCommandIdempotencyClaimRecord(
+    write: CommandIdempotencyClaimRecordWrite,
+  ): Promise<CommandIdempotencyClaimRecordRow | null> {
+    return {
+      actorParticipantId: write.actorParticipantId,
+      category: write.category,
+      commandId: write.commandId,
+      commandType: write.commandType,
+      createdAt: new Date(0),
+      fingerprint: write.fingerprint,
+      idempotencyKey: write.idempotencyKey,
+      sessionId: write.sessionId,
+    };
+  }
+}
+
 class EmptyCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
   async insertCommandEventOutboxRecord(
     write: CommandEventOutboxRecordWrite,
@@ -227,6 +254,8 @@ class StubUnitOfWork implements DndDatabaseUnitOfWork {
   ): Promise<T> {
     return run({
       characters: new EmptyCharacterRecordDatabase(),
+      commandIdempotencyClaims:
+        new EmptyCommandIdempotencyClaimRecordDatabase(),
       commandIdempotency: new EmptyCommandIdempotencyRecordDatabase(),
       encounters: new EmptyActiveEncounterRecordDatabase(),
       outbox: new EmptyCommandEventOutboxDatabase(),

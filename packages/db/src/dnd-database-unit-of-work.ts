@@ -4,6 +4,10 @@ import {
   type DndDatabase,
 } from './character-record-database.js';
 import {
+  DrizzleCommandIdempotencyClaimRecordDatabase,
+  type CommandIdempotencyClaimRecordDatabase,
+} from './command-idempotency-claim-record-database.js';
+import {
   DrizzleCommandIdempotencyRecordDatabase,
   type CommandIdempotencyRecordDatabase,
 } from './command-idempotency-record-database.js';
@@ -26,6 +30,7 @@ import {
 
 export type DndDatabaseUnitOfWorkContext = {
   characters: CharacterRecordDatabase;
+  commandIdempotencyClaims: CommandIdempotencyClaimRecordDatabase;
   commandIdempotency: CommandIdempotencyRecordDatabase;
   encounters: ActiveEncounterRecordDatabase;
   outbox: CommandEventOutboxDatabase;
@@ -48,6 +53,8 @@ export class DrizzleDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     return this.db.transaction((tx) =>
       run({
         characters: new DrizzleCharacterRecordDatabase(tx),
+        commandIdempotencyClaims:
+          new DrizzleCommandIdempotencyClaimRecordDatabase(tx),
         commandIdempotency: new DrizzleCommandIdempotencyRecordDatabase(tx),
         encounters: new DrizzleActiveEncounterRecordDatabase(tx),
         outbox: new DrizzleCommandEventOutboxDatabase(tx),

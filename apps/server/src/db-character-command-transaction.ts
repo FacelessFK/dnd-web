@@ -3,7 +3,11 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
-import type { CharacterStateUpdate, MovementStateUpdate } from '@dnd/protocol';
+import type {
+  CharacterStateUpdate,
+  MoveCharacterInActiveSceneCommand,
+  MovementStateUpdate,
+} from '@dnd/protocol';
 
 import {
   CommandIdempotencyError,
@@ -18,9 +22,11 @@ import {
   DURABLE_CHARACTER_MUTATION_COMMAND_TYPES,
   type DurableCharacterMutationCommandType,
 } from './db-command-idempotency-store.js';
+import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import type {
   InMemoryGameRuntime,
+  PreparedMovementContext,
   RuntimeCharacterRepository,
 } from './game-runtime.js';
 import type { RuntimeSessionStore } from './session-store.js';
@@ -58,6 +64,14 @@ type TransactionalRunResult<TResponse> = {
   publications: CharacterTransactionalPublication[];
   response: TResponse;
 };
+
+export class CombatMovementTransactionRequiredError extends Error {
+  constructor() {
+    super(
+      'move_character_in_active_scene requires the combat transaction boundary for encounter-aware movement spending.',
+    );
+  }
+}
 
 export class DbBackedCharacterCommandTransactionBoundary {
   private readonly durableCommandTypes: ReadonlySet<string>;
@@ -159,7 +173,48 @@ export class DbBackedCharacterCommandTransactionBoundary {
         },
       },
     );
-    const response = await params.execute(transactionRuntime);
+    const preparedMovement =
+      params.command.type === 'move_character_in_active_scene'
+        ? transactionRuntime.prepareMoveCharacterInActiveScene(
+            params.command as MoveCharacterInActiveSceneCommand,
+          )
+        : null;
+
+    if (preparedMovement) {
+      const movementBranch =
+        await transactionRuntime.resolveMoveCharacterInActiveSceneBranchPrepared(
+          preparedMovement,
+        );
+
+      if (movementBranch === 'combat') {
+        throw new CombatMovementTransactionRequiredError();
+      }
+    }
+    const claim = await acquireTransactionalIdempotencyClaim<TResponse>({
+      category: params.category,
+      claims: context.commandIdempotencyClaims,
+      command: params.command,
+      completed: context.commandIdempotency,
+      fingerprint,
+      idempotencyKey,
+    });
+
+    if (claim.kind === 'cached') {
+      return {
+        characterStateUpdates: [],
+        dispatchIdempotencyKey: null,
+        publications: [],
+        response: this.clone(claim.response),
+      };
+    }
+
+    const response = preparedMovement
+      ? await this.executePreparedMovementCommand<TResponse>(
+          params,
+          transactionRuntime,
+          preparedMovement,
+        )
+      : await params.execute(transactionRuntime);
     const inserted =
       await context.commandIdempotency.insertCompletedCommandIdempotencyRecord({
         actorParticipantId: params.command.actor.participantId,
@@ -211,6 +266,32 @@ export class DbBackedCharacterCommandTransactionBoundary {
       publications: [],
       response: this.clone(concurrentRecord.response) as TResponse,
     };
+  }
+
+  private async executePreparedMovementCommand<TResponse>(
+    params: TransactionalRunParams<TResponse>,
+    transactionRuntime: InMemoryGameRuntime<
+      RuntimeCharacterRepository,
+      RuntimeSessionStore
+    >,
+    preparedMovement: PreparedMovementContext,
+  ): Promise<TResponse> {
+    const moved = await transactionRuntime.moveCharacterInActiveScenePrepared(
+      preparedMovement,
+      {
+        rejectEncounterSideEffects: true,
+        transactionalBranchOnly: false,
+      },
+    );
+
+    if (!moved) {
+      throw new CombatMovementTransactionRequiredError();
+    }
+
+    return {
+      ok: true,
+      data: moved,
+    } as TResponse;
   }
 
   private async persistOutboxRows(

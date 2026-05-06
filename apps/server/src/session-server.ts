@@ -55,7 +55,10 @@ import {
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
-import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
+import {
+  CombatMovementTransactionRequiredError,
+  DbBackedCharacterCommandTransactionBoundary,
+} from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
 import { DbBackedEncounterCommandTransactionBoundary } from './db-encounter-command-transaction.js';
 import { DbBackedSceneCommandTransactionBoundary } from './db-scene-command-transaction.js';
@@ -177,7 +180,7 @@ export async function handleRequest(
       name: 'dnd-dm-platform-server',
       phase: 'phase-12',
       status:
-        'scene-transaction-plus-session-character-movement-encounter-combat-outbox-foundation',
+        'db-idempotency-claim-plus-scene-transaction-and-session-character-movement-encounter-combat-outbox-foundation',
     });
     return;
   }
@@ -801,53 +804,68 @@ async function handleMovementCommandRequest(
     const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_active_scene_state' ? null : 'movement';
+    const runCombatMovementTransaction =
+      async (): Promise<MovementCommandSuccess | null> => {
+        if (
+          !idempotencyCategory ||
+          !combatCommandTransaction?.supports({
+            category: idempotencyCategory,
+            command,
+          })
+        ) {
+          return null;
+        }
 
-    if (
-      idempotencyCategory &&
-      combatCommandTransaction?.supports({
-        category: idempotencyCategory,
-        command,
-      })
-    ) {
-      const success = await combatCommandTransaction.run({
-        category: idempotencyCategory,
-        command,
-        runtime,
-        prepare: (preparedRuntime) => {
-          switch (command.type) {
-            case 'move_character_in_active_scene':
-              return preparedRuntime.prepareMoveCharacterInActiveScene(command);
-            default:
-              throw new Error(
-                `Unsupported transactional combat command type "${command.type}".`,
-              );
-          }
-        },
-        execute: async (transactionRuntime, prepared) => {
-          switch (command.type) {
-            case 'move_character_in_active_scene': {
-              const moved =
-                await transactionRuntime.moveCharacterInActiveScenePrepared(
-                  prepared,
+        const success = await combatCommandTransaction.run({
+          category: idempotencyCategory,
+          command,
+          runtime,
+          prepare: (preparedRuntime) => {
+            switch (command.type) {
+              case 'move_character_in_active_scene':
+                return preparedRuntime.prepareMoveCharacterInActiveScene(
+                  command,
                 );
-
-              if (!moved) {
-                return null;
-              }
-
-              return {
-                ok: true,
-                data: moved,
-              } satisfies MovementCommandSuccess;
+              default:
+                throw new Error(
+                  `Unsupported transactional combat command type "${command.type}".`,
+                );
             }
-            default:
-              throw new Error(
-                `Unsupported transactional combat command type "${command.type}".`,
-              );
-          }
-        },
-      });
+          },
+          execute: async (transactionRuntime, prepared) => {
+            switch (command.type) {
+              case 'move_character_in_active_scene': {
+                const moved =
+                  await transactionRuntime.moveCharacterInActiveScenePrepared(
+                    prepared,
+                  );
 
+                if (!moved) {
+                  return null;
+                }
+
+                return {
+                  ok: true,
+                  data: moved,
+                } satisfies MovementCommandSuccess;
+              }
+              default:
+                throw new Error(
+                  `Unsupported transactional combat command type "${command.type}".`,
+                );
+            }
+          },
+        });
+
+        if (!success) {
+          return null;
+        }
+
+        return success;
+      };
+
+    {
+      const success = await runCombatMovementTransaction();
       if (success) {
         sendJson(response, 200, success, movementCommandSuccessSchema);
         return;
@@ -861,34 +879,57 @@ async function handleMovementCommandRequest(
         command,
       })
     ) {
-      const success = await characterCommandTransaction.run({
-        category: idempotencyCategory,
-        command,
-        runtime,
-        execute: async (transactionRuntime) => {
-          let data: MovementCommandSuccess['data'];
+      let success: MovementCommandSuccess;
 
-          switch (command.type) {
-            case 'place_character_in_active_scene':
-              data =
-                await transactionRuntime.placeCharacterInActiveScene(command);
-              break;
-            case 'move_character_in_active_scene':
-              data =
-                await transactionRuntime.moveCharacterInActiveScene(command);
-              break;
-            default:
-              throw new Error(
-                `Unsupported transactional movement command type "${command.type}".`,
-              );
+      try {
+        success = await characterCommandTransaction.run({
+          category: idempotencyCategory,
+          command,
+          runtime,
+          execute: async (transactionRuntime) => {
+            let data: MovementCommandSuccess['data'];
+
+            switch (command.type) {
+              case 'place_character_in_active_scene':
+                data =
+                  await transactionRuntime.placeCharacterInActiveScene(command);
+                break;
+              case 'move_character_in_active_scene':
+                data =
+                  await transactionRuntime.moveCharacterInActiveScene(command);
+                break;
+              default:
+                throw new Error(
+                  `Unsupported transactional movement command type "${command.type}".`,
+                );
+            }
+
+            return {
+              ok: true,
+              data,
+            } satisfies MovementCommandSuccess;
+          },
+        });
+      } catch (error) {
+        if (
+          error instanceof CombatMovementTransactionRequiredError &&
+          command.type === 'move_character_in_active_scene'
+        ) {
+          const retriedSuccess = await runCombatMovementTransaction();
+
+          if (retriedSuccess) {
+            sendJson(
+              response,
+              200,
+              retriedSuccess,
+              movementCommandSuccessSchema,
+            );
+            return;
           }
+        }
 
-          return {
-            ok: true,
-            data,
-          } satisfies MovementCommandSuccess;
-        },
-      });
+        throw error;
+      }
 
       sendJson(response, 200, success, movementCommandSuccessSchema);
       return;

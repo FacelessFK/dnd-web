@@ -21,6 +21,7 @@ import {
   type IdempotentCommand,
 } from './command-idempotency-store.js';
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
+import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
 import type {
   InMemoryGameRuntime,
   RuntimeCharacterRepository,
@@ -141,21 +142,19 @@ export class DbBackedSessionCommandTransactionBoundary {
   ): Promise<TransactionalRunResult<TResponse>> {
     const idempotencyKey = createCommandIdempotencyKey(params);
     const fingerprint = createCommandFingerprint(params.command);
-    const existing =
-      await context.commandIdempotency.getCompletedCommandIdempotencyRecord(
-        idempotencyKey,
-      );
+    const claim = await acquireTransactionalIdempotencyClaim<TResponse>({
+      category: params.category,
+      claims: context.commandIdempotencyClaims,
+      command: params.command,
+      completed: context.commandIdempotency,
+      fingerprint,
+      idempotencyKey,
+    });
 
-    if (existing) {
-      this.assertSameFingerprint(
-        idempotencyKey,
-        existing.fingerprint,
-        fingerprint,
-      );
-
+    if (claim.kind === 'cached') {
       return {
         dispatchIdempotencyKey: null,
-        response: this.clone(existing.response) as TResponse,
+        response: this.clone(claim.response),
         sessionSnapshot: null,
       };
     }

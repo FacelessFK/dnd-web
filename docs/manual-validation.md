@@ -8,10 +8,11 @@ deployment.
 Phase 10 added injected DB-backed character, session snapshot, and scene
 boundaries. Phase 11 added injected DB-backed active-encounter,
 encounter-only transaction, attack-first cross-store combat transaction, and
-encounter-aware movement transaction boundaries. Phase 12 now adds the narrow
-DB-backed scene transaction baseline for covered scene-only durable writes,
-plus the single-process session/character/movement/encounter/combat outbox
-persistence foundation and covered live-command post-commit dispatch for the
+encounter-aware movement transaction boundaries. Phase 12 now adds a narrow
+DB-backed pre-execution idempotency-claim foundation, the narrow DB-backed
+scene transaction baseline for covered scene-only durable writes, and the
+single-process session/character/movement/encounter/combat outbox
+persistence foundation plus covered live-command post-commit dispatch for the
 already-covered DB paths. Unpublished outbox rows may remain stored after a
 restart, but they are not auto-redelivered on cold boot because SSE
 subscribers are process-local and there is still no replay or catch-up
@@ -55,7 +56,7 @@ Expected high-level status:
 {
   "name": "dnd-dm-platform-server",
   "phase": "phase-12",
-  "status": "scene-transaction-plus-session-character-movement-encounter-combat-outbox-foundation"
+  "status": "db-idempotency-claim-plus-scene-transaction-and-session-character-movement-encounter-combat-outbox-foundation"
 }
 ```
 
