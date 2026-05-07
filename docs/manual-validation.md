@@ -34,6 +34,12 @@ character, move its own token, use its own turn resources, and attack selected
 player targets. Local Reset clears browser runtime state only; it does not
 delete backend sessions or runtime state.
 
+A lightweight automated browser smoke for the same surface is available with
+`pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
+runs the DM fresh demo setup through headless Chrome, validates read-model
+recovery after reload, checks Player mode guardrails, and confirms Local Reset
+clears only browser state. It is intentionally not a full production E2E suite.
+
 ## What This Covers
 
 - Session create, join, reconnect, and SSE subscription.

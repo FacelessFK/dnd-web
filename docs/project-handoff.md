@@ -109,11 +109,15 @@ pnpm lint
 pnpm test
 pnpm typecheck
 pnpm format:check
+pnpm --filter @dnd/web test:smoke
 ```
 
 The web package has lightweight Node test coverage for runtime API parsing and
-cockpit recovery helpers. Backend behavior remains covered by the existing
-server tests and smoke tests.
+cockpit recovery helpers. It also has a browser smoke command for the `/runtime`
+surface that starts local dev processes, drives the DM fresh demo setup through
+headless Chrome, verifies recovery after reload, checks Player mode guardrails,
+and confirms Local Reset clears browser state only. Backend behavior remains
+covered by the existing server tests and repo smoke tests.
 
 ## Useful Docs
 
@@ -141,9 +145,9 @@ server tests and smoke tests.
 
 ## Recommended Next Work
 
-- Add a browser-oriented smoke flow if the cockpit becomes a long-lived manual
-  validation surface.
 - Add product-grade player-facing views and accessibility audits after the
   current runtime surface has served its manual validation purpose.
+- Promote the browser smoke into CI only after the target environment has a
+  known Chrome/Chromium binary and stable port/network assumptions.
 - Continue persistence work only with explicit claims about which command paths
   are covered.

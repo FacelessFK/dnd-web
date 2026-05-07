@@ -212,6 +212,19 @@ character sheet draft flow backed by character commands and can submit finalized
 characters for DM assignment; DM assignment remains authoritative. Local Reset
 clears browser state only.
 
+Automated browser smoke coverage for this surface is available with:
+
+```bash
+pnpm --filter @dnd/web test:smoke
+```
+
+The smoke command starts local server and web dev processes on temporary ports,
+drives `/runtime` through headless Chrome, runs the DM fresh demo setup,
+validates read-model recovery after reload, checks Player mode guardrails, and
+confirms Local Reset only clears browser cockpit state. Set
+`RUNTIME_SMOKE_BROWSER=/path/to/chrome` if Chrome/Chromium is not discoverable
+on `PATH`.
+
 Quick smoke flow:
 
 ```bash
@@ -247,6 +260,8 @@ curl -X POST http://127.0.0.1:2567/api/session/command \
 - `pnpm format:check` checks formatting without writing changes
 - `pnpm test` runs the server runtime tests, web helper tests, and repo smoke
   test
+- `pnpm --filter @dnd/web test:smoke` runs the browser smoke path for
+  `/runtime`
 - `pnpm typecheck` runs TypeScript checks for workspace packages that define it
 
 ## Environment Variables

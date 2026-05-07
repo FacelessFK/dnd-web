@@ -1,0 +1,703 @@
+#!/usr/bin/env node
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptDir, '../../..');
+const storageKey = 'dnd-runtime-cockpit';
+const smokeTimeoutMs = Number.parseInt(
+  process.env.RUNTIME_SMOKE_TIMEOUT_MS ?? '120000',
+  10,
+);
+
+const processLogs = new Map();
+const startedProcesses = [];
+let chromeUserDataDir;
+
+main().catch(async (error) => {
+  console.error('\n[runtime-smoke] failed');
+  console.error(error instanceof Error ? error.stack : error);
+  printProcessLogs();
+  await cleanup();
+  process.exit(1);
+});
+
+async function main() {
+  const browserPath = findBrowserExecutable();
+
+  if (!browserPath) {
+    throw new Error(
+      'No Chrome/Chromium executable found. Set RUNTIME_SMOKE_BROWSER=/path/to/chrome to run the browser smoke test.',
+    );
+  }
+
+  if (typeof WebSocket !== 'function') {
+    throw new Error(
+      'This smoke test requires a Node runtime with global WebSocket support.',
+    );
+  }
+
+  const serverPort = await getFreePort();
+  const webPort = await getFreePort();
+  const debugPort = await getFreePort();
+  const serverUrl = `http://127.0.0.1:${serverPort}`;
+  const runtimeUrl = `http://127.0.0.1:${webPort}/runtime`;
+
+  console.log('[runtime-smoke] starting authoritative server');
+  const serverProcess = startProcess(
+    'server',
+    'corepack',
+    ['pnpm', '--filter', '@dnd/server', 'dev'],
+    {
+      SERVER_PORT: String(serverPort),
+    },
+  );
+
+  await waitForHttp(`${serverUrl}/`, {
+    label: 'server root',
+    timeoutMs: smokeTimeoutMs,
+  });
+
+  console.log('[runtime-smoke] starting Next runtime UI');
+  const webProcess = startProcess(
+    'web',
+    'corepack',
+    [
+      'pnpm',
+      '--filter',
+      '@dnd/web',
+      'exec',
+      'next',
+      'dev',
+      '-p',
+      String(webPort),
+      '-H',
+      '127.0.0.1',
+    ],
+    {
+      NEXT_PUBLIC_SERVER_URL: serverUrl,
+    },
+  );
+
+  await waitForHttp(runtimeUrl, {
+    label: '/runtime',
+    timeoutMs: smokeTimeoutMs,
+  });
+
+  console.log('[runtime-smoke] launching headless browser');
+  const browserProcess = launchBrowser(browserPath, debugPort);
+  await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`, {
+    label: 'Chrome DevTools',
+    timeoutMs: smokeTimeoutMs,
+  });
+
+  const page = await createCdpPage(debugPort, runtimeUrl);
+
+  try {
+    await page.send('Runtime.enable');
+    await page.send('Page.enable');
+
+    await waitForText(page, 'Runtime War Table', 'runtime shell');
+    await waitForCockpitHydrated(page);
+    await clickButtonIfEnabled(page, 'Local Reset');
+    await waitForNoStoredSession(page);
+    await clickButton(page, 'DM Mode');
+
+    console.log('[runtime-smoke] running fresh DM demo setup');
+    await clickButton(page, 'Run Fresh Demo Setup');
+    await waitForCockpitState(page, (state) =>
+      Boolean(state?.sessionId && state?.sceneId),
+    );
+    await waitForText(page, 'Training Room', 'active scene after demo setup');
+    await waitForText(page, 'Aria', 'sample character Aria');
+    await waitForText(page, 'Borin', 'sample character Borin');
+    await waitForText(page, 'Tactical Grid', 'tactical grid');
+
+    console.log('[runtime-smoke] starting encounter from UI');
+    await clickButton(page, 'Start Encounter');
+    await waitFor(page, {
+      label: 'encounter summary',
+      predicate: `(() => {
+        const text = document.body?.innerText ?? '';
+        return text.includes('Round') &&
+          text.includes('Usage') &&
+          !text.includes('No active encounter loaded');
+      })()`,
+    });
+    await waitForText(page, 'Combat & Event Feed', 'event feed panel');
+    await waitForText(page, 'Monsters & NPCs', 'DM combatant controls panel');
+
+    console.log('[runtime-smoke] validating recovery after reload');
+    await page.send('Page.reload', { ignoreCache: true });
+    await waitForText(page, 'Runtime War Table', 'runtime shell after reload');
+    await waitForCockpitHydrated(page);
+    await clickButton(page, 'Recover');
+    await waitForText(page, 'Training Room', 'recovered scene');
+    await waitForText(page, 'Aria', 'recovered character Aria');
+    await waitForText(page, 'Borin', 'recovered character Borin');
+    await waitFor(page, {
+      label: 'recovered encounter summary',
+      predicate: `(() => {
+        const text = document.body?.innerText ?? '';
+        return text.includes('Round') && text.includes('Usage');
+      })()`,
+    });
+
+    console.log('[runtime-smoke] validating player mode guardrails');
+    await clickButton(page, 'Player Mode');
+    await waitForText(page, 'PLAYER VIEW', 'player mode tactical shell');
+    await clickButton(page, 'Recover');
+    await waitForText(page, 'Aria', 'player assigned character');
+    await waitForText(page, 'Tactical Grid', 'player tactical grid');
+    await expectVisibleButton(page, 'Run Fresh Demo Setup', false);
+    await expectVisibleText(page, 'Scene Builder', false);
+    await expectVisibleText(page, 'Monsters & NPCs', false);
+
+    console.log('[runtime-smoke] validating local reset stays local');
+    await clickButton(page, 'Local Reset');
+    await waitForNoStoredSession(page);
+    await waitFor(page, {
+      label: 'session input reset',
+      predicate: `(() => {
+        const input = [...document.querySelectorAll('input')].find(
+          (candidate) => candidate.getAttribute('placeholder')?.includes('Paste an existing session ID'),
+        );
+        return Boolean(input && input.value === '');
+      })()`,
+    });
+
+    console.log('[runtime-smoke] passed');
+  } finally {
+    await page.close();
+    await cleanup();
+  }
+
+  // Keep these references live for lints and for clearer cleanup ownership.
+  void serverProcess;
+  void webProcess;
+  void browserProcess;
+
+  process.exit(0);
+}
+
+function startProcess(name, command, args, env = {}) {
+  const child = spawn(command, args, {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      ...env,
+      FORCE_COLOR: '0',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  startedProcesses.push(child);
+  processLogs.set(child.pid, {
+    name,
+    lines: [],
+  });
+
+  const capture = (chunk) => {
+    const log = processLogs.get(child.pid);
+
+    if (!log) {
+      return;
+    }
+
+    for (const line of chunk.toString('utf8').split(/\r?\n/)) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      log.lines.push(line);
+
+      if (log.lines.length > 80) {
+        log.lines.shift();
+      }
+    }
+  };
+
+  child.stdout.on('data', capture);
+  child.stderr.on('data', capture);
+  child.on('exit', (code, signal) => {
+    if (code === 0 || signal === 'SIGTERM' || signal === 'SIGKILL') {
+      return;
+    }
+
+    const log = processLogs.get(child.pid);
+    log?.lines.push(`[process exited code=${code} signal=${signal}]`);
+  });
+
+  return child;
+}
+
+function launchBrowser(browserPath, debugPort) {
+  chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-runtime-smoke-'));
+
+  return startProcess('chrome', browserPath, [
+    '--headless=new',
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${chromeUserDataDir}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-background-networking',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-sandbox',
+    'about:blank',
+  ]);
+}
+
+async function createCdpPage(debugPort, url) {
+  const response = await fetch(
+    `http://127.0.0.1:${debugPort}/json/new?${encodeURIComponent(url)}`,
+    {
+      method: 'PUT',
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Unable to create Chrome tab: HTTP ${response.status} ${response.statusText}`,
+    );
+  }
+
+  const target = await response.json();
+
+  if (!target.webSocketDebuggerUrl) {
+    throw new Error('Chrome did not return a page WebSocket debugger URL.');
+  }
+
+  return CdpClient.connect(target.webSocketDebuggerUrl);
+}
+
+class CdpClient {
+  static connect(webSocketUrl) {
+    return new Promise((resolveClient, rejectClient) => {
+      const socket = new WebSocket(webSocketUrl);
+      const client = new CdpClient(socket);
+      const timeout = setTimeout(() => {
+        rejectClient(new Error('Timed out connecting to Chrome DevTools.'));
+      }, 10000);
+
+      socket.addEventListener('open', () => {
+        clearTimeout(timeout);
+        resolveClient(client);
+      });
+      socket.addEventListener('error', () => {
+        clearTimeout(timeout);
+        rejectClient(new Error('Chrome DevTools WebSocket failed to open.'));
+      });
+    });
+  }
+
+  constructor(socket) {
+    this.nextId = 1;
+    this.pending = new Map();
+    this.socket = socket;
+    this.socket.addEventListener('message', (event) => {
+      this.handleMessage(event.data);
+    });
+    this.socket.addEventListener('close', () => {
+      for (const { reject } of this.pending.values()) {
+        reject(new Error('Chrome DevTools WebSocket closed.'));
+      }
+
+      this.pending.clear();
+    });
+  }
+
+  send(method, params = {}) {
+    const id = this.nextId;
+    this.nextId += 1;
+
+    return new Promise((resolveResponse, rejectResponse) => {
+      this.pending.set(id, {
+        reject: rejectResponse,
+        resolve: resolveResponse,
+      });
+      this.socket.send(
+        JSON.stringify({
+          id,
+          method,
+          params,
+        }),
+      );
+    });
+  }
+
+  async evaluate(expression) {
+    const response = await this.send('Runtime.evaluate', {
+      awaitPromise: true,
+      expression,
+      returnByValue: true,
+      userGesture: true,
+    });
+
+    if (response.exceptionDetails) {
+      throw new Error(
+        response.exceptionDetails.exception?.description ??
+          response.exceptionDetails.text ??
+          'Runtime.evaluate failed.',
+      );
+    }
+
+    return response.result?.value;
+  }
+
+  close() {
+    if (this.socket.readyState === 3) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolveClose) => {
+      const timeout = setTimeout(resolveClose, 1000);
+
+      this.socket.addEventListener(
+        'close',
+        () => {
+          clearTimeout(timeout);
+          resolveClose();
+        },
+        {
+          once: true,
+        },
+      );
+      this.socket.close();
+    });
+  }
+
+  handleMessage(rawData) {
+    const text =
+      typeof rawData === 'string'
+        ? rawData
+        : Buffer.from(rawData).toString('utf8');
+    const message = JSON.parse(text);
+
+    if (!message.id) {
+      return;
+    }
+
+    const pending = this.pending.get(message.id);
+
+    if (!pending) {
+      return;
+    }
+
+    this.pending.delete(message.id);
+
+    if (message.error) {
+      pending.reject(
+        new Error(
+          `${message.error.message}${
+            message.error.data ? `: ${message.error.data}` : ''
+          }`,
+        ),
+      );
+      return;
+    }
+
+    pending.resolve(message.result);
+  }
+}
+
+async function clickButton(page, label) {
+  await waitFor(page, {
+    label: `button "${label}"`,
+    predicate: hasEnabledVisibleButtonExpression(label),
+  });
+
+  const point = await page.evaluate(`(() => {
+    const label = ${JSON.stringify(label)};
+    const button = [...document.querySelectorAll('button')].find(
+      (candidate) =>
+        candidate.textContent?.includes(label) &&
+        !candidate.disabled &&
+        candidate.getClientRects().length > 0,
+    );
+
+    if (!button) {
+      throw new Error('No enabled visible button found for ' + label);
+    }
+
+    button.scrollIntoView({ block: 'center', inline: 'center' });
+    const rect = button.getBoundingClientRect();
+
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  })()`);
+
+  await page.send('Input.dispatchMouseEvent', {
+    button: 'none',
+    type: 'mouseMoved',
+    x: point.x,
+    y: point.y,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    button: 'left',
+    clickCount: 1,
+    type: 'mousePressed',
+    x: point.x,
+    y: point.y,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    button: 'left',
+    clickCount: 1,
+    type: 'mouseReleased',
+    x: point.x,
+    y: point.y,
+  });
+}
+
+async function clickButtonIfEnabled(page, label) {
+  const canClick = await page.evaluate(
+    hasEnabledVisibleButtonExpression(label),
+  );
+
+  if (canClick) {
+    await clickButton(page, label);
+  }
+}
+
+function hasEnabledVisibleButtonExpression(label) {
+  return `(() => [...document.querySelectorAll('button')].some(
+    (candidate) =>
+      candidate.textContent?.includes(${JSON.stringify(label)}) &&
+      !candidate.disabled &&
+      candidate.getClientRects().length > 0,
+  ))()`;
+}
+
+async function waitForText(page, text, label = text) {
+  await waitFor(page, {
+    label,
+    predicate: `(() => (document.body?.innerText ?? '').includes(${JSON.stringify(
+      text,
+    )}))()`,
+  });
+}
+
+async function expectVisibleText(page, text, expected) {
+  const actual = await page.evaluate(
+    `(() => {
+      const bodyText = document.body?.innerText ?? '';
+      return bodyText.includes(${JSON.stringify(text)});
+    })()`,
+  );
+
+  if (actual !== expected) {
+    throw new Error(
+      `Expected visible text ${JSON.stringify(text)} to be ${expected}, got ${actual}.`,
+    );
+  }
+}
+
+async function expectVisibleButton(page, label, expected) {
+  const actual =
+    await page.evaluate(`(() => [...document.querySelectorAll('button')].some(
+    (candidate) =>
+      candidate.textContent?.includes(${JSON.stringify(label)}) &&
+      candidate.getClientRects().length > 0,
+  ))()`);
+
+  if (actual !== expected) {
+    throw new Error(
+      `Expected visible button ${JSON.stringify(label)} to be ${expected}, got ${actual}.`,
+    );
+  }
+}
+
+async function waitForCockpitState(page, predicate) {
+  await waitFor(page, {
+    label: 'persisted cockpit state',
+    predicate: `(() => {
+      const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+
+      if (!raw) {
+        return false;
+      }
+
+      return (${predicate.toString()})(JSON.parse(raw));
+    })()`,
+  });
+}
+
+async function waitForCockpitHydrated(page) {
+  await waitFor(page, {
+    label: 'hydrated cockpit local state',
+    predicate: `(() => Boolean(localStorage.getItem(${JSON.stringify(
+      storageKey,
+    )})))()`,
+  });
+}
+
+async function waitForNoStoredSession(page) {
+  await waitFor(page, {
+    label: 'local cockpit session cleared',
+    predicate: `(() => {
+      const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+
+      if (!raw) {
+        return true;
+      }
+
+      return !JSON.parse(raw).sessionId;
+    })()`,
+  });
+}
+
+async function waitFor(page, { label, predicate, timeoutMs = smokeTimeoutMs }) {
+  const startedAt = Date.now();
+  let lastError;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const result = await page.evaluate(predicate);
+
+      if (result) {
+        return;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(250);
+  }
+
+  const bodyText = await page
+    .evaluate(`(() => document.body?.innerText?.slice(0, 2000) ?? '')()`)
+    .catch(() => '');
+  throw new Error(
+    `Timed out waiting for ${label}.${
+      lastError ? ` Last evaluation error: ${lastError.message}` : ''
+    }\nVisible page text:\n${bodyText}`,
+  );
+}
+
+async function waitForHttp(url, { label, timeoutMs }) {
+  const startedAt = Date.now();
+  let lastError;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(url);
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = new Error(`HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(250);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${label} at ${url}.${
+      lastError instanceof Error ? ` Last error: ${lastError.message}` : ''
+    }`,
+  );
+}
+
+function getFreePort() {
+  return new Promise((resolvePort, rejectPort) => {
+    const server = createServer();
+
+    server.once('error', rejectPort);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+
+      if (!address || typeof address === 'string') {
+        server.close();
+        rejectPort(new Error('Unable to allocate a local TCP port.'));
+        return;
+      }
+
+      const { port } = address;
+      server.close(() => resolvePort(port));
+    });
+  });
+}
+
+function findBrowserExecutable() {
+  if (process.env.RUNTIME_SMOKE_BROWSER) {
+    return process.env.RUNTIME_SMOKE_BROWSER;
+  }
+
+  for (const candidate of [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium',
+    'chromium-browser',
+    'chrome',
+    'msedge',
+  ]) {
+    const result = spawnSync('which', [candidate], {
+      encoding: 'utf8',
+    });
+
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  }
+
+  return null;
+}
+
+async function cleanup() {
+  await Promise.allSettled(
+    [...startedProcesses].reverse().map((child) => stopProcess(child)),
+  );
+
+  if (chromeUserDataDir) {
+    rmSync(chromeUserDataDir, {
+      force: true,
+      recursive: true,
+    });
+  }
+}
+
+async function stopProcess(child) {
+  if (!child || child.exitCode !== null || child.signalCode) {
+    return;
+  }
+
+  child.kill('SIGTERM');
+
+  const exited = await Promise.race([
+    once(child, 'exit').then(() => true),
+    delay(5000).then(() => false),
+  ]);
+
+  if (!exited && child.exitCode === null) {
+    child.kill('SIGKILL');
+  }
+}
+
+function printProcessLogs() {
+  for (const log of processLogs.values()) {
+    if (!log.lines.length) {
+      continue;
+    }
+
+    console.error(`\n[${log.name}] recent output`);
+    for (const line of log.lines) {
+      console.error(line);
+    }
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolveDelay) => {
+    setTimeout(resolveDelay, ms);
+  });
+}
