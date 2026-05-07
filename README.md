@@ -24,7 +24,8 @@ read models after refresh. Player mode can join or recover a session,
 create/update/finalize its own draft character, submit a finalized character
 into authoritative session state for DM assignment, view pending or assigned
 character and active-scene map/entity/combatant state, move its own token, use
-its own turn resources, and attack legal player targets.
+its own turn resources, and attack legal player or active non-defeated
+combatant targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -53,6 +54,8 @@ Implemented so far:
 - narrow attack action foundation with legality-before-RNG validation
 - DM-controlled monster/NPC combatant MVP with active-scene placement, HP
   control, mixed encounter turns, and a fixed-damage melee attack baseline
+- player-character attacks against active-scene monster/NPC combatants, with
+  defeated state derived from combatant `hp.current === 0`
 - downed actor gating derived from `hp.current === 0`
 - backend DM current HP, condition tag, active-scene reposition, turn-usage,
   current-turn, and encounter-end override commands
@@ -71,8 +74,8 @@ Implemented so far:
 - encounter-only transactional durable idempotency for supported
   encounter-local mutation commands on the injected DB-backed path
 - attack-first cross-store transactional durable idempotency on the injected
-  DB-backed path for atomic target HP write + encounter usage write + durable
-  completed-command success record commit
+  DB-backed path for atomic target character/combatant HP write + encounter
+  usage write + durable completed-command success record commit
 - movement-spending encounter-aware transactional durable idempotency on the
   injected DB-backed path for atomic character position write + encounter
   movement-usage write + durable completed-command success record commit

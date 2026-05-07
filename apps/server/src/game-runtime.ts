@@ -11,6 +11,8 @@ import {
   doesOccupancyFitWithinGrid,
   isAttackHit,
   isCharacterDowned,
+  isCombatantDefeated,
+  isOccupancyWithinBaselineMeleeReach,
   isWithinBaselineMeleeReach,
   rollD20,
 } from '@dnd/rules';
@@ -154,7 +156,8 @@ import {
 
 export { createConnectionId };
 
-type AttackContext = {
+type CharacterTargetAttackContext = {
+  kind: 'character';
   sessionId: SessionId;
   activeSceneId: SceneId;
   encounter: Encounter;
@@ -165,6 +168,23 @@ type AttackContext = {
   targetRecord: StoredCharacterRecord;
   targetPosition: ScenePosition;
 };
+
+type CombatantTargetAttackContext = {
+  kind: 'combatant';
+  sessionId: SessionId;
+  activeSceneId: SceneId;
+  encounter: Encounter;
+  attackerParticipant: Participant;
+  attackerRecord: StoredCharacterRecord;
+  attackerPosition: ScenePosition;
+  targetCombatant: SceneEntity & { combatant: SceneCombatant };
+  targetParticipantId: ParticipantId;
+  targetPosition: ScenePosition;
+};
+
+type AttackContext =
+  | CharacterTargetAttackContext
+  | CombatantTargetAttackContext;
 
 type CombatantAttackContext = {
   sessionId: SessionId;
@@ -183,7 +203,15 @@ export type PreparedAttackContext = {
   actor: Participant;
   scene: Scene;
   snapshot: SessionSnapshot;
-  targetParticipantId: ParticipantId;
+  target:
+    | {
+        kind: 'participant';
+        participantId: ParticipantId;
+      }
+    | {
+        combatantId: SceneEntityId;
+        kind: 'combatant';
+      };
 };
 
 export type PreparedCombatantAttackContext = {
@@ -214,6 +242,7 @@ type ResolvedAttack = {
   targetArmorClass: number;
   targetHp: CombatEvent['targetHp'];
   nextTargetRecord: StoredCharacterRecord | null;
+  nextTargetScene: Scene | null;
 };
 
 type RuntimeRepositoryResult<T> = T | Promise<T>;
@@ -390,13 +419,14 @@ export class InMemoryGameRuntime<
       combatEventSink?: (update: CombatEvent) => void;
       encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
       movementStateUpdateSink?: (update: MovementStateUpdate) => void;
+      scenes?: SceneRepository;
     } = {},
   ): InMemoryGameRuntime<TNextCharacters, TSessions> {
     return new InMemoryGameRuntime(
       this.sessions,
       this.rulesProfiles,
       characters,
-      this.scenes,
+      options.scenes ?? this.scenes,
       encounters,
       this.d20Roller,
       options.characterStateUpdateSink ?? this.characterStateUpdateSink,
@@ -1658,13 +1688,31 @@ export class InMemoryGameRuntime<
     );
     const activeSceneId = requireActiveSceneId(snapshot);
     const scene = this.scenes.getScene(activeSceneId);
+    const target = command.payload.targetParticipantId
+      ? {
+          kind: 'participant' as const,
+          participantId: command.payload.targetParticipantId,
+        }
+      : command.payload.targetCombatantId
+        ? {
+            combatantId: command.payload.targetCombatantId,
+            kind: 'combatant' as const,
+          }
+        : null;
+
+    if (!target) {
+      throw new EncounterRuntimeError(
+        'invalid_attack_target',
+        'Attack command must include a target participant or combatant.',
+      );
+    }
 
     return {
       activeSceneId,
       actor,
       scene,
       snapshot,
-      targetParticipantId: command.payload.targetParticipantId,
+      target,
     };
   }
 
@@ -2020,9 +2068,46 @@ export class InMemoryGameRuntime<
     };
   }
 
+  private withUpdatedCombatantHitPoints(
+    sceneId: SceneId,
+    combatantId: SceneEntityId,
+    currentHp: number,
+  ): Scene {
+    const scene = this.scenes.getScene(sceneId);
+    const combatantEntity = this.requireSceneCombatant(scene, combatantId);
+    const combatant = combatantEntity.combatant;
+
+    if (!combatant) {
+      throw new SceneStoreError(
+        'invalid_character_state',
+        `Scene entity "${combatantId}" is not a combatant.`,
+      );
+    }
+
+    return {
+      ...scene,
+      entities: scene.entities.map((entity) =>
+        entity.id === combatantId
+          ? {
+              ...entity,
+              combatant: {
+                ...combatant,
+                hp: {
+                  ...combatant.hp,
+                  current: currentHp,
+                },
+              },
+            }
+          : entity,
+      ),
+      updatedAt: this.now(),
+    };
+  }
+
   private resolveAttackContext(prepared: PreparedAttackContext): AttackContext {
-    const { activeSceneId, actor, scene, snapshot, targetParticipantId } =
-      prepared;
+    const { activeSceneId, actor, scene, snapshot, target } = prepared;
+
+    assertSceneBelongsToSession(snapshot, scene);
 
     return this.resolveRepositoryResult(
       this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
@@ -2043,24 +2128,10 @@ export class InMemoryGameRuntime<
           snapshot,
           attackerEncounterParticipant.participantId,
         );
-        const targetParticipant = this.requireParticipant(
-          snapshot,
-          targetParticipantId,
-        );
 
-        if (targetParticipant.id === attackerParticipant.id) {
-          throw new EncounterRuntimeError(
-            'self_target_not_allowed',
-            `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
-          );
-        }
-
-        return this.resolveRepositoryResults(
-          [
-            this.requireAssignedCharacterRecord(snapshot, attackerParticipant),
-            this.requireAssignedCharacterRecord(snapshot, targetParticipant),
-          ],
-          ([attackerRecord, targetRecord]) => {
+        return this.resolveRepositoryResult(
+          this.requireAssignedCharacterRecord(snapshot, attackerParticipant),
+          (attackerRecord) => {
             if (
               attackerRecord.character.id !==
               attackerEncounterParticipant.characterId
@@ -2073,67 +2144,146 @@ export class InMemoryGameRuntime<
 
             this.assertCurrentTurnActorIsConscious(encounter, attackerRecord);
 
-            const targetEncounterParticipant = encounter.participants.find(
-              (participant) =>
-                participant.participantId === targetParticipant.id,
-            );
-
-            if (
-              !targetEncounterParticipant ||
-              !isCharacterEncounterParticipant(targetEncounterParticipant) ||
-              targetEncounterParticipant.characterId !==
-                targetRecord.character.id
-            ) {
-              throw new EncounterRuntimeError(
-                'invalid_attack_target',
-                `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
-              );
-            }
-
             const attackerPosition = this.requireAttackPlacement({
               record: attackerRecord,
               activeSceneId,
               participantId: attackerParticipant.id,
               role: 'attacker',
             });
-            const targetPosition = this.requireAttackPlacement({
-              record: targetRecord,
-              activeSceneId,
-              participantId: targetParticipant.id,
-              role: 'target',
-            });
 
-            if (isCharacterDowned(targetRecord.character)) {
-              throw new EncounterRuntimeError(
-                'attack_target_downed',
-                `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
+            if (target.kind === 'combatant') {
+              const targetCombatant = this.requireSceneCombatant(
+                scene,
+                target.combatantId,
+              ) as SceneEntity & { combatant: SceneCombatant };
+              const targetEncounterParticipant = encounter.participants.find(
+                (participant) =>
+                  isCombatantEncounterParticipant(participant) &&
+                  participant.combatantId === targetCombatant.id,
               );
-            }
 
-            if (
-              !isWithinBaselineMeleeReach({
+              if (!targetEncounterParticipant) {
+                throw new EncounterRuntimeError(
+                  'invalid_attack_target',
+                  `Combatant "${targetCombatant.id}" is not a valid target in encounter "${encounter.id}".`,
+                );
+              }
+
+              if (isCombatantDefeated(targetCombatant.combatant)) {
+                throw new EncounterRuntimeError(
+                  'attack_target_downed',
+                  `Combatant "${targetCombatant.id}" cannot be targeted because it is already at 0 HP.`,
+                );
+              }
+
+              if (
+                !isOccupancyWithinBaselineMeleeReach({
+                  attacker: {
+                    position: attackerPosition,
+                    footprint: attackerRecord.overlay.footprint,
+                  },
+                  target: {
+                    position: targetCombatant.position,
+                    footprint: targetCombatant.footprint,
+                  },
+                  cellSizeFeet: scene.grid.cellSizeFeet,
+                })
+              ) {
+                throw new EncounterRuntimeError(
+                  'attack_target_out_of_reach',
+                  `Combatant "${targetCombatant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
+                );
+              }
+
+              return {
+                kind: 'combatant',
+                sessionId: snapshot.session.id,
+                activeSceneId,
+                encounter,
+                attackerParticipant,
+                attackerRecord,
                 attackerPosition,
-                targetPosition,
-                cellSizeFeet: scene.grid.cellSizeFeet,
-              })
-            ) {
+                targetCombatant,
+                targetParticipantId: targetEncounterParticipant.participantId,
+                targetPosition: targetCombatant.position,
+              };
+            }
+
+            const targetParticipant = this.requireParticipant(
+              snapshot,
+              target.participantId,
+            );
+
+            if (targetParticipant.id === attackerParticipant.id) {
               throw new EncounterRuntimeError(
-                'attack_target_out_of_reach',
-                `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
+                'self_target_not_allowed',
+                `Participant "${attackerParticipant.id}" cannot target their own character with an attack.`,
               );
             }
 
-            return {
-              sessionId: snapshot.session.id,
-              activeSceneId,
-              encounter,
-              attackerParticipant,
-              attackerRecord,
-              attackerPosition,
-              targetParticipant,
-              targetRecord,
-              targetPosition,
-            };
+            return this.resolveRepositoryResult(
+              this.requireAssignedCharacterRecord(snapshot, targetParticipant),
+              (targetRecord) => {
+                const targetEncounterParticipant = encounter.participants.find(
+                  (participant) =>
+                    participant.participantId === targetParticipant.id,
+                );
+
+                if (
+                  !targetEncounterParticipant ||
+                  !isCharacterEncounterParticipant(
+                    targetEncounterParticipant,
+                  ) ||
+                  targetEncounterParticipant.characterId !==
+                    targetRecord.character.id
+                ) {
+                  throw new EncounterRuntimeError(
+                    'invalid_attack_target',
+                    `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
+                  );
+                }
+
+                const targetPosition = this.requireAttackPlacement({
+                  record: targetRecord,
+                  activeSceneId,
+                  participantId: targetParticipant.id,
+                  role: 'target',
+                });
+
+                if (isCharacterDowned(targetRecord.character)) {
+                  throw new EncounterRuntimeError(
+                    'attack_target_downed',
+                    `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
+                  );
+                }
+
+                if (
+                  !isWithinBaselineMeleeReach({
+                    attackerPosition,
+                    targetPosition,
+                    cellSizeFeet: scene.grid.cellSizeFeet,
+                  })
+                ) {
+                  throw new EncounterRuntimeError(
+                    'attack_target_out_of_reach',
+                    `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for participant "${attackerParticipant.id}".`,
+                  );
+                }
+
+                return {
+                  kind: 'character',
+                  sessionId: snapshot.session.id,
+                  activeSceneId,
+                  encounter,
+                  attackerParticipant,
+                  attackerRecord,
+                  attackerPosition,
+                  targetParticipant,
+                  targetRecord,
+                  targetPosition,
+                };
+              },
+            );
           },
         );
       },
@@ -2214,9 +2364,15 @@ export class InMemoryGameRuntime<
             }
 
             if (
-              !isWithinBaselineMeleeReach({
-                attackerPosition,
-                targetPosition,
+              !isOccupancyWithinBaselineMeleeReach({
+                attacker: {
+                  position: attackerPosition,
+                  footprint: attackerCombatant.footprint,
+                },
+                target: {
+                  position: targetPosition,
+                  footprint: targetRecord.overlay.footprint,
+                },
                 cellSizeFeet: scene.grid.cellSizeFeet,
               })
             ) {
@@ -2248,9 +2404,16 @@ export class InMemoryGameRuntime<
     const d20 = rollD20(this.d20Roller);
     const modifier = calculateAttackModifier(context.attackerRecord.character);
     const total = calculateAttackTotal(d20, modifier);
-    const hit = isAttackHit(total, context.targetRecord.character.armorClass);
+    const targetArmorClass =
+      context.kind === 'character'
+        ? context.targetRecord.character.armorClass
+        : context.targetCombatant.combatant.armorClass;
+    const hit = isAttackHit(total, targetArmorClass);
     const damage = hit ? 1 : 0;
-    const previousTargetHp = context.targetRecord.character.hp.current;
+    const previousTargetHp =
+      context.kind === 'character'
+        ? context.targetRecord.character.hp.current
+        : context.targetCombatant.combatant.hp.current;
     const currentTargetHp = hit
       ? applyFixedDamage(previousTargetHp, damage)
       : previousTargetHp;
@@ -2264,15 +2427,27 @@ export class InMemoryGameRuntime<
       },
       hit,
       damage,
-      targetArmorClass: context.targetRecord.character.armorClass,
+      targetArmorClass,
       targetHp: {
         previous: previousTargetHp,
         current: currentTargetHp,
       },
       nextTargetRecord:
-        hit && currentTargetHp !== previousTargetHp
+        context.kind === 'character' &&
+        hit &&
+        currentTargetHp !== previousTargetHp
           ? this.withUpdatedCharacterHitPoints(
               context.targetRecord,
+              currentTargetHp,
+            )
+          : null,
+      nextTargetScene:
+        context.kind === 'combatant' &&
+        hit &&
+        currentTargetHp !== previousTargetHp
+          ? this.withUpdatedCombatantHitPoints(
+              context.activeSceneId,
+              context.targetCombatant.id,
               currentTargetHp,
             )
           : null,
@@ -2326,6 +2501,7 @@ export class InMemoryGameRuntime<
               currentTargetHp,
             )
           : null,
+      nextTargetScene: null,
     };
   }
 
@@ -2337,6 +2513,13 @@ export class InMemoryGameRuntime<
     // character and encounter repositories. Keep the multi-write sequence and
     // both emissions centralized here so a later persistence slice can replace
     // this with a real transaction without changing the public attack flow.
+    if (resolution.nextTargetScene) {
+      return this.resolveRepositoryResult(
+        this.scenes.saveScene(resolution.nextTargetScene),
+        () => this.publishResolvedAttack(context, resolution),
+      );
+    }
+
     if (!resolution.nextTargetRecord) {
       return this.publishResolvedAttack(context, resolution);
     }
@@ -2386,13 +2569,35 @@ export class InMemoryGameRuntime<
     resolution: ResolvedAttack,
     encounter: Encounter,
   ): CombatEvent {
+    if (context.kind === 'combatant') {
+      return {
+        type: 'combat_event',
+        reason: 'attack_resolved',
+        sessionId: context.sessionId,
+        encounterId: encounter.id,
+        attackerKind: 'character',
+        attackerParticipantId: context.attackerParticipant.id,
+        attackerCharacterId: context.attackerRecord.character.id,
+        targetKind: 'combatant',
+        targetParticipantId: context.targetParticipantId,
+        targetCombatantId: context.targetCombatant.id,
+        roll: resolution.roll,
+        targetArmorClass: resolution.targetArmorClass,
+        hit: resolution.hit,
+        damage: resolution.damage,
+        targetHp: resolution.targetHp,
+      };
+    }
+
     return {
       type: 'combat_event',
       reason: 'attack_resolved',
       sessionId: context.sessionId,
       encounterId: encounter.id,
+      attackerKind: 'character',
       attackerParticipantId: context.attackerParticipant.id,
       attackerCharacterId: context.attackerRecord.character.id,
+      targetKind: 'character',
       targetParticipantId: context.targetParticipant.id,
       targetCharacterId: context.targetRecord.character.id,
       roll: resolution.roll,

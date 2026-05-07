@@ -513,6 +513,20 @@ export function getCombatantEntities(
   );
 }
 
+export function isCombatantEntityDefeated(
+  entity: SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> },
+): boolean {
+  return entity.combatant.hp.current === 0;
+}
+
+export function getAttackableCombatantEntities(
+  scene: Scene | null,
+): Array<SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }> {
+  return getCombatantEntities(scene).filter(
+    (entity) => !isCombatantEntityDefeated(entity),
+  );
+}
+
 export function getCombatantDisplayCells(
   scene: Scene | null,
 ): CombatantDisplayCell[] {
@@ -628,6 +642,14 @@ export function getDmCombatantActionDisabledReason({
 
   if (!targetParticipantId) {
     return 'Choose a player character target.';
+  }
+
+  const selectedCombatant = getCombatantEntities(scene).find(
+    (combatant) => combatant.id === selectedCombatantId,
+  );
+
+  if (selectedCombatant && isCombatantEntityDefeated(selectedCombatant)) {
+    return 'The selected monster/NPC is defeated and cannot act.';
   }
 
   if (currentTurnCombatantId !== selectedCombatantId) {
@@ -937,6 +959,7 @@ export function getRuntimeDisabledReasons({
   playerParticipantIds,
   selectedActorHasCharacter,
   sessionId,
+  hasValidAttackTarget,
   targetParticipantId,
 }: {
   actingParticipantId: string;
@@ -951,6 +974,7 @@ export function getRuntimeDisabledReasons({
   playerParticipantIds: string[];
   selectedActorHasCharacter: boolean;
   sessionId: string;
+  hasValidAttackTarget?: boolean;
   targetParticipantId: string;
 }): RuntimeDisabledReasons {
   const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
@@ -966,11 +990,14 @@ export function getRuntimeDisabledReasons({
   const invalidActorReason = playerParticipantIds.includes(actingParticipantId)
     ? null
     : 'Choose a joined player participant as the acting character.';
-  const invalidTargetReason = playerParticipantIds.includes(targetParticipantId)
-    ? actingParticipantId === targetParticipantId
-      ? 'Choose a different target participant.'
-      : null
-    : 'Choose a joined player participant as the target.';
+  const invalidTargetReason =
+    hasValidAttackTarget === true
+      ? null
+      : playerParticipantIds.includes(targetParticipantId)
+        ? actingParticipantId === targetParticipantId
+          ? 'Choose a different target participant.'
+          : null
+        : 'Choose a joined player participant or active monster/NPC target.';
   const dmOnlyReason =
     mode === 'dm' ? null : 'Switch to DM mode for this control.';
   const playerJoinReason =
@@ -1171,12 +1198,18 @@ export function describeSessionStreamEvent(
   event: SessionStreamEvent,
 ): RuntimeEventSummary {
   switch (event.type) {
-    case 'combat_event':
+    case 'combat_event': {
+      const targetLabel =
+        event.targetKind === 'combatant' && event.targetCombatantId
+          ? event.targetCombatantId
+          : event.targetParticipantId;
+
       return {
-        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${event.targetParticipantId} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
+        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
         title: 'Attack resolved',
         tone: event.hit ? 'danger' : 'warning',
       };
+    }
     case 'encounter_state':
       return {
         detail: `${event.reason.replaceAll('_', ' ')}. Round ${event.encounter.roundNumber}, turn ${event.encounter.currentTurnIndex + 1}.`,

@@ -376,7 +376,7 @@ COMBATANT_RESPONSE=$(curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
       "position": { "x": 1, "y": 1 },
       "footprint": { "width": 1, "height": 1 },
       "hp": { "max": 7, "current": 7, "temp": 0 },
-      "armorClass": 12,
+      "armorClass": 0,
       "speed": 30,
       "abilities": {
         "str": 8,
@@ -795,6 +795,83 @@ curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
   "payload": {
     "sessionId": "$SESSION_ID",
     "participantId": "player-001"
+  }
+}
+JSON
+```
+
+With player 001 back on turn, validate player-to-combatant targeting. The
+training goblin has AC 0, so this legal melee attack should hit, reduce its HP
+to 0, keep the defeated combatant visible in the scene, and return cached
+success on an exact retry without rerolling or reapplying damage.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-combatant-hp-before-player-attack-1",
+  "type": "dm_set_combatant_current_hp",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "combatantId": "$COMBATANT_ID",
+    "currentHp": 1
+  }
+}
+JSON
+
+PLAYER_COMBATANT_ATTACK_PAYLOAD=$(cat <<JSON
+{
+  "commandId": "manual-player-attack-combatant-1",
+  "type": "attack",
+  "actor": { "participantId": "player-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "targetCombatantId": "$COMBATANT_ID"
+  }
+}
+JSON
+)
+
+curl -sS -X POST http://127.0.0.1:2567/api/encounters/command \
+  -H 'content-type: application/json' \
+  -d "$PLAYER_COMBATANT_ATTACK_PAYLOAD" | jq .
+
+curl -sS -X POST http://127.0.0.1:2567/api/encounters/command \
+  -H 'content-type: application/json' \
+  -d "$PLAYER_COMBATANT_ATTACK_PAYLOAD" | jq .
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[] | select(.id == "'$COMBATANT_ID'") | { id, name, hp: .combatant.hp }'
+{
+  "commandId": "manual-read-combatant-after-player-attack",
+  "type": "get_scene",
+  "actor": { "participantId": "player-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID"
+  }
+}
+JSON
+```
+
+Try a fresh attack command against the defeated combatant. Expected error code:
+`attack_target_downed`. This proves defeated combatants remain recoverable scene
+state but are not valid attack targets.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/encounters/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-player-attack-defeated-combatant-1",
+  "type": "attack",
+  "actor": { "participantId": "player-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "targetCombatantId": "$COMBATANT_ID"
   }
 }
 JSON

@@ -2087,6 +2087,39 @@ test('encounter commands are accepted for narrow start/read/advance validation',
       targetParticipantId: 'player-002',
     },
   });
+  const combatantAttackResult = encounterCommandSchema.safeParse({
+    commandId: 'attack-combatant-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+    },
+  });
+  const attackWithoutTargetResult = encounterCommandSchema.safeParse({
+    commandId: 'attack-missing-target-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+    },
+  });
+  const attackWithBothTargetsResult = encounterCommandSchema.safeParse({
+    commandId: 'attack-both-targets-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      targetParticipantId: 'player-002',
+    },
+  });
 
   assert.equal(startResult.success, true);
   assert.equal(readResult.success, true);
@@ -2096,6 +2129,9 @@ test('encounter commands are accepted for narrow start/read/advance validation',
   assert.equal(useReactionResult.success, true);
   assert.equal(recordMovementUsageResult.success, true);
   assert.equal(attackResult.success, true);
+  assert.equal(combatantAttackResult.success, true);
+  assert.equal(attackWithoutTargetResult.success, false);
+  assert.equal(attackWithBothTargetsResult.success, false);
 });
 
 test('dm commands are accepted for narrow HP override validation', () => {
@@ -5455,6 +5491,173 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   assert.deepEqual(combatEvents[0]?.targetHp, {
     previous: 34,
     current: 33,
+  });
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+});
+
+test('db-backed combat transaction boundary commits combatant target damage, encounter usage, durable success, and outbox rows atomically', async () => {
+  let rollCount = 0;
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+    outboxDatabase,
+    new InMemorySessionSnapshotDatabase(),
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    new InMemorySessionStore(),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+    () => {
+      rollCount += 1;
+      return 20;
+    },
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
+
+  await runtime.dmEndActiveEncounter({
+    commandId: 'setup-end-encounter-before-combatant',
+    type: 'dm_end_active_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+  const sceneWithCombatant = await runtime.dmCreateCombatantInActiveScene({
+    commandId: 'setup-create-transactional-target-combatant',
+    type: 'dm_create_combatant_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      combatant: {
+        kind: 'monster',
+        name: 'Transactional Goblin',
+        position: {
+          x: 0,
+          y: 1,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        hp: {
+          max: 8,
+          current: 8,
+          temp: 0,
+        },
+        armorClass: 0,
+        speed: 30,
+        abilities: {
+          str: 14,
+          dex: 12,
+          con: 12,
+          int: 8,
+          wis: 10,
+          cha: 8,
+        },
+      },
+    },
+  });
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  await runtime.startEncounter({
+    commandId: 'setup-restart-encounter-with-combatant',
+    type: 'start_encounter',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const attackCommand = {
+    commandId: 'transactional-attack-combatant-1',
+    type: 'attack',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      targetCombatantId: combatantId,
+    },
+  };
+  const attack = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    attackCommand,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const retry = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    attackCommand,
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+  const updatedScene = runtime.scenes.getScene(sceneWithCombatant.id);
+  const updatedCombatant = updatedScene.entities.find(
+    (entity) => entity.id === combatantId,
+  );
+  const encounter = await runtime.getEncounterState({
+    commandId: 'transactional-attack-combatant-reread',
+    type: 'get_encounter_state',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+    },
+  });
+  const encounterUpdates = getEncounterUpdates(updates);
+  const combatEvents = getCombatEvents(updates);
+
+  assert.equal(attack.status, 200);
+  assert.equal(retry.status, 200);
+  assert.equal(attack.body.ok, true);
+  assert.equal(retry.body.ok, true);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(rollCount, 1);
+  assert.equal(updatedCombatant?.combatant?.hp.current, 7);
+  assert.equal(encounter.currentTurnUsage.actionUsed, true);
+  assert.equal(encounterUpdates.length, 1);
+  assert.equal(combatEvents.length, 1);
+  assert.equal(combatEvents[0]?.targetKind, 'combatant');
+  assert.equal(combatEvents[0]?.targetCombatantId, combatantId);
+  assert.deepEqual(combatEvents[0]?.targetHp, {
+    previous: 8,
+    current: 7,
   });
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,

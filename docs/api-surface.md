@@ -158,8 +158,16 @@ Notes:
 - Encounter participants can be player-character turns or DM-controlled
   combatant turns. Character participants preserve the existing response shape;
   combatant participants include `kind: "combatant"` and `combatantId`.
-- `attack` currently uses the narrow attack foundation: legality-before-RNG,
-  fixed damage, HP floor, and server-owned turn/action updates.
+- `attack` uses the narrow attack foundation: legality-before-RNG, 5-foot
+  melee reach, d20 roll, fixed hit damage of 1, HP floor, and server-owned
+  turn/action updates.
+- `attack.payload` must include exactly one target selector:
+  `targetParticipantId` for an opposing placed player character or
+  `targetCombatantId` for an active placed DM-controlled combatant in the
+  active encounter.
+- Combatants at `hp.current === 0` are defeated. They remain visible in scene
+  read models, are excluded from newly started encounters, and are rejected as
+  attack targets.
 
 ### `POST /api/dm/command`
 
@@ -190,6 +198,9 @@ Notes:
 - `dm_combatant_attack` is DM-only and currently supports a current-turn
   combatant making a fixed-damage melee attack against a placed player
   character target.
+- A combatant with `hp.current === 0` cannot act through
+  `dm_combatant_attack`; the current MVP treats that as the same turn-actor
+  downed gate used elsewhere.
 - `dm_set_current_turn_participant` accepts the existing `participantId` turn
   override and can also accept `combatantId` for a DM-controlled combatant turn.
 - Ending an active encounter publishes the final ended encounter snapshot and
@@ -248,9 +259,9 @@ Partial live updates:
 Transient events:
 
 - `combat_event` reports attack resolution details, including roll, hit, damage,
-  and target HP transition. Combatant attacks preserve existing fields and may
-  also include optional attacker/target kind and combatant/character reference
-  fields.
+  and target HP transition. Player-to-combatant and combatant-to-player attacks
+  preserve existing fields and may also include optional attacker/target kind
+  and combatant/character reference fields such as `targetCombatantId`.
 
 ## Recovery Guidance
 
@@ -284,9 +295,9 @@ create/update/finalize its own draft character through the existing character
 command endpoint, submit a finalized character for authoritative DM assignment,
 see pending assignment state after recovery, read pending or assigned character
 state, view active scene entities after recovery, move only its own token, use
-turn resources as itself, and attack selected player targets. A readable
-combat/event feed is primary; raw JSON remains available as secondary debug
-detail.
+turn resources as itself, and attack selected player or active non-defeated
+combatant targets. A readable combat/event feed is primary; raw JSON remains
+available as secondary debug detail.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model

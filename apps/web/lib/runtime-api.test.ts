@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { sessionCommandResponseSchema } from '@dnd/protocol';
+import {
+  encounterCommandSchema,
+  sessionCommandResponseSchema,
+} from '@dnd/protocol';
 
 import {
   buildSessionStreamUrl,
@@ -23,6 +26,22 @@ describe('runtime-api helpers', () => {
     const commandId = createCommandId('recover');
 
     assert.match(commandId, /^web-recover-/);
+  });
+
+  it('accepts combatant targets on the existing attack command schema', () => {
+    const parsed = encounterCommandSchema.safeParse({
+      actor: {
+        participantId: 'player-001',
+      },
+      commandId: 'attack-combatant-1',
+      payload: {
+        sessionId: 'ABC123',
+        targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      },
+      type: 'attack',
+    });
+
+    assert.equal(parsed.success, true);
   });
 
   it('parses successful command responses', () => {

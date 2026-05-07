@@ -16,6 +16,7 @@ import {
   formatRuntimeFailure,
   getActingParticipantId,
   getActiveSceneGuidance,
+  getAttackableCombatantEntities,
   getAssignedCharacterRefs,
   getCombatantDisplayCells,
   getCombatantEntities,
@@ -29,6 +30,7 @@ import {
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
+  isCombatantEntityDefeated,
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
@@ -221,6 +223,27 @@ describe('runtime cockpit helpers', () => {
     assert.equal(reasons.dmCharacter, 'Switch to DM mode for this control.');
   });
 
+  it('allows player attack controls to target an active combatant option', () => {
+    const reasons = getRuntimeDisabledReasons({
+      actingParticipantId: 'player-001',
+      activeSceneKnown: true,
+      activeSceneLoaded: true,
+      activeScenePlacementCount: 2,
+      busyLabel: null,
+      encounterLoaded: true,
+      hasValidAttackTarget: true,
+      mode: 'player',
+      playerDisplayName: 'Player One',
+      playerParticipantId: 'player-001',
+      playerParticipantIds: ['player-001', 'player-002'],
+      selectedActorHasCharacter: true,
+      sessionId: 'ABC123',
+      targetParticipantId: '',
+    });
+
+    assert.equal(reasons.attack, null);
+  });
+
   it('explains player prerequisite failures', () => {
     const reasons = getRuntimeDisabledReasons({
       actingParticipantId: 'player-999',
@@ -275,6 +298,33 @@ describe('runtime cockpit helpers', () => {
     assert.equal(summary.title, 'Attack resolved');
     assert.equal(summary.tone, 'danger');
     assert.match(summary.detail, /player-001 rolled 17/);
+    assert.match(
+      describeSessionStreamEvent({
+        attackerCharacterId: 'CHAR-001',
+        attackerKind: 'character',
+        attackerParticipantId: 'player-001',
+        damage: 1,
+        encounterId: 'ENC-001',
+        hit: true,
+        reason: 'attack_resolved',
+        roll: {
+          d20: 20,
+          modifier: 5,
+          total: 25,
+        },
+        sessionId: 'SESSION-001',
+        targetArmorClass: 12,
+        targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        targetHp: {
+          current: 7,
+          previous: 8,
+        },
+        targetKind: 'combatant',
+        targetParticipantId: 'dm-001',
+        type: 'combat_event',
+      }).detail,
+      /scene_entity_11111111-1111-4111-8111-111111111111 HP 8 -> 7/,
+    );
     assert.equal(
       isSessionStreamEvent({
         type: 'movement_state',
@@ -794,6 +844,81 @@ describe('runtime cockpit helpers', () => {
         scene,
       }),
       'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+    );
+  });
+
+  it('derives attackable combatants and defeated state from authoritative HP', () => {
+    const activeCombatant = {
+      blocksMovement: true,
+      blocksVision: false,
+      combatant: {
+        abilities: {
+          cha: 8,
+          con: 12,
+          dex: 12,
+          int: 8,
+          str: 14,
+          wis: 10,
+        },
+        armorClass: 12,
+        hp: {
+          current: 8,
+          max: 8,
+          temp: 0,
+        },
+        kind: 'monster' as const,
+        speed: 30,
+      },
+      footprint: {
+        height: 1,
+        width: 1,
+      },
+      hidden: false,
+      id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      meta: {},
+      name: 'Ash Goblin',
+      position: {
+        x: 3,
+        y: 4,
+      },
+      type: 'monster' as const,
+    };
+    const defeatedCombatant = {
+      ...activeCombatant,
+      combatant: {
+        ...activeCombatant.combatant,
+        hp: {
+          current: 0,
+          max: 8,
+          temp: 0,
+        },
+      },
+      id: 'scene_entity_22222222-2222-4222-8222-222222222222',
+      name: 'Fallen Goblin',
+      position: {
+        x: 4,
+        y: 4,
+      },
+    };
+    const scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [activeCombatant, defeatedCombatant],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    assert.equal(isCombatantEntityDefeated(activeCombatant), false);
+    assert.equal(isCombatantEntityDefeated(defeatedCombatant), true);
+    assert.deepEqual(
+      getAttackableCombatantEntities(scene).map((combatant) => combatant.id),
+      ['scene_entity_11111111-1111-4111-8111-111111111111'],
     );
   });
 

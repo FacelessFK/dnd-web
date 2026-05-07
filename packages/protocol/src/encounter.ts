@@ -141,10 +141,28 @@ export const attackCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('attack'),
   actor: sessionActorSchema,
-  payload: z.object({
-    sessionId: sessionIdSchema,
-    targetParticipantId: participantIdSchema,
-  }),
+  payload: z
+    .object({
+      sessionId: sessionIdSchema,
+      targetCombatantId: sceneEntityIdSchema.optional(),
+      targetParticipantId: participantIdSchema.optional(),
+    })
+    .superRefine((payload, context) => {
+      const targetCount =
+        (payload.targetParticipantId ? 1 : 0) +
+        (payload.targetCombatantId ? 1 : 0);
+
+      if (targetCount === 1) {
+        return;
+      }
+
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'Attack payload must include exactly one targetParticipantId or targetCombatantId.',
+        path: ['targetParticipantId'],
+      });
+    }),
 });
 
 export const encounterCommandSchema = z.discriminatedUnion('type', [

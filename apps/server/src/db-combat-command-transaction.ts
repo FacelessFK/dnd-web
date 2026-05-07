@@ -9,7 +9,7 @@ import type {
   EncounterStateUpdate,
   MovementStateUpdate,
 } from '@dnd/protocol';
-import type { Encounter, SessionId } from '@dnd/shared';
+import type { Encounter, Scene, SceneId, SessionId } from '@dnd/shared';
 
 import {
   CommandIdempotencyError,
@@ -22,6 +22,7 @@ import {
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
+import { DbBackedSceneStore } from './db-scene-store.js';
 import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
 import type {
   InMemoryGameRuntime,
@@ -71,11 +72,13 @@ type TransactionalRunResult<TResponse> = {
   dispatchIdempotencyKey: string | null;
   encounterCache: Map<SessionId, Encounter>;
   response: TResponse;
+  sceneCache: Map<SceneId, Scene> | null;
 };
 
 type CachedResult<TResponse> = {
   encounterCache: Map<SessionId, Encounter>;
   response: TResponse;
+  sceneCache: Map<SceneId, Scene> | null;
 };
 
 export class DbBackedCombatCommandTransactionBoundary {
@@ -126,6 +129,15 @@ export class DbBackedCombatCommandTransactionBoundary {
       );
     }
 
+    if (
+      this.commandRequiresSceneRepository(params.command) &&
+      !(params.runtime.scenes instanceof DbBackedSceneStore)
+    ) {
+      throw new Error(
+        'The DB-backed combat transaction boundary requires the runtime to use DbBackedSceneStore for combatant-targeting attacks.',
+      );
+    }
+
     const idempotencyKey = createCommandIdempotencyKey(params);
     const fingerprint = createCommandFingerprint(params.command);
     const cached = await this.unitOfWork.transaction((context) =>
@@ -136,6 +148,14 @@ export class DbBackedCombatCommandTransactionBoundary {
       params.runtime.encounters.replaceEncountersBySession(
         cached.encounterCache,
       );
+
+      if (
+        cached.sceneCache &&
+        params.runtime.scenes instanceof DbBackedSceneStore
+      ) {
+        params.runtime.scenes.replaceScenes(cached.sceneCache);
+      }
+
       return this.clone(cached.response);
     }
 
@@ -160,6 +180,13 @@ export class DbBackedCombatCommandTransactionBoundary {
     }
 
     params.runtime.encounters.replaceEncountersBySession(result.encounterCache);
+
+    if (
+      result.sceneCache &&
+      params.runtime.scenes instanceof DbBackedSceneStore
+    ) {
+      params.runtime.scenes.replaceScenes(result.sceneCache);
+    }
 
     if (!result.dispatchIdempotencyKey) {
       return this.clone(result.response);
@@ -224,6 +251,12 @@ export class DbBackedCombatCommandTransactionBoundary {
     );
   }
 
+  private commandRequiresSceneRepository(command: IdempotentCommand): boolean {
+    return (
+      command.type === 'attack' && Boolean(command.payload?.targetCombatantId)
+    );
+  }
+
   private async loadCachedResponse<TResponse>(
     context: DndDatabaseUnitOfWorkContext,
     idempotencyKey: string,
@@ -247,10 +280,12 @@ export class DbBackedCombatCommandTransactionBoundary {
     const encounters = await DbBackedEncounterStore.fromDatabase(
       context.encounters,
     );
+    const scenes = await DbBackedSceneStore.fromDatabase(context.scenes);
 
     return {
       encounterCache: encounters.cloneEncountersBySession(),
       response: this.clone(existing.response) as TResponse,
+      sceneCache: scenes.cloneScenes(),
     };
   }
 
@@ -274,11 +309,13 @@ export class DbBackedCombatCommandTransactionBoundary {
       const encounters = await DbBackedEncounterStore.fromDatabase(
         context.encounters,
       );
+      const scenes = await DbBackedSceneStore.fromDatabase(context.scenes);
 
       return {
         dispatchIdempotencyKey: null,
         encounterCache: encounters.cloneEncountersBySession(),
         response: this.clone(claim.response),
+        sceneCache: scenes.cloneScenes(),
       };
     }
 
@@ -286,6 +323,10 @@ export class DbBackedCombatCommandTransactionBoundary {
     const encounters = await DbBackedEncounterStore.fromDatabase(
       context.encounters,
     );
+    const scenes =
+      params.runtime.scenes instanceof DbBackedSceneStore
+        ? params.runtime.scenes.forkForTransaction(context.scenes)
+        : null;
     const transactionRuntime = params.runtime.withCombatRepositories(
       new DbBackedCharacterRepository(context.characters),
       encounters,
@@ -299,6 +340,7 @@ export class DbBackedCombatCommandTransactionBoundary {
         movementStateUpdateSink: (update) => {
           publications.push(this.clone(update));
         },
+        scenes: scenes ?? undefined,
       },
     );
     const response = await params.execute(transactionRuntime, prepared);
@@ -326,6 +368,7 @@ export class DbBackedCombatCommandTransactionBoundary {
         dispatchIdempotencyKey: idempotencyKey,
         encounterCache: encounters.cloneEncountersBySession(),
         response,
+        sceneCache: scenes?.cloneScenes() ?? null,
       };
     }
 
@@ -350,6 +393,7 @@ export class DbBackedCombatCommandTransactionBoundary {
       dispatchIdempotencyKey: null,
       encounterCache: encounters.cloneEncountersBySession(),
       response: this.clone(concurrentRecord.response) as TResponse,
+      sceneCache: scenes?.cloneScenes() ?? null,
     };
   }
 

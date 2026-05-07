@@ -142,6 +142,79 @@ test('db-backed idempotency store rejects command fingerprint conflicts', async 
   );
 });
 
+test('command fingerprint distinguishes attack target selector kind and id', async () => {
+  const store = new InMemoryCommandIdempotencyStore();
+  const participantTargetLookup: CommandIdempotencyLookup = {
+    category: 'encounter',
+    command: {
+      commandId: 'attack-target-selector-1',
+      type: 'attack',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId: 'session-001',
+        targetParticipantId: 'player-002',
+      },
+    },
+  };
+
+  await store.cacheSuccess({
+    ...participantTargetLookup,
+    response: {
+      ok: true,
+      data: {
+        marker: 'participant-target',
+      },
+    },
+  });
+
+  await assert.rejects(
+    async () => {
+      await store.getCachedSuccess({
+        category: 'encounter',
+        command: {
+          commandId: 'attack-target-selector-1',
+          type: 'attack',
+          actor: {
+            participantId: 'player-001',
+          },
+          payload: {
+            sessionId: 'session-001',
+            targetCombatantId:
+              'scene_entity_11111111-1111-4111-8111-111111111111',
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CommandIdempotencyError &&
+      error.code === 'command_id_conflict',
+  );
+
+  await assert.rejects(
+    async () => {
+      await store.getCachedSuccess({
+        category: 'encounter',
+        command: {
+          commandId: 'attack-target-selector-1',
+          type: 'attack',
+          actor: {
+            participantId: 'player-001',
+          },
+          payload: {
+            sessionId: 'session-001',
+            targetParticipantId: 'player-003',
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CommandIdempotencyError &&
+      error.code === 'command_id_conflict',
+  );
+});
+
 test('db-backed idempotency store keeps out-of-scope commands process-local', async () => {
   const database = new InMemoryCommandIdempotencyRecordDatabase();
   const firstStore = new DbBackedCommandIdempotencyStore(database, {

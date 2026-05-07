@@ -3,6 +3,7 @@ import type {
   Character,
   DerivedCharacterStats,
   GridDefinition,
+  SceneCombatant,
   TurnUsage,
   SceneEntity,
   SceneEntityFootprint,
@@ -213,6 +214,12 @@ export function isCharacterDowned(character: Pick<Character, 'hp'>): boolean {
   return character.hp.current === 0;
 }
 
+export function isCombatantDefeated(
+  combatant: Pick<SceneCombatant, 'hp'>,
+): boolean {
+  return combatant.hp.current === 0;
+}
+
 // Phase 6 uses a temporary melee-only baseline: one Manhattan grid step on a
 // standard 5-foot grid. This intentionally ignores weapons, size, diagonals,
 // cover, and ranged attacks until those systems exist explicitly.
@@ -238,6 +245,52 @@ export function isWithinBaselineMeleeReach(params: {
       params.cellSizeFeet,
     ) <= (params.reachFeet ?? BASELINE_MELEE_REACH_FEET)
   );
+}
+
+export function isOccupancyWithinBaselineMeleeReach(params: {
+  attacker: OccupancyShape;
+  target: OccupancyShape;
+  cellSizeFeet: number;
+  reachFeet?: number;
+}): boolean {
+  if (
+    !Number.isInteger(params.cellSizeFeet) ||
+    params.cellSizeFeet < 1 ||
+    (params.reachFeet != null &&
+      (!Number.isInteger(params.reachFeet) || params.reachFeet < 1))
+  ) {
+    return false;
+  }
+
+  const attackerCells = getOccupiedCells(params.attacker);
+  const targetCells = getOccupiedCells(params.target);
+  const reachFeet = params.reachFeet ?? BASELINE_MELEE_REACH_FEET;
+
+  return attackerCells.some((attackerCell) =>
+    targetCells.some(
+      (targetCell) =>
+        calculateMovementDistanceFeet(
+          attackerCell,
+          targetCell,
+          params.cellSizeFeet,
+        ) <= reachFeet,
+    ),
+  );
+}
+
+function getOccupiedCells(occupancy: OccupancyShape): ScenePosition[] {
+  const cells: ScenePosition[] = [];
+
+  for (let x = 0; x < occupancy.footprint.width; x += 1) {
+    for (let y = 0; y < occupancy.footprint.height; y += 1) {
+      cells.push({
+        x: occupancy.position.x + x,
+        y: occupancy.position.y + y,
+      });
+    }
+  }
+
+  return cells;
 }
 
 export function sortEncounterParticipantsByInitiative<

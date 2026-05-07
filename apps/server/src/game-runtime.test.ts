@@ -632,6 +632,25 @@ function attack(
   });
 }
 
+function attackCombatant(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  targetCombatantId: string,
+  actorParticipantId = 'player-001',
+) {
+  return runtime.attack({
+    commandId: `attack-${actorParticipantId}-${targetCombatantId}`,
+    type: 'attack',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      targetCombatantId,
+    },
+  });
+}
+
 function dmSetCharacterCurrentHp(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -4068,6 +4087,67 @@ test('DM-controlled combatant attacks a player character on its turn without rol
   assert.equal(rollCount, 1);
 });
 
+test('defeated current-turn combatants cannot attack before rolling or emitting events', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
+  const { session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      abilities: {
+        str: 16,
+        dex: 20,
+        con: 12,
+        int: 8,
+        wis: 10,
+        cha: 8,
+      },
+      hp: {
+        max: 8,
+        current: 1,
+        temp: 0,
+      },
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  dmSetCombatantCurrentHp(runtime, session.sessionId, combatantId, 0);
+  const encounterUpdateCountBeforeAttack = getEncounterUpdates(updates).length;
+  const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+  assert.throws(
+    () => {
+      dmCombatantAttack(runtime, session.sessionId, combatantId, 'player-001');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'turn_actor_downed',
+  );
+  assert.equal(rollCount, 0);
+  assert.equal(
+    getEncounterUpdates(updates).length,
+    encounterUpdateCountBeforeAttack,
+  );
+  assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
+
+  dmSetCombatantCurrentHp(runtime, session.sessionId, combatantId, 1);
+  dmCombatantAttack(runtime, session.sessionId, combatantId, 'player-001');
+
+  assert.equal(rollCount, 1);
+});
+
 test('current turn owner can resolve an attack that consumes action, applies fixed damage, and emits encounter and combat events', () => {
   const runtime = createRuntimeWithAttackRoll(20);
   const { session, secondCharacter } = setupEncounterParticipants(runtime);
@@ -4122,6 +4202,87 @@ test('current turn owner can resolve an attack that consumes action, applies fix
     previous: 34,
     current: 33,
   });
+});
+
+test('current turn player character can attack an active scene combatant and emits encounter before combat event', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session, scene } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const totalEventCountBeforeAttack = updates.length;
+  const updatedEncounter = attackCombatant(
+    runtime,
+    session.sessionId,
+    combatantId,
+  );
+  const updatedScene = runtime.scenes.getScene(scene.id);
+  const targetCombatant = updatedScene.entities.find(
+    (entity) => entity.id === combatantId,
+  );
+  const newEvents = updates.slice(totalEventCountBeforeAttack);
+  const combatEvent = getCombatEvents(newEvents)[0];
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(targetCombatant?.combatant?.hp.current, 7);
+  assert.deepEqual(
+    newEvents.map((event) => event.type),
+    ['encounter_state', 'combat_event'],
+  );
+  assert.equal(combatEvent?.attackerKind, 'character');
+  assert.equal(combatEvent?.targetKind, 'combatant');
+  assert.equal(combatEvent?.targetCombatantId, combatantId);
+  assert.equal(combatEvent?.targetParticipantId, 'dm-001');
+  assert.deepEqual(combatEvent?.targetHp, {
+    previous: 8,
+    current: 7,
+  });
+});
+
+test('missed player attack against a combatant consumes action without changing combatant HP', () => {
+  const runtime = createRuntimeWithAttackRoll(1);
+  const { session, scene } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      armorClass: 99,
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  startEncounter(runtime, session.sessionId);
+  const updatedEncounter = attackCombatant(
+    runtime,
+    session.sessionId,
+    combatantId,
+  );
+  const updatedScene = runtime.scenes.getScene(scene.id);
+  const targetCombatant = updatedScene.entities.find(
+    (entity) => entity.id === combatantId,
+  );
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(targetCombatant?.combatant?.hp.current, 8);
 });
 
 test('a miss still consumes action and emits a combat event without changing target HP', () => {
@@ -4204,6 +4365,72 @@ test('attack damage never reduces target HP below zero', () => {
   );
 
   assert.equal(targetRecord.character.hp.current, 0);
+});
+
+test('player attack damage defeats combatants without removing them from the scene', () => {
+  const runtime = createRuntimeWithAttackRoll(20);
+  const { session, scene } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      hp: {
+        max: 1,
+        current: 1,
+        temp: 0,
+      },
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  startEncounter(runtime, session.sessionId);
+  attackCombatant(runtime, session.sessionId, combatantId);
+
+  const updatedScene = runtime.scenes.getScene(scene.id);
+  const targetCombatant = updatedScene.entities.find(
+    (entity) => entity.id === combatantId,
+  );
+
+  assert.ok(targetCombatant);
+  assert.equal(targetCombatant.combatant?.hp.current, 0);
+});
+
+test('start encounter excludes combatants that are already defeated', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      hp: {
+        max: 8,
+        current: 0,
+        temp: 0,
+      },
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.ok(
+    !encounter.participants.some(
+      (participant) =>
+        'combatantId' in participant && participant.combatantId === combatantId,
+    ),
+  );
 });
 
 test('non-current participants cannot attack and do not consume attack RNG', () => {
@@ -4424,6 +4651,179 @@ test('out-of-reach melee attack targets are rejected before rolling', () => {
     encounterUpdateCountBeforeAttack,
   );
   assert.equal(getCombatEvents(updates).length, combatEventCountBeforeAttack);
+});
+
+test('illegal player attacks against combatant targets do not roll or emit events', () => {
+  const cases: Array<{
+    expectedCode: string;
+    name: string;
+    setup: (runtime: InMemoryGameRuntime) => {
+      sessionId: string;
+      targetCombatantId: string;
+    };
+  }> = [
+    {
+      expectedCode: 'scene_not_found',
+      name: 'missing combatant',
+      setup: (runtime) => {
+        const { session } = setupEncounterParticipants(runtime);
+
+        startEncounter(runtime, session.sessionId);
+
+        return {
+          sessionId: session.sessionId,
+          targetCombatantId:
+            'scene_entity_99999999-9999-4999-8999-999999999999',
+        };
+      },
+    },
+    {
+      expectedCode: 'invalid_character_state',
+      name: 'passive scene entity',
+      setup: (runtime) => {
+        const { scene, session } = setupEncounterParticipants(runtime);
+        const passiveEntity = placeEntity(
+          runtime,
+          session.sessionId,
+          scene.id,
+          {
+            position: {
+              x: 0,
+              y: 1,
+            },
+          },
+        );
+
+        startEncounter(runtime, session.sessionId);
+
+        return {
+          sessionId: session.sessionId,
+          targetCombatantId: passiveEntity.entities.at(-1)!.id,
+        };
+      },
+    },
+    {
+      expectedCode: 'invalid_attack_target',
+      name: 'combatant not in encounter',
+      setup: (runtime) => {
+        const { session } = setupEncounterParticipants(runtime);
+
+        startEncounter(runtime, session.sessionId);
+        const sceneWithCombatant = dmCreateCombatantInActiveScene(
+          runtime,
+          session.sessionId,
+          {
+            position: {
+              x: 0,
+              y: 1,
+            },
+          },
+        );
+
+        return {
+          sessionId: session.sessionId,
+          targetCombatantId: sceneWithCombatant.entities.find(
+            (entity) => entity.combatant,
+          )!.id,
+        };
+      },
+    },
+    {
+      expectedCode: 'attack_target_downed',
+      name: 'defeated combatant',
+      setup: (runtime) => {
+        const { session } = setupEncounterParticipants(runtime);
+        const sceneWithCombatant = dmCreateCombatantInActiveScene(
+          runtime,
+          session.sessionId,
+          {
+            hp: {
+              max: 8,
+              current: 1,
+              temp: 0,
+            },
+            position: {
+              x: 0,
+              y: 1,
+            },
+          },
+        );
+        const combatantId = sceneWithCombatant.entities.find(
+          (entity) => entity.combatant,
+        )!.id;
+
+        startEncounter(runtime, session.sessionId);
+        dmSetCombatantCurrentHp(runtime, session.sessionId, combatantId, 0);
+
+        return {
+          sessionId: session.sessionId,
+          targetCombatantId: combatantId,
+        };
+      },
+    },
+    {
+      expectedCode: 'attack_target_out_of_reach',
+      name: 'out of reach combatant',
+      setup: (runtime) => {
+        const { session } = setupEncounterParticipants(runtime);
+        const sceneWithCombatant = dmCreateCombatantInActiveScene(
+          runtime,
+          session.sessionId,
+          {
+            position: {
+              x: 3,
+              y: 0,
+            },
+          },
+        );
+        const combatantId = sceneWithCombatant.entities.find(
+          (entity) => entity.combatant,
+        )!.id;
+
+        startEncounter(runtime, session.sessionId);
+
+        return {
+          sessionId: session.sessionId,
+          targetCombatantId: combatantId,
+        };
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    let rollCount = 0;
+    const runtime = createRuntimeWithAttackRoller(() => {
+      rollCount += 1;
+      return 20;
+    });
+    const { sessionId, targetCombatantId } = testCase.setup(runtime);
+    const updates = subscribeToSession(runtime, sessionId);
+    const encounterUpdateCountBeforeAttack =
+      getEncounterUpdates(updates).length;
+    const combatEventCountBeforeAttack = getCombatEvents(updates).length;
+
+    assert.throws(
+      () => {
+        attackCombatant(runtime, sessionId, targetCombatantId);
+      },
+      (error: unknown) =>
+        error instanceof Error &&
+        'code' in error &&
+        error.code === testCase.expectedCode,
+      testCase.name,
+    );
+    assert.equal(rollCount, 0, testCase.name);
+    assert.equal(
+      getEncounterUpdates(updates).length,
+      encounterUpdateCountBeforeAttack,
+      testCase.name,
+    );
+    assert.equal(
+      getCombatEvents(updates).length,
+      combatEventCountBeforeAttack,
+      testCase.name,
+    );
+  }
 });
 
 test('failed attack commands emit neither combat_event nor encounter_state updates and do not consume attack RNG', () => {

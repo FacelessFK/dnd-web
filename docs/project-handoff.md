@@ -60,7 +60,8 @@ It can:
   DM assignment,
 - show pending assignment requests from session state and let DMs assign them,
 - let players move only their own token, use their own action/bonus/reaction,
-  and attack selected player targets,
+  and attack selected player or active non-defeated monster/NPC combatant
+  targets,
 - let DMs trigger turn advance, attack/movement for selected player actors,
   monster/NPC attacks, HP overrides, reposition, condition tags, turn actor
   override, turn usage override, and encounter end.
@@ -138,6 +139,9 @@ covered by the existing server tests and repo smoke tests.
   monster AI.
 - Monster/NPC combatants are DM-controlled MVP actors only; there is no monster
   AI, CR/stat-block library, weapon system, or spell system behind them.
+- Combatant defeated state is derived narrowly from `hp.current === 0`; defeated
+  combatants remain visible on the map but cannot act or be targeted by player
+  attacks.
 - The runtime surface is a playable DM/player MVP, not production auth or a
   final product UX.
 - The default local server still starts with the in-memory runtime unless

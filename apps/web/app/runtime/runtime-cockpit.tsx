@@ -42,6 +42,7 @@ import {
   getActingParticipantId,
   getActiveSceneGuidance,
   getAssignedCharacterRefs,
+  getAttackableCombatantEntities,
   getCombatantDisplayCells,
   getCombatantEntities,
   getCurrentTurnCombatantId,
@@ -58,6 +59,7 @@ import {
   getSceneEntityLabel,
   initials,
   isSessionStreamEvent,
+  isCombatantEntityDefeated,
   isExpectedRecoveryMiss,
   sampleCharacters,
   samplePlayers,
@@ -155,6 +157,8 @@ export function RuntimeCockpit() {
   const [selectedTarget, setSelectedTarget] = useState<string>(
     samplePlayers[1].participantId,
   );
+  const [selectedTargetCombatantId, setSelectedTargetCombatantId] =
+    useState('');
   const [selectedCell, setSelectedCell] = useState<Cell>({ x: 0, y: 0 });
   const [selectedCombatantId, setSelectedCombatantId] = useState('');
   const [hpDraft, setHpDraft] = useState('1');
@@ -306,6 +310,7 @@ export function RuntimeCockpit() {
 
   useEffect(() => {
     const combatants = getCombatantEntities(scene);
+    const attackableCombatants = getAttackableCombatantEntities(scene);
 
     setSelectedCombatantId((current) => {
       if (current && combatants.some((combatant) => combatant.id === current)) {
@@ -313,6 +318,17 @@ export function RuntimeCockpit() {
       }
 
       return combatants[0]?.id ?? '';
+    });
+
+    setSelectedTargetCombatantId((current) => {
+      if (
+        current &&
+        attackableCombatants.some((combatant) => combatant.id === current)
+      ) {
+        return current;
+      }
+
+      return '';
     });
   }, [scene]);
 
@@ -415,6 +431,7 @@ export function RuntimeCockpit() {
     setSceneEntityDraft(createDefaultSceneEntityDraftForm());
     setCombatantDraft(createDefaultCombatantDraftForm());
     setSelectedCombatantId('');
+    setSelectedTargetCombatantId('');
     setCombatantHpDraft('8');
     setTurnUsageDraft({
       actionUsed: false,
@@ -591,6 +608,31 @@ export function RuntimeCockpit() {
               },
             },
           }));
+        }
+        if (event.targetCombatantId) {
+          setScene((currentScene) => {
+            if (!currentScene) {
+              return currentScene;
+            }
+
+            return {
+              ...currentScene,
+              entities: currentScene.entities.map((entity) =>
+                entity.id === event.targetCombatantId && entity.combatant
+                  ? {
+                      ...entity,
+                      combatant: {
+                        ...entity.combatant,
+                        hp: {
+                          ...entity.combatant.hp,
+                          current: event.targetHp.current,
+                        },
+                      },
+                    }
+                  : entity,
+              ),
+            };
+          });
         }
         break;
     }
@@ -1671,6 +1713,8 @@ export function RuntimeCockpit() {
   async function attackTarget(): Promise<void> {
     await runTask('attack', async () => {
       assertSession();
+      const targetCombatantId =
+        mode === 'player' ? selectedTargetCombatantId : '';
 
       const response = await unwrap(
         'attack',
@@ -1681,7 +1725,13 @@ export function RuntimeCockpit() {
           commandId: createCommandId('attack'),
           payload: {
             sessionId,
-            targetParticipantId: selectedTarget,
+            ...(targetCombatantId
+              ? {
+                  targetCombatantId,
+                }
+              : {
+                  targetParticipantId: selectedTarget,
+                }),
           },
           type: 'attack',
         }),
@@ -1689,6 +1739,27 @@ export function RuntimeCockpit() {
 
       setEncounter(response.data.encounter);
       setTurnUsageDraft(response.data.encounter.currentTurnUsage);
+
+      if (targetCombatantId && sceneId) {
+        const recoveredScene = await unwrap(
+          'get_scene',
+          sendSceneCommand({
+            actor: {
+              participantId: actingParticipantId,
+            },
+            commandId: createCommandId('attack-get-scene'),
+            payload: {
+              sceneId,
+              sessionId,
+            },
+            type: 'get_scene',
+          }),
+        );
+
+        if ('scene' in recoveredScene.data) {
+          rememberScene(recoveredScene.data.scene);
+        }
+      }
 
       return response;
     });
@@ -2339,6 +2410,7 @@ export function RuntimeCockpit() {
     position: selectedCell,
   });
   const combatants = getCombatantEntities(scene);
+  const attackableCombatants = getAttackableCombatantEntities(scene);
   const selectedCombatant = combatants.find(
     (combatant) => combatant.id === selectedCombatantId,
   );
@@ -2461,6 +2533,34 @@ export function RuntimeCockpit() {
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
   );
+  const targetParticipants = playerParticipants.filter(
+    (participant) => participant.id !== actingParticipantId,
+  );
+  const attackTargetOptions =
+    mode === 'player'
+      ? [
+          ...targetParticipants.map((participant) => ({
+            label: `${participant.displayName} (${participant.id})`,
+            value: `participant:${participant.id}`,
+          })),
+          ...attackableCombatants.map((combatant) => ({
+            label: `${combatant.name} (${combatant.combatant.kind}, HP ${combatant.combatant.hp.current}/${combatant.combatant.hp.max})`,
+            value: `combatant:${combatant.id}`,
+          })),
+        ]
+      : targetParticipants.map((participant) => ({
+          label: `${participant.displayName} (${participant.id})`,
+          value: participant.id,
+        }));
+  const selectedAttackTargetValue =
+    mode === 'player' && selectedTargetCombatantId
+      ? `combatant:${selectedTargetCombatantId}`
+      : mode === 'player'
+        ? `participant:${selectedTarget}`
+        : selectedTarget;
+  const hasValidAttackTarget = attackTargetOptions.some(
+    (option) => option.value === selectedAttackTargetValue,
+  );
   const currentTurnName = getCurrentTurnLabel({
     encounter,
     participants,
@@ -2482,6 +2582,7 @@ export function RuntimeCockpit() {
       charactersByParticipant[actingParticipantId]?.character.id,
     ),
     sessionId,
+    hasValidAttackTarget,
     targetParticipantId: selectedTarget,
   });
   const playerAttackDisabledReason =
@@ -2489,9 +2590,6 @@ export function RuntimeCockpit() {
     (currentTurnCombatantId
       ? 'Current turn is a monster/NPC; use the DM combatant attack control.'
       : null);
-  const targetParticipants = playerParticipants.filter(
-    (participant) => participant.id !== actingParticipantId,
-  );
   const selectedActorAssignedCharacterId =
     sessionState?.participants.find(
       (participant) => participant.id === selectedActor,
@@ -2744,6 +2842,7 @@ export function RuntimeCockpit() {
                 scene={scene}
                 selectedCell={selectedCell}
                 selectedCombatantId={selectedCombatantId}
+                selectedTargetCombatantId={selectedTargetCombatantId}
                 selectedTargetParticipantId={selectedTarget}
               />
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
@@ -3107,12 +3206,26 @@ export function RuntimeCockpit() {
                 )}
                 <SelectField
                   label="Target"
-                  onChange={setSelectedTarget}
-                  options={targetParticipants.map((participant) => ({
-                    label: `${participant.displayName} (${participant.id})`,
-                    value: participant.id,
-                  }))}
-                  value={selectedTarget}
+                  onChange={(value) => {
+                    if (mode !== 'player') {
+                      setSelectedTarget(value);
+                      return;
+                    }
+
+                    const [targetKind, targetId] = value.split(':', 2);
+
+                    if (targetKind === 'combatant' && targetId) {
+                      setSelectedTargetCombatantId(targetId);
+                      return;
+                    }
+
+                    if (targetKind === 'participant' && targetId) {
+                      setSelectedTarget(targetId);
+                      setSelectedTargetCombatantId('');
+                    }
+                  }}
+                  options={attackTargetOptions}
+                  value={selectedAttackTargetValue}
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton
@@ -4187,7 +4300,7 @@ function CombatantPanel({
               label="Selected monster/NPC"
               onChange={onSelectCombatant}
               options={combatants.map((combatant) => ({
-                label: `${combatant.name} (${combatant.combatant.kind}, HP ${combatant.combatant.hp.current}/${combatant.combatant.hp.max})`,
+                label: `${combatant.name} (${combatant.combatant.kind}, HP ${combatant.combatant.hp.current}/${combatant.combatant.hp.max}${isCombatantEntityDefeated(combatant) ? ', defeated' : ''})`,
                 value: combatant.id,
               }))}
               value={selectedCombatantId}
@@ -4208,6 +4321,14 @@ function CombatantPanel({
                 label="Current turn"
                 value={
                   currentTurnCombatantId === selectedCombatant.id ? 'yes' : 'no'
+                }
+              />
+              <StatusRow
+                label="Status"
+                value={
+                  isCombatantEntityDefeated(selectedCombatant)
+                    ? 'defeated'
+                    : 'active'
                 }
               />
               <StatusRow label="Target" value={targetParticipantId || 'none'} />
@@ -4514,6 +4635,7 @@ function TacticalGrid({
   scene,
   selectedCell,
   selectedCombatantId,
+  selectedTargetCombatantId,
   selectedTargetParticipantId,
 }: {
   activeScene: ActiveSceneState | null;
@@ -4530,6 +4652,7 @@ function TacticalGrid({
   scene: Scene | null;
   selectedCell: Cell;
   selectedCombatantId: string;
+  selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
 }) {
   const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
@@ -4581,6 +4704,11 @@ function TacticalGrid({
           primaryCombatantCell?.entity.id === currentTurnCombatantId;
         const isSelectedCombatant =
           primaryCombatantCell?.entity.id === selectedCombatantId;
+        const isTargetCombatant =
+          primaryCombatantCell?.entity.id === selectedTargetCombatantId;
+        const isDefeatedCombatant = primaryCombatantCell
+          ? isCombatantEntityDefeated(primaryCombatantCell.entity)
+          : false;
         const tokenTone = isTarget
           ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
           : isPlayerOwn
@@ -4591,7 +4719,9 @@ function TacticalGrid({
                 ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
                 : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
         const entityTone = primaryCombatantCell
-          ? 'border-red-200/60 bg-red-900/65 text-red-50'
+          ? isDefeatedCombatant
+            ? 'border-stone-400/50 bg-stone-900/70 text-stone-200'
+            : 'border-red-200/60 bg-red-900/65 text-red-50'
           : primaryEntityCell?.entity.type === 'terrain'
             ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
             : primaryEntityCell?.entity.type === 'monster'
@@ -4645,17 +4775,26 @@ function TacticalGrid({
             {primaryCombatantCell ? (
               <span
                 className={`runtime-token-pop absolute inset-x-2 top-1/2 z-20 mx-auto flex size-10 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${
-                  isSelectedCombatant
-                    ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
-                    : isCurrentCombatant
-                      ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
-                      : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
-                } ${isCurrentCombatant ? 'animate-pulse' : ''}`}
+                  isTargetCombatant
+                    ? 'border-fuchsia-100 bg-fuchsia-500 text-stone-950 shadow-fuchsia-300/45'
+                    : isSelectedCombatant
+                      ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
+                      : isCurrentCombatant
+                        ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
+                        : isDefeatedCombatant
+                          ? 'border-stone-300/70 bg-stone-800 text-stone-200 opacity-75 shadow-black/40'
+                          : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
+                } ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
                 title={primaryCombatantCell.label}
               >
                 {primaryCombatantCell.isOrigin
                   ? initials(primaryCombatantCell.entity.name) || 'M'
                   : '·'}
+                {isDefeatedCombatant ? (
+                  <span className="absolute -bottom-4 text-[8px] uppercase tracking-wide text-stone-200">
+                    defeated
+                  </span>
+                ) : null}
               </span>
             ) : null}
             {placement ? (
