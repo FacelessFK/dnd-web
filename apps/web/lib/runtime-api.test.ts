@@ -42,6 +42,7 @@ describe('runtime-api helpers', () => {
                 id: 'dm-001',
                 joinedAt: '2026-01-01T00:00:00.000Z',
                 lastSeenAt: '2026-01-01T00:00:00.000Z',
+                pendingCharacterId: null,
                 role: 'dm',
               },
             ],

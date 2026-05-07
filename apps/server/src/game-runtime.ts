@@ -51,6 +51,7 @@ import type {
   ReconnectSessionCommand,
   SceneActivationSuccess,
   StartEncounterCommand,
+  SubmitCharacterForAssignmentCommand,
   UpdateCharacterCommand,
   UseActionCommand,
   UseBonusActionCommand,
@@ -555,6 +556,65 @@ export class InMemoryGameRuntime<
           (state) => ({
             sessionId: snapshot.session.id,
             participantId: participant.id,
+            characterId: record.character.id,
+            state,
+          }),
+        );
+      },
+    );
+  }
+
+  submitCharacterForAssignment(
+    command: SubmitCharacterForAssignmentCommand,
+  ): CharacterAssignmentSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    if (actor.role !== 'player') {
+      throw new CharacterStoreError(
+        'invalid_role_assumption',
+        `Participant "${actor.id}" must be a player to submit a character for assignment.`,
+      );
+    }
+
+    return this.resolveRepositoryResult(
+      this.characters.getCharacter(command.payload.characterId),
+      (record) => {
+        this.assertCharacterBelongsToSession(
+          snapshot,
+          record.character.id,
+          record,
+        );
+
+        if (record.character.ownerParticipantId !== actor.id) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Character "${record.character.id}" belongs to participant "${record.character.ownerParticipantId}" and cannot be submitted by "${actor.id}".`,
+          );
+        }
+
+        if (record.character.status !== 'ready') {
+          throw new CharacterStoreError(
+            'invalid_character_state',
+            `Character "${record.character.id}" must be finalized before it can be submitted for assignment.`,
+          );
+        }
+
+        return this.resolveSessionResult(
+          this.sessions.submitCharacterForAssignment(
+            snapshot.session.id,
+            actor.id,
+            record.character.id,
+          ),
+          (state) => ({
+            sessionId: snapshot.session.id,
+            participantId: actor.id,
             characterId: record.character.id,
             state,
           }),

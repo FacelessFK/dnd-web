@@ -37,6 +37,8 @@ import {
   getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
+  getPendingAssignmentRequests,
+  getPendingCharacterRefs,
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
@@ -158,6 +160,7 @@ export function RuntimeCockpit() {
       id: dmParticipantId,
       joinedAt: '',
       lastSeenAt: '',
+      pendingCharacterId: null,
       role: 'dm' as const,
     },
     ...samplePlayers.map((player) => ({
@@ -167,6 +170,7 @@ export function RuntimeCockpit() {
       id: player.participantId,
       joinedAt: '',
       lastSeenAt: '',
+      pendingCharacterId: null,
       role: 'player' as const,
     })),
     ...(samplePlayers.some(
@@ -181,6 +185,7 @@ export function RuntimeCockpit() {
             id: playerParticipantId,
             joinedAt: '',
             lastSeenAt: '',
+            pendingCharacterId: null,
             role: 'player' as const,
           },
         ]),
@@ -1246,6 +1251,12 @@ export function RuntimeCockpit() {
         characterRefs.set(participant.characterId, participant);
       }
 
+      for (const participant of getPendingCharacterRefs(recovered.data.state)) {
+        if (!characterRefs.has(participant.characterId)) {
+          characterRefs.set(participant.characterId, participant);
+        }
+      }
+
       for (const [participantId, characterId] of Object.entries(
         knownCharacterIdsByParticipant,
       )) {
@@ -1522,6 +1533,34 @@ export function RuntimeCockpit() {
     });
   }
 
+  async function submitPlayerCharacterForAssignment(): Promise<void> {
+    await runTask('submit_character_for_assignment player', async () => {
+      assertSession();
+      const characterId = requirePlayerCharacterId();
+
+      const response = await unwrap(
+        'submit_character_for_assignment',
+        sendCharacterCommand({
+          actor: {
+            participantId: playerParticipantId,
+          },
+          commandId: createCommandId('player-submit-character'),
+          payload: {
+            characterId,
+            sessionId,
+          },
+          type: 'submit_character_for_assignment',
+        }),
+      );
+
+      if ('state' in response.data) {
+        applySessionSnapshot(response.data.state);
+      }
+
+      return response;
+    });
+  }
+
   async function dmAssignSelectedLoadedCharacter(): Promise<void> {
     await runTask('assign selected loaded character', async () => {
       assertSession();
@@ -1543,6 +1582,37 @@ export function RuntimeCockpit() {
           payload: {
             characterId,
             participantId: selectedActor,
+            sessionId,
+          },
+          type: 'assign_character_to_participant',
+        }),
+      );
+
+      if ('state' in response.data) {
+        applySessionSnapshot(response.data.state);
+      }
+
+      return response;
+    });
+  }
+
+  async function dmAssignPendingCharacter(
+    participantId: string,
+    characterId: string,
+  ): Promise<void> {
+    await runTask(`assign pending character ${participantId}`, async () => {
+      assertSession();
+
+      const response = await unwrap(
+        'assign_character_to_participant',
+        sendCharacterCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-assign-pending-character'),
+          payload: {
+            characterId,
+            participantId,
             sessionId,
           },
           type: 'assign_character_to_participant',
@@ -1816,10 +1886,19 @@ export function RuntimeCockpit() {
     sessionState?.participants.find(
       (participant) => participant.id === playerParticipantId,
     )?.characterId ?? null;
+  const playerPendingCharacterId =
+    sessionState?.participants.find(
+      (participant) => participant.id === playerParticipantId,
+    )?.pendingCharacterId ?? null;
   const playerCharacterId =
-    playerCharacter?.character.id ?? knownCharacterIds[playerParticipantId];
+    playerCharacter?.character.id ??
+    playerPendingCharacterId ??
+    knownCharacterIds[playerParticipantId];
   const isPlayerCharacterAssigned = Boolean(
     playerCharacterId && playerAssignedCharacterId === playerCharacterId,
+  );
+  const isPlayerCharacterSubmitted = Boolean(
+    playerCharacterId && playerPendingCharacterId === playerCharacterId,
   );
   const characterDraftErrors = validateCharacterDraftForm(characterDraft);
   const playerCharacterSetupReason =
@@ -1847,6 +1926,18 @@ export function RuntimeCockpit() {
     (playerCharacter ? null : 'Create or recover your character first.') ??
     (playerCharacter?.character.status === 'ready'
       ? 'This character is already finalized.'
+      : null);
+  const submitPlayerCharacterReason =
+    playerCharacterSetupReason ??
+    (playerCharacter ? null : 'Create or recover your character first.') ??
+    (playerCharacter?.character.status === 'ready'
+      ? null
+      : 'Finalize this character before submitting it.') ??
+    (isPlayerCharacterAssigned
+      ? 'This character is already assigned.'
+      : null) ??
+    (isPlayerCharacterSubmitted
+      ? 'This character is already waiting for DM assignment.'
       : null);
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
@@ -1879,8 +1970,13 @@ export function RuntimeCockpit() {
     sessionState?.participants.find(
       (participant) => participant.id === selectedActor,
     )?.characterId ?? null;
+  const selectedActorPendingCharacterId =
+    sessionState?.participants.find(
+      (participant) => participant.id === selectedActor,
+    )?.pendingCharacterId ?? null;
   const selectedActorKnownCharacterId =
     charactersByParticipant[selectedActor]?.character.id ??
+    selectedActorPendingCharacterId ??
     knownCharacterIds[selectedActor];
   const selectedActorNeedsAssignment = Boolean(
     selectedActorKnownCharacterId &&
@@ -1901,11 +1997,17 @@ export function RuntimeCockpit() {
   const playerPlacement = activeScene?.placedCharacters.find(
     (placement) => placement.participantId === playerParticipantId,
   );
+  const pendingAssignmentRequests = getPendingAssignmentRequests({
+    charactersByParticipant,
+    sessionState,
+  });
   const playerNextStep = getPlayerNextStep({
     hasActiveScene: Boolean(activeScene),
     hasCharacter: Boolean(playerCharacter),
     hasEncounter: Boolean(encounter),
+    isCharacterReady: playerCharacter?.character.status === 'ready',
     isCharacterAssigned: isPlayerCharacterAssigned,
+    isCharacterSubmitted: isPlayerCharacterSubmitted,
     isCurrentTurn: currentTurnParticipantId === playerParticipantId,
     isJoined: isPlayerJoined,
     isPlaced: Boolean(playerPlacement),
@@ -2334,9 +2436,12 @@ export function RuntimeCockpit() {
                 onFieldChange={updateCharacterDraftField}
                 onFinalize={finalizePlayerCharacter}
                 onHpChange={updateCharacterDraftHp}
+                onSubmit={submitPlayerCharacterForAssignment}
                 onUpdate={updatePlayerCharacter}
+                pendingCharacterId={playerPendingCharacterId}
                 playerCharacter={playerCharacter}
                 playerParticipantId={playerParticipantId}
+                submitDisabledReason={submitPlayerCharacterReason}
                 updateDisabledReason={updatePlayerCharacterReason}
                 finalizeDisabledReason={finalizePlayerCharacterReason}
               />
@@ -2460,6 +2565,73 @@ export function RuntimeCockpit() {
                         title="No players loaded"
                       />
                     )}
+                    <div className="grid gap-3 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
+                      <div>
+                        <p className="text-sm font-bold text-amber-50">
+                          Assignment Requests
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-amber-100/60">
+                          Pending requests come from authoritative session
+                          state, not this browser&apos;s local character cache.
+                        </p>
+                      </div>
+                      {pendingAssignmentRequests.length ? (
+                        pendingAssignmentRequests.map((request) => (
+                          <div
+                            className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3"
+                            key={`${request.participantId}-${request.pendingCharacterId}`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-semibold text-amber-50">
+                                  {request.displayName}
+                                </p>
+                                <p className="mt-1 break-all text-xs text-amber-100/60">
+                                  {request.participantId}
+                                </p>
+                              </div>
+                              <StatusBadge
+                                label={
+                                  request.assignedCharacterId
+                                    ? 'Replacement pending'
+                                    : 'Needs assignment'
+                                }
+                                tone="warning"
+                              />
+                            </div>
+                            <StatusRow
+                              label="Pending"
+                              value={
+                                request.character
+                                  ? `${request.character.character.name} (${request.pendingCharacterId})`
+                                  : request.pendingCharacterId
+                              }
+                            />
+                            <StatusRow
+                              label="Assigned"
+                              value={request.assignedCharacterId ?? 'none'}
+                            />
+                            <ActionButton
+                              disabled={Boolean(busyReason)}
+                              disabledReason={busyReason ?? undefined}
+                              label="Assign Pending Character"
+                              onClick={() =>
+                                dmAssignPendingCharacter(
+                                  request.participantId,
+                                  request.pendingCharacterId,
+                                )
+                              }
+                              variant="secondary"
+                            />
+                          </div>
+                        ))
+                      ) : (
+                        <EmptyState
+                          detail="Players can submit finalized characters from Player mode."
+                          title="No pending character requests"
+                        />
+                      )}
+                    </div>
                     <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
                       <p className="text-sm font-bold text-amber-50">
                         Assignment helper
@@ -2476,6 +2648,10 @@ export function RuntimeCockpit() {
                       <StatusRow
                         label="Known character"
                         value={selectedActorKnownCharacterId ?? 'none'}
+                      />
+                      <StatusRow
+                        label="Pending"
+                        value={selectedActorPendingCharacterId ?? 'none'}
                       />
                       <StatusRow
                         label="Assigned"
@@ -2993,9 +3169,12 @@ function CharacterOnboardingPanel({
   onFieldChange,
   onFinalize,
   onHpChange,
+  onSubmit,
   onUpdate,
+  pendingCharacterId,
   playerCharacter,
   playerParticipantId,
+  submitDisabledReason,
   updateDisabledReason,
 }: {
   characterDraft: CharacterDraftForm;
@@ -3019,20 +3198,27 @@ function CharacterOnboardingPanel({
   ) => void;
   onFinalize: () => void | Promise<void>;
   onHpChange: (field: keyof CharacterDraftForm['hp'], value: string) => void;
+  onSubmit: () => void | Promise<void>;
   onUpdate: () => void | Promise<void>;
+  pendingCharacterId: string | null;
   playerCharacter?: CharacterResource;
   playerParticipantId: string;
+  submitDisabledReason: string | null;
   updateDisabledReason: string | null;
 }) {
   const statusTone: RuntimeNoticeTone = playerCharacter
     ? isAssigned
       ? 'success'
-      : 'warning'
+      : pendingCharacterId === playerCharacter.character.id
+        ? 'info'
+        : 'warning'
     : 'info';
   const statusLabel = playerCharacter
     ? isAssigned
       ? 'Assigned'
-      : 'Needs DM assignment'
+      : pendingCharacterId === playerCharacter.character.id
+        ? 'Submitted'
+        : 'Ready for submission'
     : 'No character yet';
 
   return (
@@ -3068,11 +3254,11 @@ function CharacterOnboardingPanel({
           </Notice>
         ) : null}
 
-        {!isAssigned && playerCharacter ? (
+        {!isAssigned && playerCharacter?.character.status === 'ready' ? (
           <Notice title="Waiting on DM assignment" tone="warning">
-            The character exists on the server, but this session participant is
-            not assigned yet. A DM must assign this character before movement
-            and encounter participation.
+            {pendingCharacterId === playerCharacter.character.id
+              ? 'Your finalized character is submitted in authoritative session state. A DM can now see and assign it from their roster.'
+              : 'This character is finalized but not submitted yet. Submit it so a DM in another browser can assign it.'}
           </Notice>
         ) : null}
 
@@ -3184,7 +3370,7 @@ function CharacterOnboardingPanel({
           </div>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-4">
           <ActionButton
             disabled={Boolean(createDisabledReason)}
             disabledReason={createDisabledReason ?? undefined}
@@ -3203,6 +3389,13 @@ function CharacterOnboardingPanel({
             disabledReason={finalizeDisabledReason ?? undefined}
             label="Finalize"
             onClick={onFinalize}
+            variant="secondary"
+          />
+          <ActionButton
+            disabled={Boolean(submitDisabledReason)}
+            disabledReason={submitDisabledReason ?? undefined}
+            label="Submit to DM"
+            onClick={onSubmit}
             variant="secondary"
           />
         </div>

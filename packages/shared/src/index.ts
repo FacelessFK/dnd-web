@@ -55,6 +55,7 @@ export interface Participant {
   joinedAt: string;
   lastSeenAt: string;
   characterId: CharacterId | null;
+  pendingCharacterId: CharacterId | null;
 }
 
 export interface Session {

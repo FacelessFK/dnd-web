@@ -13,6 +13,8 @@ import {
   getActingParticipantId,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
+  getPendingAssignmentRequests,
+  getPendingCharacterRefs,
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
@@ -31,6 +33,7 @@ const sessionState: SessionSnapshot = {
       id: 'dm-001',
       joinedAt: '2026-01-01T00:00:00.000Z',
       lastSeenAt: '2026-01-01T00:00:00.000Z',
+      pendingCharacterId: null,
       role: 'dm',
     },
     {
@@ -40,6 +43,7 @@ const sessionState: SessionSnapshot = {
       id: 'player-001',
       joinedAt: '2026-01-01T00:00:00.000Z',
       lastSeenAt: '2026-01-01T00:00:00.000Z',
+      pendingCharacterId: null,
       role: 'player',
     },
   ],
@@ -66,6 +70,43 @@ describe('runtime cockpit helpers', () => {
     ]);
   });
 
+  it('collects pending character reads and assignment requests from session state', () => {
+    const pendingState: SessionSnapshot = {
+      ...sessionState,
+      participants: sessionState.participants.map((participant) =>
+        participant.id === 'player-001'
+          ? {
+              ...participant,
+              characterId: null,
+              pendingCharacterId: 'CHAR-PENDING',
+            }
+          : participant,
+      ),
+    };
+
+    assert.deepEqual(getPendingCharacterRefs(pendingState), [
+      {
+        characterId: 'CHAR-PENDING',
+        participantId: 'player-001',
+      },
+    ]);
+    assert.deepEqual(
+      getPendingAssignmentRequests({
+        charactersByParticipant: {},
+        sessionState: pendingState,
+      }),
+      [
+        {
+          assignedCharacterId: null,
+          character: undefined,
+          displayName: 'Player One',
+          participantId: 'player-001',
+          pendingCharacterId: 'CHAR-PENDING',
+        },
+      ],
+    );
+  });
+
   it('prefers session assigned IDs over loaded character resources', () => {
     const ids = getKnownCharacterIds(sessionState, {
       'player-001': {
@@ -76,6 +117,25 @@ describe('runtime cockpit helpers', () => {
     });
 
     assert.equal(ids['player-001'], 'CHAR-001');
+  });
+
+  it('uses pending character IDs when no assigned character exists', () => {
+    const pendingState: SessionSnapshot = {
+      ...sessionState,
+      participants: sessionState.participants.map((participant) =>
+        participant.id === 'player-001'
+          ? {
+              ...participant,
+              characterId: null,
+              pendingCharacterId: 'CHAR-PENDING',
+            }
+          : participant,
+      ),
+    };
+
+    const ids = getKnownCharacterIds(pendingState, {}, {});
+
+    assert.equal(ids['player-001'], 'CHAR-PENDING');
   });
 
   it('classifies expected optional recovery misses', () => {
@@ -214,7 +274,9 @@ describe('runtime cockpit helpers', () => {
         hasActiveScene: true,
         hasCharacter: true,
         hasEncounter: true,
+        isCharacterReady: true,
         isCharacterAssigned: true,
+        isCharacterSubmitted: false,
         isCurrentTurn: true,
         isJoined: true,
         isPlaced: true,
@@ -233,7 +295,9 @@ describe('runtime cockpit helpers', () => {
         hasActiveScene: false,
         hasCharacter: false,
         hasEncounter: false,
+        isCharacterReady: false,
         isCharacterAssigned: false,
+        isCharacterSubmitted: false,
         isCurrentTurn: false,
         isJoined: false,
         isPlaced: false,
@@ -314,13 +378,15 @@ describe('runtime cockpit helpers', () => {
     assert.match(errors.join('\n'), /Current HP cannot exceed max HP/);
   });
 
-  it('explains player-created characters that still need DM assignment', () => {
+  it('explains finalized player characters that need submission', () => {
     assert.deepEqual(
       getPlayerNextStep({
         hasActiveScene: true,
         hasCharacter: true,
         hasEncounter: false,
         isCharacterAssigned: false,
+        isCharacterReady: true,
+        isCharacterSubmitted: false,
         isCurrentTurn: false,
         isJoined: true,
         isPlaced: false,
@@ -328,8 +394,31 @@ describe('runtime cockpit helpers', () => {
       }),
       {
         detail:
-          'Your character exists locally, but the session participant is not assigned yet. Ask the DM to assign it.',
-        title: 'Needs DM assignment',
+          'Submit your finalized character for DM assignment so the table can see it.',
+        title: 'Submit for assignment',
+        tone: 'warning',
+      },
+    );
+  });
+
+  it('explains submitted player characters waiting for DM assignment', () => {
+    assert.deepEqual(
+      getPlayerNextStep({
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: false,
+        isCharacterReady: true,
+        isCharacterAssigned: false,
+        isCharacterSubmitted: true,
+        isCurrentTurn: false,
+        isJoined: true,
+        isPlaced: false,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          'Your finalized character is submitted in session state. Waiting for the DM to assign it.',
+        title: 'Waiting for DM assignment',
         tone: 'warning',
       },
     );

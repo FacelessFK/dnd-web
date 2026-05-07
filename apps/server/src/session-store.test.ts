@@ -89,6 +89,42 @@ test('join session adds a player to the authoritative participant list', () => {
   assert.equal(joined.state.session.revision, 2);
 });
 
+test('pending character assignment is stored and cleared by assignment', () => {
+  const store = new InMemorySessionStore();
+  const created = store.createSession(createSessionCommand());
+
+  store.joinSession(joinSessionCommand(created.sessionId));
+
+  const submitted = store.submitCharacterForAssignment(
+    created.sessionId,
+    'player-001',
+    'char_11111111-1111-4111-8111-111111111111',
+  );
+  const pendingParticipant = submitted.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(
+    pendingParticipant?.pendingCharacterId,
+    'char_11111111-1111-4111-8111-111111111111',
+  );
+
+  const assigned = store.assignCharacterToParticipant(
+    created.sessionId,
+    'player-001',
+    'char_11111111-1111-4111-8111-111111111111',
+  );
+  const assignedParticipant = assigned.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(
+    assignedParticipant?.characterId,
+    'char_11111111-1111-4111-8111-111111111111',
+  );
+  assert.equal(assignedParticipant?.pendingCharacterId, null);
+});
+
 test('joining a non-existent session fails safely', () => {
   const store = new InMemorySessionStore();
 

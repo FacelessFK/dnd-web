@@ -19,9 +19,10 @@ sessions, create and activate scenes, place tokens, start encounters, drive
 turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo
 setup flow, reset local browser state without touching the backend, and recover
 current state through read models after refresh. Player mode can join or recover
-a session, create/update/finalize its own draft character, see when DM
-assignment is still required, view the assigned character, move its own token,
-use its own turn resources, and attack legal player targets.
+a session, create/update/finalize its own draft character, submit a finalized
+character into authoritative session state for DM assignment, view pending or
+assigned character state, move its own token, use its own turn resources, and
+attack legal player targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -39,7 +40,8 @@ Implemented so far:
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
-- character create, update, finalize, assign, and read flows
+- character create, update, finalize, submit-for-assignment, assign, and read
+  flows
 - derived character stats helpers
 - scene create, read, activate, entity placement, and active-scene read model
 - character placement and movement in the active scene
@@ -166,7 +168,7 @@ Current high-level command groups:
 | Endpoint                  | Main commands                                        | Read commands            |
 | ------------------------- | ---------------------------------------------------- | ------------------------ |
 | `/api/session/command`    | create, join, reconnect                              | reconnect recovery       |
-| `/api/characters/command` | create, update, finalize, assign                     | `get_character`          |
+| `/api/characters/command` | create, update, finalize, submit, assign             | `get_character`          |
 | `/api/scenes/command`     | create, activate, place scene entity                 | `get_scene`              |
 | `/api/movement/command`   | place character, move character                      | `get_active_scene_state` |
 | `/api/encounters/command` | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
@@ -199,8 +201,9 @@ downed actor gating, DM override commands, and idempotent retry behavior.
 For browser-based manual operation, start both apps and open
 `http://localhost:3000/runtime`. The launcher offers DM mode and Player mode.
 DM mode has the fresh demo setup action for local playtesting. Player mode has a
-character sheet draft flow backed by the existing character commands; DM
-assignment remains authoritative. Local Reset clears browser state only.
+character sheet draft flow backed by character commands and can submit finalized
+characters for DM assignment; DM assignment remains authoritative. Local Reset
+clears browser state only.
 
 Quick smoke flow:
 

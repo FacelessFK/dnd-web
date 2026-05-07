@@ -595,6 +595,41 @@ async function handleCharacterCommandRequest(
         sendCharacterSuccess(response, command.type, success);
         return;
       }
+      case 'submit_character_for_assignment': {
+        if (
+          sessionCommandTransaction?.supports({
+            category: 'character',
+            command,
+          })
+        ) {
+          const success: CharacterAssignmentSuccess = {
+            ok: true,
+            data: await sessionCommandTransaction.run({
+              category: 'character',
+              command,
+              execute: async (transactionRuntime) =>
+                transactionRuntime.submitCharacterForAssignment(command),
+              runtime,
+            }),
+          };
+
+          sendCharacterSuccess(response, command.type, success);
+          return;
+        }
+
+        const success: CharacterAssignmentSuccess = {
+          ok: true,
+          data: await runtime.submitCharacterForAssignment(command),
+        };
+
+        await idempotency.cacheSuccess({
+          category: 'character',
+          command,
+          response: success,
+        });
+        sendCharacterSuccess(response, command.type, success);
+        return;
+      }
       default:
         throw new Error('Unsupported character command type.');
     }
@@ -1559,6 +1594,11 @@ function sendCharacterSuccess(
   payload: CharacterAssignmentSuccess | CharacterCommandSuccess,
 ): void {
   if (commandType === 'assign_character_to_participant') {
+    sendJson(response, 200, payload, characterAssignmentSuccessSchema);
+    return;
+  }
+
+  if (commandType === 'submit_character_for_assignment') {
     sendJson(response, 200, payload, characterAssignmentSuccessSchema);
     return;
   }

@@ -291,6 +291,10 @@ export function getKnownCharacterIds(
   }
 
   for (const participant of sessionState?.participants ?? []) {
+    if (participant.pendingCharacterId) {
+      ids[participant.id] = participant.pendingCharacterId;
+    }
+
     if (participant.characterId) {
       ids[participant.id] = participant.characterId;
     }
@@ -299,10 +303,14 @@ export function getKnownCharacterIds(
   return ids;
 }
 
-export function getAssignedCharacterRefs(sessionState: SessionSnapshot): Array<{
+export type CharacterReadRef = {
   characterId: string;
   participantId: string;
-}> {
+};
+
+export function getAssignedCharacterRefs(
+  sessionState: SessionSnapshot,
+): CharacterReadRef[] {
   return sessionState.participants.flatMap((participant) =>
     participant.characterId
       ? [
@@ -315,6 +323,51 @@ export function getAssignedCharacterRefs(sessionState: SessionSnapshot): Array<{
   );
 }
 
+export function getPendingCharacterRefs(
+  sessionState: SessionSnapshot,
+): CharacterReadRef[] {
+  return sessionState.participants.flatMap((participant) =>
+    participant.pendingCharacterId
+      ? [
+          {
+            characterId: participant.pendingCharacterId,
+            participantId: participant.id,
+          },
+        ]
+      : [],
+  );
+}
+
+export type AssignmentRequest = {
+  assignedCharacterId: string | null;
+  character?: CharacterResource;
+  displayName: string;
+  participantId: string;
+  pendingCharacterId: string;
+};
+
+export function getPendingAssignmentRequests({
+  charactersByParticipant,
+  sessionState,
+}: {
+  charactersByParticipant: Record<string, CharacterResource | undefined>;
+  sessionState: SessionSnapshot | null;
+}): AssignmentRequest[] {
+  return (sessionState?.participants ?? [])
+    .filter(
+      (participant) =>
+        participant.role === 'player' &&
+        Boolean(participant.pendingCharacterId),
+    )
+    .map((participant) => ({
+      assignedCharacterId: participant.characterId,
+      character: charactersByParticipant[participant.id],
+      displayName: participant.displayName,
+      participantId: participant.id,
+      pendingCharacterId: participant.pendingCharacterId as string,
+    }));
+}
+
 export function getPlayerParticipantIds(
   sessionState: SessionSnapshot | null,
 ): string[] {
@@ -322,6 +375,7 @@ export function getPlayerParticipantIds(
     sessionState?.participants ??
     samplePlayers.map((player) => ({
       id: player.participantId,
+      pendingCharacterId: null,
       role: 'player' as const,
     }));
 
@@ -482,7 +536,9 @@ export function getPlayerNextStep({
   hasActiveScene,
   hasCharacter,
   hasEncounter,
+  isCharacterReady,
   isCharacterAssigned,
+  isCharacterSubmitted,
   isCurrentTurn,
   isJoined,
   isPlaced,
@@ -491,7 +547,9 @@ export function getPlayerNextStep({
   hasActiveScene: boolean;
   hasCharacter: boolean;
   hasEncounter: boolean;
+  isCharacterReady: boolean;
   isCharacterAssigned: boolean;
+  isCharacterSubmitted: boolean;
   isCurrentTurn: boolean;
   isJoined: boolean;
   isPlaced: boolean;
@@ -524,10 +582,28 @@ export function getPlayerNextStep({
   }
 
   if (!isCharacterAssigned) {
+    if (!isCharacterReady) {
+      return {
+        detail:
+          'Finish editing and finalize your character before sending it to the DM.',
+        title: 'Finalize your character',
+        tone: 'warning',
+      };
+    }
+
+    if (!isCharacterSubmitted) {
+      return {
+        detail:
+          'Submit your finalized character for DM assignment so the table can see it.',
+        title: 'Submit for assignment',
+        tone: 'warning',
+      };
+    }
+
     return {
       detail:
-        'Your character exists locally, but the session participant is not assigned yet. Ask the DM to assign it.',
-      title: 'Needs DM assignment',
+        'Your finalized character is submitted in session state. Waiting for the DM to assign it.',
+      title: 'Waiting for DM assignment',
       tone: 'warning',
     };
   }

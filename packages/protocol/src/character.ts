@@ -223,12 +223,23 @@ export const assignCharacterToParticipantCommandSchema = z.object({
   }),
 });
 
+export const submitCharacterForAssignmentCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('submit_character_for_assignment'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    characterId: characterIdSchema,
+  }),
+});
+
 export const characterCommandSchema = z.discriminatedUnion('type', [
   createCharacterCommandSchema,
   getCharacterCommandSchema,
   updateCharacterCommandSchema,
   finalizeCharacterCommandSchema,
   assignCharacterToParticipantCommandSchema,
+  submitCharacterForAssignmentCommandSchema,
 ]);
 
 export const characterCommandSuccessSchema = z.object({
@@ -272,6 +283,9 @@ export type FinalizeCharacterCommand = z.infer<
 >;
 export type AssignCharacterToParticipantCommand = z.infer<
   typeof assignCharacterToParticipantCommandSchema
+>;
+export type SubmitCharacterForAssignmentCommand = z.infer<
+  typeof submitCharacterForAssignmentCommandSchema
 >;
 export type CharacterCommand = z.infer<typeof characterCommandSchema>;
 export type CharacterCommandSuccess = z.infer<

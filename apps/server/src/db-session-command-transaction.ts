@@ -33,6 +33,7 @@ export const DURABLE_SESSION_MUTATION_COMMAND_TYPES = [
   'create_session',
   'join_session',
   'assign_character_to_participant',
+  'submit_character_for_assignment',
   'activate_scene_for_session',
 ] as const;
 
@@ -81,6 +82,10 @@ export class DbBackedSessionCommandTransactionBoundary {
     }
 
     if (params.command.type === 'assign_character_to_participant') {
+      return params.category === 'character';
+    }
+
+    if (params.command.type === 'submit_character_for_assignment') {
       return params.category === 'character';
     }
 
@@ -286,6 +291,10 @@ export class DbBackedSessionCommandTransactionBoundary {
 
     if (commandType === 'assign_character_to_participant') {
       return 'participant_character_assigned';
+    }
+
+    if (commandType === 'submit_character_for_assignment') {
+      return 'participant_character_submitted';
     }
 
     return 'active_scene_changed';

@@ -76,6 +76,11 @@ export interface RuntimeSessionStore {
     participantId: ParticipantId,
     characterId: CharacterId,
   ): RuntimeSessionStoreResult<SessionSnapshot>;
+  submitCharacterForAssignment(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    characterId: CharacterId,
+  ): RuntimeSessionStoreResult<SessionSnapshot>;
   activateScene(
     sessionId: SessionId,
     sceneId: SceneId,
@@ -273,12 +278,46 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     const room = this.requireRoom(sessionId);
     const participant = this.requireParticipant(room.snapshot, participantId);
 
-    if (participant.characterId === characterId) {
+    if (
+      participant.characterId === characterId &&
+      !participant.pendingCharacterId
+    ) {
       return this.clone(room.snapshot);
     }
 
     this.applyMutation(room, 'participant_character_assigned', () => {
       participant.characterId = characterId;
+      participant.pendingCharacterId = null;
+    });
+
+    return this.clone(room.snapshot);
+  }
+
+  submitCharacterForAssignment(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    characterId: CharacterId,
+  ): SessionSnapshot {
+    const room = this.requireRoom(sessionId);
+    const participant = this.requireParticipant(room.snapshot, participantId);
+
+    if (
+      participant.pendingCharacterId === characterId &&
+      participant.characterId !== characterId
+    ) {
+      return this.clone(room.snapshot);
+    }
+
+    if (
+      participant.characterId === characterId &&
+      !participant.pendingCharacterId
+    ) {
+      return this.clone(room.snapshot);
+    }
+
+    this.applyMutation(room, 'participant_character_submitted', () => {
+      participant.pendingCharacterId =
+        participant.characterId === characterId ? null : characterId;
     });
 
     return this.clone(room.snapshot);
@@ -412,6 +451,7 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       joinedAt: now,
       lastSeenAt: now,
       characterId: null,
+      pendingCharacterId: null,
     };
   }
 

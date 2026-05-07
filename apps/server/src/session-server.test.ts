@@ -3871,6 +3871,112 @@ test('db-backed session transaction boundary writes one outbox row, dispatches a
   assert.equal(assignedParticipant?.characterId, characterId);
 });
 
+test('db-backed session transaction boundary writes one outbox row for submit_character_for_assignment and returns cached success on duplicate retry', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { characterId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+
+  await runtime.finalizeCharacter({
+    commandId: 'setup-finalize-character-for-submit',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      characterId,
+    },
+  });
+
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const command = {
+    commandId: 'transactional-submit-character-1',
+    type: 'submit_character_for_assignment',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId,
+      characterId,
+    },
+  };
+  const sessionUpdateCountBefore = updates.length;
+  const first = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+
+  ({ sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+  const sessionSnapshotRow =
+    await sessionDatabase.getSessionSnapshot(sessionId);
+  const sessionUpdates = updates.slice(sessionUpdateCountBefore);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(sessionUpdates.length, 1);
+  assert.equal(sessionUpdates[0]?.type, 'session_state');
+  assert.equal(sessionUpdates[0]?.reason, 'participant_character_submitted');
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+
+  const submittedParticipant = sessionSnapshotRow?.snapshot.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+
+  assert.equal(submittedParticipant?.pendingCharacterId, characterId);
+  assert.equal(submittedParticipant?.characterId, null);
+});
+
 test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();

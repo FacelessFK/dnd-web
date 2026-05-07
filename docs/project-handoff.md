@@ -52,7 +52,9 @@ It can:
   backend state,
 - let players create, update, and finalize their own character draft through
   the existing character command surface,
-- show when a player-created character still needs authoritative DM assignment,
+- let players submit finalized characters into authoritative session state for
+  DM assignment,
+- show pending assignment requests from session state and let DMs assign them,
 - let players move only their own token, use their own action/bonus/reaction,
   and attack selected player targets,
 - let DMs trigger turn advance, attack/movement for selected player actors, HP

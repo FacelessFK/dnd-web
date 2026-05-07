@@ -1114,6 +1114,239 @@ test('assigning a character links it to the participant and broadcasts session s
   assert.equal(updates.at(-1), 'participant_character_assigned');
 });
 
+test('player can submit own finalized character for DM assignment', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const updates: string[] = [];
+
+  joinPlayer(runtime, session.sessionId);
+
+  runtime.connectParticipant(session.sessionId, 'dm-001', {
+    connectionId: 'dm-connection-1',
+    close: () => undefined,
+    send: (update) => {
+      updates.push(update.reason);
+    },
+  });
+
+  const character = createPlayerCharacter(runtime, session.sessionId);
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-for-submit',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+
+  const submitted = runtime.submitCharacterForAssignment({
+    commandId: 'submit-character-1',
+    type: 'submit_character_for_assignment',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+  const participant = submitted.state.participants.find(
+    (candidate) => candidate.id === 'player-001',
+  );
+
+  assert.equal(submitted.characterId, character.character.id);
+  assert.equal(participant?.pendingCharacterId, character.character.id);
+  assert.equal(participant?.characterId, null);
+  assert.equal(updates.at(-1), 'participant_character_submitted');
+});
+
+test('submitting another participant character is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  joinSecondPlayer(runtime, session.sessionId);
+
+  const character = createPlayerCharacter(runtime, session.sessionId);
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-for-non-owner-submit',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+
+  assert.throws(
+    () => {
+      runtime.submitCharacterForAssignment({
+        commandId: 'submit-character-non-owner',
+        type: 'submit_character_for_assignment',
+        actor: {
+          participantId: 'player-002',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          characterId: character.character.id,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_participant_session_association',
+  );
+});
+
+test('draft character submission is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  const character = createPlayerCharacter(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.submitCharacterForAssignment({
+        commandId: 'submit-character-draft',
+        type: 'submit_character_for_assignment',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          characterId: character.character.id,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_character_state',
+  );
+});
+
+test('dm participants cannot submit characters for assignment', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const character = runtime.createCharacter({
+    commandId: 'create-dm-character-for-submit',
+    type: 'create_character',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      ownerParticipantId: 'dm-001',
+      character: {
+        name: 'Archivist',
+        level: 3,
+        className: 'Wizard',
+        speciesOrRace: 'Human',
+        background: 'Sage',
+        abilities: {
+          str: 8,
+          dex: 12,
+          con: 12,
+          int: 16,
+          wis: 14,
+          cha: 10,
+        },
+        hp: {
+          max: 18,
+          current: 18,
+          temp: 0,
+        },
+        armorClass: 12,
+        speed: 30,
+      },
+    },
+  });
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-dm-character-for-submit',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+
+  assert.throws(
+    () => {
+      runtime.submitCharacterForAssignment({
+        commandId: 'submit-character-dm',
+        type: 'submit_character_for_assignment',
+        actor: {
+          participantId: 'dm-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          characterId: character.character.id,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('assignment clears a pending character request', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  const character = createPlayerCharacter(runtime, session.sessionId);
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-for-pending-clear',
+    type: 'finalize_character',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+  runtime.submitCharacterForAssignment({
+    commandId: 'submit-character-pending-clear',
+    type: 'submit_character_for_assignment',
+    actor: {
+      participantId: 'player-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      characterId: character.character.id,
+    },
+  });
+
+  const assigned = assignCharacter(
+    runtime,
+    session.sessionId,
+    'player-001',
+    character.character.id,
+  );
+  const participant = assigned.state.participants.find(
+    (candidate) => candidate.id === 'player-001',
+  );
+
+  assert.equal(participant?.characterId, character.character.id);
+  assert.equal(participant?.pendingCharacterId, null);
+});
+
 test('assigning a character to the wrong participant is rejected', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);

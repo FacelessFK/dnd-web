@@ -31,6 +31,7 @@ export type PersistedSessionParticipantDocument = {
   displayName: string;
   id: ParticipantId;
   joinedAt: string;
+  pendingCharacterId?: CharacterId | null;
   role: ParticipantRole;
 };
 

@@ -30,6 +30,7 @@ export const participantSchema = z.object({
   joinedAt: z.string().datetime(),
   lastSeenAt: z.string().datetime(),
   characterId: characterIdSchema.nullable(),
+  pendingCharacterId: characterIdSchema.nullable(),
 });
 
 export const sessionSchema = z.object({
@@ -115,6 +116,7 @@ export const sessionStateUpdateReasonSchema = z.enum([
   'active_scene_changed',
   'initial_sync',
   'participant_character_assigned',
+  'participant_character_submitted',
   'participant_connected',
   'participant_disconnected',
   'participant_joined',

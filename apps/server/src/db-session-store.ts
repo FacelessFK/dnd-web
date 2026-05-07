@@ -260,7 +260,10 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
     const room = this.requireRoom(sessionId);
     const participant = this.requireParticipant(room.snapshot, participantId);
 
-    if (participant.characterId === characterId) {
+    if (
+      participant.characterId === characterId &&
+      !participant.pendingCharacterId
+    ) {
       return this.clone(room.snapshot);
     }
 
@@ -274,6 +277,44 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
         );
 
         nextParticipant.characterId = characterId;
+        nextParticipant.pendingCharacterId = null;
+      },
+    );
+  }
+
+  async submitCharacterForAssignment(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    characterId: CharacterId,
+  ): Promise<SessionSnapshot> {
+    const room = this.requireRoom(sessionId);
+    const participant = this.requireParticipant(room.snapshot, participantId);
+
+    if (
+      participant.pendingCharacterId === characterId &&
+      participant.characterId !== characterId
+    ) {
+      return this.clone(room.snapshot);
+    }
+
+    if (
+      participant.characterId === characterId &&
+      !participant.pendingCharacterId
+    ) {
+      return this.clone(room.snapshot);
+    }
+
+    return this.applyDurableMutation(
+      room,
+      'participant_character_submitted',
+      (nextSnapshot) => {
+        const nextParticipant = this.requireParticipant(
+          nextSnapshot,
+          participantId,
+        );
+
+        nextParticipant.pendingCharacterId =
+          nextParticipant.characterId === characterId ? null : characterId;
       },
     );
   }
@@ -427,6 +468,7 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
         displayName: participant.displayName,
         id: participant.id,
         joinedAt: participant.joinedAt,
+        pendingCharacterId: participant.pendingCharacterId,
         role: participant.role,
       })),
     };
@@ -441,6 +483,7 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
         ...structuredClone(participant),
         connectionStatus: 'disconnected',
         lastSeenAt: participant.joinedAt,
+        pendingCharacterId: participant.pendingCharacterId ?? null,
       })),
     };
   }
@@ -479,6 +522,7 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
       joinedAt: now,
       lastSeenAt: now,
       characterId: null,
+      pendingCharacterId: null,
     };
   }
 

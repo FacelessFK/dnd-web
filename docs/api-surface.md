@@ -72,6 +72,7 @@ Mutating commands:
 - `create_character`
 - `update_character`
 - `finalize_character`
+- `submit_character_for_assignment`
 - `assign_character_to_participant`
 
 Read command:
@@ -82,8 +83,11 @@ Notes:
 
 - Character reads return a `CharacterResource`: canonical character data,
   derived stats, overlay, and rules profile.
+- `submit_character_for_assignment` lets the owning player submit a finalized
+  character into session state as `pendingCharacterId` for DM assignment.
 - `assign_character_to_participant` mutates the session snapshot and emits the
-  same `session_state` semantics as the runtime already had.
+  same `session_state` semantics as the runtime already had. Assignment clears
+  that participant's pending character request.
 
 ### `POST /api/scenes/command`
 
@@ -202,6 +206,9 @@ Current event types:
 Snapshot-style events:
 
 - `session_state` includes a full session snapshot and revision.
+- Participant snapshots include `characterId` for authoritative assignment and
+  `pendingCharacterId` for finalized characters submitted by players and
+  awaiting DM assignment.
 - `encounter_state` includes the current encounter snapshot.
 
 Partial live updates:
@@ -228,6 +235,7 @@ After refresh or reconnect, clients should rebuild state with:
 - `get_active_scene_state`
 - `get_encounter_state`
 - `get_character` for assigned or locally known character IDs
+- `get_character` for pending character IDs from the recovered session snapshot
 
 The browser cockpit follows this model: SSE updates live state when connected,
 and the Recover button rereads authoritative state through command read models.
@@ -242,10 +250,11 @@ from server responses, read models, and live SSE events. DM mode can run a fresh
 demo setup, seed the sample session, operate scene/encounter controls, and use
 explicit DM override commands. Player mode can join or recover an existing
 session, create/update/finalize its own draft character through the existing
-character command endpoint, see when DM assignment is still required, read its
-assigned character, move only its own token, use turn resources as itself, and
-attack selected player targets. A readable combat/event feed is primary; raw JSON
-remains available as secondary debug detail.
+character command endpoint, submit a finalized character for authoritative DM
+assignment, see pending assignment state after recovery, read pending or
+assigned character state, move only its own token, use turn resources as itself,
+and attack selected player targets. A readable combat/event feed is primary; raw
+JSON remains available as secondary debug detail.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model
