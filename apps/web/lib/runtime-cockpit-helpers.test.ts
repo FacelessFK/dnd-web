@@ -8,9 +8,12 @@ import {
   characterInputFromDraft,
   characterUpdateInputFromDraft,
   createDefaultCharacterDraftForm,
+  createDefaultSceneDraftForm,
+  createDefaultSceneEntityDraftForm,
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActiveSceneGuidance,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
@@ -18,10 +21,15 @@ import {
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
+  getSceneEntityDisplayCells,
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
+  sceneEntityInputFromDraft,
+  sceneInputFromDraft,
   validateCharacterDraftForm,
+  validateSceneDraftForm,
+  validateSceneEntityDraftForm,
 } from './runtime-cockpit-helpers';
 
 const sessionState: SessionSnapshot = {
@@ -421,6 +429,220 @@ describe('runtime cockpit helpers', () => {
         title: 'Waiting for DM assignment',
         tone: 'warning',
       },
+    );
+  });
+
+  it('creates and normalizes scene drafts', () => {
+    const draft = createDefaultSceneDraftForm();
+
+    assert.deepEqual(validateSceneDraftForm(draft), []);
+    assert.deepEqual(
+      sceneInputFromDraft({
+        ...draft,
+        cellSizeFeet: '10',
+        height: '12',
+        name: '  Crystal Vault  ',
+        width: '16',
+      }),
+      {
+        grid: {
+          cellSizeFeet: 10,
+          height: 12,
+          width: 16,
+        },
+        name: 'Crystal Vault',
+      },
+    );
+    assert.match(
+      validateSceneDraftForm({
+        ...draft,
+        height: '0',
+        name: ' ',
+      }).join('\n'),
+      /Scene name is required/,
+    );
+  });
+
+  it('creates and validates scene entity placement drafts', () => {
+    const draft = createDefaultSceneEntityDraftForm();
+
+    assert.deepEqual(
+      validateSceneEntityDraftForm({
+        form: draft,
+        grid: {
+          cellSizeFeet: 5,
+          height: 8,
+          width: 8,
+        },
+        position: {
+          x: 2,
+          y: 2,
+        },
+      }),
+      [],
+    );
+    assert.deepEqual(sceneEntityInputFromDraft(draft, { x: 2, y: 2 }), {
+      blocksMovement: true,
+      blocksVision: true,
+      footprint: {
+        height: 1,
+        width: 1,
+      },
+      hidden: false,
+      meta: {
+        source: 'runtime-cockpit',
+      },
+      name: 'Stone Pillar',
+      position: {
+        x: 2,
+        y: 2,
+      },
+      type: 'object',
+    });
+    assert.match(
+      validateSceneEntityDraftForm({
+        form: {
+          ...draft,
+          footprintWidth: '2',
+          name: '',
+        },
+        grid: {
+          cellSizeFeet: 5,
+          height: 3,
+          width: 3,
+        },
+        position: {
+          x: 2,
+          y: 2,
+        },
+      }).join('\n'),
+      /Entity name is required/,
+    );
+    assert.match(
+      validateSceneEntityDraftForm({
+        form: {
+          ...draft,
+          footprintWidth: '2',
+        },
+        grid: {
+          cellSizeFeet: 5,
+          height: 3,
+          width: 3,
+        },
+        position: {
+          x: 2,
+          y: 2,
+        },
+      }).join('\n'),
+      /fit within the scene grid/,
+    );
+  });
+
+  it('derives active scene guidance for DM and player modes', () => {
+    assert.equal(
+      getActiveSceneGuidance({
+        activeSceneId: null,
+        mode: 'dm',
+        scene: null,
+      }).title,
+      'Build a scene',
+    );
+    assert.equal(
+      getActiveSceneGuidance({
+        activeSceneId: 'SCENE-001',
+        mode: 'player',
+        scene: null,
+      }).title,
+      'Scene ID known',
+    );
+    assert.equal(
+      getActiveSceneGuidance({
+        activeSceneId: 'SCENE-001',
+        mode: 'player',
+        scene: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          entities: [],
+          grid: {
+            cellSizeFeet: 5,
+            height: 8,
+            width: 8,
+          },
+          id: 'SCENE-001',
+          name: 'Training Room',
+          sessionId: 'SESSION-001',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      }).title,
+      'Scene loaded',
+    );
+  });
+
+  it('derives occupied cells for scene entity footprints', () => {
+    const cells = getSceneEntityDisplayCells({
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: true,
+          blocksVision: false,
+          footprint: {
+            height: 2,
+            width: 2,
+          },
+          hidden: false,
+          id: 'ENTITY-001',
+          meta: {},
+          name: 'Crate Stack',
+          position: {
+            x: 1,
+            y: 2,
+          },
+          type: 'object',
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    assert.deepEqual(
+      cells.map((cell) => ({
+        isOrigin: cell.isOrigin,
+        label: cell.label,
+        x: cell.x,
+        y: cell.y,
+      })),
+      [
+        {
+          isOrigin: true,
+          label: 'Crate Stack (object, blocks movement)',
+          x: 1,
+          y: 2,
+        },
+        {
+          isOrigin: false,
+          label: 'Crate Stack (object, blocks movement)',
+          x: 2,
+          y: 2,
+        },
+        {
+          isOrigin: false,
+          label: 'Crate Stack (object, blocks movement)',
+          x: 1,
+          y: 3,
+        },
+        {
+          isOrigin: false,
+          label: 'Crate Stack (object, blocks movement)',
+          x: 2,
+          y: 3,
+        },
+      ],
     );
   });
 });

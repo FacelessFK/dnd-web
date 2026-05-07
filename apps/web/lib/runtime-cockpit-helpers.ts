@@ -2,10 +2,16 @@ import type {
   CharacterInput,
   CharacterResource,
   CharacterUpdateInput,
+  GridDefinition,
   RuntimeErrorCode,
+  Scene,
+  SceneEntity,
+  SceneEntityInput,
+  SceneInput,
   SessionStreamEvent,
   SessionCommandSuccess,
 } from '@dnd/protocol';
+import { sceneEntityTypeSchema } from '@dnd/protocol';
 
 import type { RuntimeApiFailure } from './runtime-api';
 
@@ -37,6 +43,31 @@ export type CharacterDraftForm = {
   notes: string;
   speciesOrRace: string;
   speed: string;
+};
+
+export type SceneDraftForm = {
+  cellSizeFeet: string;
+  height: string;
+  name: string;
+  width: string;
+};
+
+export type SceneEntityDraftForm = {
+  blocksMovement: boolean;
+  blocksVision: boolean;
+  footprintHeight: string;
+  footprintWidth: string;
+  hidden: boolean;
+  name: string;
+  type: SceneEntityInput['type'];
+};
+
+export type SceneEntityDisplayCell = {
+  entity: SceneEntity;
+  isOrigin: boolean;
+  label: string;
+  x: number;
+  y: number;
 };
 
 export type StoredCockpitState = {
@@ -117,6 +148,8 @@ export const sampleCharacters: Record<string, CharacterInput> = {
   },
 };
 
+export const sceneEntityTypeOptions = sceneEntityTypeSchema.options;
+
 export function createDefaultCharacterDraftForm(
   displayName = 'New Adventurer',
 ): CharacterDraftForm {
@@ -143,6 +176,201 @@ export function createDefaultCharacterDraftForm(
     speciesOrRace: 'Human',
     speed: '30',
   };
+}
+
+export function createDefaultSceneDraftForm(): SceneDraftForm {
+  return {
+    cellSizeFeet: '5',
+    height: '8',
+    name: 'Torchlit Hall',
+    width: '8',
+  };
+}
+
+export function createSceneDraftFormFromScene(scene: Scene): SceneDraftForm {
+  return {
+    cellSizeFeet: String(scene.grid.cellSizeFeet),
+    height: String(scene.grid.height),
+    name: scene.name,
+    width: String(scene.grid.width),
+  };
+}
+
+export function validateSceneDraftForm(form: SceneDraftForm): string[] {
+  const errors: string[] = [];
+
+  if (!form.name.trim()) {
+    errors.push('Scene name is required.');
+  }
+
+  validateIntegerRange(errors, 'Grid width', form.width, 1, 500);
+  validateIntegerRange(errors, 'Grid height', form.height, 1, 500);
+  validateIntegerRange(errors, 'Cell size', form.cellSizeFeet, 1, 20);
+
+  return errors;
+}
+
+export function sceneInputFromDraft(form: SceneDraftForm): SceneInput {
+  return {
+    grid: {
+      cellSizeFeet: parseIntegerOrZero(form.cellSizeFeet),
+      height: parseIntegerOrZero(form.height),
+      width: parseIntegerOrZero(form.width),
+    },
+    name: form.name.trim(),
+  };
+}
+
+export function createDefaultSceneEntityDraftForm(): SceneEntityDraftForm {
+  return {
+    blocksMovement: true,
+    blocksVision: true,
+    footprintHeight: '1',
+    footprintWidth: '1',
+    hidden: false,
+    name: 'Stone Pillar',
+    type: 'object',
+  };
+}
+
+export function validateSceneEntityDraftForm({
+  form,
+  grid,
+  position,
+}: {
+  form: SceneEntityDraftForm;
+  grid?: GridDefinition;
+  position: Cell;
+}): string[] {
+  const errors: string[] = [];
+
+  if (!form.name.trim()) {
+    errors.push('Entity name is required.');
+  }
+
+  if (!sceneEntityTypeOptions.includes(form.type)) {
+    errors.push('Choose a valid entity type.');
+  }
+
+  validateIntegerRange(errors, 'Footprint width', form.footprintWidth, 1, 20);
+  validateIntegerRange(errors, 'Footprint height', form.footprintHeight, 1, 20);
+
+  if (position.x < 0 || position.y < 0) {
+    errors.push('Select a non-negative target cell.');
+  }
+
+  const footprintWidth = parseInteger(form.footprintWidth);
+  const footprintHeight = parseInteger(form.footprintHeight);
+
+  if (
+    grid &&
+    typeof footprintWidth === 'number' &&
+    typeof footprintHeight === 'number' &&
+    (position.x + footprintWidth > grid.width ||
+      position.y + footprintHeight > grid.height)
+  ) {
+    errors.push('Entity footprint must fit within the scene grid.');
+  }
+
+  return errors;
+}
+
+export function sceneEntityInputFromDraft(
+  form: SceneEntityDraftForm,
+  position: Cell,
+): SceneEntityInput {
+  return {
+    blocksMovement: form.blocksMovement,
+    blocksVision: form.blocksVision,
+    footprint: {
+      height: parseIntegerOrZero(form.footprintHeight),
+      width: parseIntegerOrZero(form.footprintWidth),
+    },
+    hidden: form.hidden,
+    meta: {
+      source: 'runtime-cockpit',
+    },
+    name: form.name.trim(),
+    position,
+    type: form.type,
+  };
+}
+
+export function getActiveSceneGuidance({
+  activeSceneId,
+  mode,
+  scene,
+}: {
+  activeSceneId: string | null;
+  mode: RuntimeMode;
+  scene: Scene | null;
+}): PlayerNextStep {
+  if (scene) {
+    return {
+      detail: `${scene.name} is loaded with a ${scene.grid.width}x${scene.grid.height} grid and ${scene.entities.length} scene entities.`,
+      title: 'Scene loaded',
+      tone: 'success',
+    };
+  }
+
+  if (activeSceneId) {
+    return {
+      detail:
+        'The session has an active scene ID, but the full scene document has not been recovered yet.',
+      title: 'Scene ID known',
+      tone: 'warning',
+    };
+  }
+
+  return mode === 'dm'
+    ? {
+        detail:
+          'Create or activate a scene before placing tokens, entities, or starting an encounter.',
+        title: 'Build a scene',
+        tone: 'warning',
+      }
+    : {
+        detail:
+          'The DM has not activated a scene yet, or this browser needs to recover read models.',
+        title: 'No active scene',
+        tone: 'warning',
+      };
+}
+
+export function getSceneEntityDisplayCells(
+  scene: Scene | null,
+): SceneEntityDisplayCell[] {
+  if (!scene) {
+    return [];
+  }
+
+  return scene.entities.flatMap((entity) => {
+    const cells: SceneEntityDisplayCell[] = [];
+
+    for (let y = 0; y < entity.footprint.height; y += 1) {
+      for (let x = 0; x < entity.footprint.width; x += 1) {
+        cells.push({
+          entity,
+          isOrigin: x === 0 && y === 0,
+          label: getSceneEntityLabel(entity),
+          x: entity.position.x + x,
+          y: entity.position.y + y,
+        });
+      }
+    }
+
+    return cells;
+  });
+}
+
+export function getSceneEntityLabel(entity: SceneEntity): string {
+  const flags = [
+    entity.blocksMovement ? 'blocks movement' : null,
+    entity.blocksVision ? 'blocks vision' : null,
+    entity.hidden ? 'hidden' : null,
+  ].filter(Boolean);
+
+  return `${entity.name} (${entity.type}${flags.length ? `, ${flags.join(', ')}` : ''})`;
 }
 
 export function createCharacterDraftFormFromResource(

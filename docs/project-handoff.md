@@ -40,7 +40,9 @@ It can:
 - join a player to an existing session,
 - run a DM-only fresh demo setup flow for local playtesting,
 - seed sample players and characters from DM mode,
-- create and activate an 8x8 scene from DM mode,
+- create custom grid scenes from DM mode,
+- activate existing or newly created scenes from DM mode,
+- place simple scene entities/obstacles on the tactical grid from DM mode,
 - place both sample characters from DM mode,
 - start an encounter from DM mode,
 - subscribe to the session SSE stream as the active role,
@@ -123,6 +125,7 @@ server tests and smoke tests.
 
 - No authentication or production deployment posture.
 - No durable event replay, stream cursor, or catch-up API.
+- No map asset pipeline, deletion tools, or final VTT-grade scene editor.
 - No multi-process SSE subscriber persistence or distributed coordination.
 - No opportunity attacks, out-of-turn reaction windows, full condition engine,
   death saves, spells, weapons, ranged attacks, or monster AI.

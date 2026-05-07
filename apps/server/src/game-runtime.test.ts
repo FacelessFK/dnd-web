@@ -2400,6 +2400,39 @@ test('scene creation returns an empty scene that session participants can retrie
   assert.equal(fetchedScene.name, 'Ruined Chapel');
 });
 
+test('non-DM participants cannot create scenes', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.createScene({
+        commandId: 'player-create-scene-1',
+        type: 'create_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          scene: {
+            name: 'Player Map',
+            grid: {
+              cellSizeFeet: 5,
+              height: 8,
+              width: 8,
+            },
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
 test('activating a scene updates the authoritative session snapshot and broadcasts the revision', () => {
   const runtime = new InMemoryGameRuntime();
   const session = createSession(runtime);
@@ -2452,6 +2485,48 @@ test('placing an entity stores it on the authoritative scene', () => {
   assert.equal(updatedScene.entities.length, 1);
   assert.match(updatedScene.entities[0]!.id, /^scene_entity_[a-f0-9-]{36}$/);
   assert.equal(fetchedScene.entities[0]?.name, 'Stone Pillar');
+});
+
+test('non-DM participants cannot place scene entities', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+  const scene = createScene(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.placeEntityInScene({
+        commandId: 'player-place-entity-1',
+        type: 'place_entity_in_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          sceneId: scene.id,
+          entity: {
+            type: 'object',
+            name: 'Player Crate',
+            position: {
+              x: 2,
+              y: 2,
+            },
+            footprint: {
+              height: 1,
+              width: 1,
+            },
+            blocksMovement: true,
+            blocksVision: false,
+            hidden: false,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
 });
 
 test('out-of-bounds entity placement is rejected', () => {

@@ -8,6 +8,7 @@ import type {
   DmCommand,
   Encounter,
   Scene,
+  SceneEntityInput,
   SessionStreamEvent,
 } from '@dnd/protocol';
 
@@ -29,12 +30,16 @@ import {
   cockpitStorageKey,
   createCharacterDraftFormFromResource,
   createDefaultCharacterDraftForm,
+  createDefaultSceneDraftForm,
+  createDefaultSceneEntityDraftForm,
+  createSceneDraftFormFromScene,
   defaultDm,
   defaultPlayer,
   describeSessionStreamEvent,
   flag,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActiveSceneGuidance,
   getAssignedCharacterRefs,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
@@ -42,19 +47,28 @@ import {
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
+  getSceneEntityDisplayCells,
+  getSceneEntityLabel,
   initials,
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sampleCharacters,
   samplePlayers,
   sanitizeSessionIdInput,
+  sceneEntityInputFromDraft,
+  sceneEntityTypeOptions,
+  sceneInputFromDraft,
   validateCharacterDraftForm,
+  validateSceneDraftForm,
+  validateSceneEntityDraftForm,
   type Cell,
   type AbilityKey,
   type CharacterDraftForm,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
+  type SceneDraftForm,
+  type SceneEntityDraftForm,
   type SessionSnapshot,
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
@@ -110,6 +124,12 @@ export function RuntimeCockpit() {
   const [characterDraft, setCharacterDraft] = useState<CharacterDraftForm>(() =>
     createDefaultCharacterDraftForm(defaultPlayer.displayName),
   );
+  const [sceneDraft, setSceneDraft] = useState<SceneDraftForm>(() =>
+    createDefaultSceneDraftForm(),
+  );
+  const [sceneActivationId, setSceneActivationId] = useState('');
+  const [sceneEntityDraft, setSceneEntityDraft] =
+    useState<SceneEntityDraftForm>(() => createDefaultSceneEntityDraftForm());
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<LastResponse | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -222,6 +242,7 @@ export function RuntimeCockpit() {
       );
       setSessionId(stored.sessionId ?? '');
       setSceneId(stored.sceneId ?? '');
+      setSceneActivationId(stored.sceneId ?? '');
       setKnownCharacterIdsByParticipant(stored.charactersByParticipant ?? {});
     } catch {
       localStorage.removeItem(cockpitStorageKey);
@@ -362,6 +383,9 @@ export function RuntimeCockpit() {
     setLastResponse(null);
     setCommandError(null);
     setRecoveryNotes([]);
+    setSceneDraft(createDefaultSceneDraftForm());
+    setSceneActivationId('');
+    setSceneEntityDraft(createDefaultSceneEntityDraftForm());
     setTurnUsageDraft({
       actionUsed: false,
       bonusActionUsed: false,
@@ -422,11 +446,20 @@ export function RuntimeCockpit() {
 
     if (state.session.activeSceneId) {
       setSceneId(state.session.activeSceneId);
+      setSceneActivationId(state.session.activeSceneId);
     } else {
       setSceneId('');
+      setSceneActivationId('');
       setScene(null);
       setActiveScene(null);
     }
+  }
+
+  function rememberScene(nextScene: Scene): void {
+    setScene(nextScene);
+    setSceneId(nextScene.id);
+    setSceneActivationId(nextScene.id);
+    setSceneDraft(createSceneDraftFormFromScene(nextScene));
   }
 
   function rememberCharacter(resource: CharacterResource): void {
@@ -746,8 +779,7 @@ export function RuntimeCockpit() {
         throw new Error('create_scene returned a non-scene response.');
       }
 
-      setScene(createdScene.data.scene);
-      setSceneId(createdScene.data.scene.id);
+      rememberScene(createdScene.data.scene);
 
       const activated = await unwrap(
         'activate_scene_for_session',
@@ -999,8 +1031,7 @@ export function RuntimeCockpit() {
         throw new Error('create_scene returned a non-scene response.');
       }
 
-      setScene(created.data.scene);
-      setSceneId(created.data.scene.id);
+      rememberScene(created.data.scene);
 
       const activated = await unwrap(
         'activate_scene_for_session',
@@ -1025,6 +1056,126 @@ export function RuntimeCockpit() {
         activated,
         created,
       };
+    });
+  }
+
+  async function createCustomScene(): Promise<void> {
+    await runTask('create custom scene', async () => {
+      assertSession();
+      assertSceneDraftValid();
+
+      const response = await unwrap(
+        'create_scene',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-create-custom-scene'),
+          payload: {
+            scene: sceneInputFromDraft(sceneDraft),
+            sessionId,
+          },
+          type: 'create_scene',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error('create_scene returned a non-scene response.');
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function activateSelectedScene(): Promise<void> {
+    await runTask('activate selected scene', async () => {
+      assertSession();
+      const nextSceneId = (sceneActivationId || scene?.id || sceneId).trim();
+
+      if (!nextSceneId) {
+        throw new Error('Enter or create a scene ID to activate.');
+      }
+
+      const activated = await unwrap(
+        'activate_scene_for_session',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-activate-scene'),
+          payload: {
+            sceneId: nextSceneId,
+            sessionId,
+          },
+          type: 'activate_scene_for_session',
+        }),
+      );
+
+      if ('state' in activated.data) {
+        applySessionSnapshot(activated.data.state);
+      }
+
+      const recovered = await unwrap(
+        'get_scene',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-get-activated-scene'),
+          payload: {
+            sceneId: nextSceneId,
+            sessionId,
+          },
+          type: 'get_scene',
+        }),
+      );
+
+      if ('scene' in recovered.data) {
+        rememberScene(recovered.data.scene);
+      }
+
+      return {
+        activated,
+        scene: recovered,
+      };
+    });
+  }
+
+  async function placeSceneEntity(): Promise<void> {
+    await runTask('place scene entity', async () => {
+      assertSession();
+      assertSceneEntityDraftValid();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId) {
+        throw new Error('Create, activate, or recover a scene first.');
+      }
+
+      const response = await unwrap(
+        'place_entity_in_scene',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-place-scene-entity'),
+          payload: {
+            entity: sceneEntityInputFromDraft(sceneEntityDraft, selectedCell),
+            sceneId: targetSceneId,
+            sessionId,
+          },
+          type: 'place_entity_in_scene',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error('place_entity_in_scene returned a non-scene response.');
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
     });
   }
 
@@ -1145,8 +1296,7 @@ export function RuntimeCockpit() {
 
         if (sceneResult.ok && 'scene' in sceneResult.response.data) {
           recoveredScene = sceneResult.response.data.scene;
-          setScene(recoveredScene);
-          setSceneId(recoveredScene.id);
+          rememberScene(recoveredScene);
         } else if (!sceneResult.ok) {
           if (!isExpectedRecoveryMiss(sceneResult.error.code)) {
             throw new Error(
@@ -1816,6 +1966,56 @@ export function RuntimeCockpit() {
     }
   }
 
+  function assertSceneDraftValid(): void {
+    const errors = validateSceneDraftForm(sceneDraft);
+
+    if (errors.length) {
+      throw new Error(`Fix the scene draft first: ${errors.join(' ')}`);
+    }
+  }
+
+  function assertSceneEntityDraftValid(): void {
+    const errors = validateSceneEntityDraftForm({
+      form: sceneEntityDraft,
+      grid: scene?.grid,
+      position: selectedCell,
+    });
+
+    if (errors.length) {
+      throw new Error(`Fix the entity draft first: ${errors.join(' ')}`);
+    }
+  }
+
+  function updateSceneDraftField(
+    field: keyof SceneDraftForm,
+    value: string,
+  ): void {
+    setSceneDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateSceneEntityDraftField(
+    field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
+    value: string,
+  ): void {
+    setSceneEntityDraft((current) => ({
+      ...current,
+      [field]: field === 'type' ? (value as SceneEntityInput['type']) : value,
+    }));
+  }
+
+  function updateSceneEntityDraftFlag(
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ): void {
+    setSceneEntityDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
   function updateCharacterDraftField(
     field:
       | 'armorClass'
@@ -1872,10 +2072,46 @@ export function RuntimeCockpit() {
     height: 8,
     width: 8,
   };
+  const activeSceneGuidance = getActiveSceneGuidance({
+    activeSceneId: sceneId || sessionState?.session.activeSceneId || null,
+    mode,
+    scene,
+  });
   const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
   const missingSessionReason = !canUseSession
     ? 'Create, paste, or recover a session first.'
     : null;
+  const dmOnlySceneReason =
+    mode === 'dm' ? null : 'Switch to DM mode for scene building.';
+  const sceneDraftErrors = validateSceneDraftForm(sceneDraft);
+  const sceneEntityDraftErrors = validateSceneEntityDraftForm({
+    form: sceneEntityDraft,
+    grid: scene?.grid,
+    position: selectedCell,
+  });
+  const sceneDraftReason =
+    sceneDraftErrors.length > 0
+      ? `Fix the scene draft first: ${sceneDraftErrors[0]}`
+      : null;
+  const sceneEntityDraftReason =
+    sceneEntityDraftErrors.length > 0
+      ? `Fix the entity draft first: ${sceneEntityDraftErrors[0]}`
+      : null;
+  const createCustomSceneReason =
+    busyReason ?? missingSessionReason ?? dmOnlySceneReason ?? sceneDraftReason;
+  const activateSceneReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    ((sceneActivationId || scene?.id || sceneId).trim()
+      ? null
+      : 'Enter or create a scene ID to activate.');
+  const placeSceneEntityReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a scene first.') ??
+    sceneEntityDraftReason;
   const playerCharacter = charactersByParticipant[playerParticipantId];
   const isPlayerJoined = Boolean(
     sessionState?.participants.some(
@@ -2089,6 +2325,12 @@ export function RuntimeCockpit() {
             {playerNextStep.detail}
           </Notice>
         ) : null}
+        <Notice
+          title={activeSceneGuidance.title}
+          tone={activeSceneGuidance.tone}
+        >
+          {activeSceneGuidance.detail}
+        </Notice>
 
         <section className="rounded-3xl border border-amber-500/25 bg-[#24160f]/90 p-4 shadow-xl shadow-black/30">
           <div className="grid gap-4 xl:grid-cols-[220px_minmax(220px,1fr)_minmax(220px,1fr)_auto] xl:items-end">
@@ -2208,6 +2450,7 @@ export function RuntimeCockpit() {
                 grid={grid}
                 mode={mode}
                 onSelectCell={setSelectedCell}
+                scene={scene}
                 selectedCell={selectedCell}
                 selectedTargetParticipantId={selectedTarget}
               />
@@ -2424,6 +2667,29 @@ export function RuntimeCockpit() {
                 </div>
               </Panel>
             )}
+
+            {mode === 'dm' ? (
+              <SceneBuilderPanel
+                activeSceneGuidance={activeSceneGuidance}
+                activationSceneId={sceneActivationId}
+                createDisabledReason={createCustomSceneReason}
+                entityDraft={sceneEntityDraft}
+                entityDraftErrors={sceneEntityDraftErrors}
+                onActivateScene={activateSelectedScene}
+                onActivationSceneIdChange={setSceneActivationId}
+                onCreateScene={createCustomScene}
+                onEntityFieldChange={updateSceneEntityDraftField}
+                onEntityFlagChange={updateSceneEntityDraftFlag}
+                onPlaceEntity={placeSceneEntity}
+                onSceneFieldChange={updateSceneDraftField}
+                placeEntityDisabledReason={placeSceneEntityReason}
+                scene={scene}
+                sceneDraft={sceneDraft}
+                sceneDraftErrors={sceneDraftErrors}
+                selectedCell={selectedCell}
+                activateDisabledReason={activateSceneReason}
+              />
+            ) : null}
 
             {mode === 'player' ? (
               <CharacterOnboardingPanel
@@ -3028,6 +3294,28 @@ function SelectField({
   );
 }
 
+function CheckboxField({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-amber-100/85">
+      <input
+        checked={checked}
+        className="accent-amber-500"
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      {label}
+    </label>
+  );
+}
+
 function TextAreaField({
   label,
   onChange,
@@ -3153,6 +3441,211 @@ function LatestEventFeed({
             title="No live events summarized"
           />
         )}
+      </div>
+    </Panel>
+  );
+}
+
+function SceneBuilderPanel({
+  activateDisabledReason,
+  activationSceneId,
+  activeSceneGuidance,
+  createDisabledReason,
+  entityDraft,
+  entityDraftErrors,
+  onActivateScene,
+  onActivationSceneIdChange,
+  onCreateScene,
+  onEntityFieldChange,
+  onEntityFlagChange,
+  onPlaceEntity,
+  onSceneFieldChange,
+  placeEntityDisabledReason,
+  scene,
+  sceneDraft,
+  sceneDraftErrors,
+  selectedCell,
+}: {
+  activateDisabledReason: string | null;
+  activationSceneId: string;
+  activeSceneGuidance: RuntimeEventSummary;
+  createDisabledReason: string | null;
+  entityDraft: SceneEntityDraftForm;
+  entityDraftErrors: string[];
+  onActivateScene: () => void | Promise<void>;
+  onActivationSceneIdChange: (value: string) => void;
+  onCreateScene: () => void | Promise<void>;
+  onEntityFieldChange: (
+    field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
+    value: string,
+  ) => void;
+  onEntityFlagChange: (
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ) => void;
+  onPlaceEntity: () => void | Promise<void>;
+  onSceneFieldChange: (field: keyof SceneDraftForm, value: string) => void;
+  placeEntityDisabledReason: string | null;
+  scene: Scene | null;
+  sceneDraft: SceneDraftForm;
+  sceneDraftErrors: string[];
+  selectedCell: Cell;
+}) {
+  return (
+    <Panel
+      description="Create custom tactical scenes and add simple authoritative scene entities. No fake local map edits are applied."
+      eyebrow="DM-only"
+      title="Scene Builder"
+      tone="dm"
+    >
+      <div className="grid gap-4">
+        <Notice
+          title={activeSceneGuidance.title}
+          tone={activeSceneGuidance.tone}
+        >
+          {activeSceneGuidance.detail}
+        </Notice>
+
+        <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
+          <p className="text-sm font-bold text-amber-50">Scene draft</p>
+          {sceneDraftErrors.length ? (
+            <p className="text-xs leading-5 text-amber-200">
+              {sceneDraftErrors.slice(0, 3).join(' ')}
+            </p>
+          ) : null}
+          <LabeledInput
+            label="Scene name"
+            onChange={(value) => onSceneFieldChange('name', value)}
+            value={sceneDraft.name}
+          />
+          <div className="grid grid-cols-3 gap-2">
+            <LabeledInput
+              label="Width"
+              onChange={(value) => onSceneFieldChange('width', value)}
+              value={sceneDraft.width}
+            />
+            <LabeledInput
+              label="Height"
+              onChange={(value) => onSceneFieldChange('height', value)}
+              value={sceneDraft.height}
+            />
+            <LabeledInput
+              label="Cell ft"
+              onChange={(value) => onSceneFieldChange('cellSizeFeet', value)}
+              value={sceneDraft.cellSizeFeet}
+            />
+          </div>
+          <ActionButton
+            disabled={Boolean(createDisabledReason)}
+            disabledReason={createDisabledReason ?? undefined}
+            label="Create Custom Scene"
+            onClick={onCreateScene}
+          />
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
+          <p className="text-sm font-bold text-amber-50">Activate scene</p>
+          <LabeledInput
+            label="Scene ID"
+            onChange={onActivationSceneIdChange}
+            placeholder={scene?.id ?? 'scene_...'}
+            value={activationSceneId}
+          />
+          <ActionButton
+            disabled={Boolean(activateDisabledReason)}
+            disabledReason={activateDisabledReason ?? undefined}
+            label="Activate Scene"
+            onClick={onActivateScene}
+            variant="secondary"
+          />
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-orange-300/20 bg-orange-950/15 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">Place entity</p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              Target cell {selectedCell.x},{selectedCell.y}. Placement is
+              persisted only after `place_entity_in_scene` succeeds.
+            </p>
+          </div>
+          {entityDraftErrors.length ? (
+            <p className="text-xs leading-5 text-amber-200">
+              {entityDraftErrors.slice(0, 3).join(' ')}
+            </p>
+          ) : null}
+          <SelectField
+            label="Entity type"
+            onChange={(value) => onEntityFieldChange('type', value)}
+            options={sceneEntityTypeOptions.map((entityType) => ({
+              label: entityType.replaceAll('_', ' '),
+              value: entityType,
+            }))}
+            value={entityDraft.type}
+          />
+          <LabeledInput
+            label="Name / label"
+            onChange={(value) => onEntityFieldChange('name', value)}
+            value={entityDraft.name}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledInput
+              label="Footprint W"
+              onChange={(value) => onEntityFieldChange('footprintWidth', value)}
+              value={entityDraft.footprintWidth}
+            />
+            <LabeledInput
+              label="Footprint H"
+              onChange={(value) =>
+                onEntityFieldChange('footprintHeight', value)
+              }
+              value={entityDraft.footprintHeight}
+            />
+          </div>
+          <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
+            <CheckboxField
+              checked={entityDraft.blocksMovement}
+              label="Blocks movement"
+              onChange={(checked) =>
+                onEntityFlagChange('blocksMovement', checked)
+              }
+            />
+            <CheckboxField
+              checked={entityDraft.blocksVision}
+              label="Blocks vision"
+              onChange={(checked) =>
+                onEntityFlagChange('blocksVision', checked)
+              }
+            />
+            <CheckboxField
+              checked={entityDraft.hidden}
+              label="Hidden from map styling"
+              onChange={(checked) => onEntityFlagChange('hidden', checked)}
+            />
+          </div>
+          <ActionButton
+            disabled={Boolean(placeEntityDisabledReason)}
+            disabledReason={placeEntityDisabledReason ?? undefined}
+            label="Place Entity"
+            onClick={onPlaceEntity}
+            variant="secondary"
+          />
+          {scene?.entities.length ? (
+            <div className="grid gap-2 text-xs text-amber-100/70">
+              <p className="font-bold uppercase tracking-[0.14em] text-amber-300/70">
+                Loaded entities
+              </p>
+              {scene.entities.slice(-5).map((entity) => (
+                <div
+                  className="rounded-xl border border-amber-500/10 bg-black/20 px-3 py-2"
+                  key={entity.id}
+                >
+                  {getSceneEntityLabel(entity)} at {entity.position.x},
+                  {entity.position.y}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
     </Panel>
   );
@@ -3412,6 +3905,7 @@ function TacticalGrid({
   grid,
   mode,
   onSelectCell,
+  scene,
   selectedCell,
   selectedTargetParticipantId,
 }: {
@@ -3425,9 +3919,11 @@ function TacticalGrid({
   };
   mode: RuntimeMode;
   onSelectCell: (cell: Cell) => void;
+  scene: Scene | null;
   selectedCell: Cell;
   selectedTargetParticipantId: string;
 }) {
+  const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
   const cells: Cell[] = [];
 
   for (let y = 0; y < grid.height; y += 1) {
@@ -3444,6 +3940,10 @@ function TacticalGrid({
       }}
     >
       {cells.map((cell) => {
+        const entitiesAtCell = entityCells.filter(
+          (candidate) => candidate.x === cell.x && candidate.y === cell.y,
+        );
+        const primaryEntityCell = entitiesAtCell[0];
         const placement = activeScene?.placedCharacters.find(
           (candidate) =>
             candidate.position.x === cell.x && candidate.position.y === cell.y,
@@ -3469,14 +3969,31 @@ function TacticalGrid({
               : isActingToken
                 ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
                 : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
+        const entityTone =
+          primaryEntityCell?.entity.type === 'terrain'
+            ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
+            : primaryEntityCell?.entity.type === 'monster'
+              ? 'border-red-300/45 bg-red-950/45 text-red-100'
+              : primaryEntityCell?.entity.type === 'player_spawn'
+                ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
+                : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
+        const ariaParts = [
+          `Select cell ${cell.x}, ${cell.y}`,
+          primaryEntityCell ? primaryEntityCell.label : null,
+          placement
+            ? `token ${resource?.character.name ?? placement.participantId}`
+            : null,
+        ].filter(Boolean);
 
         return (
           <button
-            aria-label={`Select cell ${cell.x}, ${cell.y}`}
+            aria-label={ariaParts.join(', ')}
             className={`group relative aspect-square min-h-11 border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
               isSelected
                 ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
-                : 'bg-[#211711] hover:bg-[#332316]'
+                : primaryEntityCell
+                  ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
+                  : 'bg-[#211711] hover:bg-[#332316]'
             }`}
             key={`${cell.x}-${cell.y}`}
             onClick={() => onSelectCell(cell)}
@@ -3485,9 +4002,21 @@ function TacticalGrid({
             <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
               {cell.x},{cell.y}
             </span>
+            {primaryEntityCell ? (
+              <span
+                className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
+                  primaryEntityCell.entity.hidden ? 'opacity-45' : ''
+                }`}
+                title={primaryEntityCell.label}
+              >
+                {primaryEntityCell.isOrigin
+                  ? initials(primaryEntityCell.entity.name) || 'E'
+                  : '·'}
+              </span>
+            ) : null}
             {placement ? (
               <span
-                className={`runtime-token-pop mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
+                className={`runtime-token-pop relative z-10 mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
                   isCurrentTurn ? 'animate-pulse' : ''
                 }`}
                 title={resource?.character.name ?? placement.participantId}
@@ -3495,7 +4024,7 @@ function TacticalGrid({
                 {initials(resource?.character.name ?? placement.participantId)}
               </span>
             ) : (
-              <span className="sr-only">empty</span>
+              <span className="sr-only">no character token</span>
             )}
           </button>
         );

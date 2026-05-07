@@ -107,6 +107,10 @@ Notes:
 - `activate_scene_for_session` mutates the session snapshot and returns the
   updated session state.
 - Scene entity placement is separate from character active-scene placement.
+- Scene entities use the existing scene entity shape: type, name, position,
+  footprint, movement/vision blocking flags, hidden flag, and optional metadata.
+- There is no scene-specific SSE event. Browser map/entity state is updated from
+  command responses and recovered through `get_scene`.
 
 ### `POST /api/movement/command`
 
@@ -247,14 +251,16 @@ are treated as recoverable local state, not failed recovery.
 The role-aware runtime surface at `/runtime` uses this API surface directly. The
 launcher supports DM mode and Player mode and renders a dark tactical tabletop
 from server responses, read models, and live SSE events. DM mode can run a fresh
-demo setup, seed the sample session, operate scene/encounter controls, and use
-explicit DM override commands. Player mode can join or recover an existing
-session, create/update/finalize its own draft character through the existing
-character command endpoint, submit a finalized character for authoritative DM
-assignment, see pending assignment state after recovery, read pending or
-assigned character state, move only its own token, use turn resources as itself,
-and attack selected player targets. A readable combat/event feed is primary; raw
-JSON remains available as secondary debug detail.
+demo setup, seed the sample session, create/activate custom scenes, place scene
+entities/obstacles, operate encounter controls, and use explicit DM override
+commands. Player mode can join or recover an existing session,
+create/update/finalize its own draft character through the existing character
+command endpoint, submit a finalized character for authoritative DM assignment,
+see pending assignment state after recovery, read pending or assigned character
+state, view active scene entities after recovery, move only its own token, use
+turn resources as itself, and attack selected player targets. A readable
+combat/event feed is primary; raw JSON remains available as secondary debug
+detail.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model
