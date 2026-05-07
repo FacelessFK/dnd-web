@@ -23,7 +23,12 @@ import {
   type RuntimeApiResult,
 } from '../../lib/runtime-api';
 import {
+  abilityKeys,
+  characterInputFromDraft,
+  characterUpdateInputFromDraft,
   cockpitStorageKey,
+  createCharacterDraftFormFromResource,
+  createDefaultCharacterDraftForm,
   defaultDm,
   defaultPlayer,
   describeSessionStreamEvent,
@@ -41,7 +46,10 @@ import {
   sampleCharacters,
   samplePlayers,
   sanitizeSessionIdInput,
+  validateCharacterDraftForm,
   type Cell,
+  type AbilityKey,
+  type CharacterDraftForm,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -95,6 +103,11 @@ export function RuntimeCockpit() {
   const [charactersByParticipant, setCharactersByParticipant] = useState<
     Record<string, CharacterResource | undefined>
   >({});
+  const [knownCharacterIdsByParticipant, setKnownCharacterIdsByParticipant] =
+    useState<Record<string, string>>({});
+  const [characterDraft, setCharacterDraft] = useState<CharacterDraftForm>(() =>
+    createDefaultCharacterDraftForm(defaultPlayer.displayName),
+  );
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<LastResponse | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -122,6 +135,7 @@ export function RuntimeCockpit() {
   const knownCharacterIds = getKnownCharacterIds(
     sessionState,
     charactersByParticipant,
+    knownCharacterIdsByParticipant,
   );
   const playerParticipantIds = useMemo(
     () => getPlayerParticipantIds(sessionState),
@@ -203,6 +217,7 @@ export function RuntimeCockpit() {
       );
       setSessionId(stored.sessionId ?? '');
       setSceneId(stored.sceneId ?? '');
+      setKnownCharacterIdsByParticipant(stored.charactersByParticipant ?? {});
     } catch {
       localStorage.removeItem(cockpitStorageKey);
     }
@@ -250,12 +265,15 @@ export function RuntimeCockpit() {
 
   useEffect(() => {
     const stored: StoredCockpitState = {
-      charactersByParticipant: Object.fromEntries(
-        Object.entries(charactersByParticipant).flatMap(
-          ([participantId, resource]) =>
-            resource ? [[participantId, resource.character.id] as const] : [],
+      charactersByParticipant: {
+        ...knownCharacterIdsByParticipant,
+        ...Object.fromEntries(
+          Object.entries(charactersByParticipant).flatMap(
+            ([participantId, resource]) =>
+              resource ? [[participantId, resource.character.id] as const] : [],
+          ),
         ),
-      ),
+      },
       dmDisplayName,
       dmParticipantId,
       mode,
@@ -270,6 +288,7 @@ export function RuntimeCockpit() {
     charactersByParticipant,
     dmDisplayName,
     dmParticipantId,
+    knownCharacterIdsByParticipant,
     mode,
     playerDisplayName,
     playerParticipantId,
@@ -323,13 +342,18 @@ export function RuntimeCockpit() {
     );
   }
 
-  function clearRuntimeReadModels(): void {
+  function clearRuntimeReadModels(
+    options: { clearKnownCharacterIds?: boolean } = {},
+  ): void {
     setSceneId('');
     setSessionState(null);
     setScene(null);
     setActiveScene(null);
     setEncounter(null);
     setCharactersByParticipant({});
+    if (options.clearKnownCharacterIds) {
+      setKnownCharacterIdsByParticipant({});
+    }
     setLastResponse(null);
     setCommandError(null);
     setRecoveryNotes([]);
@@ -345,7 +369,7 @@ export function RuntimeCockpit() {
   function switchSessionId(nextSessionId: string): void {
     setStreamEnabled(false);
     setSessionId(sanitizeSessionIdInput(nextSessionId));
-    clearRuntimeReadModels();
+    clearRuntimeReadModels({ clearKnownCharacterIds: true });
     setEventLog([]);
   }
 
@@ -359,6 +383,7 @@ export function RuntimeCockpit() {
   function switchPlayerParticipantId(nextParticipantId: string): void {
     setStreamEnabled(false);
     setPlayerParticipantId(nextParticipantId.trim());
+    setCharacterDraft(createDefaultCharacterDraftForm(playerDisplayName));
     setCommandError(null);
     setRecoveryNotes([]);
   }
@@ -379,7 +404,10 @@ export function RuntimeCockpit() {
     setPlayerDisplayName(defaultPlayer.displayName);
     setSessionId('');
     setStreamEnabled(false);
-    clearRuntimeReadModels();
+    setCharacterDraft(
+      createDefaultCharacterDraftForm(defaultPlayer.displayName),
+    );
+    clearRuntimeReadModels({ clearKnownCharacterIds: true });
     setEventLog([]);
   }
 
@@ -401,6 +429,14 @@ export function RuntimeCockpit() {
       ...current,
       [resource.character.ownerParticipantId]: resource,
     }));
+    setKnownCharacterIdsByParticipant((current) => ({
+      ...current,
+      [resource.character.ownerParticipantId]: resource.character.id,
+    }));
+
+    if (resource.character.ownerParticipantId === playerParticipantId) {
+      setCharacterDraft(createCharacterDraftFormFromResource(resource));
+    }
   }
 
   function patchCharacter(
@@ -509,7 +545,7 @@ export function RuntimeCockpit() {
       );
 
       setStreamEnabled(false);
-      clearRuntimeReadModels();
+      clearRuntimeReadModels({ clearKnownCharacterIds: true });
       applySessionSnapshot(response.data.state);
 
       return response;
@@ -564,7 +600,7 @@ export function RuntimeCockpit() {
       const activeSessionId = createdSession.data.sessionId;
       let latestState = createdSession.data.state;
 
-      clearRuntimeReadModels();
+      clearRuntimeReadModels({ clearKnownCharacterIds: true });
       setEventLog([]);
       applySessionSnapshot(latestState);
 
@@ -1196,9 +1232,32 @@ export function RuntimeCockpit() {
         );
       }
 
+      const characterRefs = new Map<
+        string,
+        {
+          characterId: string;
+          participantId: string;
+        }
+      >();
+
       for (const participant of getAssignedCharacterRefs(
         recovered.data.state,
       )) {
+        characterRefs.set(participant.characterId, participant);
+      }
+
+      for (const [participantId, characterId] of Object.entries(
+        knownCharacterIdsByParticipant,
+      )) {
+        if (characterId && !characterRefs.has(characterId)) {
+          characterRefs.set(characterId, {
+            characterId,
+            participantId,
+          });
+        }
+      }
+
+      for (const participant of characterRefs.values()) {
         const characterResult = await sendCharacterCommand({
           actor: {
             participantId: streamParticipantId,
@@ -1363,6 +1422,136 @@ export function RuntimeCockpit() {
       }
 
       await readActiveSceneState({ quiet: true });
+
+      return response;
+    });
+  }
+
+  async function createPlayerCharacter(): Promise<void> {
+    await runTask('create_character player draft', async () => {
+      assertSession();
+      assertCharacterDraftValid();
+
+      const response = await unwrap(
+        'create_character',
+        sendCharacterCommand({
+          actor: {
+            participantId: playerParticipantId,
+          },
+          commandId: createCommandId('player-create-character'),
+          payload: {
+            character: characterInputFromDraft(characterDraft),
+            ownerParticipantId: playerParticipantId,
+            sessionId,
+          },
+          type: 'create_character',
+        }),
+      );
+
+      if (!('character' in response.data)) {
+        throw new Error('create_character returned a non-character response.');
+      }
+
+      rememberCharacter(response.data);
+
+      return response;
+    });
+  }
+
+  async function updatePlayerCharacter(): Promise<void> {
+    await runTask('update_character player draft', async () => {
+      assertSession();
+      assertCharacterDraftValid();
+      const characterId = requirePlayerCharacterId();
+
+      const response = await unwrap(
+        'update_character',
+        sendCharacterCommand({
+          actor: {
+            participantId: playerParticipantId,
+          },
+          commandId: createCommandId('player-update-character'),
+          payload: {
+            character: characterUpdateInputFromDraft(characterDraft),
+            characterId,
+            sessionId,
+          },
+          type: 'update_character',
+        }),
+      );
+
+      if (!('character' in response.data)) {
+        throw new Error('update_character returned a non-character response.');
+      }
+
+      rememberCharacter(response.data);
+
+      return response;
+    });
+  }
+
+  async function finalizePlayerCharacter(): Promise<void> {
+    await runTask('finalize_character player draft', async () => {
+      assertSession();
+      const characterId = requirePlayerCharacterId();
+
+      const response = await unwrap(
+        'finalize_character',
+        sendCharacterCommand({
+          actor: {
+            participantId: playerParticipantId,
+          },
+          commandId: createCommandId('player-finalize-character'),
+          payload: {
+            characterId,
+            sessionId,
+          },
+          type: 'finalize_character',
+        }),
+      );
+
+      if (!('character' in response.data)) {
+        throw new Error(
+          'finalize_character returned a non-character response.',
+        );
+      }
+
+      rememberCharacter(response.data);
+
+      return response;
+    });
+  }
+
+  async function dmAssignSelectedLoadedCharacter(): Promise<void> {
+    await runTask('assign selected loaded character', async () => {
+      assertSession();
+      const characterId =
+        charactersByParticipant[selectedActor]?.character.id ??
+        knownCharacterIds[selectedActor];
+
+      if (!characterId) {
+        throw new Error(`No loaded character is known for ${selectedActor}.`);
+      }
+
+      const response = await unwrap(
+        'assign_character_to_participant',
+        sendCharacterCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-assign-loaded-character'),
+          payload: {
+            characterId,
+            participantId: selectedActor,
+            sessionId,
+          },
+          type: 'assign_character_to_participant',
+        }),
+      );
+
+      if ('state' in response.data) {
+        applySessionSnapshot(response.data.state);
+      }
 
       return response;
     });
@@ -1537,6 +1726,70 @@ export function RuntimeCockpit() {
     return characterId;
   }
 
+  function requirePlayerCharacterId(): string {
+    const characterId =
+      charactersByParticipant[playerParticipantId]?.character.id ??
+      knownCharacterIds[playerParticipantId];
+
+    if (!characterId) {
+      throw new Error('Create or recover your character first.');
+    }
+
+    return characterId;
+  }
+
+  function assertCharacterDraftValid(): void {
+    const errors = validateCharacterDraftForm(characterDraft);
+
+    if (errors.length) {
+      throw new Error(`Fix the character sheet first: ${errors.join(' ')}`);
+    }
+  }
+
+  function updateCharacterDraftField(
+    field:
+      | 'armorClass'
+      | 'background'
+      | 'className'
+      | 'level'
+      | 'name'
+      | 'notes'
+      | 'speciesOrRace'
+      | 'speed',
+    value: string,
+  ): void {
+    setCharacterDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateCharacterDraftAbility(
+    abilityKey: AbilityKey,
+    value: string,
+  ): void {
+    setCharacterDraft((current) => ({
+      ...current,
+      abilities: {
+        ...current.abilities,
+        [abilityKey]: value,
+      },
+    }));
+  }
+
+  function updateCharacterDraftHp(
+    field: keyof CharacterDraftForm['hp'],
+    value: string,
+  ): void {
+    setCharacterDraft((current) => ({
+      ...current,
+      hp: {
+        ...current.hp,
+        [field]: value,
+      },
+    }));
+  }
+
   function assertSession(): void {
     if (!sessionId) {
       throw new Error('Create or enter a session ID first.');
@@ -1549,17 +1802,58 @@ export function RuntimeCockpit() {
     height: 8,
     width: 8,
   };
+  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
+  const missingSessionReason = !canUseSession
+    ? 'Create, paste, or recover a session first.'
+    : null;
   const playerCharacter = charactersByParticipant[playerParticipantId];
+  const isPlayerJoined = Boolean(
+    sessionState?.participants.some(
+      (participant) => participant.id === playerParticipantId,
+    ),
+  );
+  const playerAssignedCharacterId =
+    sessionState?.participants.find(
+      (participant) => participant.id === playerParticipantId,
+    )?.characterId ?? null;
+  const playerCharacterId =
+    playerCharacter?.character.id ?? knownCharacterIds[playerParticipantId];
+  const isPlayerCharacterAssigned = Boolean(
+    playerCharacterId && playerAssignedCharacterId === playerCharacterId,
+  );
+  const characterDraftErrors = validateCharacterDraftForm(characterDraft);
+  const playerCharacterSetupReason =
+    busyReason ??
+    missingSessionReason ??
+    (isPlayerJoined
+      ? null
+      : 'Join or recover this session as the player first.');
+  const characterDraftReason =
+    characterDraftErrors.length > 0
+      ? `Fix the character sheet first: ${characterDraftErrors[0]}`
+      : null;
+  const createPlayerCharacterReason =
+    playerCharacterSetupReason ??
+    characterDraftReason ??
+    (playerCharacter
+      ? 'A character is already loaded for this participant.'
+      : null);
+  const updatePlayerCharacterReason =
+    playerCharacterSetupReason ??
+    characterDraftReason ??
+    (playerCharacter ? null : 'Create or recover your character first.');
+  const finalizePlayerCharacterReason =
+    playerCharacterSetupReason ??
+    (playerCharacter ? null : 'Create or recover your character first.') ??
+    (playerCharacter?.character.status === 'ready'
+      ? 'This character is already finalized.'
+      : null);
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
   );
   const currentTurnName = currentTurnParticipantId
     ? getParticipantName(participants, currentTurnParticipantId)
     : 'No active turn';
-  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
-  const missingSessionReason = !canUseSession
-    ? 'Create, paste, or recover a session first.'
-    : null;
   const disabledReasons = getRuntimeDisabledReasons({
     actingParticipantId,
     activeSceneKnown: Boolean(activeScene || sceneId),
@@ -1581,6 +1875,26 @@ export function RuntimeCockpit() {
   const targetParticipants = playerParticipants.filter(
     (participant) => participant.id !== actingParticipantId,
   );
+  const selectedActorAssignedCharacterId =
+    sessionState?.participants.find(
+      (participant) => participant.id === selectedActor,
+    )?.characterId ?? null;
+  const selectedActorKnownCharacterId =
+    charactersByParticipant[selectedActor]?.character.id ??
+    knownCharacterIds[selectedActor];
+  const selectedActorNeedsAssignment = Boolean(
+    selectedActorKnownCharacterId &&
+    selectedActorAssignedCharacterId !== selectedActorKnownCharacterId,
+  );
+  const dmAssignSelectedReason =
+    busyReason ??
+    missingSessionReason ??
+    (mode === 'dm' ? null : 'Switch to DM mode for this control.') ??
+    (selectedActorKnownCharacterId
+      ? selectedActorNeedsAssignment
+        ? null
+        : 'Selected participant already has this character assigned.'
+      : 'Load or recover a character for this participant first.');
   const activeSceneLabel = scene
     ? `${scene.name} (${scene.id})`
     : (activeScene?.activeSceneId ?? sceneId) || 'none';
@@ -1591,12 +1905,9 @@ export function RuntimeCockpit() {
     hasActiveScene: Boolean(activeScene),
     hasCharacter: Boolean(playerCharacter),
     hasEncounter: Boolean(encounter),
+    isCharacterAssigned: isPlayerCharacterAssigned,
     isCurrentTurn: currentTurnParticipantId === playerParticipantId,
-    isJoined: Boolean(
-      sessionState?.participants.some(
-        (participant) => participant.id === playerParticipantId,
-      ),
-    ),
+    isJoined: isPlayerJoined,
     isPlaced: Boolean(playerPlacement),
     sessionId,
   });
@@ -2012,6 +2323,25 @@ export function RuntimeCockpit() {
               </Panel>
             )}
 
+            {mode === 'player' ? (
+              <CharacterOnboardingPanel
+                characterDraft={characterDraft}
+                characterDraftErrors={characterDraftErrors}
+                createDisabledReason={createPlayerCharacterReason}
+                isAssigned={isPlayerCharacterAssigned}
+                onAbilityChange={updateCharacterDraftAbility}
+                onCreate={createPlayerCharacter}
+                onFieldChange={updateCharacterDraftField}
+                onFinalize={finalizePlayerCharacter}
+                onHpChange={updateCharacterDraftHp}
+                onUpdate={updatePlayerCharacter}
+                playerCharacter={playerCharacter}
+                playerParticipantId={playerParticipantId}
+                updateDisabledReason={updatePlayerCharacterReason}
+                finalizeDisabledReason={finalizePlayerCharacterReason}
+              />
+            ) : null}
+
             <Panel
               description="Turn controls submit actor-scoped commands; disabled buttons explain missing prerequisites."
               eyebrow="Encounter"
@@ -2112,21 +2442,54 @@ export function RuntimeCockpit() {
                     resource={playerCharacter}
                     title={`${playerDisplayName} (you)`}
                   />
-                ) : playerParticipants.length ? (
-                  playerParticipants.map((participant) => (
-                    <CharacterSummary
-                      currentTurnParticipantId={currentTurnParticipantId}
-                      key={participant.id}
-                      participantId={participant.id}
-                      resource={charactersByParticipant[participant.id]}
-                      title={participant.displayName}
-                    />
-                  ))
                 ) : (
-                  <EmptyState
-                    detail="Join players or run the fresh demo setup."
-                    title="No players loaded"
-                  />
+                  <>
+                    {playerParticipants.length ? (
+                      playerParticipants.map((participant) => (
+                        <CharacterSummary
+                          currentTurnParticipantId={currentTurnParticipantId}
+                          key={participant.id}
+                          participantId={participant.id}
+                          resource={charactersByParticipant[participant.id]}
+                          title={participant.displayName}
+                        />
+                      ))
+                    ) : (
+                      <EmptyState
+                        detail="Join players or run the fresh demo setup."
+                        title="No players loaded"
+                      />
+                    )}
+                    <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
+                      <p className="text-sm font-bold text-amber-50">
+                        Assignment helper
+                      </p>
+                      <SelectField
+                        label="Player"
+                        onChange={setSelectedActor}
+                        options={playerParticipants.map((participant) => ({
+                          label: `${participant.displayName} (${participant.id})`,
+                          value: participant.id,
+                        }))}
+                        value={selectedActor}
+                      />
+                      <StatusRow
+                        label="Known character"
+                        value={selectedActorKnownCharacterId ?? 'none'}
+                      />
+                      <StatusRow
+                        label="Assigned"
+                        value={selectedActorAssignedCharacterId ?? 'none'}
+                      />
+                      <ActionButton
+                        disabled={Boolean(dmAssignSelectedReason)}
+                        disabledReason={dmAssignSelectedReason ?? undefined}
+                        label="Assign Loaded Character"
+                        onClick={dmAssignSelectedLoadedCharacter}
+                        variant="secondary"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             </Panel>
@@ -2489,6 +2852,27 @@ function SelectField({
   );
 }
 
+function TextAreaField({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="grid gap-1 text-sm">
+      <span className="font-semibold text-amber-100/75">{label}</span>
+      <textarea
+        className="min-h-24 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-2 text-amber-50 outline-none transition placeholder:text-amber-100/30 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
+  );
+}
+
 function StatusRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
@@ -2593,6 +2977,235 @@ function LatestEventFeed({
             title="No live events summarized"
           />
         )}
+      </div>
+    </Panel>
+  );
+}
+
+function CharacterOnboardingPanel({
+  characterDraft,
+  characterDraftErrors,
+  createDisabledReason,
+  finalizeDisabledReason,
+  isAssigned,
+  onAbilityChange,
+  onCreate,
+  onFieldChange,
+  onFinalize,
+  onHpChange,
+  onUpdate,
+  playerCharacter,
+  playerParticipantId,
+  updateDisabledReason,
+}: {
+  characterDraft: CharacterDraftForm;
+  characterDraftErrors: string[];
+  createDisabledReason: string | null;
+  finalizeDisabledReason: string | null;
+  isAssigned: boolean;
+  onAbilityChange: (abilityKey: AbilityKey, value: string) => void;
+  onCreate: () => void | Promise<void>;
+  onFieldChange: (
+    field:
+      | 'armorClass'
+      | 'background'
+      | 'className'
+      | 'level'
+      | 'name'
+      | 'notes'
+      | 'speciesOrRace'
+      | 'speed',
+    value: string,
+  ) => void;
+  onFinalize: () => void | Promise<void>;
+  onHpChange: (field: keyof CharacterDraftForm['hp'], value: string) => void;
+  onUpdate: () => void | Promise<void>;
+  playerCharacter?: CharacterResource;
+  playerParticipantId: string;
+  updateDisabledReason: string | null;
+}) {
+  const statusTone: RuntimeNoticeTone = playerCharacter
+    ? isAssigned
+      ? 'success'
+      : 'warning'
+    : 'info';
+  const statusLabel = playerCharacter
+    ? isAssigned
+      ? 'Assigned'
+      : 'Needs DM assignment'
+    : 'No character yet';
+
+  return (
+    <Panel
+      description="Create and maintain your own character draft. The server validates and returns the authoritative sheet."
+      eyebrow="Character sheet"
+      title="Player Character"
+      tone="player"
+    >
+      <div className="grid gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">
+              {playerCharacter?.character.name ?? 'Unwritten adventurer'}
+            </p>
+            <p className="mt-1 text-xs text-amber-100/60">
+              Owner: {playerParticipantId}
+              {playerCharacter
+                ? ` · ${playerCharacter.character.status}`
+                : ' · draft not created'}
+            </p>
+          </div>
+          <StatusBadge label={statusLabel} tone={statusTone} />
+        </div>
+
+        {characterDraftErrors.length ? (
+          <Notice title="Sheet needs attention" tone="warning">
+            <ul className="list-disc space-y-1 pl-5">
+              {characterDraftErrors.slice(0, 4).map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          </Notice>
+        ) : null}
+
+        {!isAssigned && playerCharacter ? (
+          <Notice title="Waiting on DM assignment" tone="warning">
+            The character exists on the server, but this session participant is
+            not assigned yet. A DM must assign this character before movement
+            and encounter participation.
+          </Notice>
+        ) : null}
+
+        <div className="grid gap-3">
+          <LabeledInput
+            label="Name"
+            onChange={(value) => onFieldChange('name', value)}
+            value={characterDraft.name}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <LabeledInput
+              label="Class"
+              onChange={(value) => onFieldChange('className', value)}
+              value={characterDraft.className}
+            />
+            <LabeledInput
+              label="Level (create only)"
+              onChange={(value) => onFieldChange('level', value)}
+              value={characterDraft.level}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <LabeledInput
+              label="Species/Race"
+              onChange={(value) => onFieldChange('speciesOrRace', value)}
+              value={characterDraft.speciesOrRace}
+            />
+            <LabeledInput
+              label="Background"
+              onChange={(value) => onFieldChange('background', value)}
+              value={characterDraft.background}
+            />
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
+            Abilities
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {abilityKeys.map((abilityKey) => (
+              <LabeledInput
+                key={abilityKey}
+                label={abilityKey.toUpperCase()}
+                onChange={(value) => onAbilityChange(abilityKey, value)}
+                value={characterDraft.abilities[abilityKey]}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
+            Combat Basics
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledInput
+              label="HP Max"
+              onChange={(value) => onHpChange('max', value)}
+              value={characterDraft.hp.max}
+            />
+            <LabeledInput
+              label="HP Current"
+              onChange={(value) => onHpChange('current', value)}
+              value={characterDraft.hp.current}
+            />
+            <LabeledInput
+              label="Temp HP"
+              onChange={(value) => onHpChange('temp', value)}
+              value={characterDraft.hp.temp}
+            />
+            <LabeledInput
+              label="Armor Class"
+              onChange={(value) => onFieldChange('armorClass', value)}
+              value={characterDraft.armorClass}
+            />
+            <LabeledInput
+              label="Speed"
+              onChange={(value) => onFieldChange('speed', value)}
+              value={characterDraft.speed}
+            />
+          </div>
+        </div>
+
+        <TextAreaField
+          label="Notes"
+          onChange={(value) => onFieldChange('notes', value)}
+          value={characterDraft.notes}
+        />
+
+        {playerCharacter ? (
+          <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
+            <StatusRow
+              label="Character ID"
+              value={playerCharacter.character.id}
+            />
+            <StatusRow
+              label="Proficiency"
+              value={`+${playerCharacter.derived.proficiencyBonus}`}
+            />
+            <StatusRow
+              label="Initiative"
+              value={`${playerCharacter.derived.initiativeModifier >= 0 ? '+' : ''}${playerCharacter.derived.initiativeModifier}`}
+            />
+            <StatusRow
+              label="Passive Perception"
+              value={String(playerCharacter.derived.passivePerception)}
+            />
+          </div>
+        ) : null}
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          <ActionButton
+            disabled={Boolean(createDisabledReason)}
+            disabledReason={createDisabledReason ?? undefined}
+            label="Create Draft"
+            onClick={onCreate}
+          />
+          <ActionButton
+            disabled={Boolean(updateDisabledReason)}
+            disabledReason={updateDisabledReason ?? undefined}
+            label="Update Draft"
+            onClick={onUpdate}
+            variant="secondary"
+          />
+          <ActionButton
+            disabled={Boolean(finalizeDisabledReason)}
+            disabledReason={finalizeDisabledReason ?? undefined}
+            label="Finalize"
+            onClick={onFinalize}
+            variant="secondary"
+          />
+        </div>
       </div>
     </Panel>
   );
@@ -2751,6 +3364,15 @@ function CharacterSummary({
         />
         <Stat label="AC" value={String(resource.character.armorClass)} />
         <Stat label="Speed" value={`${resource.character.speed} ft`} />
+        <Stat label="Prof" value={`+${resource.derived.proficiencyBonus}`} />
+        <Stat
+          label="Init"
+          value={`${resource.derived.initiativeModifier >= 0 ? '+' : ''}${resource.derived.initiativeModifier}`}
+        />
+        <Stat
+          label="Passive"
+          value={String(resource.derived.passivePerception)}
+        />
       </dl>
       <p className="mt-3 text-xs text-amber-100/60">
         Conditions:{' '}

@@ -241,9 +241,11 @@ launcher supports DM mode and Player mode and renders a dark tactical tabletop
 from server responses, read models, and live SSE events. DM mode can run a fresh
 demo setup, seed the sample session, operate scene/encounter controls, and use
 explicit DM override commands. Player mode can join or recover an existing
-session, read its assigned character, move only its own token, use turn
-resources as itself, and attack selected player targets. A readable combat/event
-feed is primary; raw JSON remains available as secondary debug detail.
+session, create/update/finalize its own draft character through the existing
+character command endpoint, see when DM assignment is still required, read its
+assigned character, move only its own token, use turn resources as itself, and
+attack selected player targets. A readable combat/event feed is primary; raw JSON
+remains available as secondary debug detail.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model

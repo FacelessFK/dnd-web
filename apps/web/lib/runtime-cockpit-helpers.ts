@@ -1,6 +1,7 @@
 import type {
   CharacterInput,
   CharacterResource,
+  CharacterUpdateInput,
   RuntimeErrorCode,
   SessionStreamEvent,
   SessionCommandSuccess,
@@ -16,6 +17,27 @@ export type Cell = {
 };
 
 export type RuntimeMode = 'dm' | 'player';
+
+export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+
+export type AbilityKey = (typeof abilityKeys)[number];
+
+export type CharacterDraftForm = {
+  abilities: Record<AbilityKey, string>;
+  armorClass: string;
+  background: string;
+  className: string;
+  hp: {
+    current: string;
+    max: string;
+    temp: string;
+  };
+  level: string;
+  name: string;
+  notes: string;
+  speciesOrRace: string;
+  speed: string;
+};
 
 export type StoredCockpitState = {
   charactersByParticipant?: Record<string, string>;
@@ -95,6 +117,154 @@ export const sampleCharacters: Record<string, CharacterInput> = {
   },
 };
 
+export function createDefaultCharacterDraftForm(
+  displayName = 'New Adventurer',
+): CharacterDraftForm {
+  return {
+    abilities: {
+      cha: '10',
+      con: '14',
+      dex: '14',
+      int: '10',
+      str: '10',
+      wis: '12',
+    },
+    armorClass: '13',
+    background: 'Wanderer',
+    className: 'Fighter',
+    hp: {
+      current: '12',
+      max: '12',
+      temp: '0',
+    },
+    level: '1',
+    name: displayName ? `${displayName}'s Hero` : 'New Adventurer',
+    notes: '',
+    speciesOrRace: 'Human',
+    speed: '30',
+  };
+}
+
+export function createCharacterDraftFormFromResource(
+  resource: CharacterResource,
+): CharacterDraftForm {
+  return {
+    abilities: Object.fromEntries(
+      abilityKeys.map((abilityKey) => [
+        abilityKey,
+        String(resource.character.abilities[abilityKey]),
+      ]),
+    ) as Record<AbilityKey, string>,
+    armorClass: String(resource.character.armorClass),
+    background: resource.character.background,
+    className: resource.character.className,
+    hp: {
+      current: String(resource.character.hp.current),
+      max: String(resource.character.hp.max),
+      temp: String(resource.character.hp.temp),
+    },
+    level: String(resource.character.level),
+    name: resource.character.name,
+    notes: resource.character.notes ?? '',
+    speciesOrRace: resource.character.speciesOrRace,
+    speed: String(resource.character.speed),
+  };
+}
+
+export function validateCharacterDraftForm(form: CharacterDraftForm): string[] {
+  const errors: string[] = [];
+  const trimmedName = form.name.trim();
+
+  if (!trimmedName) {
+    errors.push('Name is required.');
+  }
+
+  validateIntegerRange(errors, 'Level', form.level, 1, 20);
+  validateIntegerRange(errors, 'Armor Class', form.armorClass, 0, 99);
+  validateIntegerRange(errors, 'Speed', form.speed, 0, 200);
+  validateIntegerRange(errors, 'Max HP', form.hp.max, 1, 999);
+  validateIntegerRange(errors, 'Current HP', form.hp.current, 0, 999);
+  validateIntegerRange(errors, 'Temp HP', form.hp.temp, 0, 999);
+
+  for (const abilityKey of abilityKeys) {
+    validateIntegerRange(
+      errors,
+      abilityKey.toUpperCase(),
+      form.abilities[abilityKey],
+      1,
+      30,
+    );
+  }
+
+  const currentHp = parseInteger(form.hp.current);
+  const maxHp = parseInteger(form.hp.max);
+
+  if (
+    typeof currentHp === 'number' &&
+    typeof maxHp === 'number' &&
+    currentHp > maxHp
+  ) {
+    errors.push('Current HP cannot exceed max HP.');
+  }
+
+  if (!form.className.trim()) {
+    errors.push('Class is required.');
+  }
+
+  if (!form.speciesOrRace.trim()) {
+    errors.push('Species/Race is required.');
+  }
+
+  if (!form.background.trim()) {
+    errors.push('Background is required.');
+  }
+
+  if (form.notes.trim().length > 4000) {
+    errors.push('Notes cannot exceed 4000 characters.');
+  }
+
+  return errors;
+}
+
+export function characterInputFromDraft(
+  form: CharacterDraftForm,
+): CharacterInput {
+  return {
+    abilities: characterAbilitiesFromDraft(form),
+    armorClass: parseIntegerOrZero(form.armorClass),
+    background: form.background.trim(),
+    className: form.className.trim(),
+    hp: {
+      current: parseIntegerOrZero(form.hp.current),
+      max: parseIntegerOrZero(form.hp.max),
+      temp: parseIntegerOrZero(form.hp.temp),
+    },
+    level: parseIntegerOrZero(form.level),
+    name: form.name.trim(),
+    notes: normalizeOptionalNotes(form.notes),
+    speed: parseIntegerOrZero(form.speed),
+    speciesOrRace: form.speciesOrRace.trim(),
+  };
+}
+
+export function characterUpdateInputFromDraft(
+  form: CharacterDraftForm,
+): CharacterUpdateInput {
+  const input = characterInputFromDraft(form);
+
+  return {
+    abilities: input.abilities,
+    armorClass: input.armorClass,
+    background: input.background,
+    className: input.className,
+    hp: input.hp,
+    name: input.name,
+    notes: input.notes,
+    speed: input.speed,
+    speciesOrRace: input.speciesOrRace,
+  };
+}
+
 export function formatRuntimeFailure(
   label: string,
   failure: RuntimeApiFailure,
@@ -108,8 +278,9 @@ export function formatRuntimeFailure(
 export function getKnownCharacterIds(
   sessionState: SessionSnapshot | null,
   charactersByParticipant: Record<string, CharacterResource | undefined>,
+  rememberedCharacterIds: Record<string, string> = {},
 ): Record<string, string> {
-  const ids: Record<string, string> = {};
+  const ids: Record<string, string> = { ...rememberedCharacterIds };
 
   for (const [participantId, resource] of Object.entries(
     charactersByParticipant,
@@ -311,6 +482,7 @@ export function getPlayerNextStep({
   hasActiveScene,
   hasCharacter,
   hasEncounter,
+  isCharacterAssigned,
   isCurrentTurn,
   isJoined,
   isPlaced,
@@ -319,6 +491,7 @@ export function getPlayerNextStep({
   hasActiveScene: boolean;
   hasCharacter: boolean;
   hasEncounter: boolean;
+  isCharacterAssigned: boolean;
   isCurrentTurn: boolean;
   isJoined: boolean;
   isPlaced: boolean;
@@ -343,8 +516,18 @@ export function getPlayerNextStep({
 
   if (!hasCharacter) {
     return {
-      detail: 'Ask the DM to assign and finalize a character, then recover.',
-      title: 'Waiting for character',
+      detail:
+        'Create a draft character here, finalize it, then ask the DM to assign it.',
+      title: 'Create your character',
+      tone: 'warning',
+    };
+  }
+
+  if (!isCharacterAssigned) {
+    return {
+      detail:
+        'Your character exists locally, but the session participant is not assigned yet. Ask the DM to assign it.',
+      title: 'Needs DM assignment',
       tone: 'warning',
     };
   }
@@ -472,4 +655,56 @@ export function initials(value: string): string {
 
 export function flag(value: boolean): string {
   return value ? 'yes' : 'no';
+}
+
+function characterAbilitiesFromDraft(
+  form: CharacterDraftForm,
+): CharacterInput['abilities'] {
+  return Object.fromEntries(
+    abilityKeys.map((abilityKey) => [
+      abilityKey,
+      parseIntegerOrZero(form.abilities[abilityKey]),
+    ]),
+  ) as CharacterInput['abilities'];
+}
+
+function normalizeOptionalNotes(value: string): string | null {
+  const trimmed = value.trim();
+
+  return trimmed ? trimmed : null;
+}
+
+function parseIntegerOrZero(value: string): number {
+  return parseInteger(value) ?? 0;
+}
+
+function parseInteger(value: string): number | null {
+  const trimmed = value.trim();
+
+  if (!/^-?\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function validateIntegerRange(
+  errors: string[],
+  label: string,
+  value: string,
+  min: number,
+  max: number,
+): void {
+  const parsed = parseInteger(value);
+
+  if (typeof parsed !== 'number') {
+    errors.push(`${label} must be a whole number.`);
+    return;
+  }
+
+  if (parsed < min || parsed > max) {
+    errors.push(`${label} must be between ${min} and ${max}.`);
+  }
 }

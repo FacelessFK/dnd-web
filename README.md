@@ -19,8 +19,9 @@ sessions, create and activate scenes, place tokens, start encounters, drive
 turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo
 setup flow, reset local browser state without touching the backend, and recover
 current state through read models after refresh. Player mode can join or recover
-a session, view the assigned character, move its own token, use its own turn
-resources, and attack legal player targets.
+a session, create/update/finalize its own draft character, see when DM
+assignment is still required, view the assigned character, move its own token,
+use its own turn resources, and attack legal player targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -197,8 +198,9 @@ downed actor gating, DM override commands, and idempotent retry behavior.
 
 For browser-based manual operation, start both apps and open
 `http://localhost:3000/runtime`. The launcher offers DM mode and Player mode.
-DM mode has the fresh demo setup action for local playtesting; Local Reset
-clears browser state only.
+DM mode has the fresh demo setup action for local playtesting. Player mode has a
+character sheet draft flow backed by the existing character commands; DM
+assignment remains authoritative. Local Reset clears browser state only.
 
 Quick smoke flow:
 

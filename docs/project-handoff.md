@@ -50,6 +50,9 @@ It can:
   and assigned-character read-model commands,
 - paste an existing session ID and clear local cockpit state without touching
   backend state,
+- let players create, update, and finalize their own character draft through
+  the existing character command surface,
+- show when a player-created character still needs authoritative DM assignment,
 - let players move only their own token, use their own action/bonus/reaction,
   and attack selected player targets,
 - let DMs trigger turn advance, attack/movement for selected player actors, HP

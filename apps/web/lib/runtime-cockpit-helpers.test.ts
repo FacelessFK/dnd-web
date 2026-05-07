@@ -5,6 +5,9 @@ import type { CharacterResource } from '@dnd/protocol';
 
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
+  characterInputFromDraft,
+  characterUpdateInputFromDraft,
+  createDefaultCharacterDraftForm,
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
@@ -16,6 +19,7 @@ import {
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
+  validateCharacterDraftForm,
 } from './runtime-cockpit-helpers';
 
 const sessionState: SessionSnapshot = {
@@ -210,6 +214,7 @@ describe('runtime cockpit helpers', () => {
         hasActiveScene: true,
         hasCharacter: true,
         hasEncounter: true,
+        isCharacterAssigned: true,
         isCurrentTurn: true,
         isJoined: true,
         isPlaced: true,
@@ -228,12 +233,105 @@ describe('runtime cockpit helpers', () => {
         hasActiveScene: false,
         hasCharacter: false,
         hasEncounter: false,
+        isCharacterAssigned: false,
         isCurrentTurn: false,
         isJoined: false,
         isPlaced: false,
         sessionId: 'SESSION-001',
       }).title,
       'Join the table',
+    );
+  });
+
+  it('creates and normalizes player character draft forms', () => {
+    const draft = createDefaultCharacterDraftForm('Mira');
+
+    assert.equal(draft.name, "Mira's Hero");
+    assert.deepEqual(validateCharacterDraftForm(draft), []);
+
+    const edited = {
+      ...draft,
+      abilities: {
+        ...draft.abilities,
+        int: '16',
+      },
+      hp: {
+        current: '9',
+        max: '10',
+        temp: '2',
+      },
+      level: '3',
+      name: '  Calder  ',
+      notes: '  A careful scout.  ',
+    };
+
+    assert.deepEqual(characterInputFromDraft(edited), {
+      abilities: {
+        cha: 10,
+        con: 14,
+        dex: 14,
+        int: 16,
+        str: 10,
+        wis: 12,
+      },
+      armorClass: 13,
+      background: 'Wanderer',
+      className: 'Fighter',
+      hp: {
+        current: 9,
+        max: 10,
+        temp: 2,
+      },
+      level: 3,
+      name: 'Calder',
+      notes: 'A careful scout.',
+      speed: 30,
+      speciesOrRace: 'Human',
+    });
+    assert.equal('level' in characterUpdateInputFromDraft(edited), false);
+  });
+
+  it('validates obvious character draft mistakes before server submission', () => {
+    const draft = createDefaultCharacterDraftForm();
+    const errors = validateCharacterDraftForm({
+      ...draft,
+      abilities: {
+        ...draft.abilities,
+        str: '31',
+      },
+      hp: {
+        current: '20',
+        max: '10',
+        temp: '0',
+      },
+      level: '0',
+      name: ' ',
+    });
+
+    assert.match(errors.join('\n'), /Name is required/);
+    assert.match(errors.join('\n'), /Level must be between 1 and 20/);
+    assert.match(errors.join('\n'), /STR must be between 1 and 30/);
+    assert.match(errors.join('\n'), /Current HP cannot exceed max HP/);
+  });
+
+  it('explains player-created characters that still need DM assignment', () => {
+    assert.deepEqual(
+      getPlayerNextStep({
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: false,
+        isCharacterAssigned: false,
+        isCurrentTurn: false,
+        isJoined: true,
+        isPlaced: false,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          'Your character exists locally, but the session participant is not assigned yet. Ask the DM to assign it.',
+        title: 'Needs DM assignment',
+        tone: 'warning',
+      },
     );
   });
 });
