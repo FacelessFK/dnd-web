@@ -4,8 +4,10 @@ import {
   applyFixedDamage,
   calculateAttackModifier,
   calculateAttackTotal,
+  calculateInitiativeModifier,
   calculateMovementDistanceFeet,
   deriveCharacterStats,
+  doesDestinationOverlapBlockingOccupancy,
   doesOccupancyFitWithinGrid,
   isAttackHit,
   isCharacterDowned,
@@ -29,9 +31,14 @@ import type {
   CreateSceneCommand,
   CreateSessionCommand,
   DmEndActiveEncounterCommand,
+  DmCombatantAttackCommand,
+  DmCombatantInput,
+  DmCreateCombatantInActiveSceneCommand,
   DmRepositionCharacterInActiveSceneCommand,
+  DmRepositionCombatantInActiveSceneCommand,
   DmSetCharacterActiveConditionsCommand,
   DmSetCharacterCurrentHpCommand,
+  DmSetCombatantCurrentHpCommand,
   DmSetCurrentTurnParticipantCommand,
   DmSetCurrentTurnUsageCommand,
   EncounterStateUpdate,
@@ -68,6 +75,9 @@ import type {
   ParticipantId,
   RulesProfile,
   Scene,
+  SceneCombatant,
+  SceneEntity,
+  SceneEntityId,
   SceneId,
   ScenePosition,
   SessionSnapshot,
@@ -94,6 +104,8 @@ import {
   createEncounterRecord,
   endEncounterRecord,
   EncounterRuntimeError,
+  isCharacterEncounterParticipant,
+  isCombatantEncounterParticipant,
   markEncounterActionUsed,
   markEncounterBonusActionUsed,
   markEncounterReactionUsed,
@@ -116,6 +128,7 @@ import {
   assertGridDefinitionIsValid,
   assertSceneBelongsToSession,
   assertSceneEntityPlacement,
+  createCombatantSceneEntity,
   createSceneEntity,
   createSceneRecord,
 } from './scene-runtime.js';
@@ -153,9 +166,30 @@ type AttackContext = {
   targetPosition: ScenePosition;
 };
 
+type CombatantAttackContext = {
+  sessionId: SessionId;
+  activeSceneId: SceneId;
+  encounter: Encounter;
+  attackerCombatant: SceneEntity;
+  attackerParticipantId: ParticipantId;
+  attackerPosition: ScenePosition;
+  targetParticipant: Participant;
+  targetRecord: StoredCharacterRecord;
+  targetPosition: ScenePosition;
+};
+
 export type PreparedAttackContext = {
   activeSceneId: SceneId;
   actor: Participant;
+  scene: Scene;
+  snapshot: SessionSnapshot;
+  targetParticipantId: ParticipantId;
+};
+
+export type PreparedCombatantAttackContext = {
+  activeSceneId: SceneId;
+  actor: Participant;
+  combatantId: SceneEntityId;
   scene: Scene;
   snapshot: SessionSnapshot;
   targetParticipantId: ParticipantId;
@@ -818,6 +852,172 @@ export class InMemoryGameRuntime<
     );
   }
 
+  dmCreateCombatantInActiveScene(
+    command: DmCreateCombatantInActiveSceneCommand,
+  ): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'create combatants');
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    const combatant = this.createSceneCombatant(command.payload.combatant);
+    const entity = createCombatantSceneEntity({
+      name: command.payload.combatant.name,
+      position: command.payload.combatant.position,
+      footprint: command.payload.combatant.footprint,
+      hidden: command.payload.combatant.hidden ?? false,
+      combatant,
+    });
+
+    return this.resolveRepositoryResult(
+      this.getResolvedSessionCharacterRecords(snapshot),
+      (allCharacterRecords) => {
+        assertSceneBelongsToSession(snapshot, scene);
+        assertGridDefinitionIsValid(scene.grid);
+        assertSceneEntityPlacement(scene, entity);
+        this.assertSceneEntityDoesNotOverlapCharacters({
+          scene,
+          entity,
+          characterRecords: allCharacterRecords,
+        });
+
+        return this.resolveRepositoryResult(
+          this.scenes.saveScene({
+            ...scene,
+            entities: [...scene.entities, entity],
+            updatedAt: this.now(),
+          }),
+          (updatedScene) => updatedScene,
+        );
+      },
+    );
+  }
+
+  dmRepositionCombatantInActiveScene(
+    command: DmRepositionCombatantInActiveSceneCommand,
+  ): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'reposition combatants');
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+
+    return this.resolveRepositoryResult(
+      this.getResolvedSessionCharacterRecords(snapshot),
+      (allCharacterRecords) => {
+        assertSceneBelongsToSession(snapshot, scene);
+        assertGridDefinitionIsValid(scene.grid);
+
+        const existingCombatant = this.requireSceneCombatant(
+          scene,
+          command.payload.combatantId,
+        );
+        const movedCombatant: SceneEntity = {
+          ...existingCombatant,
+          position: structuredClone(command.payload.position),
+        };
+        const sceneWithoutCombatant = {
+          ...scene,
+          entities: scene.entities.filter(
+            (entity) => entity.id !== command.payload.combatantId,
+          ),
+        };
+
+        assertSceneEntityPlacement(sceneWithoutCombatant, movedCombatant);
+        this.assertSceneEntityDoesNotOverlapCharacters({
+          scene,
+          entity: movedCombatant,
+          characterRecords: allCharacterRecords,
+        });
+
+        return this.resolveRepositoryResult(
+          this.scenes.saveScene({
+            ...scene,
+            entities: scene.entities.map((entity) =>
+              entity.id === movedCombatant.id ? movedCombatant : entity,
+            ),
+            updatedAt: this.now(),
+          }),
+          (updatedScene) => updatedScene,
+        );
+      },
+    );
+  }
+
+  dmSetCombatantCurrentHp(command: DmSetCombatantCurrentHpCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'set combatant HP');
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+    assertSceneBelongsToSession(snapshot, scene);
+
+    const combatantEntity = this.requireSceneCombatant(
+      scene,
+      command.payload.combatantId,
+    );
+    const combatant = combatantEntity.combatant;
+
+    if (!combatant) {
+      throw new SceneStoreError(
+        'invalid_character_state',
+        `Scene entity "${combatantEntity.id}" is not a combatant.`,
+      );
+    }
+
+    this.assertCombatantCurrentHpCanBeSet(
+      combatantEntity.id,
+      combatant,
+      command.payload.currentHp,
+    );
+
+    return this.resolveRepositoryResult(
+      this.scenes.saveScene({
+        ...scene,
+        entities: scene.entities.map((entity) =>
+          entity.id === command.payload.combatantId
+            ? {
+                ...entity,
+                combatant: {
+                  ...combatant,
+                  hp: {
+                    ...combatant.hp,
+                    current: command.payload.currentHp,
+                  },
+                },
+              }
+            : entity,
+        ),
+        updatedAt: this.now(),
+      }),
+      (updatedScene) => updatedScene,
+    );
+  }
+
   dmSetCurrentTurnUsage(command: DmSetCurrentTurnUsageCommand): Encounter {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
@@ -866,6 +1066,7 @@ export class InMemoryGameRuntime<
           encounter: setEncounterCurrentTurnParticipant({
             encounter,
             participantId: command.payload.participantId,
+            combatantId: command.payload.combatantId,
           }),
           reason: 'dm_current_turn_changed',
         }),
@@ -1180,6 +1381,7 @@ export class InMemoryGameRuntime<
               );
 
               if (
+                !isCharacterEncounterParticipant(currentTurnParticipant) ||
                 currentTurnParticipant.participantId !==
                   prepared.participant.id ||
                 currentTurnParticipant.characterId !== record.character.id
@@ -1348,6 +1550,7 @@ export class InMemoryGameRuntime<
           this.buildEncounterParticipantsFromActiveScene(
             snapshot,
             activeSceneState,
+            scene,
           ),
           (participants) =>
             this.saveAndPublishEncounter({
@@ -1421,13 +1624,13 @@ export class InMemoryGameRuntime<
         command.payload.sessionId,
         command.actor.participantId,
       ),
-      ({ encounter, currentTurnCharacterRecord }) =>
+      ({ encounter, movementAllowanceFeet }) =>
         this.saveAndPublishEncounter({
           sessionId: command.payload.sessionId,
           encounter: recordEncounterMovementUsage({
             encounter,
             additionalMovementFeet: command.payload.amountFeet,
-            movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
+            movementAllowanceFeet,
           }),
           reason: 'movement_used',
         }),
@@ -1436,6 +1639,12 @@ export class InMemoryGameRuntime<
 
   attack(command: AttackCommand): Encounter {
     return this.attackPrepared(this.prepareAttack(command));
+  }
+
+  dmCombatantAttack(command: DmCombatantAttackCommand): Encounter {
+    return this.dmCombatantAttackPrepared(
+      this.prepareDmCombatantAttack(command),
+    );
   }
 
   prepareAttack(command: AttackCommand): PreparedAttackContext {
@@ -1466,6 +1675,45 @@ export class InMemoryGameRuntime<
         const resolution = this.resolveAttack(context);
 
         return this.persistResolvedAttack(context, resolution);
+      },
+    );
+  }
+
+  prepareDmCombatantAttack(
+    command: DmCombatantAttackCommand,
+  ): PreparedCombatantAttackContext {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+
+    this.assertActorIsDm(actor, 'command combatants');
+
+    return {
+      activeSceneId,
+      actor,
+      combatantId: command.payload.combatantId,
+      scene,
+      snapshot,
+      targetParticipantId: command.payload.targetParticipantId,
+    };
+  }
+
+  dmCombatantAttackPrepared(
+    prepared: PreparedCombatantAttackContext,
+  ): Encounter {
+    return this.resolveRepositoryResult(
+      this.resolveCombatantAttackContext(prepared),
+      (context) => {
+        const resolution = this.resolveCombatantAttack(context);
+
+        return this.persistResolvedCombatantAttack(context, resolution);
       },
     );
   }
@@ -1591,6 +1839,9 @@ export class InMemoryGameRuntime<
           activeSceneState.placedCharacters.map(
             (placement) => placement.participantId,
           ),
+          scene.entities
+            .filter((entity) => entity.combatant)
+            .map((entity) => entity.id),
         );
         requireCurrentEncounterParticipant(encounter);
 
@@ -1780,6 +2031,14 @@ export class InMemoryGameRuntime<
           encounter,
           actor.id,
         );
+
+        if (!isCharacterEncounterParticipant(attackerEncounterParticipant)) {
+          throw new EncounterRuntimeError(
+            'invalid_turn_actor',
+            `Participant "${actor.id}" cannot use the player attack command for combatant "${attackerEncounterParticipant.combatantId}".`,
+          );
+        }
+
         const attackerParticipant = this.requireParticipant(
           snapshot,
           attackerEncounterParticipant.participantId,
@@ -1821,6 +2080,7 @@ export class InMemoryGameRuntime<
 
             if (
               !targetEncounterParticipant ||
+              !isCharacterEncounterParticipant(targetEncounterParticipant) ||
               targetEncounterParticipant.characterId !==
                 targetRecord.character.id
             ) {
@@ -1880,10 +2140,163 @@ export class InMemoryGameRuntime<
     );
   }
 
+  private resolveCombatantAttackContext(
+    prepared: PreparedCombatantAttackContext,
+  ): CombatantAttackContext {
+    const { activeSceneId, actor, combatantId, scene, snapshot } = prepared;
+
+    assertSceneBelongsToSession(snapshot, scene);
+
+    const attackerCombatant = this.requireSceneCombatant(scene, combatantId);
+    const attackerPosition = attackerCombatant.position;
+
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(snapshot.session.id, actor.id),
+      (encounter) => {
+        const currentTurnParticipant = assertEncounterTurnActor(
+          encounter,
+          actor.id,
+        );
+
+        if (
+          !isCombatantEncounterParticipant(currentTurnParticipant) ||
+          currentTurnParticipant.combatantId !== combatantId
+        ) {
+          throw new EncounterRuntimeError(
+            'invalid_turn_actor',
+            `Combatant "${combatantId}" is not the current turn actor in encounter "${encounter.id}".`,
+          );
+        }
+
+        this.assertCombatantCanAct(attackerCombatant);
+
+        const targetParticipant = this.requireParticipant(
+          snapshot,
+          prepared.targetParticipantId,
+        );
+
+        if (targetParticipant.role !== 'player') {
+          throw new EncounterRuntimeError(
+            'invalid_attack_target',
+            `Combatant "${combatantId}" can only target player characters in the current MVP attack baseline.`,
+          );
+        }
+
+        return this.resolveRepositoryResult(
+          this.requireAssignedCharacterRecord(snapshot, targetParticipant),
+          (targetRecord) => {
+            const targetEncounterParticipant = encounter.participants.find(
+              (participant) =>
+                isCharacterEncounterParticipant(participant) &&
+                participant.participantId === targetParticipant.id &&
+                participant.characterId === targetRecord.character.id,
+            );
+
+            if (!targetEncounterParticipant) {
+              throw new EncounterRuntimeError(
+                'invalid_attack_target',
+                `Participant "${targetParticipant.id}" is not a valid target in encounter "${encounter.id}".`,
+              );
+            }
+
+            const targetPosition = this.requireAttackPlacement({
+              record: targetRecord,
+              activeSceneId,
+              participantId: targetParticipant.id,
+              role: 'target',
+            });
+
+            if (isCharacterDowned(targetRecord.character)) {
+              throw new EncounterRuntimeError(
+                'attack_target_downed',
+                `Participant "${targetParticipant.id}" cannot be targeted because character "${targetRecord.character.id}" is already at 0 HP.`,
+              );
+            }
+
+            if (
+              !isWithinBaselineMeleeReach({
+                attackerPosition,
+                targetPosition,
+                cellSizeFeet: scene.grid.cellSizeFeet,
+              })
+            ) {
+              throw new EncounterRuntimeError(
+                'attack_target_out_of_reach',
+                `Participant "${targetParticipant.id}" is outside the current 5-foot melee attack baseline for combatant "${combatantId}".`,
+              );
+            }
+
+            return {
+              sessionId: snapshot.session.id,
+              activeSceneId,
+              encounter,
+              attackerCombatant,
+              attackerParticipantId: currentTurnParticipant.participantId,
+              attackerPosition,
+              targetParticipant,
+              targetRecord,
+              targetPosition,
+            };
+          },
+        );
+      },
+    );
+  }
+
   private resolveAttack(context: AttackContext): ResolvedAttack {
     const updatedEncounter = markEncounterActionUsed(context.encounter);
     const d20 = rollD20(this.d20Roller);
     const modifier = calculateAttackModifier(context.attackerRecord.character);
+    const total = calculateAttackTotal(d20, modifier);
+    const hit = isAttackHit(total, context.targetRecord.character.armorClass);
+    const damage = hit ? 1 : 0;
+    const previousTargetHp = context.targetRecord.character.hp.current;
+    const currentTargetHp = hit
+      ? applyFixedDamage(previousTargetHp, damage)
+      : previousTargetHp;
+
+    return {
+      updatedEncounter,
+      roll: {
+        d20,
+        modifier,
+        total,
+      },
+      hit,
+      damage,
+      targetArmorClass: context.targetRecord.character.armorClass,
+      targetHp: {
+        previous: previousTargetHp,
+        current: currentTargetHp,
+      },
+      nextTargetRecord:
+        hit && currentTargetHp !== previousTargetHp
+          ? this.withUpdatedCharacterHitPoints(
+              context.targetRecord,
+              currentTargetHp,
+            )
+          : null,
+    };
+  }
+
+  private resolveCombatantAttack(
+    context: CombatantAttackContext,
+  ): ResolvedAttack {
+    const combatant = context.attackerCombatant.combatant;
+
+    if (!combatant) {
+      throw new SceneStoreError(
+        'invalid_character_state',
+        `Scene entity "${context.attackerCombatant.id}" is not a combatant.`,
+      );
+    }
+
+    const updatedEncounter = markEncounterActionUsed(context.encounter);
+    const d20 = rollD20(this.d20Roller);
+    const modifier = calculateAttackModifier({
+      abilities: combatant.abilities,
+      level: 1,
+    });
     const total = calculateAttackTotal(d20, modifier);
     const hit = isAttackHit(total, context.targetRecord.character.armorClass);
     const damage = hit ? 1 : 0;
@@ -1934,6 +2347,20 @@ export class InMemoryGameRuntime<
     );
   }
 
+  private persistResolvedCombatantAttack(
+    context: CombatantAttackContext,
+    resolution: ResolvedAttack,
+  ): Encounter {
+    if (!resolution.nextTargetRecord) {
+      return this.publishResolvedCombatantAttack(context, resolution);
+    }
+
+    return this.resolveRepositoryResult(
+      this.characters.saveCharacter(resolution.nextTargetRecord),
+      () => this.publishResolvedCombatantAttack(context, resolution),
+    );
+  }
+
   private publishResolvedAttack(
     context: AttackContext,
     resolution: ResolvedAttack,
@@ -1966,6 +2393,51 @@ export class InMemoryGameRuntime<
       encounterId: encounter.id,
       attackerParticipantId: context.attackerParticipant.id,
       attackerCharacterId: context.attackerRecord.character.id,
+      targetParticipantId: context.targetParticipant.id,
+      targetCharacterId: context.targetRecord.character.id,
+      roll: resolution.roll,
+      targetArmorClass: resolution.targetArmorClass,
+      hit: resolution.hit,
+      damage: resolution.damage,
+      targetHp: resolution.targetHp,
+    };
+  }
+
+  private publishResolvedCombatantAttack(
+    context: CombatantAttackContext,
+    resolution: ResolvedAttack,
+  ): Encounter {
+    const savedEncounter = this.saveAndPublishEncounter({
+      sessionId: context.sessionId,
+      encounter: resolution.updatedEncounter,
+      reason: 'action_used',
+    });
+
+    this.publishCombatEvent(
+      this.buildResolvedCombatantAttackCombatEvent(
+        context,
+        resolution,
+        savedEncounter,
+      ),
+    );
+
+    return savedEncounter;
+  }
+
+  private buildResolvedCombatantAttackCombatEvent(
+    context: CombatantAttackContext,
+    resolution: ResolvedAttack,
+    encounter: Encounter,
+  ): CombatEvent {
+    return {
+      type: 'combat_event',
+      reason: 'attack_resolved',
+      sessionId: context.sessionId,
+      encounterId: encounter.id,
+      attackerKind: 'combatant',
+      attackerParticipantId: context.attackerParticipantId,
+      attackerCombatantId: context.attackerCombatant.id,
+      targetKind: 'character',
       targetParticipantId: context.targetParticipant.id,
       targetCharacterId: context.targetRecord.character.id,
       roll: resolution.roll,
@@ -2028,6 +2500,109 @@ export class InMemoryGameRuntime<
       concentration: null,
       currentVisibility: 'visible',
     };
+  }
+
+  private createSceneCombatant(input: DmCombatantInput): SceneCombatant {
+    return {
+      kind: input.kind,
+      hp: structuredClone(input.hp),
+      armorClass: input.armorClass,
+      speed: input.speed,
+      abilities: structuredClone(input.abilities),
+    };
+  }
+
+  private requireSceneCombatant(
+    scene: Scene,
+    combatantId: SceneEntityId,
+  ): SceneEntity {
+    const entity = scene.entities.find(
+      (candidate) => candidate.id === combatantId,
+    );
+
+    if (!entity) {
+      throw new SceneStoreError(
+        'scene_not_found',
+        `Combatant "${combatantId}" does not exist in scene "${scene.id}".`,
+      );
+    }
+
+    if (!entity.combatant) {
+      throw new SceneStoreError(
+        'invalid_character_state',
+        `Scene entity "${combatantId}" is not an active combatant.`,
+      );
+    }
+
+    return entity;
+  }
+
+  private assertSceneEntityDoesNotOverlapCharacters(params: {
+    scene: Scene;
+    entity: SceneEntity;
+    characterRecords: StoredCharacterRecord[];
+  }): void {
+    const characterBlockers = params.characterRecords.flatMap((record) => {
+      if (
+        !record.overlay.position ||
+        record.overlay.position.sceneId !== params.scene.id
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          position: {
+            x: record.overlay.position.x,
+            y: record.overlay.position.y,
+          },
+          footprint: record.overlay.footprint,
+        },
+      ];
+    });
+
+    if (
+      doesDestinationOverlapBlockingOccupancy(
+        {
+          position: params.entity.position,
+          footprint: params.entity.footprint,
+        },
+        characterBlockers,
+      )
+    ) {
+      throw new SceneStoreError(
+        'scene_entity_overlap',
+        `Scene entity "${params.entity.id}" overlaps with a character token in scene "${params.scene.id}".`,
+      );
+    }
+  }
+
+  private assertCombatantCurrentHpCanBeSet(
+    combatantId: SceneEntityId,
+    combatant: SceneCombatant,
+    currentHp: number,
+  ): void {
+    if (
+      !Number.isInteger(currentHp) ||
+      currentHp < 0 ||
+      currentHp > combatant.hp.max
+    ) {
+      throw new SceneStoreError(
+        'invalid_character_hp',
+        `Current HP for combatant "${combatantId}" must be an integer from 0 to ${combatant.hp.max}.`,
+      );
+    }
+  }
+
+  private assertCombatantCanAct(entity: SceneEntity): void {
+    if (entity.combatant && entity.combatant.hp.current > 0) {
+      return;
+    }
+
+    throw new EncounterRuntimeError(
+      'turn_actor_downed',
+      `Current turn combatant "${entity.id}" is at 0 HP and cannot perform turn-bound combat actions.`,
+    );
   }
 
   private assertCharacterCanBeFinalized(character: Character): void {
@@ -2357,7 +2932,7 @@ export class InMemoryGameRuntime<
     actorParticipantId: ParticipantId,
   ): {
     encounter: Encounter;
-    currentTurnCharacterRecord: StoredCharacterRecord;
+    movementAllowanceFeet: number;
   } {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       sessionId,
@@ -2370,6 +2945,24 @@ export class InMemoryGameRuntime<
           encounter,
           actorParticipantId,
         );
+
+        if (isCombatantEncounterParticipant(currentTurnParticipant)) {
+          const activeSceneId = requireActiveSceneId(snapshot);
+          const scene = this.scenes.getScene(activeSceneId);
+          assertSceneBelongsToSession(snapshot, scene);
+          const combatant = this.requireSceneCombatant(
+            scene,
+            currentTurnParticipant.combatantId,
+          );
+
+          this.assertCombatantCanAct(combatant);
+
+          return {
+            encounter,
+            movementAllowanceFeet: combatant.combatant?.speed ?? 0,
+          };
+        }
+
         const currentTurnSessionParticipant = this.requireParticipant(
           snapshot,
           currentTurnParticipant.participantId,
@@ -2398,7 +2991,7 @@ export class InMemoryGameRuntime<
 
             return {
               encounter,
-              currentTurnCharacterRecord,
+              movementAllowanceFeet: currentTurnCharacterRecord.character.speed,
             };
           },
         );
@@ -2409,6 +3002,7 @@ export class InMemoryGameRuntime<
   private buildEncounterParticipantsFromActiveScene(
     snapshot: SessionSnapshot,
     activeSceneState: ActiveSceneState,
+    scene: Scene,
   ): EncounterParticipant[] {
     return this.resolveRepositoryResults(
       activeSceneState.placedCharacters.map((placement) => {
@@ -2435,7 +3029,25 @@ export class InMemoryGameRuntime<
           },
         );
       }),
-      (participants) => participants,
+      (participants) => [
+        ...participants,
+        ...scene.entities.flatMap((entity): EncounterParticipant[] => {
+          if (!entity.combatant || entity.combatant.hp.current === 0) {
+            return [];
+          }
+
+          return [
+            {
+              kind: 'combatant',
+              combatantId: entity.id,
+              participantId: snapshot.session.dmParticipantId,
+              initiative: calculateInitiativeModifier(
+                entity.combatant.abilities,
+              ),
+            },
+          ];
+        }),
+      ],
     );
   }
 

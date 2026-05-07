@@ -99,7 +99,13 @@ export class DbBackedSceneStore implements SceneRepository {
   }
 
   private fromDocument(document: StoredSceneRecordDocument): Scene {
-    return this.clone(document);
+    return {
+      ...this.clone(document),
+      entities: document.entities.map((entity) => ({
+        ...this.clone(entity),
+        combatant: entity.combatant ? this.clone(entity.combatant) : null,
+      })),
+    };
   }
 
   private clone<T>(value: T): T {

@@ -7112,6 +7112,73 @@ test('duplicate attack commands do not reroll, double damage, or duplicate SSE',
   assert.equal(getCombatEvents(updates).length - combatEventsBefore, 1);
 });
 
+test('duplicate DM combatant creation commands return cached success without duplicate scene entities', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const { sessionId } = setupEncounterForIdempotency(runtime);
+  const activeSceneId = runtime.getSessionSnapshotForParticipant(
+    sessionId,
+    'dm-001',
+  ).session.activeSceneId!;
+
+  const command = {
+    commandId: 'idempotent-dm-create-combatant-1',
+    type: 'dm_create_combatant_in_active_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      combatant: {
+        kind: 'monster',
+        name: 'Ash Goblin',
+        position: {
+          x: 2,
+          y: 0,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        hp: {
+          max: 8,
+          current: 8,
+          temp: 0,
+        },
+        armorClass: 12,
+        speed: 30,
+        abilities: {
+          str: 14,
+          dex: 12,
+          con: 12,
+          int: 8,
+          wis: 10,
+          cha: 8,
+        },
+      },
+    },
+  };
+
+  const first = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const second = await postJson<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+  );
+  const scene = runtime.scenes.getScene(activeSceneId);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(scene.entities.filter((entity) => entity.combatant).length, 1);
+});
+
 test('duplicate DM HP override commands return cached success without duplicate character_state', async () => {
   const runtime = new InMemoryGameRuntime();
   const idempotency = new InMemoryCommandIdempotencyStore();

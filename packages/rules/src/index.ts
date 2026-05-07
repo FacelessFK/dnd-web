@@ -15,9 +15,10 @@ export type OccupancyShape = {
 };
 
 export type InitiativeOrderEntry = {
+  combatantId?: string | null;
   initiative: number;
   participantId: string;
-  characterId: string;
+  characterId?: string | null;
 };
 
 export const BASELINE_MELEE_REACH_FEET = 5;
@@ -255,7 +256,9 @@ export function sortEncounterParticipantsByInitiative<
       return participantOrder;
     }
 
-    return left.characterId.localeCompare(right.characterId);
+    return (left.characterId ?? left.combatantId ?? '').localeCompare(
+      right.characterId ?? right.combatantId ?? '',
+    );
   });
 }
 

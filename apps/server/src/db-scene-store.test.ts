@@ -107,6 +107,7 @@ test('db-backed scene store persists scenes across rehydration with clone-safe s
     },
     blocksMovement: true,
     blocksVision: false,
+    combatant: null,
     hidden: false,
     meta: {},
   });
@@ -135,6 +136,7 @@ test('db-backed scene store persists scenes across rehydration with clone-safe s
         },
         blocksMovement: true,
         blocksVision: true,
+        combatant: null,
         hidden: false,
         meta: {},
       },

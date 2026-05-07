@@ -16,14 +16,15 @@ The repository now has a role-aware browser runtime surface at `/runtime`, plus
 refreshed Phase 9 API and handoff documentation. The runtime UI presents a dark
 fantasy tactical tabletop with DM and Player modes. A DM can create and seed
 sessions, create custom tactical scenes, activate scenes, place scene
-entities/obstacles and character tokens, start encounters, drive
-turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo setup
-flow, reset local browser state without touching the backend, and recover
-current state through read models after refresh. Player mode can join or recover
-a session, create/update/finalize its own draft character, submit a finalized
-character into authoritative session state for DM assignment, view pending or
-assigned character and active-scene map/entity state, move its own token, use its
-own turn resources, and attack legal player targets.
+entities/obstacles, create narrow monster/NPC combatants, place character
+tokens, start mixed player/combatant encounters, drive turn/combat/DM controls,
+watch a readable SSE combat feed, run a fresh demo setup flow, reset local
+browser state without touching the backend, and recover current state through
+read models after refresh. Player mode can join or recover a session,
+create/update/finalize its own draft character, submit a finalized character
+into authoritative session state for DM assignment, view pending or assigned
+character and active-scene map/entity/combatant state, move its own token, use
+its own turn resources, and attack legal player targets.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -44,11 +45,14 @@ Implemented so far:
 - character create, update, finalize, submit-for-assignment, assign, and read
   flows
 - derived character stats helpers
-- scene create, read, activate, entity placement, and active-scene read model
+- scene create, read, activate, entity/combatant placement, and active-scene
+  read model
 - character placement and movement in the active scene
 - encounter start, read, turn advancement, and turn usage tracking
 - action, bonus action, reaction, and movement usage commands
 - narrow attack action foundation with legality-before-RNG validation
+- DM-controlled monster/NPC combatant MVP with active-scene placement, HP
+  control, mixed encounter turns, and a fixed-damage melee attack baseline
 - downed actor gating derived from `hp.current === 0`
 - backend DM current HP, condition tag, active-scene reposition, turn-usage,
   current-turn, and encounter-end override commands
@@ -89,8 +93,8 @@ Not implemented yet:
 - character builder/library product UI
 - production-grade player UX, map/adventure editor, or authenticated DM panel
 - opportunity attacks or out-of-turn reaction windows
-- full condition engine, death saves, spells, weapons, ranged attacks, or monster
-  AI
+- full condition engine, death saves, spells, weapons, ranged attacks, full
+  monster stat blocks, or monster AI
 - authentication, production deployment, or multi-process scaling
 
 ## Stack Summary
@@ -173,7 +177,7 @@ Current high-level command groups:
 | `/api/scenes/command`     | create, activate, place scene entity                 | `get_scene`              |
 | `/api/movement/command`   | place character, move character                      | `get_active_scene_state` |
 | `/api/encounters/command` | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
-| `/api/dm/command`         | HP, conditions, reposition, turn overrides, end      | none                     |
+| `/api/dm/command`         | HP, conditions, reposition, combatants, turns, end   | none                     |
 
 Current SSE event types:
 
@@ -201,11 +205,12 @@ downed actor gating, DM override commands, and idempotent retry behavior.
 
 For browser-based manual operation, start both apps and open
 `http://localhost:3000/runtime`. The launcher offers DM mode and Player mode.
-DM mode has the fresh demo setup action for local playtesting and a scene
-builder for custom grid scenes plus authoritative entity/obstacle placement.
-Player mode has a character sheet draft flow backed by character commands and
-can submit finalized characters for DM assignment; DM assignment remains
-authoritative. Local Reset clears browser state only.
+DM mode has the fresh demo setup action for local playtesting, a scene builder
+for custom grid scenes plus authoritative entity/obstacle placement, and a
+monster/NPC panel for narrow DM-controlled combatants. Player mode has a
+character sheet draft flow backed by character commands and can submit finalized
+characters for DM assignment; DM assignment remains authoritative. Local Reset
+clears browser state only.
 
 Quick smoke flow:
 

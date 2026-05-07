@@ -240,6 +240,8 @@ export async function handleRequest(
       idempotency,
       characterCommandTransaction,
       encounterCommandTransaction,
+      combatCommandTransaction,
+      sceneCommandTransaction,
     );
     return;
   }
@@ -1227,6 +1229,8 @@ async function handleDmCommandRequest(
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
+  combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
+  sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
@@ -1304,6 +1308,108 @@ async function handleDmCommandRequest(
     }
 
     if (
+      sceneCommandTransaction?.supports({
+        category: 'dm',
+        command,
+      })
+    ) {
+      const success = await sceneCommandTransaction.run({
+        category: 'dm',
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          switch (command.type) {
+            case 'dm_create_combatant_in_active_scene':
+              return {
+                ok: true,
+                data: {
+                  scene:
+                    await transactionRuntime.dmCreateCombatantInActiveScene(
+                      command,
+                    ),
+                },
+              } satisfies DmCommandSuccess;
+            case 'dm_reposition_combatant_in_active_scene':
+              return {
+                ok: true,
+                data: {
+                  scene:
+                    await transactionRuntime.dmRepositionCombatantInActiveScene(
+                      command,
+                    ),
+                },
+              } satisfies DmCommandSuccess;
+            case 'dm_set_combatant_current_hp':
+              return {
+                ok: true,
+                data: {
+                  scene:
+                    await transactionRuntime.dmSetCombatantCurrentHp(command),
+                },
+              } satisfies DmCommandSuccess;
+            default:
+              throw new Error(
+                `Unsupported transactional DM scene command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      sendJson(response, 200, success, dmCommandSuccessSchema);
+      return;
+    }
+
+    if (
+      combatCommandTransaction?.supports({
+        category: 'dm',
+        command,
+      })
+    ) {
+      const success = await combatCommandTransaction.run({
+        category: 'dm',
+        command,
+        runtime,
+        prepare: (preparedRuntime) => {
+          switch (command.type) {
+            case 'dm_combatant_attack':
+              return preparedRuntime.prepareDmCombatantAttack(command);
+            default:
+              throw new Error(
+                `Unsupported transactional DM combat command type "${command.type}".`,
+              );
+          }
+        },
+        execute: async (transactionRuntime, prepared) => {
+          switch (command.type) {
+            case 'dm_combatant_attack':
+              return {
+                ok: true,
+                data: {
+                  encounter:
+                    await transactionRuntime.dmCombatantAttackPrepared(
+                      prepared,
+                    ),
+                },
+              } satisfies DmCommandSuccess;
+            default:
+              throw new Error(
+                `Unsupported transactional DM combat command type "${command.type}".`,
+              );
+          }
+        },
+      });
+
+      if (!success) {
+        throw new Error(
+          `Transactional DM combat command "${command.type}" unexpectedly returned no result.`,
+        );
+      }
+
+      sendJson(response, 200, success, dmCommandSuccessSchema);
+      return;
+    }
+
+    if (
       encounterCommandTransaction?.supports({
         category: 'dm',
         command,
@@ -1369,6 +1475,26 @@ async function handleDmCommandRequest(
         break;
       case 'dm_reposition_character_in_active_scene':
         data = await runtime.dmRepositionCharacterInActiveScene(command);
+        break;
+      case 'dm_create_combatant_in_active_scene':
+        data = {
+          scene: await runtime.dmCreateCombatantInActiveScene(command),
+        };
+        break;
+      case 'dm_reposition_combatant_in_active_scene':
+        data = {
+          scene: await runtime.dmRepositionCombatantInActiveScene(command),
+        };
+        break;
+      case 'dm_set_combatant_current_hp':
+        data = {
+          scene: await runtime.dmSetCombatantCurrentHp(command),
+        };
+        break;
+      case 'dm_combatant_attack':
+        data = {
+          encounter: await runtime.dmCombatantAttack(command),
+        };
         break;
       case 'dm_set_current_turn_usage':
         data = {

@@ -13,11 +13,11 @@ The repository is a TypeScript pnpm monorepo with:
   work boundaries.
 
 The backend currently supports sessions, participants, character lifecycle,
-scene creation/activation, active-scene placement and movement, encounter turn
-state, attack foundation, downed actor gating, reaction usage, backend DM
-controls, idempotent successful command retries, reconnect/read-model recovery,
-DB-backed transactional slices, and single-process post-commit outbox dispatch
-for covered live-command paths.
+scene creation/activation, active-scene placement and movement, narrow
+DM-controlled monster/NPC combatants, encounter turn state, attack foundation,
+downed actor gating, reaction usage, backend DM controls, idempotent successful
+command retries, reconnect/read-model recovery, DB-backed transactional slices,
+and single-process post-commit outbox dispatch for covered live-command paths.
 
 Cold boot remains honest: the server does not auto-drain unpublished outbox rows
 because current SSE subscribers are process-local and there is no replay or
@@ -43,8 +43,10 @@ It can:
 - create custom grid scenes from DM mode,
 - activate existing or newly created scenes from DM mode,
 - place simple scene entities/obstacles on the tactical grid from DM mode,
+- create, place, reposition, and set HP for narrow DM-controlled monster/NPC
+  combatants,
 - place both sample characters from DM mode,
-- start an encounter from DM mode,
+- start a mixed player-character and monster/NPC encounter from DM mode,
 - subscribe to the session SSE stream as the active role,
 - display session, active-scene, encounter, assigned-character, tactical-grid,
   and readable live combat/event-feed state,
@@ -59,9 +61,9 @@ It can:
 - show pending assignment requests from session state and let DMs assign them,
 - let players move only their own token, use their own action/bonus/reaction,
   and attack selected player targets,
-- let DMs trigger turn advance, attack/movement for selected player actors, HP
-  overrides, reposition, condition tags, turn actor override, turn usage
-  override, and encounter end.
+- let DMs trigger turn advance, attack/movement for selected player actors,
+  monster/NPC attacks, HP overrides, reposition, condition tags, turn actor
+  override, turn usage override, and encounter end.
 
 The UI intentionally submits commands to the authoritative server instead of
 treating browser state as truth. It is role-aware, but it is not production
@@ -128,7 +130,10 @@ server tests and smoke tests.
 - No map asset pipeline, deletion tools, or final VTT-grade scene editor.
 - No multi-process SSE subscriber persistence or distributed coordination.
 - No opportunity attacks, out-of-turn reaction windows, full condition engine,
-  death saves, spells, weapons, ranged attacks, or monster AI.
+  death saves, spells, weapons, ranged attacks, full monster stat blocks, or
+  monster AI.
+- Monster/NPC combatants are DM-controlled MVP actors only; there is no monster
+  AI, CR/stat-block library, weapon system, or spell system behind them.
 - The runtime surface is a playable DM/player MVP, not production auth or a
   final product UX.
 - The default local server still starts with the in-memory runtime unless

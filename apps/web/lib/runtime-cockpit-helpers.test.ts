@@ -7,7 +7,9 @@ import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
   characterInputFromDraft,
   characterUpdateInputFromDraft,
+  combatantInputFromDraft,
   createDefaultCharacterDraftForm,
+  createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
   describeSessionStreamEvent,
@@ -15,6 +17,11 @@ import {
   getActingParticipantId,
   getActiveSceneGuidance,
   getAssignedCharacterRefs,
+  getCombatantDisplayCells,
+  getCombatantEntities,
+  getCurrentTurnCombatantId,
+  getCurrentTurnLabel,
+  getDmCombatantActionDisabledReason,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
@@ -28,6 +35,7 @@ import {
   sceneEntityInputFromDraft,
   sceneInputFromDraft,
   validateCharacterDraftForm,
+  validateCombatantDraftForm,
   validateSceneDraftForm,
   validateSceneEntityDraftForm,
 } from './runtime-cockpit-helpers';
@@ -590,6 +598,7 @@ describe('runtime cockpit helpers', () => {
           },
           hidden: false,
           id: 'ENTITY-001',
+          combatant: null,
           meta: {},
           name: 'Crate Stack',
           position: {
@@ -643,6 +652,191 @@ describe('runtime cockpit helpers', () => {
           y: 3,
         },
       ],
+    );
+  });
+
+  it('normalizes and validates monster/NPC combatant drafts', () => {
+    const draft = createDefaultCombatantDraftForm();
+    const errors = validateCombatantDraftForm({
+      form: draft,
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      position: {
+        x: 1,
+        y: 1,
+      },
+    });
+    const input = combatantInputFromDraft(draft, {
+      x: 1,
+      y: 1,
+    });
+
+    assert.deepEqual(errors, []);
+    assert.equal(input.kind, 'monster');
+    assert.equal(input.name, 'Ash Goblin');
+    assert.deepEqual(input.position, {
+      x: 1,
+      y: 1,
+    });
+    assert.equal(input.hp.current, 8);
+
+    assert.ok(
+      validateCombatantDraftForm({
+        form: {
+          ...draft,
+          hp: {
+            ...draft.hp,
+            current: '99',
+          },
+        },
+        position: {
+          x: 0,
+          y: 0,
+        },
+      }).includes('Current HP cannot exceed max HP.'),
+    );
+  });
+
+  it('derives combatant entities, occupied cells, and current turn labels', () => {
+    const scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: true,
+          blocksVision: false,
+          combatant: {
+            abilities: {
+              cha: 8,
+              con: 12,
+              dex: 12,
+              int: 8,
+              str: 14,
+              wis: 10,
+            },
+            armorClass: 12,
+            hp: {
+              current: 8,
+              max: 8,
+              temp: 0,
+            },
+            kind: 'monster' as const,
+            speed: 30,
+          },
+          footprint: {
+            height: 1,
+            width: 2,
+          },
+          hidden: false,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          meta: {},
+          name: 'Ash Goblin',
+          position: {
+            x: 3,
+            y: 4,
+          },
+          type: 'monster' as const,
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const encounter = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      currentTurnIndex: 0,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: false,
+        movementUsed: 0,
+        reactionUsed: false,
+      },
+      id: 'encounter_11111111-1111-4111-8111-111111111111',
+      participants: [
+        {
+          combatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          initiative: 1,
+          kind: 'combatant' as const,
+          participantId: 'dm-001',
+        },
+      ],
+      roundNumber: 1,
+      sceneId: 'SCENE-001',
+      sessionId: 'SESSION-001',
+      status: 'active' as const,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    assert.equal(getCombatantEntities(scene).length, 1);
+    assert.deepEqual(
+      getCombatantDisplayCells(scene).map((cell) => [cell.x, cell.y]),
+      [
+        [3, 4],
+        [4, 4],
+      ],
+    );
+    assert.equal(
+      getCurrentTurnCombatantId(encounter),
+      'scene_entity_11111111-1111-4111-8111-111111111111',
+    );
+    assert.equal(
+      getCurrentTurnLabel({
+        encounter,
+        participants: sessionState.participants,
+        scene,
+      }),
+      'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+    );
+  });
+
+  it('guards monster/NPC controls by mode, scene, selected combatant, and current turn', () => {
+    assert.equal(
+      getDmCombatantActionDisabledReason({
+        busyLabel: null,
+        currentTurnCombatantId:
+          'scene_entity_11111111-1111-4111-8111-111111111111',
+        mode: 'player',
+        scene: null,
+        selectedCombatantId:
+          'scene_entity_11111111-1111-4111-8111-111111111111',
+        sessionId: 'ABC123',
+        targetParticipantId: 'player-001',
+      }),
+      'Switch to DM mode for monster/NPC controls.',
+    );
+    assert.equal(
+      getDmCombatantActionDisabledReason({
+        busyLabel: null,
+        currentTurnCombatantId:
+          'scene_entity_22222222-2222-4222-8222-222222222222',
+        mode: 'dm',
+        scene: {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          entities: [],
+          grid: {
+            cellSizeFeet: 5,
+            height: 8,
+            width: 8,
+          },
+          id: 'SCENE-001',
+          name: 'Training Room',
+          sessionId: 'SESSION-001',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        selectedCombatantId:
+          'scene_entity_11111111-1111-4111-8111-111111111111',
+        sessionId: 'ABC123',
+        targetParticipantId: 'player-001',
+      }),
+      'The selected combatant must be the current turn actor.',
     );
   });
 });

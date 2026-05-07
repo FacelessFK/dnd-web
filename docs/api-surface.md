@@ -109,6 +109,9 @@ Notes:
 - Scene entity placement is separate from character active-scene placement.
 - Scene entities use the existing scene entity shape: type, name, position,
   footprint, movement/vision blocking flags, hidden flag, and optional metadata.
+- Passive scene entities remain map/object/obstacle data. DM-controlled
+  monster/NPC combatants are represented as explicit scene entities with
+  combatant stats and are created only through DM commands.
 - There is no scene-specific SSE event. Browser map/entity state is updated from
   command responses and recovered through `get_scene`.
 
@@ -150,6 +153,11 @@ Read command:
 Notes:
 
 - Encounter commands return the current encounter snapshot.
+- `start_encounter` includes placed assigned player characters and active-scene
+  monster/NPC combatants with current HP above 0.
+- Encounter participants can be player-character turns or DM-controlled
+  combatant turns. Character participants preserve the existing response shape;
+  combatant participants include `kind: "combatant"` and `combatantId`.
 - `attack` currently uses the narrow attack foundation: legality-before-RNG,
   fixed damage, HP floor, and server-owned turn/action updates.
 
@@ -163,12 +171,27 @@ Mutating commands:
 - `dm_set_current_turn_usage`
 - `dm_set_current_turn_participant`
 - `dm_end_active_encounter`
+- `dm_create_combatant_in_active_scene`
+- `dm_reposition_combatant_in_active_scene`
+- `dm_set_combatant_current_hp`
+- `dm_combatant_attack`
 
 Notes:
 
 - These are explicit DM controls, not a generic unsafe override surface.
 - Condition tags are metadata only in the current runtime and do not apply rules
   effects.
+- Monster/NPC combatants are a narrow MVP actor model, not full monster stat
+  blocks. They support kind, name, HP, AC, speed, abilities, footprint, and
+  active-scene position.
+- `dm_create_combatant_in_active_scene`,
+  `dm_reposition_combatant_in_active_scene`, and
+  `dm_set_combatant_current_hp` return the authoritative updated scene.
+- `dm_combatant_attack` is DM-only and currently supports a current-turn
+  combatant making a fixed-damage melee attack against a placed player
+  character target.
+- `dm_set_current_turn_participant` accepts the existing `participantId` turn
+  override and can also accept `combatantId` for a DM-controlled combatant turn.
 - Ending an active encounter publishes the final ended encounter snapshot and
   then clears the active encounter from future reads.
 
@@ -225,7 +248,9 @@ Partial live updates:
 Transient events:
 
 - `combat_event` reports attack resolution details, including roll, hit, damage,
-  and target HP transition.
+  and target HP transition. Combatant attacks preserve existing fields and may
+  also include optional attacker/target kind and combatant/character reference
+  fields.
 
 ## Recovery Guidance
 
@@ -252,7 +277,8 @@ The role-aware runtime surface at `/runtime` uses this API surface directly. The
 launcher supports DM mode and Player mode and renders a dark tactical tabletop
 from server responses, read models, and live SSE events. DM mode can run a fresh
 demo setup, seed the sample session, create/activate custom scenes, place scene
-entities/obstacles, operate encounter controls, and use explicit DM override
+entities/obstacles, create and command narrow monster/NPC combatants, operate
+mixed player/combatant encounter controls, and use explicit DM override
 commands. Player mode can join or recover an existing session,
 create/update/finalize its own draft character through the existing character
 command endpoint, submit a finalized character for authoritative DM assignment,
@@ -273,7 +299,8 @@ delete backend sessions or runtime state.
 - No event replay, cursor, or durable catch-up API.
 - No multi-process subscriber persistence or distributed coordination.
 - No opportunity attacks, reaction windows, full condition engine, death saves,
-  spells, weapon system, ranged attacks, or monster AI.
+  spells, weapon system, ranged attacks, full monster stat blocks, or monster
+  AI.
 - Process-local SSE subscribers mean cold boot remains inert; unpublished
   outbox rows may remain stored, but the server does not auto-redeliver them on
   startup.

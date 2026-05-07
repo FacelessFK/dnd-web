@@ -25,6 +25,12 @@ export const DURABLE_SCENE_MUTATION_COMMAND_TYPES = [
   'place_entity_in_scene',
 ] as const;
 
+export const DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES = [
+  'dm_create_combatant_in_active_scene',
+  'dm_reposition_combatant_in_active_scene',
+  'dm_set_combatant_current_hp',
+] as const;
+
 type TransactionalCommandParams = {
   category: CommandIdempotencyCategory;
   command: IdempotentCommand;
@@ -49,14 +55,22 @@ export class DbBackedSceneCommandTransactionBoundary {
   private readonly durableCommandTypes: ReadonlySet<string> = new Set(
     DURABLE_SCENE_MUTATION_COMMAND_TYPES,
   );
+  private readonly durableDmCommandTypes: ReadonlySet<string> = new Set(
+    DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES,
+  );
 
   constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {}
 
   supports(params: TransactionalCommandParams): boolean {
-    return (
-      params.category === 'scene' &&
-      this.durableCommandTypes.has(params.command.type)
-    );
+    if (this.durableCommandTypes.has(params.command.type)) {
+      return params.category === 'scene';
+    }
+
+    if (this.durableDmCommandTypes.has(params.command.type)) {
+      return params.category === 'dm';
+    }
+
+    return false;
   }
 
   async run<TResponse>(

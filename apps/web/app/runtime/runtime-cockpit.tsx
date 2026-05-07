@@ -30,6 +30,7 @@ import {
   cockpitStorageKey,
   createCharacterDraftFormFromResource,
   createDefaultCharacterDraftForm,
+  createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
   createSceneDraftFormFromScene,
@@ -41,6 +42,12 @@ import {
   getActingParticipantId,
   getActiveSceneGuidance,
   getAssignedCharacterRefs,
+  getCombatantDisplayCells,
+  getCombatantEntities,
+  getCurrentTurnCombatantId,
+  getCurrentTurnLabel,
+  getCurrentTurnParticipantId,
+  getDmCombatantActionDisabledReason,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
@@ -57,13 +64,16 @@ import {
   sanitizeSessionIdInput,
   sceneEntityInputFromDraft,
   sceneEntityTypeOptions,
+  combatantInputFromDraft,
   sceneInputFromDraft,
   validateCharacterDraftForm,
+  validateCombatantDraftForm,
   validateSceneDraftForm,
   validateSceneEntityDraftForm,
   type Cell,
   type AbilityKey,
   type CharacterDraftForm,
+  type CombatantDraftForm,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -130,6 +140,9 @@ export function RuntimeCockpit() {
   const [sceneActivationId, setSceneActivationId] = useState('');
   const [sceneEntityDraft, setSceneEntityDraft] =
     useState<SceneEntityDraftForm>(() => createDefaultSceneEntityDraftForm());
+  const [combatantDraft, setCombatantDraft] = useState<CombatantDraftForm>(() =>
+    createDefaultCombatantDraftForm(),
+  );
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<LastResponse | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -143,7 +156,9 @@ export function RuntimeCockpit() {
     samplePlayers[1].participantId,
   );
   const [selectedCell, setSelectedCell] = useState<Cell>({ x: 0, y: 0 });
+  const [selectedCombatantId, setSelectedCombatantId] = useState('');
   const [hpDraft, setHpDraft] = useState('1');
+  const [combatantHpDraft, setCombatantHpDraft] = useState('8');
   const [conditionsDraft, setConditionsDraft] = useState('prone, marked');
   const [turnUsageDraft, setTurnUsageDraft] = useState<TurnUsageDraft>({
     actionUsed: false,
@@ -152,8 +167,8 @@ export function RuntimeCockpit() {
     reactionUsed: false,
   });
 
-  const currentTurnParticipantId =
-    encounter?.participants[encounter.currentTurnIndex]?.participantId ?? null;
+  const currentTurnParticipantId = getCurrentTurnParticipantId(encounter);
+  const currentTurnCombatantId = getCurrentTurnCombatantId(encounter);
   const knownCharacterIds = getKnownCharacterIds(
     sessionState,
     charactersByParticipant,
@@ -290,6 +305,18 @@ export function RuntimeCockpit() {
   }, [actingParticipantId, playerParticipantIds]);
 
   useEffect(() => {
+    const combatants = getCombatantEntities(scene);
+
+    setSelectedCombatantId((current) => {
+      if (current && combatants.some((combatant) => combatant.id === current)) {
+        return current;
+      }
+
+      return combatants[0]?.id ?? '';
+    });
+  }, [scene]);
+
+  useEffect(() => {
     const stored: StoredCockpitState = {
       charactersByParticipant: {
         ...knownCharacterIdsByParticipant,
@@ -386,6 +413,9 @@ export function RuntimeCockpit() {
     setSceneDraft(createDefaultSceneDraftForm());
     setSceneActivationId('');
     setSceneEntityDraft(createDefaultSceneEntityDraftForm());
+    setCombatantDraft(createDefaultCombatantDraftForm());
+    setSelectedCombatantId('');
+    setCombatantHpDraft('8');
     setTurnUsageDraft({
       actionUsed: false,
       bonusActionUsed: false,
@@ -550,16 +580,18 @@ export function RuntimeCockpit() {
         }));
         break;
       case 'combat_event':
-        patchCharacter(event.targetCharacterId, (resource) => ({
-          ...resource,
-          character: {
-            ...resource.character,
-            hp: {
-              ...resource.character.hp,
-              current: event.targetHp.current,
+        if (event.targetCharacterId) {
+          patchCharacter(event.targetCharacterId, (resource) => ({
+            ...resource,
+            character: {
+              ...resource.character,
+              hp: {
+                ...resource.character.hp,
+                current: event.targetHp.current,
+              },
             },
-          },
-        }));
+          }));
+        }
         break;
     }
   }
@@ -1179,6 +1211,110 @@ export function RuntimeCockpit() {
     });
   }
 
+  async function createCombatant(): Promise<void> {
+    await runTask('dm_create_combatant_in_active_scene', async () => {
+      assertSession();
+      assertCombatantDraftValid();
+
+      const response = await unwrap(
+        'dm_create_combatant_in_active_scene',
+        sendDmCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-create-combatant'),
+          payload: {
+            combatant: combatantInputFromDraft(combatantDraft, selectedCell),
+            sessionId,
+          },
+          type: 'dm_create_combatant_in_active_scene',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'dm_create_combatant_in_active_scene returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function repositionCombatant(): Promise<void> {
+    await runTask('dm_reposition_combatant_in_active_scene', async () => {
+      assertSession();
+
+      if (!selectedCombatantId) {
+        throw new Error('Select a monster/NPC combatant first.');
+      }
+
+      const response = await unwrap(
+        'dm_reposition_combatant_in_active_scene',
+        sendDmCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-reposition-combatant'),
+          payload: {
+            combatantId: selectedCombatantId,
+            position: selectedCell,
+            sessionId,
+          },
+          type: 'dm_reposition_combatant_in_active_scene',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'dm_reposition_combatant_in_active_scene returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function setCombatantHp(): Promise<void> {
+    await runTask('dm_set_combatant_current_hp', async () => {
+      assertSession();
+
+      if (!selectedCombatantId) {
+        throw new Error('Select a monster/NPC combatant first.');
+      }
+
+      const response = await unwrap(
+        'dm_set_combatant_current_hp',
+        sendDmCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-combatant-hp'),
+          payload: {
+            combatantId: selectedCombatantId,
+            currentHp: Number.parseInt(combatantHpDraft, 10),
+            sessionId,
+          },
+          type: 'dm_set_combatant_current_hp',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'dm_set_combatant_current_hp returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
   async function placeSampleCharacters(): Promise<void> {
     await runTask('place sample characters', async () => {
       assertSession();
@@ -1558,6 +1694,39 @@ export function RuntimeCockpit() {
     });
   }
 
+  async function dmCombatantAttackTarget(): Promise<void> {
+    await runTask('dm_combatant_attack', async () => {
+      assertSession();
+
+      if (!selectedCombatantId) {
+        throw new Error('Select a monster/NPC combatant first.');
+      }
+
+      const response = await unwrap(
+        'dm_combatant_attack',
+        sendDmCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-combatant-attack'),
+          payload: {
+            combatantId: selectedCombatantId,
+            sessionId,
+            targetParticipantId: selectedTarget,
+          },
+          type: 'dm_combatant_attack',
+        }),
+      );
+
+      if ('encounter' in response.data) {
+        setEncounter(response.data.encounter);
+        setTurnUsageDraft(response.data.encounter.currentTurnUsage);
+      }
+
+      return response;
+    });
+  }
+
   async function moveSelectedActor(): Promise<void> {
     await runTask('move_character_in_active_scene', async () => {
       assertSession();
@@ -1837,6 +2006,25 @@ export function RuntimeCockpit() {
     });
   }
 
+  async function dmSetTurnCombatant(): Promise<void> {
+    if (!selectedCombatantId) {
+      setCommandError('Select a monster/NPC combatant first.');
+      return;
+    }
+
+    await runDmEncounterCommand({
+      actor: {
+        participantId: dmParticipantId,
+      },
+      commandId: createCommandId('dm-current-turn-combatant'),
+      payload: {
+        combatantId: selectedCombatantId,
+        sessionId,
+      },
+      type: 'dm_set_current_turn_participant',
+    });
+  }
+
   async function dmSetTurnUsage(): Promise<void> {
     await runDmEncounterCommand({
       actor: {
@@ -1986,6 +2174,18 @@ export function RuntimeCockpit() {
     }
   }
 
+  function assertCombatantDraftValid(): void {
+    const errors = validateCombatantDraftForm({
+      form: combatantDraft,
+      grid: scene?.grid,
+      position: selectedCell,
+    });
+
+    if (errors.length) {
+      throw new Error(`Fix the combatant draft first: ${errors.join(' ')}`);
+    }
+  }
+
   function updateSceneDraftField(
     field: keyof SceneDraftForm,
     value: string,
@@ -2013,6 +2213,55 @@ export function RuntimeCockpit() {
     setSceneEntityDraft((current) => ({
       ...current,
       [field]: value,
+    }));
+  }
+
+  function updateCombatantDraftField(
+    field:
+      | 'armorClass'
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'speed',
+    value: string,
+  ): void {
+    setCombatantDraft((current) => ({
+      ...current,
+      [field]: field === 'kind' ? (value as CombatantDraftForm['kind']) : value,
+    }));
+  }
+
+  function updateCombatantDraftAbility(
+    abilityKey: AbilityKey,
+    value: string,
+  ): void {
+    setCombatantDraft((current) => ({
+      ...current,
+      abilities: {
+        ...current.abilities,
+        [abilityKey]: value,
+      },
+    }));
+  }
+
+  function updateCombatantDraftHp(
+    field: keyof CombatantDraftForm['hp'],
+    value: string,
+  ): void {
+    setCombatantDraft((current) => ({
+      ...current,
+      hp: {
+        ...current.hp,
+        [field]: value,
+      },
+    }));
+  }
+
+  function updateCombatantDraftHidden(value: boolean): void {
+    setCombatantDraft((current) => ({
+      ...current,
+      hidden: value,
     }));
   }
 
@@ -2089,6 +2338,15 @@ export function RuntimeCockpit() {
     grid: scene?.grid,
     position: selectedCell,
   });
+  const combatants = getCombatantEntities(scene);
+  const selectedCombatant = combatants.find(
+    (combatant) => combatant.id === selectedCombatantId,
+  );
+  const combatantDraftErrors = validateCombatantDraftForm({
+    form: combatantDraft,
+    grid: scene?.grid,
+    position: selectedCell,
+  });
   const sceneDraftReason =
     sceneDraftErrors.length > 0
       ? `Fix the scene draft first: ${sceneDraftErrors[0]}`
@@ -2112,6 +2370,31 @@ export function RuntimeCockpit() {
     dmOnlySceneReason ??
     (scene ? null : 'Create, activate, or recover a scene first.') ??
     sceneEntityDraftReason;
+  const combatantDraftReason =
+    combatantDraftErrors.length > 0
+      ? `Fix the combatant draft first: ${combatantDraftErrors[0]}`
+      : null;
+  const createCombatantReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a scene first.') ??
+    combatantDraftReason;
+  const selectedCombatantReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a scene first.') ??
+    (selectedCombatantId ? null : 'Create or select a monster/NPC first.');
+  const combatantAttackReason = getDmCombatantActionDisabledReason({
+    busyLabel,
+    currentTurnCombatantId,
+    mode,
+    scene,
+    selectedCombatantId,
+    sessionId,
+    targetParticipantId: selectedTarget,
+  });
   const playerCharacter = charactersByParticipant[playerParticipantId];
   const isPlayerJoined = Boolean(
     sessionState?.participants.some(
@@ -2178,9 +2461,11 @@ export function RuntimeCockpit() {
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
   );
-  const currentTurnName = currentTurnParticipantId
-    ? getParticipantName(participants, currentTurnParticipantId)
-    : 'No active turn';
+  const currentTurnName = getCurrentTurnLabel({
+    encounter,
+    participants,
+    scene,
+  });
   const disabledReasons = getRuntimeDisabledReasons({
     actingParticipantId,
     activeSceneKnown: Boolean(activeScene || sceneId),
@@ -2199,6 +2484,11 @@ export function RuntimeCockpit() {
     sessionId,
     targetParticipantId: selectedTarget,
   });
+  const playerAttackDisabledReason =
+    disabledReasons.attack ??
+    (currentTurnCombatantId
+      ? 'Current turn is a monster/NPC; use the DM combatant attack control.'
+      : null);
   const targetParticipants = playerParticipants.filter(
     (participant) => participant.id !== actingParticipantId,
   );
@@ -2446,12 +2736,14 @@ export function RuntimeCockpit() {
                 activeScene={activeScene}
                 actingParticipantId={actingParticipantId}
                 charactersByParticipant={charactersByParticipant}
+                currentTurnCombatantId={currentTurnCombatantId}
                 currentTurnParticipantId={currentTurnParticipantId}
                 grid={grid}
                 mode={mode}
                 onSelectCell={setSelectedCell}
                 scene={scene}
                 selectedCell={selectedCell}
+                selectedCombatantId={selectedCombatantId}
                 selectedTargetParticipantId={selectedTarget}
               />
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
@@ -2691,6 +2983,35 @@ export function RuntimeCockpit() {
               />
             ) : null}
 
+            {mode === 'dm' ? (
+              <CombatantPanel
+                attackDisabledReason={combatantAttackReason}
+                combatantDraft={combatantDraft}
+                combatantDraftErrors={combatantDraftErrors}
+                combatants={combatants}
+                createDisabledReason={createCombatantReason}
+                currentTurnCombatantId={currentTurnCombatantId}
+                hpDraft={combatantHpDraft}
+                onAbilityChange={updateCombatantDraftAbility}
+                onAttack={dmCombatantAttackTarget}
+                onCreate={createCombatant}
+                onFieldChange={updateCombatantDraftField}
+                onHiddenChange={updateCombatantDraftHidden}
+                onHpChange={updateCombatantDraftHp}
+                onHpDraftChange={setCombatantHpDraft}
+                onReposition={repositionCombatant}
+                onSelectCombatant={setSelectedCombatantId}
+                onSetCurrentTurn={dmSetTurnCombatant}
+                onSetHp={setCombatantHp}
+                repositionDisabledReason={selectedCombatantReason}
+                selectedCell={selectedCell}
+                selectedCombatant={selectedCombatant}
+                selectedCombatantId={selectedCombatantId}
+                setHpDisabledReason={selectedCombatantReason}
+                targetParticipantId={selectedTarget}
+              />
+            ) : null}
+
             {mode === 'player' ? (
               <CharacterOnboardingPanel
                 characterDraft={characterDraft}
@@ -2733,6 +3054,50 @@ export function RuntimeCockpit() {
                       label="Usage"
                       value={`${encounter.currentTurnUsage.movementUsed} ft, action ${flag(encounter.currentTurnUsage.actionUsed)}, bonus ${flag(encounter.currentTurnUsage.bonusActionUsed)}, reaction ${flag(encounter.currentTurnUsage.reactionUsed)}`}
                     />
+                    <div className="pt-2">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
+                        Turn order
+                      </p>
+                      <div className="mt-2 grid gap-1">
+                        {encounter.participants.map((participant, index) => {
+                          const isCombatant = 'combatantId' in participant;
+                          const combatant = isCombatant
+                            ? combatants.find(
+                                (entity) =>
+                                  entity.id === participant.combatantId,
+                              )
+                            : null;
+
+                          return (
+                            <div
+                              className={`rounded-xl border px-2 py-1 text-xs ${
+                                index === encounter.currentTurnIndex
+                                  ? 'border-amber-200/35 bg-amber-900/30 text-amber-50'
+                                  : 'border-amber-500/10 bg-black/20 text-amber-100/65'
+                              }`}
+                              key={
+                                isCombatant
+                                  ? participant.combatantId
+                                  : participant.participantId
+                              }
+                            >
+                              {index + 1}.{' '}
+                              {isCombatant
+                                ? `${combatant?.name ?? participant.combatantId} (DM ${participant.participantId})`
+                                : getCurrentTurnLabel({
+                                    encounter: {
+                                      ...encounter,
+                                      currentTurnIndex: index,
+                                    },
+                                    participants,
+                                    scene,
+                                  })}{' '}
+                              · init {participant.initiative}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <EmptyState
@@ -2788,8 +3153,8 @@ export function RuntimeCockpit() {
                   ) : null}
                 </div>
                 <ActionButton
-                  disabled={Boolean(disabledReasons.attack)}
-                  disabledReason={disabledReasons.attack ?? undefined}
+                  disabled={Boolean(playerAttackDisabledReason)}
+                  disabledReason={playerAttackDisabledReason ?? undefined}
                   label="Attack Target"
                   onClick={attackTarget}
                 />
@@ -3651,6 +4016,246 @@ function SceneBuilderPanel({
   );
 }
 
+function CombatantPanel({
+  attackDisabledReason,
+  combatantDraft,
+  combatantDraftErrors,
+  combatants,
+  createDisabledReason,
+  currentTurnCombatantId,
+  hpDraft,
+  onAbilityChange,
+  onAttack,
+  onCreate,
+  onFieldChange,
+  onHiddenChange,
+  onHpChange,
+  onHpDraftChange,
+  onReposition,
+  onSelectCombatant,
+  onSetCurrentTurn,
+  onSetHp,
+  repositionDisabledReason,
+  selectedCell,
+  selectedCombatant,
+  selectedCombatantId,
+  setHpDisabledReason,
+  targetParticipantId,
+}: {
+  attackDisabledReason: string | null;
+  combatantDraft: CombatantDraftForm;
+  combatantDraftErrors: string[];
+  combatants: ReturnType<typeof getCombatantEntities>;
+  createDisabledReason: string | null;
+  currentTurnCombatantId: string | null;
+  hpDraft: string;
+  onAbilityChange: (abilityKey: AbilityKey, value: string) => void;
+  onAttack: () => void | Promise<void>;
+  onCreate: () => void | Promise<void>;
+  onFieldChange: (
+    field:
+      | 'armorClass'
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'speed',
+    value: string,
+  ) => void;
+  onHiddenChange: (value: boolean) => void;
+  onHpChange: (field: keyof CombatantDraftForm['hp'], value: string) => void;
+  onHpDraftChange: (value: string) => void;
+  onReposition: () => void | Promise<void>;
+  onSelectCombatant: (combatantId: string) => void;
+  onSetCurrentTurn: () => void | Promise<void>;
+  onSetHp: () => void | Promise<void>;
+  repositionDisabledReason: string | null;
+  selectedCell: Cell;
+  selectedCombatant?: ReturnType<typeof getCombatantEntities>[number];
+  selectedCombatantId: string;
+  setHpDisabledReason: string | null;
+  targetParticipantId: string;
+}) {
+  return (
+    <Panel
+      description="Create and command narrow DM-controlled monster/NPC combatants. They are scene actors, not full stat blocks or AI."
+      eyebrow="DM-only"
+      title="Monsters & NPCs"
+      tone="dm"
+    >
+      <div className="grid gap-4">
+        <div className="grid gap-3 rounded-2xl border border-red-300/20 bg-red-950/15 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">Create combatant</p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              Target cell {selectedCell.x},{selectedCell.y}. Combatants block
+              movement and can join encounter turn order.
+            </p>
+          </div>
+          {combatantDraftErrors.length ? (
+            <p className="text-xs leading-5 text-amber-200">
+              {combatantDraftErrors.slice(0, 3).join(' ')}
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <SelectField
+              label="Kind"
+              onChange={(value) => onFieldChange('kind', value)}
+              options={[
+                { label: 'monster', value: 'monster' },
+                { label: 'npc', value: 'npc' },
+              ]}
+              value={combatantDraft.kind}
+            />
+            <LabeledInput
+              label="Name"
+              onChange={(value) => onFieldChange('name', value)}
+              value={combatantDraft.name}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <LabeledInput
+              label="HP max"
+              onChange={(value) => onHpChange('max', value)}
+              value={combatantDraft.hp.max}
+            />
+            <LabeledInput
+              label="HP current"
+              onChange={(value) => onHpChange('current', value)}
+              value={combatantDraft.hp.current}
+            />
+            <LabeledInput
+              label="Temp"
+              onChange={(value) => onHpChange('temp', value)}
+              value={combatantDraft.hp.temp}
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <LabeledInput
+              label="AC"
+              onChange={(value) => onFieldChange('armorClass', value)}
+              value={combatantDraft.armorClass}
+            />
+            <LabeledInput
+              label="Speed"
+              onChange={(value) => onFieldChange('speed', value)}
+              value={combatantDraft.speed}
+            />
+            <LabeledInput
+              label="Size W"
+              onChange={(value) => onFieldChange('footprintWidth', value)}
+              value={combatantDraft.footprintWidth}
+            />
+            <LabeledInput
+              label="Size H"
+              onChange={(value) => onFieldChange('footprintHeight', value)}
+              value={combatantDraft.footprintHeight}
+            />
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
+              Abilities
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {abilityKeys.map((abilityKey) => (
+                <LabeledInput
+                  key={abilityKey}
+                  label={abilityKey.toUpperCase()}
+                  onChange={(value) => onAbilityChange(abilityKey, value)}
+                  value={combatantDraft.abilities[abilityKey]}
+                />
+              ))}
+            </div>
+          </div>
+          <CheckboxField
+            checked={combatantDraft.hidden}
+            label="Hidden styling"
+            onChange={onHiddenChange}
+          />
+          <ActionButton
+            disabled={Boolean(createDisabledReason)}
+            disabledReason={createDisabledReason ?? undefined}
+            label="Create Combatant"
+            onClick={onCreate}
+          />
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-red-300/20 bg-black/25 p-3">
+          <p className="text-sm font-bold text-amber-50">Command combatant</p>
+          {combatants.length ? (
+            <SelectField
+              label="Selected monster/NPC"
+              onChange={onSelectCombatant}
+              options={combatants.map((combatant) => ({
+                label: `${combatant.name} (${combatant.combatant.kind}, HP ${combatant.combatant.hp.current}/${combatant.combatant.hp.max})`,
+                value: combatant.id,
+              }))}
+              value={selectedCombatantId}
+            />
+          ) : (
+            <EmptyState
+              detail="Create a combatant in the active scene first."
+              title="No monster/NPC combatants"
+            />
+          )}
+          {selectedCombatant ? (
+            <div className="grid gap-2 text-sm">
+              <StatusRow
+                label="Selected"
+                value={`${selectedCombatant.name} at ${selectedCombatant.position.x},${selectedCombatant.position.y}`}
+              />
+              <StatusRow
+                label="Current turn"
+                value={
+                  currentTurnCombatantId === selectedCombatant.id ? 'yes' : 'no'
+                }
+              />
+              <StatusRow label="Target" value={targetParticipantId || 'none'} />
+            </div>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <ActionButton
+              disabled={Boolean(repositionDisabledReason)}
+              disabledReason={repositionDisabledReason ?? undefined}
+              label="Reposition"
+              onClick={onReposition}
+              variant="secondary"
+            />
+            <ActionButton
+              disabled={Boolean(repositionDisabledReason)}
+              disabledReason={repositionDisabledReason ?? undefined}
+              label="Make Turn"
+              onClick={onSetCurrentTurn}
+              variant="secondary"
+            />
+          </div>
+          <div className="grid grid-cols-[1fr_auto] gap-2">
+            <LabeledInput
+              label="HP"
+              onChange={onHpDraftChange}
+              value={hpDraft}
+            />
+            <ActionButton
+              disabled={Boolean(setHpDisabledReason)}
+              disabledReason={setHpDisabledReason ?? undefined}
+              label="Set HP"
+              onClick={onSetHp}
+              variant="secondary"
+            />
+          </div>
+          <ActionButton
+            disabled={Boolean(attackDisabledReason)}
+            disabledReason={attackDisabledReason ?? undefined}
+            label="Monster/NPC Attack Target"
+            onClick={onAttack}
+            variant="danger"
+          />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function CharacterOnboardingPanel({
   characterDraft,
   characterDraftErrors,
@@ -3901,17 +4506,20 @@ function TacticalGrid({
   activeScene,
   actingParticipantId,
   charactersByParticipant,
+  currentTurnCombatantId,
   currentTurnParticipantId,
   grid,
   mode,
   onSelectCell,
   scene,
   selectedCell,
+  selectedCombatantId,
   selectedTargetParticipantId,
 }: {
   activeScene: ActiveSceneState | null;
   actingParticipantId: string;
   charactersByParticipant: Record<string, CharacterResource | undefined>;
+  currentTurnCombatantId: string | null;
   currentTurnParticipantId: string | null;
   grid: {
     height: number;
@@ -3921,9 +4529,14 @@ function TacticalGrid({
   onSelectCell: (cell: Cell) => void;
   scene: Scene | null;
   selectedCell: Cell;
+  selectedCombatantId: string;
   selectedTargetParticipantId: string;
 }) {
   const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
+  const combatantCells = useMemo(
+    () => getCombatantDisplayCells(scene),
+    [scene],
+  );
   const cells: Cell[] = [];
 
   for (let y = 0; y < grid.height; y += 1) {
@@ -3944,6 +4557,10 @@ function TacticalGrid({
           (candidate) => candidate.x === cell.x && candidate.y === cell.y,
         );
         const primaryEntityCell = entitiesAtCell[0];
+        const combatantsAtCell = combatantCells.filter(
+          (candidate) => candidate.x === cell.x && candidate.y === cell.y,
+        );
+        const primaryCombatantCell = combatantsAtCell[0];
         const placement = activeScene?.placedCharacters.find(
           (candidate) =>
             candidate.position.x === cell.x && candidate.position.y === cell.y,
@@ -3960,6 +4577,10 @@ function TacticalGrid({
           placement?.participantId === selectedTargetParticipantId;
         const isPlayerOwn =
           mode === 'player' && placement?.participantId === actingParticipantId;
+        const isCurrentCombatant =
+          primaryCombatantCell?.entity.id === currentTurnCombatantId;
+        const isSelectedCombatant =
+          primaryCombatantCell?.entity.id === selectedCombatantId;
         const tokenTone = isTarget
           ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
           : isPlayerOwn
@@ -3969,8 +4590,9 @@ function TacticalGrid({
               : isActingToken
                 ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
                 : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
-        const entityTone =
-          primaryEntityCell?.entity.type === 'terrain'
+        const entityTone = primaryCombatantCell
+          ? 'border-red-200/60 bg-red-900/65 text-red-50'
+          : primaryEntityCell?.entity.type === 'terrain'
             ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
             : primaryEntityCell?.entity.type === 'monster'
               ? 'border-red-300/45 bg-red-950/45 text-red-100'
@@ -3979,7 +4601,11 @@ function TacticalGrid({
                 : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
         const ariaParts = [
           `Select cell ${cell.x}, ${cell.y}`,
-          primaryEntityCell ? primaryEntityCell.label : null,
+          primaryCombatantCell
+            ? primaryCombatantCell.label
+            : primaryEntityCell
+              ? primaryEntityCell.label
+              : null,
           placement
             ? `token ${resource?.character.name ?? placement.participantId}`
             : null,
@@ -3991,9 +4617,11 @@ function TacticalGrid({
             className={`group relative aspect-square min-h-11 border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
               isSelected
                 ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
-                : primaryEntityCell
-                  ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
-                  : 'bg-[#211711] hover:bg-[#332316]'
+                : primaryCombatantCell
+                  ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
+                  : primaryEntityCell
+                    ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
+                    : 'bg-[#211711] hover:bg-[#332316]'
             }`}
             key={`${cell.x}-${cell.y}`}
             onClick={() => onSelectCell(cell)}
@@ -4011,6 +4639,22 @@ function TacticalGrid({
               >
                 {primaryEntityCell.isOrigin
                   ? initials(primaryEntityCell.entity.name) || 'E'
+                  : '·'}
+              </span>
+            ) : null}
+            {primaryCombatantCell ? (
+              <span
+                className={`runtime-token-pop absolute inset-x-2 top-1/2 z-20 mx-auto flex size-10 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${
+                  isSelectedCombatant
+                    ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
+                    : isCurrentCombatant
+                      ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
+                      : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
+                } ${isCurrentCombatant ? 'animate-pulse' : ''}`}
+                title={primaryCombatantCell.label}
+              >
+                {primaryCombatantCell.isOrigin
+                  ? initials(primaryCombatantCell.entity.name) || 'M'
                   : '·'}
               </span>
             ) : null}
@@ -4120,15 +4764,5 @@ function JsonPreview({ value }: { value: unknown }) {
     <pre className="max-h-96 overflow-auto rounded-2xl border border-amber-500/15 bg-black/50 p-3 text-xs text-amber-100/85">
       {JSON.stringify(value, null, 2)}
     </pre>
-  );
-}
-
-function getParticipantName(
-  participants: SessionSnapshot['participants'],
-  participantId: string,
-): string {
-  return (
-    participants.find((participant) => participant.id === participantId)
-      ?.displayName ?? participantId
   );
 }

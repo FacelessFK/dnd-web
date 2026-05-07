@@ -16,6 +16,7 @@ export const sceneEntityTypes = [
   'object',
   'terrain',
 ] as const;
+export const sceneCombatantKinds = ['monster', 'npc'] as const;
 
 export type SessionId = string;
 export type ParticipantId = string;
@@ -34,6 +35,7 @@ export type CharacterStatus = (typeof characterStatuses)[number];
 export type EncounterStatus = (typeof encounterStatuses)[number];
 export type VisibilityState = (typeof visibilityStates)[number];
 export type SceneEntityType = (typeof sceneEntityTypes)[number];
+export type SceneCombatantKind = (typeof sceneCombatantKinds)[number];
 export type RulesConfigValue = string | number | boolean | null;
 export type CharacterMeta = Record<string, RulesConfigValue>;
 export type SceneEntityMeta = Record<string, RulesConfigValue>;
@@ -124,11 +126,23 @@ export interface TurnUsage {
   movementUsed: number;
 }
 
-export interface EncounterParticipant {
+export interface CharacterEncounterParticipant {
+  kind?: 'character';
   characterId: CharacterId;
   participantId: ParticipantId;
   initiative: number;
 }
+
+export interface CombatantEncounterParticipant {
+  kind: 'combatant';
+  combatantId: SceneEntityId;
+  participantId: ParticipantId;
+  initiative: number;
+}
+
+export type EncounterParticipant =
+  | CharacterEncounterParticipant
+  | CombatantEncounterParticipant;
 
 export interface Encounter {
   id: EncounterId;
@@ -189,6 +203,14 @@ export interface SceneEntityFootprint {
   height: number;
 }
 
+export interface SceneCombatant {
+  kind: SceneCombatantKind;
+  hp: CharacterHitPoints;
+  armorClass: number;
+  speed: number;
+  abilities: AbilityScores;
+}
+
 export interface SceneEntity {
   id: SceneEntityId;
   type: SceneEntityType;
@@ -198,6 +220,7 @@ export interface SceneEntity {
   blocksMovement: boolean;
   blocksVision: boolean;
   hidden: boolean;
+  combatant: SceneCombatant | null;
   meta: SceneEntityMeta;
 }
 

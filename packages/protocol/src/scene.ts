@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { sceneEntityTypes } from '@dnd/shared';
+import { sceneCombatantKinds, sceneEntityTypes } from '@dnd/shared';
 
 import {
   commandIdSchema,
@@ -14,6 +14,7 @@ import { rulesConfigValueSchema } from './rules-profile.js';
 import { sessionSnapshotSchema } from './session.js';
 
 export const sceneEntityTypeSchema = z.enum(sceneEntityTypes);
+export const sceneCombatantKindSchema = z.enum(sceneCombatantKinds);
 
 const sceneNameSchema = z.string().trim().min(1).max(80);
 const sceneEntityNameSchema = z.string().trim().min(1).max(80);
@@ -34,6 +35,35 @@ export const sceneEntityFootprintSchema = z.object({
   height: z.number().int().min(1).max(20),
 });
 
+export const sceneCombatantSchema = z.object({
+  kind: sceneCombatantKindSchema,
+  hp: z
+    .object({
+      max: z.number().int().min(1).max(999),
+      current: z.number().int().min(0).max(999),
+      temp: z.number().int().min(0).max(999),
+    })
+    .superRefine((value, ctx) => {
+      if (value.current > value.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Current HP cannot exceed max HP.',
+          path: ['current'],
+        });
+      }
+    }),
+  armorClass: z.number().int().min(0).max(99),
+  speed: z.number().int().min(0).max(200),
+  abilities: z.object({
+    str: z.number().int().min(1).max(30),
+    dex: z.number().int().min(1).max(30),
+    con: z.number().int().min(1).max(30),
+    int: z.number().int().min(1).max(30),
+    wis: z.number().int().min(1).max(30),
+    cha: z.number().int().min(1).max(30),
+  }),
+});
+
 export const sceneEntitySchema = z.object({
   id: sceneEntityIdSchema,
   type: sceneEntityTypeSchema,
@@ -43,6 +73,7 @@ export const sceneEntitySchema = z.object({
   blocksMovement: z.boolean(),
   blocksVision: z.boolean(),
   hidden: z.boolean(),
+  combatant: sceneCombatantSchema.nullable().default(null),
   meta: z.record(rulesConfigValueSchema),
 });
 
@@ -151,6 +182,7 @@ export const sceneCommandResponseSchema = z.union([
 export type GridDefinition = z.infer<typeof gridDefinitionSchema>;
 export type ScenePosition = z.infer<typeof scenePositionSchema>;
 export type SceneEntityFootprint = z.infer<typeof sceneEntityFootprintSchema>;
+export type SceneCombatant = z.infer<typeof sceneCombatantSchema>;
 export type SceneEntity = z.infer<typeof sceneEntitySchema>;
 export type Scene = z.infer<typeof sceneSchema>;
 export type SceneInput = z.infer<typeof sceneInputSchema>;

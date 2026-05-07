@@ -33,6 +33,7 @@ import type { RuntimeSessionStore } from './session-store.js';
 export const DURABLE_CROSS_STORE_COMBAT_COMMAND_TYPES = [
   'attack',
   'move_character_in_active_scene',
+  'dm_combatant_attack',
 ] as const;
 
 type TransactionalCommandParams = {
@@ -95,6 +96,8 @@ export class DbBackedCombatCommandTransactionBoundary {
     switch (params.command.type) {
       case 'attack':
         return params.category === 'encounter';
+      case 'dm_combatant_attack':
+        return params.category === 'dm';
       case 'move_character_in_active_scene':
         return params.category === 'movement';
       default:

@@ -8,6 +8,7 @@ import {
 import type { SceneEntityInput, SceneInput } from '@dnd/protocol';
 import type {
   GridDefinition,
+  SceneCombatant,
   Scene,
   SceneEntity,
   SceneEntityId,
@@ -45,7 +46,31 @@ export function createSceneEntity(entityInput: SceneEntityInput): SceneEntity {
     blocksMovement: entityInput.blocksMovement,
     blocksVision: entityInput.blocksVision,
     hidden: entityInput.hidden,
+    combatant: null,
     meta: structuredClone(entityInput.meta ?? {}),
+  };
+}
+
+export function createCombatantSceneEntity(params: {
+  name: string;
+  position: SceneEntity['position'];
+  footprint: SceneEntity['footprint'];
+  hidden: boolean;
+  combatant: SceneCombatant;
+}): SceneEntity {
+  return {
+    id: createSceneEntityId(),
+    type: 'monster',
+    name: params.name,
+    position: structuredClone(params.position),
+    footprint: structuredClone(params.footprint),
+    blocksMovement: true,
+    blocksVision: false,
+    hidden: params.hidden,
+    combatant: structuredClone(params.combatant),
+    meta: {
+      source: 'dm_combatant',
+    },
   };
 }
 

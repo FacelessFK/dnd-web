@@ -704,6 +704,122 @@ function dmRepositionCharacterInActiveScene(
   });
 }
 
+function dmCreateCombatantInActiveScene(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  overrides: Partial<
+    Parameters<
+      InMemoryGameRuntime['dmCreateCombatantInActiveScene']
+    >[0]['payload']['combatant']
+  > = {},
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmCreateCombatantInActiveScene({
+    commandId: `dm-create-combatant-${actorParticipantId}`,
+    type: 'dm_create_combatant_in_active_scene',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      combatant: {
+        kind: 'monster',
+        name: 'Ash Goblin',
+        position: {
+          x: 2,
+          y: 0,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        hp: {
+          max: 8,
+          current: 8,
+          temp: 0,
+        },
+        armorClass: 12,
+        speed: 30,
+        abilities: {
+          str: 14,
+          dex: 12,
+          con: 12,
+          int: 8,
+          wis: 10,
+          cha: 8,
+        },
+        ...overrides,
+      },
+    },
+  });
+}
+
+function dmRepositionCombatantInActiveScene(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  combatantId: string,
+  position: {
+    x: number;
+    y: number;
+  },
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmRepositionCombatantInActiveScene({
+    commandId: `dm-reposition-combatant-${combatantId}-${position.x}-${position.y}`,
+    type: 'dm_reposition_combatant_in_active_scene',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      combatantId,
+      position,
+    },
+  });
+}
+
+function dmSetCombatantCurrentHp(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  combatantId: string,
+  currentHp: number,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmSetCombatantCurrentHp({
+    commandId: `dm-set-combatant-hp-${combatantId}-${currentHp}`,
+    type: 'dm_set_combatant_current_hp',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      combatantId,
+      currentHp,
+    },
+  });
+}
+
+function dmCombatantAttack(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  combatantId: string,
+  targetParticipantId = 'player-001',
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.dmCombatantAttack({
+    commandId: `dm-combatant-attack-${combatantId}-${targetParticipantId}`,
+    type: 'dm_combatant_attack',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      combatantId,
+      targetParticipantId,
+    },
+  });
+}
+
 function dmSetCurrentTurnUsage(
   runtime: InMemoryGameRuntime,
   sessionId: string,
@@ -2583,6 +2699,209 @@ test('overlapping entity placement is rejected', () => {
   );
 });
 
+test('dm can create a combatant in the active scene and players cannot', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  const updatedScene = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 2,
+        y: 0,
+      },
+    },
+  );
+  const combatant = updatedScene.entities.find((entity) => entity.combatant);
+
+  assert.ok(combatant);
+  assert.equal(combatant.name, 'Ash Goblin');
+  assert.equal(combatant.combatant?.kind, 'monster');
+  assert.equal(combatant.blocksMovement, true);
+
+  assert.throws(
+    () => {
+      dmCreateCombatantInActiveScene(
+        runtime,
+        session.sessionId,
+        {
+          position: {
+            x: 3,
+            y: 0,
+          },
+        },
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('combatant creation validates grid bounds and occupancy', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+
+  assert.throws(
+    () => {
+      dmCreateCombatantInActiveScene(runtime, session.sessionId, {
+        position: {
+          x: 99,
+          y: 0,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'scene_entity_out_of_bounds',
+  );
+
+  assert.throws(
+    () => {
+      dmCreateCombatantInActiveScene(runtime, session.sessionId, {
+        position: {
+          x: 0,
+          y: 0,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+});
+
+test('combatants block player movement and can be repositioned only by the DM', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { firstCharacter, session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 2,
+        y: 0,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  assert.throws(
+    () => {
+      runtime.moveCharacterInActiveScene({
+        commandId: 'move-into-combatant',
+        type: 'move_character_in_active_scene',
+        actor: {
+          participantId: 'player-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          participantId: 'player-001',
+          position: {
+            x: 2,
+            y: 0,
+          },
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof MovementRuntimeError &&
+      error.code === 'movement_destination_blocked',
+  );
+
+  assert.throws(
+    () => {
+      dmRepositionCombatantInActiveScene(
+        runtime,
+        session.sessionId,
+        combatantId,
+        {
+          x: 3,
+          y: 0,
+        },
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+
+  assert.throws(
+    () => {
+      dmRepositionCombatantInActiveScene(
+        runtime,
+        session.sessionId,
+        combatantId,
+        {
+          x: 0,
+          y: 0,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+
+  const movedScene = dmRepositionCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    combatantId,
+    {
+      x: 3,
+      y: 0,
+    },
+  );
+
+  assert.deepEqual(
+    movedScene.entities.find((entity) => entity.id === combatantId)?.position,
+    {
+      x: 3,
+      y: 0,
+    },
+  );
+  assert.equal(
+    runtime.characters.getCharacter(firstCharacter.character.id).overlay
+      .position?.x,
+    0,
+  );
+});
+
+test('dm can set combatant HP and invalid HP is rejected', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  const updatedScene = dmSetCombatantCurrentHp(
+    runtime,
+    session.sessionId,
+    combatantId,
+    4,
+  );
+
+  assert.equal(
+    updatedScene.entities.find((entity) => entity.id === combatantId)?.combatant
+      ?.hp.current,
+    4,
+  );
+  assert.throws(
+    () => {
+      dmSetCombatantCurrentHp(runtime, session.sessionId, combatantId, 99);
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'invalid_character_hp',
+  );
+});
+
 test('activating a scene from another session is rejected', () => {
   const runtime = new InMemoryGameRuntime();
   const firstSession = createSession(runtime);
@@ -3618,6 +3937,135 @@ test('downed current-turn actors cannot record movement usage', () => {
 
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
   assert.equal(getEncounterUpdates(updates).length, updateCountBeforeFailure);
+});
+
+test('start encounter includes placed player characters and active scene combatants', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 2,
+        y: 0,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.equal(encounter.participants.length, 3);
+  assert.ok(
+    encounter.participants.some(
+      (participant) =>
+        'combatantId' in participant && participant.combatantId === combatantId,
+    ),
+  );
+});
+
+test('mixed turn order can advance to a combatant and DM can spend its action', () => {
+  const runtime = new InMemoryGameRuntime();
+  const { session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      abilities: {
+        str: 14,
+        dex: 20,
+        con: 12,
+        int: 8,
+        wis: 10,
+        cha: 8,
+      },
+      position: {
+        x: 2,
+        y: 0,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.deepEqual(encounter.participants[0], {
+    kind: 'combatant',
+    combatantId,
+    participantId: 'dm-001',
+    initiative: 5,
+  });
+
+  const updatedEncounter = useAction(runtime, session.sessionId, 'dm-001');
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+});
+
+test('DM-controlled combatant attacks a player character on its turn without rolling on legality failures', () => {
+  let rollCount = 0;
+  const runtime = createRuntimeWithAttackRoller(() => {
+    rollCount += 1;
+    return 20;
+  });
+  const { firstCharacter, session } = setupEncounterParticipants(runtime);
+  const sceneWithCombatant = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      abilities: {
+        str: 16,
+        dex: 20,
+        con: 12,
+        int: 8,
+        wis: 10,
+        cha: 8,
+      },
+      position: {
+        x: 0,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = sceneWithCombatant.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+  const updates = subscribeToSession(runtime, session.sessionId);
+
+  startEncounter(runtime, session.sessionId);
+  const updatedEncounter = dmCombatantAttack(
+    runtime,
+    session.sessionId,
+    combatantId,
+    'player-001',
+  );
+  const targetRecord = runtime.characters.getCharacter(
+    firstCharacter.character.id,
+  );
+  const combatEvent = getCombatEvents(updates).find(
+    (event) => event.attackerCombatantId === combatantId,
+  );
+
+  assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
+  assert.equal(targetRecord.character.hp.current, 25);
+  assert.equal(rollCount, 1);
+  assert.equal(combatEvent?.attackerKind, 'combatant');
+  assert.equal(combatEvent?.attackerCombatantId, combatantId);
+  assert.equal(combatEvent?.targetCharacterId, firstCharacter.character.id);
+
+  assert.throws(
+    () => {
+      dmCombatantAttack(runtime, session.sessionId, combatantId, 'player-001');
+    },
+    (error: unknown) =>
+      error instanceof EncounterRuntimeError &&
+      error.code === 'action_already_used',
+  );
+  assert.equal(rollCount, 1);
 });
 
 test('current turn owner can resolve an attack that consumes action, applies fixed damage, and emits encounter and combat events', () => {

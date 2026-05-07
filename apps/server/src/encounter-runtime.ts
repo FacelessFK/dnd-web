@@ -15,6 +15,7 @@ import type {
   EncounterId,
   EncounterParticipant,
   ParticipantId,
+  SceneEntityId,
   Scene,
   SceneId,
   SessionId,
@@ -104,8 +105,20 @@ export function assertEncounterSceneIsActive(
 export function assertEncounterParticipantsArePlaced(
   encounter: Encounter,
   placedParticipantIds: ParticipantId[],
+  placedCombatantIds: SceneEntityId[] = [],
 ): void {
   for (const participant of encounter.participants) {
+    if (isCombatantEncounterParticipant(participant)) {
+      if (placedCombatantIds.includes(participant.combatantId)) {
+        continue;
+      }
+
+      throw new EncounterRuntimeError(
+        'invalid_encounter_participant',
+        `Encounter "${encounter.id}" references combatant "${participant.combatantId}" without an active-scene placement.`,
+      );
+    }
+
     if (placedParticipantIds.includes(participant.participantId)) {
       continue;
     }
@@ -186,6 +199,18 @@ export function assertEncounterTurnActor(
     'invalid_turn_actor',
     `Participant "${actorParticipantId}" is not the current turn owner for encounter "${encounter.id}".`,
   );
+}
+
+export function isCombatantEncounterParticipant(
+  participant: EncounterParticipant,
+): participant is Extract<EncounterParticipant, { kind: 'combatant' }> {
+  return participant.kind === 'combatant';
+}
+
+export function isCharacterEncounterParticipant(
+  participant: EncounterParticipant,
+): participant is Extract<EncounterParticipant, { characterId: string }> {
+  return participant.kind !== 'combatant';
 }
 
 export function markEncounterActionUsed(encounter: Encounter): Encounter {
@@ -269,17 +294,31 @@ export function setEncounterTurnUsage(
 }
 
 export function setEncounterCurrentTurnParticipant(params: {
+  combatantId?: SceneEntityId;
   encounter: Encounter;
-  participantId: ParticipantId;
+  participantId?: ParticipantId;
 }): Encounter {
   const currentTurnIndex = params.encounter.participants.findIndex(
-    (participant) => participant.participantId === params.participantId,
+    (participant) => {
+      if (params.combatantId) {
+        return (
+          isCombatantEncounterParticipant(participant) &&
+          participant.combatantId === params.combatantId
+        );
+      }
+
+      return participant.participantId === params.participantId;
+    },
   );
 
   if (currentTurnIndex === -1) {
+    const label = params.combatantId
+      ? `Combatant "${params.combatantId}"`
+      : `Participant "${params.participantId}"`;
+
     throw new EncounterRuntimeError(
       'invalid_encounter_participant',
-      `Participant "${params.participantId}" is not part of encounter "${params.encounter.id}".`,
+      `${label} is not part of encounter "${params.encounter.id}".`,
     );
   }
 

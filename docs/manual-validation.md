@@ -28,22 +28,25 @@ environment variables manually.
 
 For browser-driven local playtesting, start the server and web app with
 `pnpm dev`, open `/runtime`, and choose DM mode or Player mode. DM mode exposes
-fresh demo setup, scene setup, encounter, and override controls. Player mode can
-join or recover a session, view its assigned character, move its own token, use
-its own turn resources, and attack selected player targets. Local Reset clears
-browser runtime state only; it does not delete backend sessions or runtime
-state.
+fresh demo setup, scene setup, monster/NPC combatant, encounter, and override
+controls. Player mode can join or recover a session, view its assigned
+character, move its own token, use its own turn resources, and attack selected
+player targets. Local Reset clears browser runtime state only; it does not
+delete backend sessions or runtime state.
 
 ## What This Covers
 
 - Session create, join, reconnect, and SSE subscription.
 - Character create, finalize, assign, and read.
 - Scene create, activate, placement, and active-scene state read.
-- Encounter start, turn usage, attack, and encounter state read.
+- Narrow DM-controlled monster/NPC combatant creation, HP control, turn
+  override, and fixed-damage melee attack.
+- Mixed player/combatant encounter start, turn usage, attack, and encounter
+  state read.
 - Reaction usage foundation through `use_reaction`.
 - Downed actor gating using a 1 HP target.
 - Backend DM controls for HP, condition tags, active-scene reposition, turn
-  usage, current turn actor, and active encounter end.
+  usage, current turn actor, combatants, and active encounter end.
 - In-memory idempotent retry behavior for a successful mutating command.
 - Reconnect recovery through read models instead of missed-event replay.
 
@@ -334,7 +337,7 @@ curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
 JSON
 ```
 
-## 8. Place Characters
+## 8. Place Characters And A Training Combatant
 
 ```bash
 curl -sS -X POST http://127.0.0.1:2567/api/movement/command \
@@ -351,6 +354,41 @@ curl -sS -X POST http://127.0.0.1:2567/api/movement/command \
   }
 }
 JSON
+
+COMBATANT_RESPONSE=$(curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON
+{
+  "commandId": "manual-dm-create-combatant-1",
+  "type": "dm_create_combatant_in_active_scene",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "combatant": {
+      "kind": "monster",
+      "name": "Training Goblin",
+      "position": { "x": 1, "y": 1 },
+      "footprint": { "width": 1, "height": 1 },
+      "hp": { "max": 7, "current": 7, "temp": 0 },
+      "armorClass": 12,
+      "speed": 30,
+      "abilities": {
+        "str": 8,
+        "dex": 14,
+        "con": 10,
+        "int": 10,
+        "wis": 8,
+        "cha": 8
+      }
+    }
+  }
+}
+JSON
+)
+
+echo "$COMBATANT_RESPONSE" | jq .
+export COMBATANT_ID=$(echo "$COMBATANT_RESPONSE" | jq -r '.data.scene.entities[] | select(.name == "Training Goblin") | .id')
+echo "$COMBATANT_ID"
 
 curl -sS -X POST http://127.0.0.1:2567/api/movement/command \
   -H 'content-type: application/json' \
@@ -381,10 +419,12 @@ curl -sS -X POST http://127.0.0.1:2567/api/movement/command \
 JSON
 ```
 
-## 9. Start Encounter And Use Turn State
+## 9. Start Mixed Encounter And Use Turn State
 
 Aria should be first because her initiative modifier is higher than Borin's.
-This lets player 001 use reaction/bonus-action state and then attack.
+The training goblin is included in turn order as a DM-controlled combatant, but
+Aria should still act before it. This lets player 001 use reaction/bonus-action
+state and then attack.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:2567/api/encounters/command \
@@ -664,6 +704,57 @@ curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
 JSON
 ```
 
+Adjust the training goblin through the narrow DM-controlled combatant surface.
+The current-turn override can target a combatant ID, and `dm_combatant_attack`
+uses the same narrow fixed-damage melee attack foundation. The attack may hit or
+miss depending on the server roll, but legality checks happen before any roll.
+
+```bash
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-combatant-hp-1",
+  "type": "dm_set_combatant_current_hp",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "combatantId": "$COMBATANT_ID",
+    "currentHp": 6
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-combatant-turn-1",
+  "type": "dm_set_current_turn_participant",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "combatantId": "$COMBATANT_ID"
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/dm/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-dm-combatant-attack-1",
+  "type": "dm_combatant_attack",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "combatantId": "$COMBATANT_ID",
+    "targetParticipantId": "player-001"
+  }
+}
+JSON
+```
+
 Set current turn usage directly, then switch the current turn actor back to
 player 001. The current-turn override resets usage and does not reroll
 initiative, reorder participants, or change the round number.
@@ -731,10 +822,14 @@ During this flow, the SSE terminal should receive:
   active scene changes.
 - `movement_state` when characters are placed, moved, or repositioned by the
   DM.
-- `encounter_state` when the encounter starts and turn usage changes.
-- `combat_event` when attack resolution succeeds.
+- `encounter_state` when the mixed player/combatant encounter starts and turn
+  usage changes.
+- `combat_event` when player or DM-controlled combatant attack resolution
+  succeeds.
 - `character_state` when the DM changes HP or condition tags.
 
-`combat_event`, `movement_state`, and `character_state` are not durable replay
-events. Use the read commands above to recover current authoritative state after
-reconnect.
+There is still no scene-specific SSE event for scene entity or combatant
+creation. Browser map state is refreshed from command responses and `get_scene`
+recovery reads. `combat_event`, `movement_state`, and `character_state` are not
+durable replay events. Use the read commands above to recover current
+authoritative state after reconnect.

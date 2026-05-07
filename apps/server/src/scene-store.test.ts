@@ -33,6 +33,7 @@ test('scene repository returns clones instead of exposing authoritative storage'
     },
     blocksMovement: true,
     blocksVision: false,
+    combatant: null,
     hidden: false,
     meta: {},
   });

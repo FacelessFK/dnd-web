@@ -2,6 +2,8 @@ import type {
   CharacterInput,
   CharacterResource,
   CharacterUpdateInput,
+  DmCombatantInput,
+  Encounter,
   GridDefinition,
   RuntimeErrorCode,
   Scene,
@@ -62,12 +64,32 @@ export type SceneEntityDraftForm = {
   type: SceneEntityInput['type'];
 };
 
+export type CombatantDraftForm = {
+  abilities: Record<AbilityKey, string>;
+  armorClass: string;
+  footprintHeight: string;
+  footprintWidth: string;
+  hidden: boolean;
+  hp: {
+    current: string;
+    max: string;
+    temp: string;
+  };
+  kind: DmCombatantInput['kind'];
+  name: string;
+  speed: string;
+};
+
 export type SceneEntityDisplayCell = {
   entity: SceneEntity;
   isOrigin: boolean;
   label: string;
   x: number;
   y: number;
+};
+
+export type CombatantDisplayCell = SceneEntityDisplayCell & {
+  entity: SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> };
 };
 
 export type StoredCockpitState = {
@@ -233,6 +255,122 @@ export function createDefaultSceneEntityDraftForm(): SceneEntityDraftForm {
   };
 }
 
+export function createDefaultCombatantDraftForm(): CombatantDraftForm {
+  return {
+    abilities: {
+      cha: '8',
+      con: '12',
+      dex: '12',
+      int: '8',
+      str: '14',
+      wis: '10',
+    },
+    armorClass: '12',
+    footprintHeight: '1',
+    footprintWidth: '1',
+    hidden: false,
+    hp: {
+      current: '8',
+      max: '8',
+      temp: '0',
+    },
+    kind: 'monster',
+    name: 'Ash Goblin',
+    speed: '30',
+  };
+}
+
+export function validateCombatantDraftForm({
+  form,
+  grid,
+  position,
+}: {
+  form: CombatantDraftForm;
+  grid?: GridDefinition;
+  position: Cell;
+}): string[] {
+  const errors: string[] = [];
+
+  if (!form.name.trim()) {
+    errors.push('Combatant name is required.');
+  }
+
+  if (form.kind !== 'monster' && form.kind !== 'npc') {
+    errors.push('Choose monster or npc.');
+  }
+
+  validateIntegerRange(errors, 'Armor Class', form.armorClass, 0, 99);
+  validateIntegerRange(errors, 'Speed', form.speed, 0, 200);
+  validateIntegerRange(errors, 'Max HP', form.hp.max, 1, 999);
+  validateIntegerRange(errors, 'Current HP', form.hp.current, 0, 999);
+  validateIntegerRange(errors, 'Temp HP', form.hp.temp, 0, 999);
+  validateIntegerRange(errors, 'Footprint width', form.footprintWidth, 1, 20);
+  validateIntegerRange(errors, 'Footprint height', form.footprintHeight, 1, 20);
+
+  for (const abilityKey of abilityKeys) {
+    validateIntegerRange(
+      errors,
+      abilityKey.toUpperCase(),
+      form.abilities[abilityKey],
+      1,
+      30,
+    );
+  }
+
+  const currentHp = parseInteger(form.hp.current);
+  const maxHp = parseInteger(form.hp.max);
+
+  if (
+    typeof currentHp === 'number' &&
+    typeof maxHp === 'number' &&
+    currentHp > maxHp
+  ) {
+    errors.push('Current HP cannot exceed max HP.');
+  }
+
+  const footprintWidth = parseInteger(form.footprintWidth);
+  const footprintHeight = parseInteger(form.footprintHeight);
+
+  if (
+    grid &&
+    typeof footprintWidth === 'number' &&
+    typeof footprintHeight === 'number' &&
+    (position.x + footprintWidth > grid.width ||
+      position.y + footprintHeight > grid.height)
+  ) {
+    errors.push('Combatant footprint must fit within the scene grid.');
+  }
+
+  return errors;
+}
+
+export function combatantInputFromDraft(
+  form: CombatantDraftForm,
+  position: Cell,
+): DmCombatantInput {
+  return {
+    abilities: characterAbilitiesFromDraft({
+      ...createDefaultCharacterDraftForm(),
+      abilities: form.abilities,
+    }),
+    armorClass: parseIntegerOrZero(form.armorClass),
+    footprint: {
+      height: parseIntegerOrZero(form.footprintHeight),
+      width: parseIntegerOrZero(form.footprintWidth),
+    },
+    hidden: form.hidden,
+    hp: {
+      current: parseIntegerOrZero(form.hp.current),
+      max: parseIntegerOrZero(form.hp.max),
+      temp: parseIntegerOrZero(form.hp.temp),
+    },
+    kind: form.kind,
+    name: form.name.trim(),
+    position,
+    speed: parseIntegerOrZero(form.speed),
+  };
+}
+
 export function validateSceneEntityDraftForm({
   form,
   grid,
@@ -363,14 +501,140 @@ export function getSceneEntityDisplayCells(
   });
 }
 
+export function getCombatantEntities(
+  scene: Scene | null,
+): Array<SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }> {
+  return (scene?.entities ?? []).filter(
+    (
+      entity,
+    ): entity is SceneEntity & {
+      combatant: NonNullable<SceneEntity['combatant']>;
+    } => Boolean(entity.combatant),
+  );
+}
+
+export function getCombatantDisplayCells(
+  scene: Scene | null,
+): CombatantDisplayCell[] {
+  return getSceneEntityDisplayCells({
+    ...(scene ?? {
+      createdAt: '',
+      entities: [],
+      grid: {
+        cellSizeFeet: 5,
+        height: 1,
+        width: 1,
+      },
+      id: '',
+      name: '',
+      sessionId: '',
+      updatedAt: '',
+    }),
+    entities: getCombatantEntities(scene),
+  }).map((cell) => cell as CombatantDisplayCell);
+}
+
 export function getSceneEntityLabel(entity: SceneEntity): string {
   const flags = [
+    entity.combatant ? `${entity.combatant.kind} combatant` : null,
     entity.blocksMovement ? 'blocks movement' : null,
     entity.blocksVision ? 'blocks vision' : null,
     entity.hidden ? 'hidden' : null,
   ].filter(Boolean);
 
   return `${entity.name} (${entity.type}${flags.length ? `, ${flags.join(', ')}` : ''})`;
+}
+
+export function getCurrentTurnLabel({
+  encounter,
+  participants,
+  scene,
+}: {
+  encounter: Encounter | null;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+}): string {
+  const current = encounter?.participants[encounter.currentTurnIndex];
+
+  if (!current) {
+    return 'No active turn';
+  }
+
+  if ('combatantId' in current) {
+    const combatant = getCombatantEntities(scene).find(
+      (entity) => entity.id === current.combatantId,
+    );
+
+    return `${combatant?.name ?? current.combatantId} (${current.combatantId})`;
+  }
+
+  return getParticipantName(participants, current.participantId);
+}
+
+export function getCurrentTurnParticipantId(
+  encounter: Encounter | null,
+): string | null {
+  return (
+    encounter?.participants[encounter.currentTurnIndex]?.participantId ?? null
+  );
+}
+
+export function getCurrentTurnCombatantId(
+  encounter: Encounter | null,
+): string | null {
+  const current = encounter?.participants[encounter.currentTurnIndex];
+
+  return current && 'combatantId' in current ? current.combatantId : null;
+}
+
+export function getDmCombatantActionDisabledReason({
+  busyLabel,
+  currentTurnCombatantId,
+  mode,
+  scene,
+  selectedCombatantId,
+  sessionId,
+  targetParticipantId,
+}: {
+  busyLabel: string | null;
+  currentTurnCombatantId: string | null;
+  mode: RuntimeMode;
+  scene: Scene | null;
+  selectedCombatantId: string;
+  sessionId: string;
+  targetParticipantId: string;
+}): string | null {
+  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
+
+  if (busyReason) {
+    return busyReason;
+  }
+
+  if (!sessionId) {
+    return 'Create, paste, or recover a session first.';
+  }
+
+  if (mode !== 'dm') {
+    return 'Switch to DM mode for monster/NPC controls.';
+  }
+
+  if (!scene) {
+    return 'Create, activate, or recover a scene first.';
+  }
+
+  if (!selectedCombatantId) {
+    return 'Create or select a monster/NPC combatant first.';
+  }
+
+  if (!targetParticipantId) {
+    return 'Choose a player character target.';
+  }
+
+  if (currentTurnCombatantId !== selectedCombatantId) {
+    return 'The selected combatant must be the current turn actor.';
+  }
+
+  return null;
 }
 
 export function createCharacterDraftFormFromResource(
@@ -594,6 +858,16 @@ export function getPendingAssignmentRequests({
       participantId: participant.id,
       pendingCharacterId: participant.pendingCharacterId as string,
     }));
+}
+
+export function getParticipantName(
+  participants: SessionSnapshot['participants'],
+  participantId: string,
+): string {
+  return (
+    participants.find((participant) => participant.id === participantId)
+      ?.displayName ?? participantId
+  );
 }
 
 export function getPlayerParticipantIds(
@@ -899,7 +1173,7 @@ export function describeSessionStreamEvent(
   switch (event.type) {
     case 'combat_event':
       return {
-        detail: `${event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${event.targetParticipantId} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
+        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${event.targetParticipantId} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
         title: 'Attack resolved',
         tone: event.hit ? 'danger' : 'warning',
       };

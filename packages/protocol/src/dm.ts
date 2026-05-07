@@ -4,6 +4,7 @@ import {
   characterIdSchema,
   commandIdSchema,
   participantIdSchema,
+  sceneEntityIdSchema,
   sessionIdSchema,
 } from './common.js';
 import {
@@ -14,7 +15,12 @@ import {
 } from './character.js';
 import { encounterSchema } from './encounter.js';
 import { commandErrorSchema } from './errors.js';
-import { scenePositionSchema } from './scene.js';
+import {
+  sceneCombatantKindSchema,
+  sceneEntityFootprintSchema,
+  scenePositionSchema,
+  sceneSchema,
+} from './scene.js';
 
 const dmActorSchema = z.object({
   participantId: participantIdSchema,
@@ -56,6 +62,68 @@ export const dmRepositionCharacterInActiveSceneCommandSchema = z.object({
   }),
 });
 
+export const dmCombatantInputSchema = z.object({
+  kind: sceneCombatantKindSchema,
+  name: z.string().trim().min(1).max(80),
+  position: scenePositionSchema,
+  footprint: sceneEntityFootprintSchema,
+  hp: hitPointsSchema,
+  armorClass: z.number().int().min(0).max(99),
+  speed: z.number().int().min(0).max(200),
+  abilities: z.object({
+    str: z.number().int().min(1).max(30),
+    dex: z.number().int().min(1).max(30),
+    con: z.number().int().min(1).max(30),
+    int: z.number().int().min(1).max(30),
+    wis: z.number().int().min(1).max(30),
+    cha: z.number().int().min(1).max(30),
+  }),
+  hidden: z.boolean().optional(),
+});
+
+export const dmCreateCombatantInActiveSceneCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_create_combatant_in_active_scene'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    combatant: dmCombatantInputSchema,
+  }),
+});
+
+export const dmRepositionCombatantInActiveSceneCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_reposition_combatant_in_active_scene'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    combatantId: sceneEntityIdSchema,
+    position: scenePositionSchema,
+  }),
+});
+
+export const dmSetCombatantCurrentHpCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_set_combatant_current_hp'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    combatantId: sceneEntityIdSchema,
+    currentHp: z.number().int(),
+  }),
+});
+
+export const dmCombatantAttackCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_combatant_attack'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    combatantId: sceneEntityIdSchema,
+    targetParticipantId: participantIdSchema,
+  }),
+});
+
 export const dmSetCurrentTurnUsageCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('dm_set_current_turn_usage'),
@@ -70,10 +138,22 @@ export const dmSetCurrentTurnParticipantCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('dm_set_current_turn_participant'),
   actor: dmActorSchema,
-  payload: z.object({
-    sessionId: sessionIdSchema,
-    participantId: participantIdSchema,
-  }),
+  payload: z
+    .object({
+      sessionId: sessionIdSchema,
+      participantId: participantIdSchema.optional(),
+      combatantId: sceneEntityIdSchema.optional(),
+    })
+    .superRefine((value, ctx) => {
+      if (!value.participantId && !value.combatantId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Either participantId or combatantId is required for current turn override.',
+          path: ['participantId'],
+        });
+      }
+    }),
 });
 
 export const dmEndActiveEncounterCommandSchema = z.object({
@@ -89,6 +169,10 @@ export const dmCommandSchema = z.discriminatedUnion('type', [
   dmSetCharacterCurrentHpCommandSchema,
   dmSetCharacterActiveConditionsCommandSchema,
   dmRepositionCharacterInActiveSceneCommandSchema,
+  dmCreateCombatantInActiveSceneCommandSchema,
+  dmRepositionCombatantInActiveSceneCommandSchema,
+  dmSetCombatantCurrentHpCommandSchema,
+  dmCombatantAttackCommandSchema,
   dmSetCurrentTurnUsageCommandSchema,
   dmSetCurrentTurnParticipantCommandSchema,
   dmEndActiveEncounterCommandSchema,
@@ -98,9 +182,17 @@ const dmEncounterCommandSuccessDataSchema = z.object({
   encounter: encounterSchema,
 });
 
+const dmSceneCommandSuccessDataSchema = z.object({
+  scene: sceneSchema,
+});
+
 export const dmCommandSuccessSchema = z.object({
   ok: z.literal(true),
-  data: z.union([characterResourceSchema, dmEncounterCommandSuccessDataSchema]),
+  data: z.union([
+    characterResourceSchema,
+    dmEncounterCommandSuccessDataSchema,
+    dmSceneCommandSuccessDataSchema,
+  ]),
 });
 
 export const dmCommandErrorSchema = commandErrorSchema;
@@ -133,6 +225,19 @@ export type DmSetCharacterActiveConditionsCommand = z.infer<
 >;
 export type DmRepositionCharacterInActiveSceneCommand = z.infer<
   typeof dmRepositionCharacterInActiveSceneCommandSchema
+>;
+export type DmCombatantInput = z.infer<typeof dmCombatantInputSchema>;
+export type DmCreateCombatantInActiveSceneCommand = z.infer<
+  typeof dmCreateCombatantInActiveSceneCommandSchema
+>;
+export type DmRepositionCombatantInActiveSceneCommand = z.infer<
+  typeof dmRepositionCombatantInActiveSceneCommandSchema
+>;
+export type DmSetCombatantCurrentHpCommand = z.infer<
+  typeof dmSetCombatantCurrentHpCommandSchema
+>;
+export type DmCombatantAttackCommand = z.infer<
+  typeof dmCombatantAttackCommandSchema
 >;
 export type DmSetCurrentTurnUsageCommand = z.infer<
   typeof dmSetCurrentTurnUsageCommandSchema

@@ -7,6 +7,7 @@ import {
   commandIdSchema,
   encounterIdSchema,
   participantIdSchema,
+  sceneEntityIdSchema,
   sceneIdSchema,
   sessionIdSchema,
 } from './common.js';
@@ -19,11 +20,24 @@ const sessionActorSchema = z.object({
 
 export const encounterStatusSchema = z.enum(encounterStatuses);
 
-export const encounterParticipantSchema = z.object({
+const characterEncounterParticipantSchema = z.object({
+  kind: z.literal('character').optional(),
   characterId: characterIdSchema,
   participantId: participantIdSchema,
   initiative: z.number().int(),
 });
+
+const combatantEncounterParticipantSchema = z.object({
+  kind: z.literal('combatant'),
+  combatantId: sceneEntityIdSchema,
+  participantId: participantIdSchema,
+  initiative: z.number().int(),
+});
+
+export const encounterParticipantSchema = z.union([
+  characterEncounterParticipantSchema,
+  combatantEncounterParticipantSchema,
+]);
 
 export const encounterSchema = z.object({
   id: encounterIdSchema,
