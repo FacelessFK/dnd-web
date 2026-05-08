@@ -5160,6 +5160,345 @@ test('db-backed scene transaction boundary commits passive entity update reposit
   assert.equal(persistedScene?.record.entities.length, 0);
 });
 
+test('db-backed scene transaction boundary commits transition create update and delete durably', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const targetScene = await runtime.createScene({
+    commandId: 'setup-transactional-transition-target',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      scene: {
+        name: 'Moonlit Hall',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+  let { sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork);
+  const createCommand = {
+    commandId: 'transactional-create-scene-transition-1',
+    type: 'create_scene_transition',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transition: {
+        kind: 'door',
+        name: 'Rune Door',
+        targetSceneId: targetScene.id,
+        targetLabel: 'Moonlit Hall',
+        notes: 'A cold iron-banded door.',
+        position: {
+          x: 1,
+          y: 1,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+      },
+    },
+  } as const;
+
+  const created = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    createCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  ({ sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork));
+
+  const createRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    createCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  assert.equal(created.status, 200);
+  assert.equal(createRetry.status, 200);
+  assert.deepEqual(createRetry.body, created.body);
+  assert.equal(created.body.ok, true);
+
+  if (!created.body.ok || !('scene' in created.body.data)) {
+    throw new Error('Expected create_scene_transition to return a scene.');
+  }
+
+  const transitionId = created.body.data.scene.entities.find(
+    (entity) => entity.transition,
+  )!.id;
+  const updateCommand = {
+    commandId: 'transactional-update-scene-transition-1',
+    type: 'update_scene_transition',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+      transition: {
+        kind: 'portal',
+        name: 'Moon Gate',
+        targetSceneId: targetScene.id,
+        hidden: true,
+      },
+    },
+  } as const;
+  const updated = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    updateCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const updateRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    updateCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const deleteCommand = {
+    commandId: 'transactional-delete-scene-transition-1',
+    type: 'delete_scene_transition',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+    },
+  } as const;
+  const deleted = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    deleteCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const deleteRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    deleteCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const persistedScene = await sceneDatabase.getSceneRecord(sceneId);
+
+  assert.equal(updated.status, 200);
+  assert.equal(updateRetry.status, 200);
+  assert.deepEqual(updateRetry.body, updated.body);
+  assert.equal(deleted.status, 200);
+  assert.equal(deleteRetry.status, 200);
+  assert.deepEqual(deleteRetry.body, deleted.body);
+  assert.equal(idempotencyDatabase.recordCount, 3);
+  assert.equal(outboxDatabase.recordCount, 0);
+  assert.equal(persistedScene?.record.entities.length, 0);
+});
+
+test('db-backed session transaction boundary commits activate_scene_transition and dispatches session state after commit', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const targetScene = await runtime.createScene({
+    commandId: 'setup-activate-transition-target-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      scene: {
+        name: 'Moonlit Hall',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+  const sourceScene = await runtime.createSceneTransition({
+    commandId: 'setup-activate-transition-node',
+    type: 'create_scene_transition',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transition: {
+        kind: 'stairs',
+        name: 'North Stairs',
+        targetSceneId: targetScene.id,
+        position: {
+          x: 1,
+          y: 1,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+      },
+    },
+  });
+  const transitionId = sourceScene.entities.find(
+    (entity) => entity.transition,
+  )!.id;
+  const updates = subscribeToSessionEvents(runtime, sessionId);
+  const updateCountBefore = updates.length;
+  const command = {
+    commandId: 'transactional-activate-scene-transition-1',
+    type: 'activate_scene_transition',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+    },
+  } as const;
+  const first = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+
+  ({ sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+  );
+  const sessionSnapshotRow =
+    await sessionDatabase.getSessionSnapshot(sessionId);
+  const sessionUpdates = updates.slice(updateCountBefore);
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(sessionUpdates.length, 1);
+  assert.equal(sessionUpdates[0]?.type, 'session_state');
+  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+  assert.equal(
+    sessionSnapshotRow?.snapshot.session.activeSceneId,
+    targetScene.id,
+  );
+});
+
 test('concurrent duplicate db-backed create_character requests cannot create two characters', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();

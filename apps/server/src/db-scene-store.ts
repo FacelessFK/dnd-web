@@ -104,6 +104,7 @@ export class DbBackedSceneStore implements SceneRepository {
       entities: document.entities.map((entity) => ({
         ...this.clone(entity),
         combatant: entity.combatant ? this.clone(entity.combatant) : null,
+        transition: entity.transition ? this.clone(entity.transition) : null,
       })),
     };
   }

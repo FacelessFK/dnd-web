@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import { sceneCombatantKinds, sceneEntityTypes } from '@dnd/shared';
+import {
+  sceneCombatantKinds,
+  sceneEntityTypes,
+  sceneTransitionKinds,
+} from '@dnd/shared';
 
 import {
   commandIdSchema,
@@ -15,9 +19,12 @@ import { sessionSnapshotSchema } from './session.js';
 
 export const sceneEntityTypeSchema = z.enum(sceneEntityTypes);
 export const sceneCombatantKindSchema = z.enum(sceneCombatantKinds);
+export const sceneTransitionKindSchema = z.enum(sceneTransitionKinds);
 
 const sceneNameSchema = z.string().trim().min(1).max(80);
 const sceneEntityNameSchema = z.string().trim().min(1).max(80);
+const sceneTransitionLabelSchema = z.string().trim().min(1).max(80);
+const sceneTransitionNotesSchema = z.string().trim().max(500);
 
 export const gridDefinitionSchema = z.object({
   cellSizeFeet: z.number().int().min(1).max(20).default(5),
@@ -64,6 +71,13 @@ export const sceneCombatantSchema = z.object({
   }),
 });
 
+export const sceneTransitionSchema = z.object({
+  kind: sceneTransitionKindSchema,
+  targetSceneId: sceneIdSchema,
+  targetLabel: sceneTransitionLabelSchema.nullable(),
+  notes: sceneTransitionNotesSchema.nullable(),
+});
+
 export const sceneEntitySchema = z.object({
   id: sceneEntityIdSchema,
   type: sceneEntityTypeSchema,
@@ -74,6 +88,7 @@ export const sceneEntitySchema = z.object({
   blocksVision: z.boolean(),
   hidden: z.boolean(),
   combatant: sceneCombatantSchema.nullable().default(null),
+  transition: sceneTransitionSchema.nullable().optional(),
   meta: z.record(rulesConfigValueSchema),
 });
 
@@ -121,6 +136,43 @@ export const sceneEntityUpdateInputSchema = z
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Scene entity update must include at least one editable field.',
+    });
+  });
+
+export const sceneTransitionInputSchema = z.object({
+  kind: sceneTransitionKindSchema,
+  name: sceneEntityNameSchema,
+  position: scenePositionSchema,
+  footprint: sceneEntityFootprintSchema,
+  blocksMovement: z.boolean(),
+  blocksVision: z.boolean(),
+  hidden: z.boolean(),
+  targetSceneId: sceneIdSchema,
+  targetLabel: sceneTransitionLabelSchema.nullable().optional(),
+  notes: sceneTransitionNotesSchema.nullable().optional(),
+});
+
+export const sceneTransitionUpdateInputSchema = z
+  .object({
+    kind: sceneTransitionKindSchema.optional(),
+    name: sceneEntityNameSchema.optional(),
+    footprint: sceneEntityFootprintSchema.optional(),
+    blocksMovement: z.boolean().optional(),
+    blocksVision: z.boolean().optional(),
+    hidden: z.boolean().optional(),
+    targetSceneId: sceneIdSchema.optional(),
+    targetLabel: sceneTransitionLabelSchema.nullable().optional(),
+    notes: sceneTransitionNotesSchema.nullable().optional(),
+  })
+  .superRefine((update, context) => {
+    if (Object.keys(update).length > 0) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        'Scene transition update must include at least one editable field.',
     });
   });
 
@@ -204,6 +256,51 @@ export const deleteSceneEntityCommandSchema = z.object({
   }),
 });
 
+export const createSceneTransitionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('create_scene_transition'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    transition: sceneTransitionInputSchema,
+  }),
+});
+
+export const updateSceneTransitionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('update_scene_transition'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    transitionId: sceneEntityIdSchema,
+    transition: sceneTransitionUpdateInputSchema,
+  }),
+});
+
+export const deleteSceneTransitionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('delete_scene_transition'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    transitionId: sceneEntityIdSchema,
+  }),
+});
+
+export const activateSceneTransitionCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('activate_scene_transition'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    transitionId: sceneEntityIdSchema,
+  }),
+});
+
 export const sceneCommandSchema = z.discriminatedUnion('type', [
   createSceneCommandSchema,
   getSceneCommandSchema,
@@ -212,6 +309,10 @@ export const sceneCommandSchema = z.discriminatedUnion('type', [
   updateSceneEntityCommandSchema,
   repositionSceneEntityCommandSchema,
   deleteSceneEntityCommandSchema,
+  createSceneTransitionCommandSchema,
+  updateSceneTransitionCommandSchema,
+  deleteSceneTransitionCommandSchema,
+  activateSceneTransitionCommandSchema,
 ]);
 
 export const sceneCommandSuccessSchema = z.object({
@@ -242,12 +343,17 @@ export type GridDefinition = z.infer<typeof gridDefinitionSchema>;
 export type ScenePosition = z.infer<typeof scenePositionSchema>;
 export type SceneEntityFootprint = z.infer<typeof sceneEntityFootprintSchema>;
 export type SceneCombatant = z.infer<typeof sceneCombatantSchema>;
+export type SceneTransition = z.infer<typeof sceneTransitionSchema>;
 export type SceneEntity = z.infer<typeof sceneEntitySchema>;
 export type Scene = z.infer<typeof sceneSchema>;
 export type SceneInput = z.infer<typeof sceneInputSchema>;
 export type SceneEntityInput = z.infer<typeof sceneEntityInputSchema>;
 export type SceneEntityUpdateInput = z.infer<
   typeof sceneEntityUpdateInputSchema
+>;
+export type SceneTransitionInput = z.infer<typeof sceneTransitionInputSchema>;
+export type SceneTransitionUpdateInput = z.infer<
+  typeof sceneTransitionUpdateInputSchema
 >;
 export type CreateSceneCommand = z.infer<typeof createSceneCommandSchema>;
 export type GetSceneCommand = z.infer<typeof getSceneCommandSchema>;
@@ -265,6 +371,18 @@ export type RepositionSceneEntityCommand = z.infer<
 >;
 export type DeleteSceneEntityCommand = z.infer<
   typeof deleteSceneEntityCommandSchema
+>;
+export type CreateSceneTransitionCommand = z.infer<
+  typeof createSceneTransitionCommandSchema
+>;
+export type UpdateSceneTransitionCommand = z.infer<
+  typeof updateSceneTransitionCommandSchema
+>;
+export type DeleteSceneTransitionCommand = z.infer<
+  typeof deleteSceneTransitionCommandSchema
+>;
+export type ActivateSceneTransitionCommand = z.infer<
+  typeof activateSceneTransitionCommandSchema
 >;
 export type SceneCommand = z.infer<typeof sceneCommandSchema>;
 export type SceneCommandSuccess = z.infer<typeof sceneCommandSuccessSchema>;

@@ -506,6 +506,136 @@ function deleteSceneEntity(
   });
 }
 
+function createSceneTransition(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  targetSceneId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.createSceneTransition({
+    commandId: `create-scene-transition-${sceneId}-${targetSceneId}-${actorParticipantId}`,
+    type: 'create_scene_transition',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transition: {
+        kind: 'door',
+        name: 'Rune Door',
+        targetSceneId,
+        targetLabel: 'Moonlit Hall',
+        notes: 'A cold iron-banded door.',
+        position: {
+          x: 1,
+          y: 1,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+      },
+    },
+  });
+}
+
+function updateSceneTransition(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  transitionId: string,
+  targetSceneId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.updateSceneTransition({
+    commandId: `update-scene-transition-${transitionId}-${actorParticipantId}`,
+    type: 'update_scene_transition',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+      transition: {
+        kind: 'portal',
+        name: 'Moon Gate',
+        targetSceneId,
+        targetLabel: 'Upper Gallery',
+        notes: 'The arch hums softly.',
+        hidden: true,
+      },
+    },
+  });
+}
+
+function deleteSceneTransition(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  transitionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.deleteSceneTransition({
+    commandId: `delete-scene-transition-${transitionId}-${actorParticipantId}`,
+    type: 'delete_scene_transition',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+    },
+  });
+}
+
+function activateSceneTransition(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  transitionId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.activateSceneTransition({
+    commandId: `activate-scene-transition-${transitionId}-${actorParticipantId}`,
+    type: 'activate_scene_transition',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      transitionId,
+    },
+  });
+}
+
+function getSceneTransitionCount(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+): number {
+  return runtime
+    .getScene({
+      commandId: `get-scene-transition-count-${sceneId}`,
+      type: 'get_scene',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId,
+        sceneId,
+      },
+    })
+    .entities.filter((entity) => entity.transition).length;
+}
+
 function getMovementUpdates(
   updates: SessionStreamEvent[],
 ): MovementStateUpdate[] {
@@ -3119,6 +3249,255 @@ test('passive scene entity reposition rejects blocking character overlap', () =>
     },
     (error: unknown) =>
       error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+});
+
+test('dm can create update delete and activate scene transition nodes', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const sourceScene = createScene(runtime, session.sessionId);
+  const targetScene = runtime.createScene({
+    commandId: 'create-transition-target-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Moonlit Hall',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+  const transitionScene = createSceneTransition(
+    runtime,
+    session.sessionId,
+    sourceScene.id,
+    targetScene.id,
+  );
+  const transition = transitionScene.entities.find(
+    (entity) => entity.transition,
+  );
+
+  assert.ok(transition);
+  assert.equal(transition.name, 'Rune Door');
+  assert.equal(transition.transition?.kind, 'door');
+  assert.equal(transition.transition?.targetSceneId, targetScene.id);
+  assert.equal(
+    getSceneTransitionCount(runtime, session.sessionId, sourceScene.id),
+    1,
+  );
+
+  const updatedScene = updateSceneTransition(
+    runtime,
+    session.sessionId,
+    sourceScene.id,
+    transition.id,
+    targetScene.id,
+  );
+  const updatedTransition = updatedScene.entities.find(
+    (entity) => entity.id === transition.id,
+  );
+
+  assert.equal(updatedTransition?.name, 'Moon Gate');
+  assert.equal(updatedTransition?.hidden, true);
+  assert.equal(updatedTransition?.transition?.kind, 'portal');
+  assert.equal(updatedTransition?.transition?.targetLabel, 'Upper Gallery');
+
+  const activated = activateSceneTransition(
+    runtime,
+    session.sessionId,
+    sourceScene.id,
+    transition.id,
+  );
+
+  assert.equal(activated.sceneId, targetScene.id);
+  assert.equal(activated.state.session.activeSceneId, targetScene.id);
+
+  const deletedScene = deleteSceneTransition(
+    runtime,
+    session.sessionId,
+    sourceScene.id,
+    transition.id,
+  );
+
+  assert.equal(
+    deletedScene.entities.some((entity) => entity.id === transition.id),
+    false,
+  );
+});
+
+test('scene transition commands are dm-only and reject invalid transition targets', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const sourceScene = activateScene(runtime, session.sessionId);
+  const targetScene = runtime.createScene({
+    commandId: 'create-transition-guard-target-scene',
+    type: 'create_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: session.sessionId,
+      scene: {
+        name: 'Guard Room',
+        grid: {
+          width: 8,
+          height: 8,
+          cellSizeFeet: 5,
+        },
+      },
+    },
+  });
+  const passiveScene = placeEntity(runtime, session.sessionId, sourceScene.id, {
+    position: {
+      x: 4,
+      y: 4,
+    },
+  });
+  const passiveEntityId = passiveScene.entities.find(
+    (entity) => !entity.transition && !entity.combatant,
+  )!.id;
+  const combatantScene = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 6,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = combatantScene.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+
+  joinPlayer(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      createSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        targetScene.id,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+
+  const transitionScene = createSceneTransition(
+    runtime,
+    session.sessionId,
+    sourceScene.id,
+    targetScene.id,
+  );
+  const transitionId = transitionScene.entities.find(
+    (entity) => entity.transition,
+  )!.id;
+
+  assert.throws(
+    () => {
+      updateSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        transitionId,
+        targetScene.id,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+  assert.throws(
+    () => {
+      activateSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        transitionId,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+  assert.throws(
+    () => {
+      deleteSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        transitionId,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+  assert.throws(
+    () => {
+      updateSceneEntity(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        transitionId,
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      activateSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        passiveEntityId,
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      activateSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        combatantId,
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      updateSceneTransition(
+        runtime,
+        session.sessionId,
+        sourceScene.id,
+        transitionId,
+        'scene_11111111-1111-4111-8111-111111111111',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_not_found',
   );
 });
 

@@ -99,6 +99,10 @@ Mutating commands:
 - `update_scene_entity`
 - `reposition_scene_entity`
 - `delete_scene_entity`
+- `create_scene_transition`
+- `update_scene_transition`
+- `delete_scene_transition`
+- `activate_scene_transition`
 
 Read command:
 
@@ -107,9 +111,11 @@ Read command:
 Notes:
 
 - `create_scene`, `place_entity_in_scene`, `update_scene_entity`,
-  `reposition_scene_entity`, and `delete_scene_entity` mutate scene records.
-- `activate_scene_for_session` mutates the session snapshot and returns the
-  updated session state.
+  `reposition_scene_entity`, `delete_scene_entity`,
+  `create_scene_transition`, `update_scene_transition`, and
+  `delete_scene_transition` mutate scene records.
+- `activate_scene_for_session` and `activate_scene_transition` mutate the
+  session snapshot and return the updated session state.
 - Scene entity placement is separate from character active-scene placement.
 - Scene entities use the existing scene entity shape: type, name, position,
   footprint, movement/vision blocking flags, hidden flag, and optional metadata.
@@ -117,6 +123,16 @@ Notes:
   are DM-only passive map-object operations. They reject combatant scene
   entities; monster/NPC HP, movement, and attacks stay on explicit DM combatant
   commands.
+- Transition nodes are DM-authored scene entities with typed transition data:
+  kind, target scene ID, optional target label, and optional notes. They model
+  narrow MVP doors, stairs, portals, gates, or other linked markers.
+- `activate_scene_transition` is DM-only. It validates the source scene,
+  transition node, and target scene, then applies the existing active-scene
+  session mutation. Players may see visible transition markers but cannot
+  activate scene changes in this slice.
+- Transition activation does not teleport characters, start/end encounters,
+  run scripts, or implement locks, traps, fog of war, line of sight, or
+  lighting.
 - Passive scene entities remain map/object/obstacle data. DM-controlled
   monster/NPC combatants are represented as explicit scene entities with
   combatant stats and are created only through DM commands.
@@ -296,16 +312,18 @@ The role-aware runtime surface at `/runtime` uses this API surface directly. The
 launcher supports DM mode and Player mode and renders a dark tactical tabletop
 from server responses, read models, and live SSE events. DM mode can run a fresh
 demo setup, seed the sample session, create/activate custom scenes, place and
-edit passive scene entities/obstacles, create and command narrow monster/NPC
+edit passive scene entities/obstacles, author transition nodes, activate linked
+destination scenes through those nodes, create and command narrow monster/NPC
 combatants, operate mixed player/combatant encounter controls, and use explicit
 DM override commands. Player mode can join or recover an existing session,
 create/update/finalize its own draft character through the existing character
 command endpoint, submit a finalized character for authoritative DM assignment,
 see pending assignment state after recovery, read pending or assigned character
-state, view active scene entities after recovery, move only its own token, use
-turn resources as itself, and attack selected player or active non-defeated
-combatant targets. A readable combat/event feed is primary; raw JSON remains
-available as secondary debug detail.
+state, view active scene entities and visible transition markers after
+recovery, move only its own token, use turn resources as itself, and attack
+selected player or active non-defeated combatant targets. A readable
+combat/event feed is primary; raw JSON remains available as secondary debug
+detail.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model
@@ -317,6 +335,8 @@ delete backend sessions or runtime state.
 - No authentication or authorization beyond command actor/role validation.
 - No event replay, cursor, or durable catch-up API.
 - No multi-process subscriber persistence or distributed coordination.
+- No full adventure/campaign builder, automatic player-triggered transitions,
+  traps/locks/scripts, fog of war, line of sight, or lighting.
 - No opportunity attacks, reaction windows, full condition engine, death saves,
   spells, weapon system, ranged attacks, full monster stat blocks, or monster
   AI.

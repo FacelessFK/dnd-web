@@ -35,6 +35,7 @@ export const DURABLE_SESSION_MUTATION_COMMAND_TYPES = [
   'assign_character_to_participant',
   'submit_character_for_assignment',
   'activate_scene_for_session',
+  'activate_scene_transition',
 ] as const;
 
 type DurableSessionMutationCommandType =
@@ -89,7 +90,10 @@ export class DbBackedSessionCommandTransactionBoundary {
       return params.category === 'character';
     }
 
-    if (params.command.type === 'activate_scene_for_session') {
+    if (
+      params.command.type === 'activate_scene_for_session' ||
+      params.command.type === 'activate_scene_transition'
+    ) {
       return params.category === 'scene';
     }
 

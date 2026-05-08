@@ -17,6 +17,13 @@ export const sceneEntityTypes = [
   'terrain',
 ] as const;
 export const sceneCombatantKinds = ['monster', 'npc'] as const;
+export const sceneTransitionKinds = [
+  'door',
+  'stairs',
+  'portal',
+  'gate',
+  'other',
+] as const;
 
 export type SessionId = string;
 export type ParticipantId = string;
@@ -36,6 +43,7 @@ export type EncounterStatus = (typeof encounterStatuses)[number];
 export type VisibilityState = (typeof visibilityStates)[number];
 export type SceneEntityType = (typeof sceneEntityTypes)[number];
 export type SceneCombatantKind = (typeof sceneCombatantKinds)[number];
+export type SceneTransitionKind = (typeof sceneTransitionKinds)[number];
 export type RulesConfigValue = string | number | boolean | null;
 export type CharacterMeta = Record<string, RulesConfigValue>;
 export type SceneEntityMeta = Record<string, RulesConfigValue>;
@@ -211,6 +219,13 @@ export interface SceneCombatant {
   abilities: AbilityScores;
 }
 
+export interface SceneTransition {
+  kind: SceneTransitionKind;
+  targetSceneId: SceneId;
+  targetLabel: string | null;
+  notes: string | null;
+}
+
 export interface SceneEntity {
   id: SceneEntityId;
   type: SceneEntityType;
@@ -221,6 +236,7 @@ export interface SceneEntity {
   blocksVision: boolean;
   hidden: boolean;
   combatant: SceneCombatant | null;
+  transition?: SceneTransition | null;
   meta: SceneEntityMeta;
 }
 

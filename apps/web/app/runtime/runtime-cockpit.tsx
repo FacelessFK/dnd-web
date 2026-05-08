@@ -9,6 +9,7 @@ import type {
   Encounter,
   Scene,
   SceneEntityInput,
+  SceneTransitionInput,
   SessionStreamEvent,
 } from '@dnd/protocol';
 
@@ -33,8 +34,10 @@ import {
   createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
+  createDefaultSceneTransitionDraftForm,
   createSceneEntityDraftFormFromEntity,
   createSceneDraftFormFromScene,
+  createSceneTransitionDraftFormFromEntity,
   defaultDm,
   defaultPlayer,
   describeSessionStreamEvent,
@@ -56,9 +59,11 @@ import {
   getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
+  getKnownSceneOptions,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
+  getTransitionSceneEntities,
   initials,
   isSessionStreamEvent,
   isCombatantEntityDefeated,
@@ -69,12 +74,16 @@ import {
   sceneEntityInputFromDraft,
   sceneEntityUpdateInputFromDraft,
   sceneEntityTypeOptions,
+  sceneTransitionInputFromDraft,
+  sceneTransitionKindOptions,
+  sceneTransitionUpdateInputFromDraft,
   combatantInputFromDraft,
   sceneInputFromDraft,
   validateCharacterDraftForm,
   validateCombatantDraftForm,
   validateSceneDraftForm,
   validateSceneEntityDraftForm,
+  validateSceneTransitionDraftForm,
   type Cell,
   type AbilityKey,
   type CharacterDraftForm,
@@ -84,6 +93,7 @@ import {
   type RuntimeNoticeTone,
   type SceneDraftForm,
   type SceneEntityDraftForm,
+  type SceneTransitionDraftForm,
   type SessionSnapshot,
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
@@ -129,6 +139,9 @@ export function RuntimeCockpit() {
     null,
   );
   const [scene, setScene] = useState<Scene | null>(null);
+  const [knownScenesById, setKnownScenesById] = useState<Record<string, Scene>>(
+    {},
+  );
   const [activeScene, setActiveScene] = useState<ActiveSceneState | null>(null);
   const [encounter, setEncounter] = useState<Encounter | null>(null);
   const [charactersByParticipant, setCharactersByParticipant] = useState<
@@ -148,6 +161,15 @@ export function RuntimeCockpit() {
   const [selectedSceneEntityId, setSelectedSceneEntityId] = useState('');
   const [sceneEntityEditDraft, setSceneEntityEditDraft] =
     useState<SceneEntityDraftForm>(() => createDefaultSceneEntityDraftForm());
+  const [sceneTransitionDraft, setSceneTransitionDraft] =
+    useState<SceneTransitionDraftForm>(() =>
+      createDefaultSceneTransitionDraftForm(),
+    );
+  const [selectedTransitionId, setSelectedTransitionId] = useState('');
+  const [sceneTransitionEditDraft, setSceneTransitionEditDraft] =
+    useState<SceneTransitionDraftForm>(() =>
+      createDefaultSceneTransitionDraftForm(),
+    );
   const [combatantDraft, setCombatantDraft] = useState<CombatantDraftForm>(() =>
     createDefaultCombatantDraftForm(),
   );
@@ -318,6 +340,7 @@ export function RuntimeCockpit() {
     const combatants = getCombatantEntities(scene);
     const attackableCombatants = getAttackableCombatantEntities(scene);
     const passiveEntities = getPassiveSceneEntities(scene);
+    const transitions = getTransitionSceneEntities(scene);
 
     setSelectedCombatantId((current) => {
       if (current && combatants.some((combatant) => combatant.id === current)) {
@@ -345,6 +368,14 @@ export function RuntimeCockpit() {
 
       return passiveEntities[0]?.id ?? '';
     });
+
+    setSelectedTransitionId((current) => {
+      if (current && transitions.some((entity) => entity.id === current)) {
+        return current;
+      }
+
+      return transitions[0]?.id ?? '';
+    });
   }, [scene]);
 
   useEffect(() => {
@@ -358,6 +389,18 @@ export function RuntimeCockpit() {
       );
     }
   }, [scene, selectedSceneEntityId]);
+
+  useEffect(() => {
+    const selectedTransition = getTransitionSceneEntities(scene).find(
+      (entity) => entity.id === selectedTransitionId,
+    );
+
+    if (selectedTransition) {
+      setSceneTransitionEditDraft(
+        createSceneTransitionDraftFormFromEntity(selectedTransition),
+      );
+    }
+  }, [scene, selectedTransitionId]);
 
   useEffect(() => {
     const stored: StoredCockpitState = {
@@ -458,6 +501,10 @@ export function RuntimeCockpit() {
     setSceneEntityDraft(createDefaultSceneEntityDraftForm());
     setSceneEntityEditDraft(createDefaultSceneEntityDraftForm());
     setSelectedSceneEntityId('');
+    setSceneTransitionDraft(createDefaultSceneTransitionDraftForm());
+    setSceneTransitionEditDraft(createDefaultSceneTransitionDraftForm());
+    setSelectedTransitionId('');
+    setKnownScenesById({});
     setCombatantDraft(createDefaultCombatantDraftForm());
     setSelectedCombatantId('');
     setSelectedTargetCombatantId('');
@@ -533,6 +580,10 @@ export function RuntimeCockpit() {
 
   function rememberScene(nextScene: Scene): void {
     setScene(nextScene);
+    setKnownScenesById((current) => ({
+      ...current,
+      [nextScene.id]: nextScene,
+    }));
     setSceneId(nextScene.id);
     setSceneActivationId(nextScene.id);
     setSceneDraft(createSceneDraftFormFromScene(nextScene));
@@ -1216,9 +1267,13 @@ export function RuntimeCockpit() {
         }),
       );
 
-      if ('state' in activated.data) {
-        applySessionSnapshot(activated.data.state);
+      if (!('state' in activated.data) || !('sceneId' in activated.data)) {
+        throw new Error(
+          'activate_scene_transition returned a non-activation response.',
+        );
       }
+
+      applySessionSnapshot(activated.data.state);
 
       const recovered = await unwrap(
         'get_scene',
@@ -1389,6 +1444,184 @@ export function RuntimeCockpit() {
       rememberScene(response.data.scene);
 
       return response;
+    });
+  }
+
+  async function createSceneTransition(): Promise<void> {
+    await runTask('create scene transition', async () => {
+      assertSession();
+      assertSceneTransitionDraftValid();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId) {
+        throw new Error('Create, activate, or recover a source scene first.');
+      }
+
+      const response = await unwrap(
+        'create_scene_transition',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-create-scene-transition'),
+          payload: {
+            sceneId: targetSceneId,
+            sessionId,
+            transition: sceneTransitionInputFromDraft(
+              sceneTransitionDraft,
+              selectedCell,
+            ),
+          },
+          type: 'create_scene_transition',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'create_scene_transition returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function updateSceneTransition(): Promise<void> {
+    await runTask('update scene transition', async () => {
+      assertSession();
+      assertSceneTransitionEditDraftValid();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedTransitionId) {
+        throw new Error('Select a scene transition to update.');
+      }
+
+      const response = await unwrap(
+        'update_scene_transition',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-update-scene-transition'),
+          payload: {
+            sceneId: targetSceneId,
+            sessionId,
+            transition: sceneTransitionUpdateInputFromDraft(
+              sceneTransitionEditDraft,
+            ),
+            transitionId: selectedTransitionId,
+          },
+          type: 'update_scene_transition',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'update_scene_transition returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function deleteSceneTransition(): Promise<void> {
+    await runTask('delete scene transition', async () => {
+      assertSession();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedTransitionId) {
+        throw new Error('Select a scene transition to delete.');
+      }
+
+      const response = await unwrap(
+        'delete_scene_transition',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-delete-scene-transition'),
+          payload: {
+            sceneId: targetSceneId,
+            sessionId,
+            transitionId: selectedTransitionId,
+          },
+          type: 'delete_scene_transition',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'delete_scene_transition returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function activateSceneTransition(): Promise<void> {
+    await runTask('activate scene transition', async () => {
+      assertSession();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedTransitionId) {
+        throw new Error('Select a scene transition to activate.');
+      }
+
+      const activated = await unwrap(
+        'activate_scene_transition',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-activate-scene-transition'),
+          payload: {
+            sceneId: targetSceneId,
+            sessionId,
+            transitionId: selectedTransitionId,
+          },
+          type: 'activate_scene_transition',
+        }),
+      );
+
+      if (!('state' in activated.data) || !('sceneId' in activated.data)) {
+        throw new Error(
+          'activate_scene_transition returned a non-activation response.',
+        );
+      }
+
+      applySessionSnapshot(activated.data.state);
+
+      const recovered = await unwrap(
+        'get_scene',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-get-transition-target-scene'),
+          payload: {
+            sceneId: activated.data.sceneId,
+            sessionId,
+          },
+          type: 'get_scene',
+        }),
+      );
+
+      if ('scene' in recovered.data) {
+        rememberScene(recovered.data.scene);
+      }
+
+      return {
+        activated,
+        scene: recovered,
+      };
     });
   }
 
@@ -2399,6 +2632,35 @@ export function RuntimeCockpit() {
     }
   }
 
+  function assertSceneTransitionDraftValid(): void {
+    const errors = validateSceneTransitionDraftForm({
+      form: sceneTransitionDraft,
+      grid: scene?.grid,
+      position: selectedCell,
+    });
+
+    if (errors.length) {
+      throw new Error(`Fix the transition draft first: ${errors.join(' ')}`);
+    }
+  }
+
+  function assertSceneTransitionEditDraftValid(): void {
+    const selectedTransition = getTransitionSceneEntities(scene).find(
+      (entity) => entity.id === selectedTransitionId,
+    );
+    const errors = validateSceneTransitionDraftForm({
+      form: sceneTransitionEditDraft,
+      grid: scene?.grid,
+      position: selectedTransition?.position ?? selectedCell,
+    });
+
+    if (errors.length) {
+      throw new Error(
+        `Fix the transition edit form first: ${errors.join(' ')}`,
+      );
+    }
+  }
+
   function assertCombatantDraftValid(): void {
     const errors = validateCombatantDraftForm({
       form: combatantDraft,
@@ -2456,6 +2718,78 @@ export function RuntimeCockpit() {
     value: boolean,
   ): void {
     setSceneEntityEditDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function selectPassiveSceneEntity(entityId: string): void {
+    setSelectedSceneEntityId(entityId);
+
+    if (entityId) {
+      setSelectedTransitionId('');
+    }
+  }
+
+  function selectSceneTransitionNode(transitionId: string): void {
+    setSelectedTransitionId(transitionId);
+
+    if (transitionId) {
+      setSelectedSceneEntityId('');
+    }
+  }
+
+  function updateSceneTransitionDraftField(
+    field:
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'notes'
+      | 'targetLabel'
+      | 'targetSceneId',
+    value: string,
+  ): void {
+    setSceneTransitionDraft((current) => ({
+      ...current,
+      [field]:
+        field === 'kind' ? (value as SceneTransitionInput['kind']) : value,
+    }));
+  }
+
+  function updateSceneTransitionDraftFlag(
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ): void {
+    setSceneTransitionDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateSceneTransitionEditDraftField(
+    field:
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'notes'
+      | 'targetLabel'
+      | 'targetSceneId',
+    value: string,
+  ): void {
+    setSceneTransitionEditDraft((current) => ({
+      ...current,
+      [field]:
+        field === 'kind' ? (value as SceneTransitionInput['kind']) : value,
+    }));
+  }
+
+  function updateSceneTransitionEditDraftFlag(
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ): void {
+    setSceneTransitionEditDraft((current) => ({
       ...current,
       [field]: value,
     }));
@@ -2592,6 +2926,21 @@ export function RuntimeCockpit() {
     grid: scene?.grid,
     position: selectedSceneEntity?.position ?? selectedCell,
   });
+  const transitionSceneEntities = getTransitionSceneEntities(scene);
+  const selectedTransition = transitionSceneEntities.find(
+    (entity) => entity.id === selectedTransitionId,
+  );
+  const knownSceneOptions = getKnownSceneOptions(knownScenesById);
+  const transitionDraftErrors = validateSceneTransitionDraftForm({
+    form: sceneTransitionDraft,
+    grid: scene?.grid,
+    position: selectedCell,
+  });
+  const transitionEditDraftErrors = validateSceneTransitionDraftForm({
+    form: sceneTransitionEditDraft,
+    grid: scene?.grid,
+    position: selectedTransition?.position ?? selectedCell,
+  });
   const combatants = getCombatantEntities(scene);
   const attackableCombatants = getAttackableCombatantEntities(scene);
   const selectedCombatant = combatants.find(
@@ -2639,6 +2988,30 @@ export function RuntimeCockpit() {
     selectedPassiveEntityReason ?? sceneEntityEditDraftReason;
   const repositionSceneEntityReason = selectedPassiveEntityReason;
   const deleteSceneEntityReason = selectedPassiveEntityReason;
+  const transitionDraftReason =
+    transitionDraftErrors.length > 0
+      ? `Fix the transition draft first: ${transitionDraftErrors[0]}`
+      : null;
+  const transitionEditDraftReason =
+    transitionEditDraftErrors.length > 0
+      ? `Fix the transition edit form first: ${transitionEditDraftErrors[0]}`
+      : null;
+  const createTransitionReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a source scene first.') ??
+    transitionDraftReason;
+  const selectedTransitionReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a source scene first.') ??
+    (selectedTransition ? null : 'Select a transition node first.');
+  const updateTransitionReason =
+    selectedTransitionReason ?? transitionEditDraftReason;
+  const deleteTransitionReason = selectedTransitionReason;
+  const activateTransitionReason = selectedTransitionReason;
   const combatantDraftReason =
     combatantDraftErrors.length > 0
       ? `Fix the combatant draft first: ${combatantDraftErrors[0]}`
@@ -3036,13 +3409,15 @@ export function RuntimeCockpit() {
                 grid={grid}
                 mode={mode}
                 onSelectCell={setSelectedCell}
-                onSelectSceneEntity={setSelectedSceneEntityId}
+                onSelectSceneEntity={selectPassiveSceneEntity}
+                onSelectTransition={selectSceneTransitionNode}
                 scene={scene}
                 selectedCell={selectedCell}
                 selectedCombatantId={selectedCombatantId}
                 selectedSceneEntityId={selectedSceneEntityId}
                 selectedTargetCombatantId={selectedTargetCombatantId}
                 selectedTargetParticipantId={selectedTarget}
+                selectedTransitionId={selectedTransitionId}
               />
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
                 {mode === 'dm' ? (
@@ -3279,7 +3654,7 @@ export function RuntimeCockpit() {
                 onPlaceEntity={placeSceneEntity}
                 onRepositionEntity={repositionSceneEntity}
                 onSceneFieldChange={updateSceneDraftField}
-                onSelectEntity={setSelectedSceneEntityId}
+                onSelectEntity={selectPassiveSceneEntity}
                 onUpdateEntity={updateSceneEntity}
                 deleteEntityDisabledReason={deleteSceneEntityReason}
                 placeEntityDisabledReason={placeSceneEntityReason}
@@ -3292,6 +3667,33 @@ export function RuntimeCockpit() {
                 selectedCell={selectedCell}
                 activateDisabledReason={activateSceneReason}
                 updateEntityDisabledReason={updateSceneEntityReason}
+              />
+            ) : null}
+
+            {mode === 'dm' ? (
+              <SceneTransitionPanel
+                activateDisabledReason={activateTransitionReason}
+                createDisabledReason={createTransitionReason}
+                deleteDisabledReason={deleteTransitionReason}
+                draft={sceneTransitionDraft}
+                draftErrors={transitionDraftErrors}
+                editDraft={sceneTransitionEditDraft}
+                editDraftErrors={transitionEditDraftErrors}
+                onActivate={activateSceneTransition}
+                onCreate={createSceneTransition}
+                onDelete={deleteSceneTransition}
+                onDraftFieldChange={updateSceneTransitionDraftField}
+                onDraftFlagChange={updateSceneTransitionDraftFlag}
+                onEditFieldChange={updateSceneTransitionEditDraftField}
+                onEditFlagChange={updateSceneTransitionEditDraftFlag}
+                onSelectTransition={selectSceneTransitionNode}
+                onUpdate={updateSceneTransition}
+                sceneOptions={knownSceneOptions}
+                selectedCell={selectedCell}
+                selectedTransition={selectedTransition}
+                selectedTransitionId={selectedTransitionId}
+                transitions={transitionSceneEntities}
+                updateDisabledReason={updateTransitionReason}
               />
             ) : null}
 
@@ -4493,6 +4895,332 @@ function SceneBuilderPanel({
   );
 }
 
+function SceneTransitionPanel({
+  activateDisabledReason,
+  createDisabledReason,
+  deleteDisabledReason,
+  draft,
+  draftErrors,
+  editDraft,
+  editDraftErrors,
+  onActivate,
+  onCreate,
+  onDelete,
+  onDraftFieldChange,
+  onDraftFlagChange,
+  onEditFieldChange,
+  onEditFlagChange,
+  onSelectTransition,
+  onUpdate,
+  sceneOptions,
+  selectedCell,
+  selectedTransition,
+  selectedTransitionId,
+  transitions,
+  updateDisabledReason,
+}: {
+  activateDisabledReason: string | null;
+  createDisabledReason: string | null;
+  deleteDisabledReason: string | null;
+  draft: SceneTransitionDraftForm;
+  draftErrors: string[];
+  editDraft: SceneTransitionDraftForm;
+  editDraftErrors: string[];
+  onActivate: () => void | Promise<void>;
+  onCreate: () => void | Promise<void>;
+  onDelete: () => void | Promise<void>;
+  onDraftFieldChange: (
+    field:
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'notes'
+      | 'targetLabel'
+      | 'targetSceneId',
+    value: string,
+  ) => void;
+  onDraftFlagChange: (
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ) => void;
+  onEditFieldChange: (
+    field:
+      | 'footprintHeight'
+      | 'footprintWidth'
+      | 'kind'
+      | 'name'
+      | 'notes'
+      | 'targetLabel'
+      | 'targetSceneId',
+    value: string,
+  ) => void;
+  onEditFlagChange: (
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ) => void;
+  onSelectTransition: (transitionId: string) => void;
+  onUpdate: () => void | Promise<void>;
+  sceneOptions: Array<{ label: string; value: string }>;
+  selectedCell: Cell;
+  selectedTransition?: Scene['entities'][number];
+  selectedTransitionId: string;
+  transitions: Scene['entities'];
+  updateDisabledReason: string | null;
+}) {
+  const targetOptions = [
+    { label: 'Choose a known scene...', value: '' },
+    ...sceneOptions,
+  ];
+
+  return (
+    <Panel
+      description="Author simple linked markers such as doors, stairs, portals, and gates. Only the DM can activate a transition."
+      eyebrow="DM-only"
+      title="Scene Transitions"
+      tone="dm"
+    >
+      <div className="grid gap-4">
+        <div className="grid gap-3 rounded-2xl border border-violet-300/20 bg-violet-950/20 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">Create transition</p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              Target cell {selectedCell.x},{selectedCell.y}. Linked activation
+              changes the active scene only after the server accepts the
+              command.
+            </p>
+          </div>
+          {draftErrors.length ? (
+            <p className="text-xs leading-5 text-amber-200">
+              {draftErrors.slice(0, 3).join(' ')}
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <SelectField
+              label="Kind"
+              onChange={(value) => onDraftFieldChange('kind', value)}
+              options={sceneTransitionKindOptions.map((kind) => ({
+                label: kind,
+                value: kind,
+              }))}
+              value={draft.kind}
+            />
+            <LabeledInput
+              label="Name"
+              onChange={(value) => onDraftFieldChange('name', value)}
+              value={draft.name}
+            />
+          </div>
+          <SelectField
+            label="Known target scene"
+            onChange={(value) => onDraftFieldChange('targetSceneId', value)}
+            options={targetOptions}
+            value={draft.targetSceneId}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledInput
+              label="Target scene ID"
+              onChange={(value) => onDraftFieldChange('targetSceneId', value)}
+              placeholder="scene_..."
+              value={draft.targetSceneId}
+            />
+            <LabeledInput
+              label="Target label"
+              onChange={(value) => onDraftFieldChange('targetLabel', value)}
+              value={draft.targetLabel}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledInput
+              label="Footprint W"
+              onChange={(value) => onDraftFieldChange('footprintWidth', value)}
+              value={draft.footprintWidth}
+            />
+            <LabeledInput
+              label="Footprint H"
+              onChange={(value) => onDraftFieldChange('footprintHeight', value)}
+              value={draft.footprintHeight}
+            />
+          </div>
+          <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
+            <CheckboxField
+              checked={draft.blocksMovement}
+              label="Blocks movement"
+              onChange={(checked) =>
+                onDraftFlagChange('blocksMovement', checked)
+              }
+            />
+            <CheckboxField
+              checked={draft.blocksVision}
+              label="Blocks vision"
+              onChange={(checked) => onDraftFlagChange('blocksVision', checked)}
+            />
+            <CheckboxField
+              checked={draft.hidden}
+              label="Hidden from player map styling"
+              onChange={(checked) => onDraftFlagChange('hidden', checked)}
+            />
+          </div>
+          <TextAreaField
+            label="Notes"
+            onChange={(value) => onDraftFieldChange('notes', value)}
+            value={draft.notes}
+          />
+          <ActionButton
+            disabled={Boolean(createDisabledReason)}
+            disabledReason={createDisabledReason ?? undefined}
+            label="Create Transition"
+            onClick={onCreate}
+            variant="secondary"
+          />
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-violet-300/20 bg-black/25 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">
+              Edit linked transition
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              Passive scene entities and combatants are intentionally separate.
+              Transition activation remains DM-controlled.
+            </p>
+          </div>
+          {transitions.length ? (
+            <SelectField
+              label="Transition node"
+              onChange={onSelectTransition}
+              options={transitions.map((transition) => ({
+                label: getSceneEntityLabel(transition),
+                value: transition.id,
+              }))}
+              value={selectedTransitionId}
+            />
+          ) : (
+            <EmptyState
+              detail="Create a transition node before editing or activating linked scenes."
+              title="No transition nodes"
+            />
+          )}
+          {selectedTransition ? (
+            <div className="grid gap-3">
+              <StatusRow
+                label="Selected"
+                value={`${selectedTransition.name} at ${selectedTransition.position.x},${selectedTransition.position.y}`}
+              />
+              {editDraftErrors.length ? (
+                <p className="text-xs leading-5 text-amber-200">
+                  {editDraftErrors.slice(0, 3).join(' ')}
+                </p>
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <SelectField
+                  label="Kind"
+                  onChange={(value) => onEditFieldChange('kind', value)}
+                  options={sceneTransitionKindOptions.map((kind) => ({
+                    label: kind,
+                    value: kind,
+                  }))}
+                  value={editDraft.kind}
+                />
+                <LabeledInput
+                  label="Name"
+                  onChange={(value) => onEditFieldChange('name', value)}
+                  value={editDraft.name}
+                />
+              </div>
+              <SelectField
+                label="Known target scene"
+                onChange={(value) => onEditFieldChange('targetSceneId', value)}
+                options={targetOptions}
+                value={editDraft.targetSceneId}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <LabeledInput
+                  label="Target scene ID"
+                  onChange={(value) =>
+                    onEditFieldChange('targetSceneId', value)
+                  }
+                  placeholder="scene_..."
+                  value={editDraft.targetSceneId}
+                />
+                <LabeledInput
+                  label="Target label"
+                  onChange={(value) => onEditFieldChange('targetLabel', value)}
+                  value={editDraft.targetLabel}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <LabeledInput
+                  label="Footprint W"
+                  onChange={(value) =>
+                    onEditFieldChange('footprintWidth', value)
+                  }
+                  value={editDraft.footprintWidth}
+                />
+                <LabeledInput
+                  label="Footprint H"
+                  onChange={(value) =>
+                    onEditFieldChange('footprintHeight', value)
+                  }
+                  value={editDraft.footprintHeight}
+                />
+              </div>
+              <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
+                <CheckboxField
+                  checked={editDraft.blocksMovement}
+                  label="Blocks movement"
+                  onChange={(checked) =>
+                    onEditFlagChange('blocksMovement', checked)
+                  }
+                />
+                <CheckboxField
+                  checked={editDraft.blocksVision}
+                  label="Blocks vision"
+                  onChange={(checked) =>
+                    onEditFlagChange('blocksVision', checked)
+                  }
+                />
+                <CheckboxField
+                  checked={editDraft.hidden}
+                  label="Hidden from player map styling"
+                  onChange={(checked) => onEditFlagChange('hidden', checked)}
+                />
+              </div>
+              <TextAreaField
+                label="Notes"
+                onChange={(value) => onEditFieldChange('notes', value)}
+                value={editDraft.notes}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <ActionButton
+                  disabled={Boolean(updateDisabledReason)}
+                  disabledReason={updateDisabledReason ?? undefined}
+                  label="Update"
+                  onClick={onUpdate}
+                  variant="secondary"
+                />
+                <ActionButton
+                  disabled={Boolean(activateDisabledReason)}
+                  disabledReason={activateDisabledReason ?? undefined}
+                  label="Activate Link"
+                  onClick={onActivate}
+                />
+                <ActionButton
+                  disabled={Boolean(deleteDisabledReason)}
+                  disabledReason={deleteDisabledReason ?? undefined}
+                  label="Delete"
+                  onClick={onDelete}
+                  variant="danger"
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function CombatantPanel({
   attackDisabledReason,
   combatantDraft,
@@ -4997,12 +5725,14 @@ function TacticalGrid({
   mode,
   onSelectCell,
   onSelectSceneEntity,
+  onSelectTransition,
   scene,
   selectedCell,
   selectedCombatantId,
   selectedSceneEntityId,
   selectedTargetCombatantId,
   selectedTargetParticipantId,
+  selectedTransitionId,
 }: {
   activeScene: ActiveSceneState | null;
   actingParticipantId: string;
@@ -5016,14 +5746,26 @@ function TacticalGrid({
   mode: RuntimeMode;
   onSelectCell: (cell: Cell) => void;
   onSelectSceneEntity: (entityId: string) => void;
+  onSelectTransition: (transitionId: string) => void;
   scene: Scene | null;
   selectedCell: Cell;
   selectedCombatantId: string;
   selectedSceneEntityId: string;
   selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
+  selectedTransitionId: string;
 }) {
   const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
+  const visibleEntityCells = useMemo(
+    () =>
+      mode === 'player'
+        ? entityCells.filter(
+            (candidate) =>
+              !(candidate.entity.transition && candidate.entity.hidden),
+          )
+        : entityCells,
+    [entityCells, mode],
+  );
   const combatantCells = useMemo(
     () => getCombatantDisplayCells(scene),
     [scene],
@@ -5044,7 +5786,7 @@ function TacticalGrid({
       }}
     >
       {cells.map((cell) => {
-        const entitiesAtCell = entityCells.filter(
+        const entitiesAtCell = visibleEntityCells.filter(
           (candidate) => candidate.x === cell.x && candidate.y === cell.y,
         );
         const primaryEntityCell = entitiesAtCell[0];
@@ -5065,6 +5807,11 @@ function TacticalGrid({
           selectedCell.x === cell.x && selectedCell.y === cell.y;
         const isSelectedEntity =
           primaryEntityCell?.entity.id === selectedSceneEntityId;
+        const isSelectedTransition =
+          primaryEntityCell?.entity.id === selectedTransitionId;
+        const isTransitionEntity = Boolean(
+          primaryEntityCell?.entity.transition,
+        );
         const isActingToken = placement?.participantId === actingParticipantId;
         const isTarget =
           placement?.participantId === selectedTargetParticipantId;
@@ -5092,13 +5839,15 @@ function TacticalGrid({
           ? isDefeatedCombatant
             ? 'border-stone-400/50 bg-stone-900/70 text-stone-200'
             : 'border-red-200/60 bg-red-900/65 text-red-50'
-          : primaryEntityCell?.entity.type === 'terrain'
-            ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
-            : primaryEntityCell?.entity.type === 'monster'
-              ? 'border-red-300/45 bg-red-950/45 text-red-100'
-              : primaryEntityCell?.entity.type === 'player_spawn'
-                ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
-                : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
+          : isTransitionEntity
+            ? 'border-violet-200/60 bg-violet-950/55 text-violet-100'
+            : primaryEntityCell?.entity.type === 'terrain'
+              ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
+              : primaryEntityCell?.entity.type === 'monster'
+                ? 'border-red-300/45 bg-red-950/45 text-red-100'
+                : primaryEntityCell?.entity.type === 'player_spawn'
+                  ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
+                  : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
         const ariaParts = [
           `Select cell ${cell.x}, ${cell.y}`,
           primaryCombatantCell
@@ -5132,7 +5881,11 @@ function TacticalGrid({
                 primaryEntityCell &&
                 !primaryEntityCell.entity.combatant
               ) {
-                onSelectSceneEntity(primaryEntityCell.entity.id);
+                if (primaryEntityCell.entity.transition) {
+                  onSelectTransition(primaryEntityCell.entity.id);
+                } else {
+                  onSelectSceneEntity(primaryEntityCell.entity.id);
+                }
               }
             }}
             type="button"
@@ -5144,12 +5897,25 @@ function TacticalGrid({
               <span
                 className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
                   isSelectedEntity ? 'ring-2 ring-amber-200/80' : ''
-                } ${primaryEntityCell.entity.hidden ? 'opacity-45' : ''}`}
+                } ${isSelectedTransition ? 'ring-2 ring-violet-100/90' : ''} ${
+                  primaryEntityCell.entity.hidden ? 'opacity-45' : ''
+                }`}
                 title={primaryEntityCell.label}
               >
-                {primaryEntityCell.isOrigin
-                  ? initials(primaryEntityCell.entity.name) || 'E'
-                  : '·'}
+                {primaryEntityCell.isOrigin ? (
+                  primaryEntityCell.entity.transition ? (
+                    <span className="flex items-center gap-1">
+                      <span>T</span>
+                      <span>
+                        {initials(primaryEntityCell.entity.name) || 'T'}
+                      </span>
+                    </span>
+                  ) : (
+                    initials(primaryEntityCell.entity.name) || 'E'
+                  )
+                ) : (
+                  '·'
+                )}
               </span>
             ) : null}
             {primaryCombatantCell ? (

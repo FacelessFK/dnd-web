@@ -26,6 +26,9 @@ export const DURABLE_SCENE_MUTATION_COMMAND_TYPES = [
   'update_scene_entity',
   'reposition_scene_entity',
   'delete_scene_entity',
+  'create_scene_transition',
+  'update_scene_transition',
+  'delete_scene_transition',
 ] as const;
 
 export const DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES = [

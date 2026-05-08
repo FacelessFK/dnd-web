@@ -15,8 +15,9 @@ controls, and durable persistence.
 The repository now has a role-aware browser runtime surface at `/runtime`, plus
 refreshed Phase 9 API and handoff documentation. The runtime UI presents a dark
 fantasy tactical tabletop with DM and Player modes. A DM can create and seed
-sessions, create custom tactical scenes, activate scenes, place and edit
-passive scene entities/obstacles, create narrow monster/NPC combatants, place
+sessions, create custom tactical scenes, activate scenes, author DM-controlled
+transition nodes between scenes, place and edit passive scene
+entities/obstacles, create narrow monster/NPC combatants, place
 character tokens, start mixed player/combatant encounters, drive
 turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo
 setup flow, reset local browser state without touching the backend, and recover
@@ -47,8 +48,8 @@ Implemented so far:
 - character create, update, finalize, submit-for-assignment, assign, and read
   flows
 - derived character stats helpers
-- scene create, read, activate, passive entity placement/editing,
-  combatant placement, and active-scene read model
+- scene create, read, activate, passive entity placement/editing, transition
+  node authoring/activation, combatant placement, and active-scene read model
 - character placement and movement in the active scene
 - encounter start, read, turn advancement, and turn usage tracking
 - action, bonus action, reaction, and movement usage commands
@@ -95,7 +96,8 @@ Not implemented yet:
   distributed coordination beyond the currently covered DB-backed slices
 - full transaction/outbox persistence boundaries across every command path
 - character builder/library product UI
-- production-grade player UX, map/adventure editor, or authenticated DM panel
+- production-grade player UX, full map/adventure editor, automatic
+  player-triggered scene transitions, or authenticated DM panel
 - opportunity attacks or out-of-turn reaction windows
 - full condition engine, death saves, spells, weapons, ranged attacks, full
   monster stat blocks, or monster AI
@@ -178,7 +180,7 @@ Current high-level command groups:
 | ------------------------- | ---------------------------------------------------- | ------------------------ |
 | `/api/session/command`    | create, join, reconnect                              | reconnect recovery       |
 | `/api/characters/command` | create, update, finalize, submit, assign             | `get_character`          |
-| `/api/scenes/command`     | create, activate, place/edit scene entity            | `get_scene`              |
+| `/api/scenes/command`     | create, activate, place/edit entity, transitions     | `get_scene`              |
 | `/api/movement/command`   | place character, move character                      | `get_active_scene_state` |
 | `/api/encounters/command` | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
 | `/api/dm/command`         | HP, conditions, reposition, combatants, turns, end   | none                     |
@@ -211,7 +213,8 @@ For browser-based manual operation, start both apps and open
 `http://localhost:3000/runtime`. The launcher offers DM mode and Player mode.
 DM mode has the fresh demo setup action for local playtesting, a scene builder
 for custom grid scenes plus authoritative passive entity/obstacle
-placement/edit/reposition/delete controls, and a monster/NPC panel for narrow
+placement/edit/reposition/delete controls, a transition-node panel for
+DM-controlled linked scene activation, and a monster/NPC panel for narrow
 DM-controlled combatants. Player mode has a
 character sheet draft flow backed by character commands and can submit finalized
 characters for DM assignment; DM assignment remains authoritative. Local Reset

@@ -12,7 +12,9 @@ import {
   createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
+  createDefaultSceneTransitionDraftForm,
   createSceneEntityDraftFormFromEntity,
+  createSceneTransitionDraftFormFromEntity,
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
@@ -30,6 +32,7 @@ import {
   getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
+  getKnownSceneOptions,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   isCombatantEntityDefeated,
@@ -39,10 +42,15 @@ import {
   sceneEntityInputFromDraft,
   sceneEntityUpdateInputFromDraft,
   sceneInputFromDraft,
+  sceneTransitionInputFromDraft,
+  sceneTransitionUpdateInputFromDraft,
   validateCharacterDraftForm,
   validateCombatantDraftForm,
   validateSceneDraftForm,
   validateSceneEntityDraftForm,
+  validateSceneTransitionDraftForm,
+  getTransitionSceneEntities,
+  getVisibleTransitionSceneEntities,
 } from './runtime-cockpit-helpers';
 
 const sessionState: SessionSnapshot = {
@@ -619,6 +627,7 @@ describe('runtime cockpit helpers', () => {
           blocksVision: false,
           hidden: true,
           combatant: null,
+          transition: null,
           meta: {
             lockDc: 14,
           },
@@ -656,6 +665,7 @@ describe('runtime cockpit helpers', () => {
               cha: 8,
             },
           },
+          transition: null,
           meta: {
             source: 'dm_combatant',
           },
@@ -699,6 +709,190 @@ describe('runtime cockpit helpers', () => {
       name: 'Rune Door',
       type: 'object',
     });
+  });
+
+  it('creates validates and normalizes scene transition drafts', () => {
+    const draft = createDefaultSceneTransitionDraftForm();
+    const position = {
+      x: 1,
+      y: 1,
+    };
+
+    assert.match(
+      validateSceneTransitionDraftForm({
+        form: draft,
+        grid: {
+          cellSizeFeet: 5,
+          height: 8,
+          width: 8,
+        },
+        position,
+      }).join('\n'),
+      /Target scene ID is required/,
+    );
+
+    const readyDraft = {
+      ...draft,
+      name: '  North Stairs  ',
+      notes: '  Cold steps down.  ',
+      targetLabel: '  Lower Crypt  ',
+      targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+    };
+
+    assert.deepEqual(
+      validateSceneTransitionDraftForm({
+        form: readyDraft,
+        grid: {
+          cellSizeFeet: 5,
+          height: 8,
+          width: 8,
+        },
+        position,
+      }),
+      [],
+    );
+    assert.deepEqual(sceneTransitionInputFromDraft(readyDraft, position), {
+      blocksMovement: false,
+      blocksVision: false,
+      footprint: {
+        height: 1,
+        width: 1,
+      },
+      hidden: false,
+      kind: 'door',
+      name: 'North Stairs',
+      notes: 'Cold steps down.',
+      position,
+      targetLabel: 'Lower Crypt',
+      targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+    });
+    assert.deepEqual(sceneTransitionUpdateInputFromDraft(readyDraft), {
+      blocksMovement: false,
+      blocksVision: false,
+      footprint: {
+        height: 1,
+        width: 1,
+      },
+      hidden: false,
+      kind: 'door',
+      name: 'North Stairs',
+      notes: 'Cold steps down.',
+      targetLabel: 'Lower Crypt',
+      targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+    });
+  });
+
+  it('derives transition markers separately from passive entities and respects simple visibility', () => {
+    const scene: Scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: false,
+          blocksVision: false,
+          combatant: null,
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          hidden: true,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          meta: {
+            source: 'scene_transition',
+          },
+          name: 'Secret Stairs',
+          position: {
+            x: 1,
+            y: 1,
+          },
+          transition: {
+            kind: 'stairs',
+            notes: null,
+            targetLabel: 'Lower Crypt',
+            targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+          },
+          type: 'terrain',
+        },
+        {
+          blocksMovement: true,
+          blocksVision: true,
+          combatant: null,
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          hidden: false,
+          id: 'scene_entity_33333333-3333-4333-8333-333333333333',
+          meta: {},
+          name: 'Stone Pillar',
+          position: {
+            x: 2,
+            y: 2,
+          },
+          transition: null,
+          type: 'object',
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'scene_11111111-1111-4111-8111-111111111111',
+      name: 'Rune Hall',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const transition = getTransitionSceneEntities(scene)[0]!;
+    const draft = createSceneTransitionDraftFormFromEntity(transition);
+
+    assert.equal(getTransitionSceneEntities(scene).length, 1);
+    assert.equal(getPassiveSceneEntities(scene).length, 1);
+    assert.equal(
+      getVisibleTransitionSceneEntities({ mode: 'dm', scene }).length,
+      1,
+    );
+    assert.equal(
+      getVisibleTransitionSceneEntities({ mode: 'player', scene }).length,
+      0,
+    );
+    assert.deepEqual(draft, {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: true,
+      kind: 'stairs',
+      name: 'Secret Stairs',
+      notes: '',
+      targetLabel: 'Lower Crypt',
+      targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+    });
+  });
+
+  it('derives known scene options for transition target selection', () => {
+    assert.deepEqual(
+      getKnownSceneOptions({
+        'scene_22222222-2222-4222-8222-222222222222': {
+          createdAt: '2026-01-01T00:00:00.000Z',
+          entities: [],
+          grid: {
+            cellSizeFeet: 5,
+            height: 8,
+            width: 8,
+          },
+          id: 'scene_22222222-2222-4222-8222-222222222222',
+          name: 'Lower Crypt',
+          sessionId: 'SESSION-001',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+      [
+        {
+          label: 'Lower Crypt (scene_22222222-2222-4222-8222-222222222222)',
+          value: 'scene_22222222-2222-4222-8222-222222222222',
+        },
+      ],
+    );
   });
 
   it('derives active scene guidance for DM and player modes', () => {
@@ -754,6 +948,7 @@ describe('runtime cockpit helpers', () => {
           hidden: false,
           id: 'ENTITY-001',
           combatant: null,
+          transition: null,
           meta: {},
           name: 'Crate Stack',
           position: {
@@ -893,6 +1088,7 @@ describe('runtime cockpit helpers', () => {
             y: 4,
           },
           type: 'monster' as const,
+          transition: null,
         },
       ],
       grid: {
@@ -986,6 +1182,7 @@ describe('runtime cockpit helpers', () => {
         x: 3,
         y: 4,
       },
+      transition: null,
       type: 'monster' as const,
     };
     const defeatedCombatant = {

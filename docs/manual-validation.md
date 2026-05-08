@@ -44,8 +44,8 @@ clears only browser state. It is intentionally not a full production E2E suite.
 
 - Session create, join, reconnect, and SSE subscription.
 - Character create, finalize, assign, and read.
-- Scene create, activate, passive entity placement/edit/reposition/delete, and
-  active-scene state read.
+- Scene create, activate, transition create/update/delete/activation, passive
+  entity placement/edit/reposition/delete, and active-scene state read.
 - Narrow DM-controlled monster/NPC combatant creation, HP control, turn
   override, and fixed-damage melee attack.
 - Mixed player/combatant encounter start, turn usage, attack, and encounter
@@ -334,6 +334,148 @@ curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
   -d @- <<JSON | jq .
 {
   "commandId": "manual-activate-scene-1",
+  "type": "activate_scene_for_session",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID"
+  }
+}
+JSON
+```
+
+Create a second scene, add a transition node in the training room pointing to
+that second scene, update it, activate it as the DM, confirm a player cannot
+activate it, then reactivate the training room so the rest of this flow can
+continue in the original scene.
+
+```bash
+TARGET_SCENE_RESPONSE=$(curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON
+{
+  "commandId": "manual-create-transition-target-scene-1",
+  "type": "create_scene",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "scene": {
+      "name": "Moonlit Hall",
+      "grid": {
+        "width": 8,
+        "height": 8,
+        "cellSizeFeet": 5
+      }
+    }
+  }
+}
+JSON
+)
+
+echo "$TARGET_SCENE_RESPONSE" | jq .
+export TARGET_SCENE_ID=$(echo "$TARGET_SCENE_RESPONSE" | jq -r '.data.scene.id')
+
+TRANSITION_RESPONSE=$(curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON
+{
+  "commandId": "manual-create-scene-transition-1",
+  "type": "create_scene_transition",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "transition": {
+      "kind": "door",
+      "name": "North Door",
+      "targetSceneId": "$TARGET_SCENE_ID",
+      "targetLabel": "Moonlit Hall",
+      "notes": "A cold iron-banded door.",
+      "position": { "x": 7, "y": 7 },
+      "footprint": { "width": 1, "height": 1 },
+      "blocksMovement": false,
+      "blocksVision": false,
+      "hidden": false
+    }
+  }
+}
+JSON
+)
+
+echo "$TRANSITION_RESPONSE" | jq .
+export TRANSITION_ID=$(echo "$TRANSITION_RESPONSE" | jq -r '.data.scene.entities[] | select(.transition != null) | .id')
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[] | select(.id == "'$TRANSITION_ID'")'
+{
+  "commandId": "manual-update-scene-transition-1",
+  "type": "update_scene_transition",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "transitionId": "$TRANSITION_ID",
+    "transition": {
+      "kind": "portal",
+      "name": "Moon Gate",
+      "targetSceneId": "$TARGET_SCENE_ID",
+      "targetLabel": "Moonlit Hall"
+    }
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-activate-scene-transition-1",
+  "type": "activate_scene_transition",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "transitionId": "$TRANSITION_ID"
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[]? | select(.id == "'$TRANSITION_ID'")'
+{
+  "commandId": "manual-delete-scene-transition-1",
+  "type": "delete_scene_transition",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "transitionId": "$TRANSITION_ID"
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-player-activate-scene-transition-denied-1",
+  "type": "activate_scene_transition",
+  "actor": { "participantId": "player-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "transitionId": "$TRANSITION_ID"
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq .
+{
+  "commandId": "manual-reactivate-training-room-after-transition-1",
   "type": "activate_scene_for_session",
   "actor": { "participantId": "dm-001" },
   "payload": {
@@ -1013,7 +1155,9 @@ During this flow, the SSE terminal should receive:
 - `character_state` when the DM changes HP or condition tags.
 
 There is still no scene-specific SSE event for scene entity creation, editing,
-repositioning, deletion, or combatant creation. Browser map state is refreshed
-from command responses and `get_scene` recovery reads. `combat_event`,
-`movement_state`, and `character_state` are not durable replay events. Use the
-read commands above to recover current authoritative state after reconnect.
+repositioning, deletion, transition authoring, or combatant creation. Transition
+activation uses the existing `session_state` active-scene update. Browser map
+state is refreshed from command responses and `get_scene` recovery reads.
+`combat_event`, `movement_state`, and `character_state` are not durable replay
+events. Use the read commands above to recover current authoritative state after
+reconnect.

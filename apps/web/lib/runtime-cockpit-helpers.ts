@@ -11,10 +11,15 @@ import type {
   SceneEntityInput,
   SceneEntityUpdateInput,
   SceneInput,
+  SceneTransitionInput,
+  SceneTransitionUpdateInput,
   SessionStreamEvent,
   SessionCommandSuccess,
 } from '@dnd/protocol';
-import { sceneEntityTypeSchema } from '@dnd/protocol';
+import {
+  sceneEntityTypeSchema,
+  sceneTransitionKindSchema,
+} from '@dnd/protocol';
 
 import type { RuntimeApiFailure } from './runtime-api';
 
@@ -63,6 +68,19 @@ export type SceneEntityDraftForm = {
   hidden: boolean;
   name: string;
   type: SceneEntityInput['type'];
+};
+
+export type SceneTransitionDraftForm = {
+  blocksMovement: boolean;
+  blocksVision: boolean;
+  footprintHeight: string;
+  footprintWidth: string;
+  hidden: boolean;
+  kind: SceneTransitionInput['kind'];
+  name: string;
+  notes: string;
+  targetLabel: string;
+  targetSceneId: string;
 };
 
 export type CombatantDraftForm = {
@@ -172,6 +190,7 @@ export const sampleCharacters: Record<string, CharacterInput> = {
 };
 
 export const sceneEntityTypeOptions = sceneEntityTypeSchema.options;
+export const sceneTransitionKindOptions = sceneTransitionKindSchema.options;
 
 export function createDefaultCharacterDraftForm(
   displayName = 'New Adventurer',
@@ -256,6 +275,21 @@ export function createDefaultSceneEntityDraftForm(): SceneEntityDraftForm {
   };
 }
 
+export function createDefaultSceneTransitionDraftForm(): SceneTransitionDraftForm {
+  return {
+    blocksMovement: false,
+    blocksVision: false,
+    footprintHeight: '1',
+    footprintWidth: '1',
+    hidden: false,
+    kind: 'door',
+    name: 'Rune Door',
+    notes: '',
+    targetLabel: '',
+    targetSceneId: '',
+  };
+}
+
 export function createSceneEntityDraftFormFromEntity(
   entity: SceneEntity,
 ): SceneEntityDraftForm {
@@ -267,6 +301,23 @@ export function createSceneEntityDraftFormFromEntity(
     hidden: entity.hidden,
     name: entity.name,
     type: entity.type,
+  };
+}
+
+export function createSceneTransitionDraftFormFromEntity(
+  entity: SceneEntity,
+): SceneTransitionDraftForm {
+  return {
+    blocksMovement: entity.blocksMovement,
+    blocksVision: entity.blocksVision,
+    footprintHeight: String(entity.footprint.height),
+    footprintWidth: String(entity.footprint.width),
+    hidden: entity.hidden,
+    kind: entity.transition?.kind ?? 'door',
+    name: entity.name,
+    notes: entity.transition?.notes ?? '',
+    targetLabel: entity.transition?.targetLabel ?? '',
+    targetSceneId: entity.transition?.targetSceneId ?? '',
   };
 }
 
@@ -428,6 +479,54 @@ export function validateSceneEntityDraftForm({
   return errors;
 }
 
+export function validateSceneTransitionDraftForm({
+  form,
+  grid,
+  position,
+  requireTarget = true,
+}: {
+  form: SceneTransitionDraftForm;
+  grid?: GridDefinition;
+  position: Cell;
+  requireTarget?: boolean;
+}): string[] {
+  const errors: string[] = [];
+
+  if (!form.name.trim()) {
+    errors.push('Transition name is required.');
+  }
+
+  if (!sceneTransitionKindOptions.includes(form.kind)) {
+    errors.push('Choose a valid transition kind.');
+  }
+
+  if (requireTarget && !form.targetSceneId.trim()) {
+    errors.push('Target scene ID is required.');
+  }
+
+  validateIntegerRange(errors, 'Footprint width', form.footprintWidth, 1, 20);
+  validateIntegerRange(errors, 'Footprint height', form.footprintHeight, 1, 20);
+
+  if (position.x < 0 || position.y < 0) {
+    errors.push('Select a non-negative target cell.');
+  }
+
+  const footprintWidth = parseInteger(form.footprintWidth);
+  const footprintHeight = parseInteger(form.footprintHeight);
+
+  if (
+    grid &&
+    typeof footprintWidth === 'number' &&
+    typeof footprintHeight === 'number' &&
+    (position.x + footprintWidth > grid.width ||
+      position.y + footprintHeight > grid.height)
+  ) {
+    errors.push('Transition footprint must fit within the scene grid.');
+  }
+
+  return errors;
+}
+
 export function sceneEntityInputFromDraft(
   form: SceneEntityDraftForm,
   position: Cell,
@@ -465,6 +564,52 @@ export function sceneEntityUpdateInputFromDraft(
     },
     name: form.name.trim(),
     type: form.type,
+  };
+}
+
+export function sceneTransitionInputFromDraft(
+  form: SceneTransitionDraftForm,
+  position: Cell,
+): SceneTransitionInput {
+  const targetLabel = form.targetLabel.trim();
+  const notes = form.notes.trim();
+
+  return {
+    blocksMovement: form.blocksMovement,
+    blocksVision: form.blocksVision,
+    footprint: {
+      height: parseIntegerOrZero(form.footprintHeight),
+      width: parseIntegerOrZero(form.footprintWidth),
+    },
+    hidden: form.hidden,
+    kind: form.kind,
+    name: form.name.trim(),
+    notes: notes ? notes : null,
+    position,
+    targetLabel: targetLabel ? targetLabel : null,
+    targetSceneId: form.targetSceneId.trim(),
+  };
+}
+
+export function sceneTransitionUpdateInputFromDraft(
+  form: SceneTransitionDraftForm,
+): SceneTransitionUpdateInput {
+  const targetLabel = form.targetLabel.trim();
+  const notes = form.notes.trim();
+
+  return {
+    blocksMovement: form.blocksMovement,
+    blocksVision: form.blocksVision,
+    footprint: {
+      height: parseIntegerOrZero(form.footprintHeight),
+      width: parseIntegerOrZero(form.footprintWidth),
+    },
+    hidden: form.hidden,
+    kind: form.kind,
+    name: form.name.trim(),
+    notes: notes ? notes : null,
+    targetLabel: targetLabel ? targetLabel : null,
+    targetSceneId: form.targetSceneId.trim(),
   };
 }
 
@@ -548,11 +693,48 @@ export function getCombatantEntities(
 }
 
 export function getPassiveSceneEntities(scene: Scene | null): SceneEntity[] {
-  return (scene?.entities ?? []).filter((entity) => !entity.combatant);
+  return (scene?.entities ?? []).filter(
+    (entity) => !entity.combatant && !entity.transition,
+  );
 }
 
 export function isPassiveSceneEntity(entity: SceneEntity): boolean {
-  return !entity.combatant;
+  return !entity.combatant && !entity.transition;
+}
+
+export function getTransitionSceneEntities(scene: Scene | null): SceneEntity[] {
+  return (scene?.entities ?? []).filter(
+    (entity) => !entity.combatant && Boolean(entity.transition),
+  );
+}
+
+export function getVisibleTransitionSceneEntities({
+  mode,
+  scene,
+}: {
+  mode: RuntimeMode;
+  scene: Scene | null;
+}): SceneEntity[] {
+  const transitions = getTransitionSceneEntities(scene);
+
+  return mode === 'player'
+    ? transitions.filter((entity) => !entity.hidden)
+    : transitions;
+}
+
+export function isTransitionSceneEntity(entity: SceneEntity): boolean {
+  return !entity.combatant && Boolean(entity.transition);
+}
+
+export function getKnownSceneOptions(
+  scenesById: Record<string, Scene>,
+): Array<{ label: string; value: string }> {
+  return Object.values(scenesById)
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((scene) => ({
+      label: `${scene.name} (${scene.id})`,
+      value: scene.id,
+    }));
 }
 
 export function isCombatantEntityDefeated(
@@ -593,6 +775,9 @@ export function getCombatantDisplayCells(
 export function getSceneEntityLabel(entity: SceneEntity): string {
   const flags = [
     entity.combatant ? `${entity.combatant.kind} combatant` : null,
+    entity.transition
+      ? `${entity.transition.kind} transition to ${entity.transition.targetLabel ?? entity.transition.targetSceneId}`
+      : null,
     entity.blocksMovement ? 'blocks movement' : null,
     entity.blocksVision ? 'blocks vision' : null,
     entity.hidden ? 'hidden' : null,

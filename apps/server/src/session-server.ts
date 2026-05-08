@@ -707,6 +707,12 @@ async function handleSceneCommandRequest(
                   return transactionRuntime.repositionSceneEntity(command);
                 case 'delete_scene_entity':
                   return transactionRuntime.deleteSceneEntity(command);
+                case 'create_scene_transition':
+                  return transactionRuntime.createSceneTransition(command);
+                case 'update_scene_transition':
+                  return transactionRuntime.updateSceneTransition(command);
+                case 'delete_scene_transition':
+                  return transactionRuntime.deleteSceneTransition(command);
                 default:
                   throw new Error(
                     `Unsupported transactional scene command type "${command.type}".`,
@@ -742,7 +748,10 @@ async function handleSceneCommandRequest(
       case 'place_entity_in_scene':
       case 'update_scene_entity':
       case 'reposition_scene_entity':
-      case 'delete_scene_entity': {
+      case 'delete_scene_entity':
+      case 'create_scene_transition':
+      case 'update_scene_transition':
+      case 'delete_scene_transition': {
         const scene =
           command.type === 'create_scene'
             ? await runtime.createScene(command)
@@ -754,7 +763,13 @@ async function handleSceneCommandRequest(
                   ? await runtime.updateSceneEntity(command)
                   : command.type === 'reposition_scene_entity'
                     ? await runtime.repositionSceneEntity(command)
-                    : await runtime.deleteSceneEntity(command);
+                    : command.type === 'delete_scene_entity'
+                      ? await runtime.deleteSceneEntity(command)
+                      : command.type === 'create_scene_transition'
+                        ? await runtime.createSceneTransition(command)
+                        : command.type === 'update_scene_transition'
+                          ? await runtime.updateSceneTransition(command)
+                          : await runtime.deleteSceneTransition(command);
         const success: SceneCommandSuccess = {
           ok: true,
           data: {
@@ -772,7 +787,8 @@ async function handleSceneCommandRequest(
         sendSceneSuccess(response, command.type, success);
         return;
       }
-      case 'activate_scene_for_session': {
+      case 'activate_scene_for_session':
+      case 'activate_scene_transition': {
         if (
           sessionCommandTransaction?.supports({
             category: 'scene',
@@ -785,7 +801,9 @@ async function handleSceneCommandRequest(
               category: 'scene',
               command,
               execute: async (transactionRuntime) =>
-                transactionRuntime.activateSceneForSession(command),
+                command.type === 'activate_scene_for_session'
+                  ? transactionRuntime.activateSceneForSession(command)
+                  : transactionRuntime.activateSceneTransition(command),
               runtime,
             }),
           };
@@ -796,7 +814,10 @@ async function handleSceneCommandRequest(
 
         const success: SceneActivationSuccess = {
           ok: true,
-          data: await runtime.activateSceneForSession(command),
+          data:
+            command.type === 'activate_scene_for_session'
+              ? await runtime.activateSceneForSession(command)
+              : await runtime.activateSceneTransition(command),
         };
 
         await idempotency.cacheSuccess({
@@ -1752,7 +1773,10 @@ function sendSceneSuccess(
   commandType: string,
   payload: SceneActivationSuccess | SceneCommandSuccess,
 ): void {
-  if (commandType === 'activate_scene_for_session') {
+  if (
+    commandType === 'activate_scene_for_session' ||
+    commandType === 'activate_scene_transition'
+  ) {
     sendJson(response, 200, payload, sceneActivationSuccessSchema);
     return;
   }

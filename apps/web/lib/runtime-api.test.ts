@@ -96,6 +96,81 @@ describe('runtime-api helpers', () => {
     assert.equal(deleted.success, true);
   });
 
+  it('accepts scene transition commands on the scene command schema', () => {
+    const create = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'create-scene-transition-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        transition: {
+          kind: 'door',
+          name: 'North Door',
+          targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+          position: {
+            x: 1,
+            y: 1,
+          },
+          footprint: {
+            width: 1,
+            height: 1,
+          },
+          blocksMovement: false,
+          blocksVision: false,
+          hidden: false,
+        },
+      },
+      type: 'create_scene_transition',
+    });
+    const update = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'update-scene-transition-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        transitionId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        transition: {
+          kind: 'portal',
+          targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
+        },
+      },
+      type: 'update_scene_transition',
+    });
+    const deleted = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'delete-scene-transition-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        transitionId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      },
+      type: 'delete_scene_transition',
+    });
+    const activate = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'activate-scene-transition-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        transitionId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      },
+      type: 'activate_scene_transition',
+    });
+
+    assert.equal(create.success, true);
+    assert.equal(update.success, true);
+    assert.equal(deleted.success, true);
+    assert.equal(activate.success, true);
+  });
+
   it('parses successful command responses', () => {
     const response = parseRuntimeCommandResponse(
       200,

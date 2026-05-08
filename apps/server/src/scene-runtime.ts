@@ -5,7 +5,11 @@ import {
   doSceneEntitiesOverlap,
   isGridDefinitionValid as isValidGridDefinition,
 } from '@dnd/rules';
-import type { SceneEntityInput, SceneInput } from '@dnd/protocol';
+import type {
+  SceneEntityInput,
+  SceneInput,
+  SceneTransitionInput,
+} from '@dnd/protocol';
 import type {
   GridDefinition,
   SceneCombatant,
@@ -47,7 +51,33 @@ export function createSceneEntity(entityInput: SceneEntityInput): SceneEntity {
     blocksVision: entityInput.blocksVision,
     hidden: entityInput.hidden,
     combatant: null,
+    transition: null,
     meta: structuredClone(entityInput.meta ?? {}),
+  };
+}
+
+export function createSceneTransitionEntity(
+  transitionInput: SceneTransitionInput,
+): SceneEntity {
+  return {
+    id: createSceneEntityId(),
+    type: 'terrain',
+    name: transitionInput.name,
+    position: structuredClone(transitionInput.position),
+    footprint: structuredClone(transitionInput.footprint),
+    blocksMovement: transitionInput.blocksMovement,
+    blocksVision: transitionInput.blocksVision,
+    hidden: transitionInput.hidden,
+    combatant: null,
+    transition: {
+      kind: transitionInput.kind,
+      targetSceneId: transitionInput.targetSceneId,
+      targetLabel: transitionInput.targetLabel ?? null,
+      notes: transitionInput.notes ?? null,
+    },
+    meta: {
+      source: 'scene_transition',
+    },
   };
 }
 
@@ -68,6 +98,7 @@ export function createCombatantSceneEntity(params: {
     blocksVision: false,
     hidden: params.hidden,
     combatant: structuredClone(params.combatant),
+    transition: null,
     meta: {
       source: 'dm_combatant',
     },
