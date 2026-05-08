@@ -12,22 +12,28 @@ controls, and durable persistence.
 
 ## Current Status
 
-The repository now has a role-aware browser runtime surface at `/runtime`, plus
-refreshed Phase 9 API and handoff documentation. The runtime UI presents a dark
-fantasy tactical tabletop with DM and Player modes. A DM can create and seed
-sessions, create custom tactical scenes, activate scenes, author DM-controlled
-transition nodes between scenes, place and edit passive scene
-entities/obstacles, create narrow monster/NPC combatants, place
-character tokens, start mixed player/combatant encounters, drive
-turn/combat/DM controls, watch a readable SSE combat feed, run a fresh demo
-setup flow, reset local browser state without touching the backend, and recover
-current state through read models after refresh. Player mode can join or
-recover a session,
-create/update/finalize its own draft character, submit a finalized character
-into authoritative session state for DM assignment, view pending or assigned
-character and active-scene map/entity/combatant state, move its own token, use
-its own turn resources, and attack legal player or active non-defeated
-combatant targets.
+The repository now has a role-aware browser runtime surface at `/runtime`, a
+frontend-only Character Library at `/characters`, plus refreshed Phase 9 API and
+handoff documentation. The runtime UI presents a dark fantasy tactical tabletop
+with DM and Player modes. A DM can create and seed sessions, create custom
+tactical scenes, activate scenes, author DM-controlled transition nodes between
+scenes, place and edit passive scene entities/obstacles, create narrow
+monster/NPC combatants, place character tokens, start mixed player/combatant
+encounters, drive turn/combat/DM controls, watch a readable SSE combat feed,
+run a fresh demo setup flow, reset local browser state without touching the
+backend, and recover current state through read models after refresh. Player
+mode can join or recover a session, create/update/finalize its own draft
+character, submit a finalized character into authoritative session state for DM
+assignment, view pending or assigned character and active-scene
+map/entity/combatant state, move its own token, use its own turn resources, and
+attack legal player or active non-defeated combatant targets.
+
+The `/characters` product area is intentionally separate from `/runtime`. It
+contains a mock-data Character Library and a 9-step local Character Builder
+scaffold with a dark fantasy shell, parchment cards, gold accents, purple
+active states, a progress stepper, and a right-side summary rail. It does not
+call backend APIs, persist drafts, upload images, submit characters into
+sessions, or implement full D&D character automation yet.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -42,6 +48,8 @@ Implemented so far:
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
   database packages
 - Next.js role-aware runtime surface at `/runtime`
+- frontend-only Character Library and 9-step Character Builder scaffold at
+  `/characters`
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -95,7 +103,8 @@ Not implemented yet:
 - command-surface-wide durable idempotency, event replay, event cursors, or
   distributed coordination beyond the currently covered DB-backed slices
 - full transaction/outbox persistence boundaries across every command path
-- character builder/library product UI
+- backend-backed character library persistence, real draft saves, image upload,
+  account ownership, or submit-to-session integration from `/characters`
 - production-grade player UX, full map/adventure editor, automatic
   player-triggered scene transitions, or authenticated DM panel
 - opportunity attacks or out-of-turn reaction windows
@@ -151,6 +160,7 @@ Default local URLs:
 - Web: `http://localhost:3000`
 - Server: `http://localhost:2567`
 - Runtime cockpit: `http://localhost:3000/runtime`
+- Character Library scaffold: `http://localhost:3000/characters`
 
 Run only the server:
 
@@ -219,6 +229,13 @@ DM-controlled combatants. Player mode has a
 character sheet draft flow backed by character commands and can submit finalized
 characters for DM assignment; DM assignment remains authoritative. Local Reset
 clears browser state only.
+
+For the frontend-only character product scaffold, open
+`http://localhost:3000/characters`. The page uses mock character entries and
+links to `/characters/new` plus `/characters/:characterId/edit`. Save Draft and
+Finalize are visible local placeholders with backend integration pending. Asset
+needs for replacing the generated placeholders are listed in
+[docs/character-builder-asset-request.md](docs/character-builder-asset-request.md).
 
 Automated browser smoke coverage for this surface is available with:
 

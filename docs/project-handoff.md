@@ -5,7 +5,8 @@
 The repository is a TypeScript pnpm monorepo with:
 
 - `apps/server`: authoritative Node runtime and HTTP/SSE command surface.
-- `apps/web`: Next.js role-aware runtime surface.
+- `apps/web`: Next.js role-aware runtime surface plus frontend-only character
+  library/builder scaffold.
 - `packages/protocol`: shared Zod schemas and inferred protocol types.
 - `packages/shared`: shared domain primitives.
 - `packages/rules`: deterministic rules and derived-stat helpers.
@@ -73,6 +74,33 @@ The UI intentionally submits commands to the authoritative server instead of
 treating browser state as truth. It is role-aware, but it is not production
 authentication or authorization.
 
+## Character Library / Builder Scaffold
+
+The frontend-only character product surface lives at:
+
+```text
+http://localhost:3000/characters
+```
+
+It provides:
+
+- a mock-data Character Library with search, status filters, character cards,
+  placeholder actions, and a Create New Character button,
+- a 9-step local Character Builder flow at `/characters/new`,
+- an edit-route scaffold at `/characters/:characterId/edit` that loads mock
+  entries into the same local builder,
+- a dark fantasy product shell inspired by the provided reference screenshots:
+  left navigation, parchment cards, gold accents, purple active states, top
+  progress stepper, and right summary rail,
+- local-only Save Draft and Finalize feedback that explicitly says backend
+  integration is pending,
+- placeholder art blocks and an asset request document at
+  `docs/character-builder-asset-request.md`.
+
+This surface does not call server APIs, persist character library records,
+upload portraits, submit characters into sessions, enforce account ownership,
+or implement full D&D character automation yet.
+
 ## Running Locally
 
 Install:
@@ -129,11 +157,16 @@ covered by the existing server tests and repo smoke tests.
   surface.
 - `docs/manual-validation.md`: copy-paste backend manual validation flow.
 - `docs/persistence-boundaries.md`: persistence and transaction boundary notes.
+- `docs/character-builder-asset-request.md`: requested local assets for
+  replacing Character Builder placeholders.
 - `TASKS_PHASE_9.md`: Phase 9 documentation/handoff checklist history.
 
 ## Known Limitations
 
 - No authentication or production deployment posture.
+- The `/characters` Character Library and Builder are mock-data frontend
+  scaffolds only; no backend persistence, auth/account ownership, upload
+  pipeline, or submit-to-session integration exists there yet.
 - No durable event replay, stream cursor, or catch-up API.
 - No map asset pipeline, full adventure/campaign authoring workflow,
   automatic player-triggered transitions, traps/locks/scripts, fog/LOS,

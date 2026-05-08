@@ -40,6 +40,13 @@ runs the DM fresh demo setup through headless Chrome, validates read-model
 recovery after reload, checks Player mode guardrails, and confirms Local Reset
 clears only browser state. It is intentionally not a full production E2E suite.
 
+For the frontend-only character product scaffold, start the web app and open
+`http://localhost:3000/characters`. Confirm the mock Character Library loads,
+select **Create New Character**, walk the 9-step local builder, and verify Save
+Draft/Finalize show backend-integration-pending feedback rather than claiming a
+durable save. Placeholder art is expected until the assets listed in
+`docs/character-builder-asset-request.md` are provided.
+
 ## What This Covers
 
 - Session create, join, reconnect, and SSE subscription.

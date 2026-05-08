@@ -14,7 +14,9 @@ export default function HomePage() {
           The backend runtime is now operable from the browser. Use the
           role-aware runtime surface to create sessions, seed sample characters
           and scenes, drive encounters, inspect read models, and watch live SSE
-          events on a tactical tabletop.
+          events on a tactical tabletop. A separate frontend-only Character
+          Library and step-by-step Character Builder scaffold is also available
+          for product exploration.
         </p>
       </div>
       <div className="rounded-3xl border border-amber-500/20 bg-[#1c130d]/85 p-6 shadow-2xl shadow-black/30">
@@ -27,6 +29,12 @@ export default function HomePage() {
             href="/runtime"
           >
             Open Runtime War Table
+          </Link>
+          <Link
+            className="rounded-xl border border-purple-300/45 bg-purple-950/70 px-4 py-2 text-sm font-bold text-purple-50 transition hover:border-purple-200"
+            href="/characters"
+          >
+            Open Character Library
           </Link>
           <a
             className="rounded-xl border border-amber-300/25 bg-black/20 px-4 py-2 text-sm font-bold text-amber-50 transition hover:border-amber-200/55"
