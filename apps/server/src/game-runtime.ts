@@ -31,6 +31,7 @@ import type {
   CombatEvent,
   CreateCharacterCommand,
   CreateSceneCommand,
+  DeleteSceneEntityCommand,
   CreateSessionCommand,
   DmEndActiveEncounterCommand,
   DmCombatantAttackCommand,
@@ -58,10 +59,12 @@ import type {
   PlaceCharacterInActiveSceneCommand,
   RecordMovementUsageCommand,
   ReconnectSessionCommand,
+  RepositionSceneEntityCommand,
   SceneActivationSuccess,
   StartEncounterCommand,
   SubmitCharacterForAssignmentCommand,
   UpdateCharacterCommand,
+  UpdateSceneEntityCommand,
   UseActionCommand,
   UseBonusActionCommand,
   UseReactionCommand,
@@ -1217,6 +1220,200 @@ export class InMemoryGameRuntime<
       this.scenes.saveScene({
         ...scene,
         entities: [...scene.entities, entity],
+        updatedAt: this.now(),
+      }),
+      (updatedScene) => updatedScene,
+    );
+  }
+
+  updateSceneEntity(command: UpdateSceneEntityCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'update scene entities');
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    const existingEntity = this.requirePassiveSceneEntity(
+      scene,
+      command.payload.entityId,
+    );
+    const updatedEntity: SceneEntity = {
+      ...existingEntity,
+      ...('type' in command.payload.entity
+        ? {
+            type: command.payload.entity.type ?? existingEntity.type,
+          }
+        : {}),
+      ...('name' in command.payload.entity
+        ? {
+            name: command.payload.entity.name ?? existingEntity.name,
+          }
+        : {}),
+      ...('footprint' in command.payload.entity
+        ? {
+            footprint: structuredClone(
+              command.payload.entity.footprint ?? existingEntity.footprint,
+            ),
+          }
+        : {}),
+      ...('blocksMovement' in command.payload.entity
+        ? {
+            blocksMovement:
+              command.payload.entity.blocksMovement ??
+              existingEntity.blocksMovement,
+          }
+        : {}),
+      ...('blocksVision' in command.payload.entity
+        ? {
+            blocksVision:
+              command.payload.entity.blocksVision ??
+              existingEntity.blocksVision,
+          }
+        : {}),
+      ...('hidden' in command.payload.entity
+        ? {
+            hidden: command.payload.entity.hidden ?? existingEntity.hidden,
+          }
+        : {}),
+      ...('meta' in command.payload.entity
+        ? {
+            meta: structuredClone(
+              command.payload.entity.meta ?? existingEntity.meta,
+            ),
+          }
+        : {}),
+      combatant: null,
+      position: structuredClone(existingEntity.position),
+    };
+    const sceneWithoutEntity = this.withoutSceneEntity(
+      scene,
+      existingEntity.id,
+    );
+
+    assertSceneEntityPlacement(sceneWithoutEntity, updatedEntity);
+
+    const footprintChanged =
+      updatedEntity.footprint.width !== existingEntity.footprint.width ||
+      updatedEntity.footprint.height !== existingEntity.footprint.height;
+    const blocksMovementChangedToTrue =
+      updatedEntity.blocksMovement && !existingEntity.blocksMovement;
+
+    return this.resolveRepositoryResult(
+      footprintChanged || blocksMovementChangedToTrue
+        ? this.getResolvedSessionCharacterRecords(snapshot)
+        : [],
+      (allCharacterRecords) => {
+        if (
+          updatedEntity.blocksMovement &&
+          (footprintChanged || blocksMovementChangedToTrue)
+        ) {
+          this.assertSceneEntityDoesNotOverlapCharacters({
+            scene,
+            entity: updatedEntity,
+            characterRecords: allCharacterRecords,
+          });
+        }
+
+        return this.resolveRepositoryResult(
+          this.scenes.saveScene({
+            ...scene,
+            entities: scene.entities.map((entity) =>
+              entity.id === updatedEntity.id ? updatedEntity : entity,
+            ),
+            updatedAt: this.now(),
+          }),
+          (updatedScene) => updatedScene,
+        );
+      },
+    );
+  }
+
+  repositionSceneEntity(command: RepositionSceneEntityCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'reposition scene entities');
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    const existingEntity = this.requirePassiveSceneEntity(
+      scene,
+      command.payload.entityId,
+    );
+    const movedEntity: SceneEntity = {
+      ...existingEntity,
+      position: structuredClone(command.payload.position),
+    };
+    const sceneWithoutEntity = this.withoutSceneEntity(
+      scene,
+      existingEntity.id,
+    );
+
+    assertSceneEntityPlacement(sceneWithoutEntity, movedEntity);
+
+    return this.resolveRepositoryResult(
+      movedEntity.blocksMovement
+        ? this.getResolvedSessionCharacterRecords(snapshot)
+        : [],
+      (allCharacterRecords) => {
+        if (movedEntity.blocksMovement) {
+          this.assertSceneEntityDoesNotOverlapCharacters({
+            scene,
+            entity: movedEntity,
+            characterRecords: allCharacterRecords,
+          });
+        }
+
+        return this.resolveRepositoryResult(
+          this.scenes.saveScene({
+            ...scene,
+            entities: scene.entities.map((entity) =>
+              entity.id === movedEntity.id ? movedEntity : entity,
+            ),
+            updatedAt: this.now(),
+          }),
+          (updatedScene) => updatedScene,
+        );
+      },
+    );
+  }
+
+  deleteSceneEntity(command: DeleteSceneEntityCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'delete scene entities');
+    assertSceneBelongsToSession(snapshot, scene);
+    this.requirePassiveSceneEntity(scene, command.payload.entityId);
+
+    return this.resolveRepositoryResult(
+      this.scenes.saveScene({
+        ...scene,
+        entities: scene.entities.filter(
+          (entity) => entity.id !== command.payload.entityId,
+        ),
         updatedAt: this.now(),
       }),
       (updatedScene) => updatedScene,
@@ -2714,6 +2911,38 @@ export class InMemoryGameRuntime<
       armorClass: input.armorClass,
       speed: input.speed,
       abilities: structuredClone(input.abilities),
+    };
+  }
+
+  private requirePassiveSceneEntity(
+    scene: Scene,
+    entityId: SceneEntityId,
+  ): SceneEntity {
+    const entity = scene.entities.find(
+      (candidate) => candidate.id === entityId,
+    );
+
+    if (!entity) {
+      throw new SceneStoreError(
+        'scene_not_found',
+        `Scene entity "${entityId}" does not exist in scene "${scene.id}".`,
+      );
+    }
+
+    if (entity.combatant) {
+      throw new SceneStoreError(
+        'invalid_character_state',
+        `Scene entity "${entityId}" is a combatant and must use combatant-specific commands.`,
+      );
+    }
+
+    return entity;
+  }
+
+  private withoutSceneEntity(scene: Scene, entityId: SceneEntityId): Scene {
+    return {
+      ...scene,
+      entities: scene.entities.filter((entity) => entity.id !== entityId),
     };
   }
 

@@ -1916,6 +1916,75 @@ test('invalid grid sizes are rejected for scene creation', () => {
   ]);
 });
 
+test('scene entity edit commands are accepted and validate required payloads', () => {
+  const update = sceneCommandSchema.safeParse({
+    commandId: 'update-scene-entity-valid',
+    type: 'update_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      entity: {
+        name: 'Rune Door',
+        footprint: {
+          width: 2,
+          height: 1,
+        },
+        blocksMovement: true,
+      },
+    },
+  });
+  const emptyUpdate = sceneCommandSchema.safeParse({
+    commandId: 'update-scene-entity-empty',
+    type: 'update_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      entity: {},
+    },
+  });
+  const invalidReposition = sceneCommandSchema.safeParse({
+    commandId: 'reposition-scene-entity-invalid',
+    type: 'reposition_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      position: {
+        x: -1,
+        y: 1,
+      },
+    },
+  });
+  const validDelete = sceneCommandSchema.safeParse({
+    commandId: 'delete-scene-entity-valid',
+    type: 'delete_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId: 'ABC123',
+      sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+      entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+    },
+  });
+
+  assert.equal(update.success, true);
+  assert.equal(validDelete.success, true);
+  assert.equal(emptyUpdate.success, false);
+  assert.equal(invalidReposition.success, false);
+});
+
 test('invalid update payloads are rejected for character updates', () => {
   const result = characterCommandSchema.safeParse({
     commandId: 'update-character-invalid',
@@ -4884,6 +4953,211 @@ test('concurrent duplicate db-backed place_entity_in_scene requests cannot appen
   assert.equal(outboxDatabase.recordCount, 0);
   assert.equal(persistedScene?.record.entities.length, 1);
   assert.equal(persistedScene?.record.entities[0]?.name, 'Concurrent Pillar');
+});
+
+test('db-backed scene transaction boundary commits passive entity update reposition and delete durably', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+  const placed = await runtime.placeEntityInScene({
+    commandId: 'setup-transactional-edit-entity',
+    type: 'place_entity_in_scene',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entity: {
+        type: 'object',
+        name: 'Edit Me',
+        position: {
+          x: 2,
+          y: 2,
+        },
+        footprint: {
+          width: 1,
+          height: 1,
+        },
+        blocksMovement: true,
+        blocksVision: true,
+        hidden: false,
+      },
+    },
+  });
+  const entityId = placed.entities[0]!.id;
+  let { sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork);
+  const updateCommand = {
+    commandId: 'transactional-update-scene-entity-1',
+    type: 'update_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+      entity: {
+        name: 'Edited Door',
+        blocksVision: false,
+        hidden: true,
+      },
+    },
+  } as const;
+
+  const updated = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    updateCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  ({ sceneCommandTransaction } =
+    createSceneCommandTransactionHarness(unitOfWork));
+
+  const updateRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    updateCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const conflict = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    {
+      ...updateCommand,
+      payload: {
+        ...updateCommand.payload,
+        entity: {
+          name: 'Conflicting Door',
+        },
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const repositionCommand = {
+    commandId: 'transactional-reposition-scene-entity-1',
+    type: 'reposition_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+      position: {
+        x: 4,
+        y: 4,
+      },
+    },
+  } as const;
+  const repositioned = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    repositionCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const repositionRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    repositionCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const deleteCommand = {
+    commandId: 'transactional-delete-scene-entity-1',
+    type: 'delete_scene_entity',
+    actor: {
+      participantId: 'dm-001',
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+    },
+  } as const;
+  const deleted = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    deleteCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const deleteRetry = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    deleteCommand,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+  const persistedScene = await sceneDatabase.getSceneRecord(sceneId);
+
+  assert.equal(updated.status, 200);
+  assert.equal(updateRetry.status, 200);
+  assert.deepEqual(updateRetry.body, updated.body);
+  assert.equal(conflict.status, 409);
+  assert.equal(repositioned.status, 200);
+  assert.equal(repositionRetry.status, 200);
+  assert.deepEqual(repositionRetry.body, repositioned.body);
+  assert.equal(deleted.status, 200);
+  assert.equal(deleteRetry.status, 200);
+  assert.deepEqual(deleteRetry.body, deleted.body);
+  assert.equal(idempotencyDatabase.recordCount, 3);
+  assert.equal(outboxDatabase.recordCount, 0);
+  assert.equal(persistedScene?.record.entities.length, 0);
 });
 
 test('concurrent duplicate db-backed create_character requests cannot create two characters', async () => {

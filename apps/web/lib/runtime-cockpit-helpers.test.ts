@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { CharacterResource } from '@dnd/protocol';
+import type { CharacterResource, Scene } from '@dnd/protocol';
 
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
@@ -12,6 +12,7 @@ import {
   createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
+  createSceneEntityDraftFormFromEntity,
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
@@ -26,6 +27,7 @@ import {
   getKnownCharacterIds,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
+  getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
@@ -35,6 +37,7 @@ import {
   isExpectedRecoveryMiss,
   sanitizeSessionIdInput,
   sceneEntityInputFromDraft,
+  sceneEntityUpdateInputFromDraft,
   sceneInputFromDraft,
   validateCharacterDraftForm,
   validateCombatantDraftForm,
@@ -594,6 +597,108 @@ describe('runtime cockpit helpers', () => {
       }).join('\n'),
       /fit within the scene grid/,
     );
+  });
+
+  it('creates passive scene entity edit drafts and excludes combatants', () => {
+    const scene: Scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          type: 'object',
+          name: 'Rune Door',
+          position: {
+            x: 2,
+            y: 2,
+          },
+          footprint: {
+            width: 2,
+            height: 1,
+          },
+          blocksMovement: true,
+          blocksVision: false,
+          hidden: true,
+          combatant: null,
+          meta: {
+            lockDc: 14,
+          },
+        },
+        {
+          id: 'scene_entity_22222222-2222-4222-8222-222222222222',
+          type: 'monster',
+          name: 'Ash Goblin',
+          position: {
+            x: 4,
+            y: 2,
+          },
+          footprint: {
+            width: 1,
+            height: 1,
+          },
+          blocksMovement: true,
+          blocksVision: false,
+          hidden: false,
+          combatant: {
+            kind: 'monster',
+            hp: {
+              max: 8,
+              current: 8,
+              temp: 0,
+            },
+            armorClass: 12,
+            speed: 30,
+            abilities: {
+              str: 14,
+              dex: 12,
+              con: 12,
+              int: 8,
+              wis: 10,
+              cha: 8,
+            },
+          },
+          meta: {
+            source: 'dm_combatant',
+          },
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'scene_11111111-1111-4111-8111-111111111111',
+      name: 'Rune Hall',
+      sessionId: 'ABC123',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const passive = getPassiveSceneEntities(scene);
+    const draft = createSceneEntityDraftFormFromEntity(passive[0]!);
+
+    assert.equal(passive.length, 1);
+    assert.equal(passive[0]?.name, 'Rune Door');
+    assert.deepEqual(draft, {
+      blocksMovement: true,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '2',
+      hidden: true,
+      name: 'Rune Door',
+      type: 'object',
+    });
+    assert.deepEqual(sceneEntityUpdateInputFromDraft(draft), {
+      blocksMovement: true,
+      blocksVision: false,
+      footprint: {
+        height: 1,
+        width: 2,
+      },
+      hidden: true,
+      meta: {
+        source: 'runtime-cockpit',
+      },
+      name: 'Rune Door',
+      type: 'object',
+    });
   });
 
   it('derives active scene guidance for DM and player modes', () => {

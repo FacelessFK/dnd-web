@@ -425,6 +425,87 @@ function placeEntity(
   });
 }
 
+function updateSceneEntity(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  entityId: string,
+  overrides: Partial<
+    Parameters<InMemoryGameRuntime['updateSceneEntity']>[0]['payload']['entity']
+  > = {},
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.updateSceneEntity({
+    commandId: `update-scene-entity-${entityId}`,
+    type: 'update_scene_entity',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+      entity: {
+        name: 'Updated Pillar',
+        blocksMovement: true,
+        blocksVision: false,
+        hidden: true,
+        meta: {
+          edited: true,
+        },
+        ...overrides,
+      },
+    },
+  });
+}
+
+function repositionSceneEntity(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  entityId: string,
+  position: {
+    x: number;
+    y: number;
+  },
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.repositionSceneEntity({
+    commandId: `reposition-scene-entity-${entityId}-${position.x}-${position.y}`,
+    type: 'reposition_scene_entity',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+      position,
+    },
+  });
+}
+
+function deleteSceneEntity(
+  runtime: InMemoryGameRuntime,
+  sessionId: string,
+  sceneId: string,
+  entityId: string,
+  actorParticipantId = 'dm-001',
+) {
+  return runtime.deleteSceneEntity({
+    commandId: `delete-scene-entity-${entityId}`,
+    type: 'delete_scene_entity',
+    actor: {
+      participantId: actorParticipantId,
+    },
+    payload: {
+      sessionId,
+      sceneId,
+      entityId,
+    },
+  });
+}
+
 function getMovementUpdates(
   updates: SessionStreamEvent[],
 ): MovementStateUpdate[] {
@@ -2711,6 +2792,329 @@ test('overlapping entity placement is rejected', () => {
           x: 2,
           y: 2,
         },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+});
+
+test('dm can update reposition and delete passive scene entities', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = createScene(runtime, session.sessionId);
+  const placedScene = placeEntity(runtime, session.sessionId, scene.id);
+  const entityId = placedScene.entities[0]!.id;
+
+  const updatedScene = updateSceneEntity(
+    runtime,
+    session.sessionId,
+    scene.id,
+    entityId,
+    {
+      name: 'Rune Door',
+      type: 'terrain',
+      footprint: {
+        width: 2,
+        height: 1,
+      },
+      blocksVision: false,
+      hidden: true,
+      meta: {
+        lockDc: 14,
+      },
+    },
+  );
+  const updatedEntity = updatedScene.entities.find(
+    (entity) => entity.id === entityId,
+  );
+
+  assert.equal(updatedEntity?.name, 'Rune Door');
+  assert.equal(updatedEntity?.type, 'terrain');
+  assert.deepEqual(updatedEntity?.footprint, {
+    width: 2,
+    height: 1,
+  });
+  assert.equal(updatedEntity?.blocksVision, false);
+  assert.equal(updatedEntity?.hidden, true);
+  assert.deepEqual(updatedEntity?.meta, {
+    lockDc: 14,
+  });
+
+  const repositionedScene = repositionSceneEntity(
+    runtime,
+    session.sessionId,
+    scene.id,
+    entityId,
+    {
+      x: 4,
+      y: 3,
+    },
+  );
+
+  assert.deepEqual(
+    repositionedScene.entities.find((entity) => entity.id === entityId)
+      ?.position,
+    {
+      x: 4,
+      y: 3,
+    },
+  );
+
+  const deletedScene = deleteSceneEntity(
+    runtime,
+    session.sessionId,
+    scene.id,
+    entityId,
+  );
+
+  assert.equal(
+    deletedScene.entities.some((entity) => entity.id === entityId),
+    false,
+  );
+  assert.equal(
+    runtime
+      .getScene({
+        commandId: 'get-scene-after-delete-entity',
+        type: 'get_scene',
+        actor: {
+          participantId: 'dm-001',
+        },
+        payload: {
+          sessionId: session.sessionId,
+          sceneId: scene.id,
+        },
+      })
+      .entities.some((entity) => entity.id === entityId),
+    false,
+  );
+});
+
+test('players cannot update reposition or delete passive scene entities', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = createScene(runtime, session.sessionId);
+  const placedScene = placeEntity(runtime, session.sessionId, scene.id);
+  const entityId = placedScene.entities[0]!.id;
+
+  joinPlayer(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      updateSceneEntity(
+        runtime,
+        session.sessionId,
+        scene.id,
+        entityId,
+        {},
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+  assert.throws(
+    () => {
+      repositionSceneEntity(
+        runtime,
+        session.sessionId,
+        scene.id,
+        entityId,
+        {
+          x: 3,
+          y: 3,
+        },
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+  assert.throws(
+    () => {
+      deleteSceneEntity(
+        runtime,
+        session.sessionId,
+        scene.id,
+        entityId,
+        'player-001',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_role_assumption',
+  );
+});
+
+test('passive scene entity editing rejects missing targets combatants and illegal placement', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = activateScene(runtime, session.sessionId);
+  const firstEntityScene = placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 1,
+      y: 1,
+    },
+  });
+  const firstEntityId = firstEntityScene.entities[0]!.id;
+
+  placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 4,
+      y: 1,
+    },
+  });
+  const combatantScene = dmCreateCombatantInActiveScene(
+    runtime,
+    session.sessionId,
+    {
+      position: {
+        x: 6,
+        y: 1,
+      },
+    },
+  );
+  const combatantId = combatantScene.entities.find(
+    (entity) => entity.combatant,
+  )!.id;
+  const missingSceneId = 'scene_11111111-1111-4111-8111-111111111111';
+
+  assert.throws(
+    () => {
+      updateSceneEntity(
+        runtime,
+        session.sessionId,
+        missingSceneId,
+        firstEntityId,
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_not_found',
+  );
+  assert.throws(
+    () => {
+      repositionSceneEntity(
+        runtime,
+        session.sessionId,
+        missingSceneId,
+        firstEntityId,
+        {
+          x: 1,
+          y: 1,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_not_found',
+  );
+  assert.throws(
+    () => {
+      deleteSceneEntity(
+        runtime,
+        session.sessionId,
+        missingSceneId,
+        firstEntityId,
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_not_found',
+  );
+  assert.throws(
+    () => {
+      updateSceneEntity(
+        runtime,
+        session.sessionId,
+        scene.id,
+        'scene_entity_11111111-1111-4111-8111-111111111111',
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_not_found',
+  );
+  assert.throws(
+    () => {
+      updateSceneEntity(runtime, session.sessionId, scene.id, combatantId);
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      repositionSceneEntity(runtime, session.sessionId, scene.id, combatantId, {
+        x: 7,
+        y: 1,
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      deleteSceneEntity(runtime, session.sessionId, scene.id, combatantId);
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'invalid_character_state',
+  );
+  assert.throws(
+    () => {
+      repositionSceneEntity(
+        runtime,
+        session.sessionId,
+        scene.id,
+        firstEntityId,
+        {
+          x: 10,
+          y: 1,
+        },
+      );
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError &&
+      error.code === 'scene_entity_out_of_bounds',
+  );
+  assert.throws(
+    () => {
+      updateSceneEntity(runtime, session.sessionId, scene.id, firstEntityId, {
+        footprint: {
+          width: 4,
+          height: 1,
+        },
+      });
+    },
+    (error: unknown) =>
+      error instanceof SceneStoreError && error.code === 'scene_entity_overlap',
+  );
+});
+
+test('passive scene entity reposition rejects blocking character overlap', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const scene = activateScene(runtime, session.sessionId);
+  const placedScene = placeEntity(runtime, session.sessionId, scene.id, {
+    position: {
+      x: 2,
+      y: 2,
+    },
+  });
+  const entityId = placedScene.entities[0]!.id;
+
+  joinPlayer(runtime, session.sessionId);
+  assignPlayerCharacter(runtime, session.sessionId);
+  placeAssignedCharacter(runtime, session.sessionId, {
+    x: 0,
+    y: 0,
+  });
+
+  assert.throws(
+    () => {
+      repositionSceneEntity(runtime, session.sessionId, scene.id, entityId, {
+        x: 0,
+        y: 0,
       });
     },
     (error: unknown) =>

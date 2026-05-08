@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import {
   encounterCommandSchema,
+  sceneCommandSchema,
   sessionCommandResponseSchema,
 } from '@dnd/protocol';
 
@@ -42,6 +43,57 @@ describe('runtime-api helpers', () => {
     });
 
     assert.equal(parsed.success, true);
+  });
+
+  it('accepts passive scene entity editing commands on the scene command schema', () => {
+    const update = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'update-scene-entity-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        entity: {
+          name: 'Rune Door',
+          blocksMovement: true,
+        },
+      },
+      type: 'update_scene_entity',
+    });
+    const reposition = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'reposition-scene-entity-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        position: {
+          x: 2,
+          y: 3,
+        },
+      },
+      type: 'reposition_scene_entity',
+    });
+    const deleted = sceneCommandSchema.safeParse({
+      actor: {
+        participantId: 'dm-001',
+      },
+      commandId: 'delete-scene-entity-1',
+      payload: {
+        sessionId: 'ABC123',
+        sceneId: 'scene_11111111-1111-4111-8111-111111111111',
+        entityId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      },
+      type: 'delete_scene_entity',
+    });
+
+    assert.equal(update.success, true);
+    assert.equal(reposition.success, true);
+    assert.equal(deleted.success, true);
   });
 
   it('parses successful command responses', () => {

@@ -9,6 +9,7 @@ import type {
   Scene,
   SceneEntity,
   SceneEntityInput,
+  SceneEntityUpdateInput,
   SceneInput,
   SessionStreamEvent,
   SessionCommandSuccess,
@@ -255,6 +256,20 @@ export function createDefaultSceneEntityDraftForm(): SceneEntityDraftForm {
   };
 }
 
+export function createSceneEntityDraftFormFromEntity(
+  entity: SceneEntity,
+): SceneEntityDraftForm {
+  return {
+    blocksMovement: entity.blocksMovement,
+    blocksVision: entity.blocksVision,
+    footprintHeight: String(entity.footprint.height),
+    footprintWidth: String(entity.footprint.width),
+    hidden: entity.hidden,
+    name: entity.name,
+    type: entity.type,
+  };
+}
+
 export function createDefaultCombatantDraftForm(): CombatantDraftForm {
   return {
     abilities: {
@@ -434,6 +449,25 @@ export function sceneEntityInputFromDraft(
   };
 }
 
+export function sceneEntityUpdateInputFromDraft(
+  form: SceneEntityDraftForm,
+): SceneEntityUpdateInput {
+  return {
+    blocksMovement: form.blocksMovement,
+    blocksVision: form.blocksVision,
+    footprint: {
+      height: parseIntegerOrZero(form.footprintHeight),
+      width: parseIntegerOrZero(form.footprintWidth),
+    },
+    hidden: form.hidden,
+    meta: {
+      source: 'runtime-cockpit',
+    },
+    name: form.name.trim(),
+    type: form.type,
+  };
+}
+
 export function getActiveSceneGuidance({
   activeSceneId,
   mode,
@@ -511,6 +545,14 @@ export function getCombatantEntities(
       combatant: NonNullable<SceneEntity['combatant']>;
     } => Boolean(entity.combatant),
   );
+}
+
+export function getPassiveSceneEntities(scene: Scene | null): SceneEntity[] {
+  return (scene?.entities ?? []).filter((entity) => !entity.combatant);
+}
+
+export function isPassiveSceneEntity(entity: SceneEntity): boolean {
+  return !entity.combatant;
 }
 
 export function isCombatantEntityDefeated(

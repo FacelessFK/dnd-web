@@ -185,6 +185,9 @@ Current role:
 - Persists scene writes for:
   - scene creation,
   - scene entity placement,
+  - passive scene entity update,
+  - passive scene entity reposition,
+  - passive scene entity delete,
   - any future scene saves routed through the existing scene repository
     boundary.
 
@@ -789,8 +792,9 @@ The point where outbox work stops being easy to defer is:
   the durable session snapshot without a single cross-store transaction.
 - Scene activation still validates the scene and then writes the durable
   session snapshot without a single cross-store transaction.
-- Scene writes are durable, but scene commands still use the non-durable
-  idempotency path.
+- Supported scene-only writes now use the DB-backed scene transaction boundary
+  for durable idempotency plus durable scene mutation when that boundary is
+  injected.
 - Supported encounter-only commands now have transactional durable idempotency,
   `attack` now has a cross-store transactional durable idempotency path, and
   the movement-spending encounter-aware branch now does too.

@@ -44,7 +44,8 @@ clears only browser state. It is intentionally not a full production E2E suite.
 
 - Session create, join, reconnect, and SSE subscription.
 - Character create, finalize, assign, and read.
-- Scene create, activate, placement, and active-scene state read.
+- Scene create, activate, passive entity placement/edit/reposition/delete, and
+  active-scene state read.
 - Narrow DM-controlled monster/NPC combatant creation, HP control, turn
   override, and fixed-damage melee attack.
 - Mixed player/combatant encounter start, turn usage, attack, and encounter
@@ -343,9 +344,105 @@ curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
 JSON
 ```
 
-## 8. Place Characters And A Training Combatant
+## 8. Place A Passive Entity, Characters, And A Training Combatant
 
 ```bash
+ENTITY_RESPONSE=$(curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON
+{
+  "commandId": "manual-place-scene-entity-1",
+  "type": "place_entity_in_scene",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "entity": {
+      "type": "object",
+      "name": "Rune Door",
+      "position": { "x": 3, "y": 3 },
+      "footprint": { "width": 1, "height": 1 },
+      "blocksMovement": true,
+      "blocksVision": true,
+      "hidden": false,
+      "meta": { "note": "manual validation object" }
+    }
+  }
+}
+JSON
+)
+
+echo "$ENTITY_RESPONSE" | jq .
+export SCENE_ENTITY_ID=$(echo "$ENTITY_RESPONSE" | jq -r '.data.scene.entities[] | select(.name == "Rune Door") | .id')
+echo "$SCENE_ENTITY_ID"
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[] | select(.id == "'$SCENE_ENTITY_ID'")'
+{
+  "commandId": "manual-update-scene-entity-1",
+  "type": "update_scene_entity",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "entityId": "$SCENE_ENTITY_ID",
+    "entity": {
+      "name": "Rune Door, Open",
+      "blocksMovement": false,
+      "blocksVision": false,
+      "hidden": false,
+      "meta": { "note": "updated during manual validation" }
+    }
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[] | select(.id == "'$SCENE_ENTITY_ID'")'
+{
+  "commandId": "manual-reposition-scene-entity-1",
+  "type": "reposition_scene_entity",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "entityId": "$SCENE_ENTITY_ID",
+    "position": { "x": 4, "y": 3 }
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[]? | select(.id == "'$SCENE_ENTITY_ID'")'
+{
+  "commandId": "manual-delete-scene-entity-1",
+  "type": "delete_scene_entity",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID",
+    "entityId": "$SCENE_ENTITY_ID"
+  }
+}
+JSON
+
+curl -sS -X POST http://127.0.0.1:2567/api/scenes/command \
+  -H 'content-type: application/json' \
+  -d @- <<JSON | jq '.data.scene.entities[]? | select(.id == "'$SCENE_ENTITY_ID'")'
+{
+  "commandId": "manual-read-deleted-scene-entity-1",
+  "type": "get_scene",
+  "actor": { "participantId": "dm-001" },
+  "payload": {
+    "sessionId": "$SESSION_ID",
+    "sceneId": "$SCENE_ID"
+  }
+}
+JSON
+
 curl -sS -X POST http://127.0.0.1:2567/api/movement/command \
   -H 'content-type: application/json' \
   -d @- <<JSON | jq .
@@ -861,6 +958,10 @@ Try a fresh attack command against the defeated combatant. Expected error code:
 `attack_target_downed`. This proves defeated combatants remain recoverable scene
 state but are not valid attack targets.
 
+Passive scene entity edits are recovered through `get_scene`, not SSE replay.
+After the update/reposition/delete commands above, `get_scene` should no longer
+return the deleted `SCENE_ENTITY_ID`.
+
 ```bash
 curl -sS -X POST http://127.0.0.1:2567/api/encounters/command \
   -H 'content-type: application/json' \
@@ -911,8 +1012,8 @@ During this flow, the SSE terminal should receive:
   succeeds.
 - `character_state` when the DM changes HP or condition tags.
 
-There is still no scene-specific SSE event for scene entity or combatant
-creation. Browser map state is refreshed from command responses and `get_scene`
-recovery reads. `combat_event`, `movement_state`, and `character_state` are not
-durable replay events. Use the read commands above to recover current
-authoritative state after reconnect.
+There is still no scene-specific SSE event for scene entity creation, editing,
+repositioning, deletion, or combatant creation. Browser map state is refreshed
+from command responses and `get_scene` recovery reads. `combat_event`,
+`movement_state`, and `character_state` are not durable replay events. Use the
+read commands above to recover current authoritative state after reconnect.

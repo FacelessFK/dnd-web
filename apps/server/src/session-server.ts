@@ -701,6 +701,12 @@ async function handleSceneCommandRequest(
                   return transactionRuntime.createScene(command);
                 case 'place_entity_in_scene':
                   return transactionRuntime.placeEntityInScene(command);
+                case 'update_scene_entity':
+                  return transactionRuntime.updateSceneEntity(command);
+                case 'reposition_scene_entity':
+                  return transactionRuntime.repositionSceneEntity(command);
+                case 'delete_scene_entity':
+                  return transactionRuntime.deleteSceneEntity(command);
                 default:
                   throw new Error(
                     `Unsupported transactional scene command type "${command.type}".`,
@@ -733,13 +739,22 @@ async function handleSceneCommandRequest(
     switch (command.type) {
       case 'create_scene':
       case 'get_scene':
-      case 'place_entity_in_scene': {
+      case 'place_entity_in_scene':
+      case 'update_scene_entity':
+      case 'reposition_scene_entity':
+      case 'delete_scene_entity': {
         const scene =
           command.type === 'create_scene'
             ? await runtime.createScene(command)
             : command.type === 'get_scene'
               ? await runtime.getScene(command)
-              : await runtime.placeEntityInScene(command);
+              : command.type === 'place_entity_in_scene'
+                ? await runtime.placeEntityInScene(command)
+                : command.type === 'update_scene_entity'
+                  ? await runtime.updateSceneEntity(command)
+                  : command.type === 'reposition_scene_entity'
+                    ? await runtime.repositionSceneEntity(command)
+                    : await runtime.deleteSceneEntity(command);
         const success: SceneCommandSuccess = {
           ok: true,
           data: {

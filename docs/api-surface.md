@@ -96,6 +96,9 @@ Mutating commands:
 - `create_scene`
 - `activate_scene_for_session`
 - `place_entity_in_scene`
+- `update_scene_entity`
+- `reposition_scene_entity`
+- `delete_scene_entity`
 
 Read command:
 
@@ -103,12 +106,17 @@ Read command:
 
 Notes:
 
-- `create_scene` and `place_entity_in_scene` mutate scene records.
+- `create_scene`, `place_entity_in_scene`, `update_scene_entity`,
+  `reposition_scene_entity`, and `delete_scene_entity` mutate scene records.
 - `activate_scene_for_session` mutates the session snapshot and returns the
   updated session state.
 - Scene entity placement is separate from character active-scene placement.
 - Scene entities use the existing scene entity shape: type, name, position,
   footprint, movement/vision blocking flags, hidden flag, and optional metadata.
+- `update_scene_entity`, `reposition_scene_entity`, and `delete_scene_entity`
+  are DM-only passive map-object operations. They reject combatant scene
+  entities; monster/NPC HP, movement, and attacks stay on explicit DM combatant
+  commands.
 - Passive scene entities remain map/object/obstacle data. DM-controlled
   monster/NPC combatants are represented as explicit scene entities with
   combatant stats and are created only through DM commands.
@@ -287,10 +295,10 @@ are treated as recoverable local state, not failed recovery.
 The role-aware runtime surface at `/runtime` uses this API surface directly. The
 launcher supports DM mode and Player mode and renders a dark tactical tabletop
 from server responses, read models, and live SSE events. DM mode can run a fresh
-demo setup, seed the sample session, create/activate custom scenes, place scene
-entities/obstacles, create and command narrow monster/NPC combatants, operate
-mixed player/combatant encounter controls, and use explicit DM override
-commands. Player mode can join or recover an existing session,
+demo setup, seed the sample session, create/activate custom scenes, place and
+edit passive scene entities/obstacles, create and command narrow monster/NPC
+combatants, operate mixed player/combatant encounter controls, and use explicit
+DM override commands. Player mode can join or recover an existing session,
 create/update/finalize its own draft character through the existing character
 command endpoint, submit a finalized character for authoritative DM assignment,
 see pending assignment state after recovery, read pending or assigned character

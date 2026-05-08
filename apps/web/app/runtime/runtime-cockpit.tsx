@@ -33,6 +33,7 @@ import {
   createDefaultCombatantDraftForm,
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
+  createSceneEntityDraftFormFromEntity,
   createSceneDraftFormFromScene,
   defaultDm,
   defaultPlayer,
@@ -52,6 +53,7 @@ import {
   getKnownCharacterIds,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
+  getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
   getRuntimeDisabledReasons,
@@ -65,6 +67,7 @@ import {
   samplePlayers,
   sanitizeSessionIdInput,
   sceneEntityInputFromDraft,
+  sceneEntityUpdateInputFromDraft,
   sceneEntityTypeOptions,
   combatantInputFromDraft,
   sceneInputFromDraft,
@@ -141,6 +144,9 @@ export function RuntimeCockpit() {
   );
   const [sceneActivationId, setSceneActivationId] = useState('');
   const [sceneEntityDraft, setSceneEntityDraft] =
+    useState<SceneEntityDraftForm>(() => createDefaultSceneEntityDraftForm());
+  const [selectedSceneEntityId, setSelectedSceneEntityId] = useState('');
+  const [sceneEntityEditDraft, setSceneEntityEditDraft] =
     useState<SceneEntityDraftForm>(() => createDefaultSceneEntityDraftForm());
   const [combatantDraft, setCombatantDraft] = useState<CombatantDraftForm>(() =>
     createDefaultCombatantDraftForm(),
@@ -311,6 +317,7 @@ export function RuntimeCockpit() {
   useEffect(() => {
     const combatants = getCombatantEntities(scene);
     const attackableCombatants = getAttackableCombatantEntities(scene);
+    const passiveEntities = getPassiveSceneEntities(scene);
 
     setSelectedCombatantId((current) => {
       if (current && combatants.some((combatant) => combatant.id === current)) {
@@ -330,7 +337,27 @@ export function RuntimeCockpit() {
 
       return '';
     });
+
+    setSelectedSceneEntityId((current) => {
+      if (current && passiveEntities.some((entity) => entity.id === current)) {
+        return current;
+      }
+
+      return passiveEntities[0]?.id ?? '';
+    });
   }, [scene]);
+
+  useEffect(() => {
+    const selectedEntity = getPassiveSceneEntities(scene).find(
+      (entity) => entity.id === selectedSceneEntityId,
+    );
+
+    if (selectedEntity) {
+      setSceneEntityEditDraft(
+        createSceneEntityDraftFormFromEntity(selectedEntity),
+      );
+    }
+  }, [scene, selectedSceneEntityId]);
 
   useEffect(() => {
     const stored: StoredCockpitState = {
@@ -429,6 +456,8 @@ export function RuntimeCockpit() {
     setSceneDraft(createDefaultSceneDraftForm());
     setSceneActivationId('');
     setSceneEntityDraft(createDefaultSceneEntityDraftForm());
+    setSceneEntityEditDraft(createDefaultSceneEntityDraftForm());
+    setSelectedSceneEntityId('');
     setCombatantDraft(createDefaultCombatantDraftForm());
     setSelectedCombatantId('');
     setSelectedTargetCombatantId('');
@@ -1245,6 +1274,116 @@ export function RuntimeCockpit() {
 
       if (!('scene' in response.data)) {
         throw new Error('place_entity_in_scene returned a non-scene response.');
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function updateSceneEntity(): Promise<void> {
+    await runTask('update scene entity', async () => {
+      assertSession();
+      assertSceneEntityEditDraftValid();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedSceneEntityId) {
+        throw new Error('Select a passive scene entity to update.');
+      }
+
+      const response = await unwrap(
+        'update_scene_entity',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-update-scene-entity'),
+          payload: {
+            entity: sceneEntityUpdateInputFromDraft(sceneEntityEditDraft),
+            entityId: selectedSceneEntityId,
+            sceneId: targetSceneId,
+            sessionId,
+          },
+          type: 'update_scene_entity',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error('update_scene_entity returned a non-scene response.');
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function repositionSceneEntity(): Promise<void> {
+    await runTask('reposition scene entity', async () => {
+      assertSession();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedSceneEntityId) {
+        throw new Error('Select a passive scene entity to reposition.');
+      }
+
+      const response = await unwrap(
+        'reposition_scene_entity',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-reposition-scene-entity'),
+          payload: {
+            entityId: selectedSceneEntityId,
+            position: selectedCell,
+            sceneId: targetSceneId,
+            sessionId,
+          },
+          type: 'reposition_scene_entity',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error(
+          'reposition_scene_entity returned a non-scene response.',
+        );
+      }
+
+      rememberScene(response.data.scene);
+
+      return response;
+    });
+  }
+
+  async function deleteSceneEntity(): Promise<void> {
+    await runTask('delete scene entity', async () => {
+      assertSession();
+      const targetSceneId = scene?.id ?? sceneId;
+
+      if (!targetSceneId || !selectedSceneEntityId) {
+        throw new Error('Select a passive scene entity to delete.');
+      }
+
+      const response = await unwrap(
+        'delete_scene_entity',
+        sendSceneCommand({
+          actor: {
+            participantId: dmParticipantId,
+          },
+          commandId: createCommandId('dm-delete-scene-entity'),
+          payload: {
+            entityId: selectedSceneEntityId,
+            sceneId: targetSceneId,
+            sessionId,
+          },
+          type: 'delete_scene_entity',
+        }),
+      );
+
+      if (!('scene' in response.data)) {
+        throw new Error('delete_scene_entity returned a non-scene response.');
       }
 
       rememberScene(response.data.scene);
@@ -2245,6 +2384,21 @@ export function RuntimeCockpit() {
     }
   }
 
+  function assertSceneEntityEditDraftValid(): void {
+    const selectedEntity = getPassiveSceneEntities(scene).find(
+      (entity) => entity.id === selectedSceneEntityId,
+    );
+    const errors = validateSceneEntityDraftForm({
+      form: sceneEntityEditDraft,
+      grid: scene?.grid,
+      position: selectedEntity?.position ?? selectedCell,
+    });
+
+    if (errors.length) {
+      throw new Error(`Fix the entity edit form first: ${errors.join(' ')}`);
+    }
+  }
+
   function assertCombatantDraftValid(): void {
     const errors = validateCombatantDraftForm({
       form: combatantDraft,
@@ -2282,6 +2436,26 @@ export function RuntimeCockpit() {
     value: boolean,
   ): void {
     setSceneEntityDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function updateSceneEntityEditDraftField(
+    field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
+    value: string,
+  ): void {
+    setSceneEntityEditDraft((current) => ({
+      ...current,
+      [field]: field === 'type' ? (value as SceneEntityInput['type']) : value,
+    }));
+  }
+
+  function updateSceneEntityEditDraftFlag(
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ): void {
+    setSceneEntityEditDraft((current) => ({
       ...current,
       [field]: value,
     }));
@@ -2409,6 +2583,15 @@ export function RuntimeCockpit() {
     grid: scene?.grid,
     position: selectedCell,
   });
+  const passiveSceneEntities = getPassiveSceneEntities(scene);
+  const selectedSceneEntity = passiveSceneEntities.find(
+    (entity) => entity.id === selectedSceneEntityId,
+  );
+  const sceneEntityEditDraftErrors = validateSceneEntityDraftForm({
+    form: sceneEntityEditDraft,
+    grid: scene?.grid,
+    position: selectedSceneEntity?.position ?? selectedCell,
+  });
   const combatants = getCombatantEntities(scene);
   const attackableCombatants = getAttackableCombatantEntities(scene);
   const selectedCombatant = combatants.find(
@@ -2427,6 +2610,10 @@ export function RuntimeCockpit() {
     sceneEntityDraftErrors.length > 0
       ? `Fix the entity draft first: ${sceneEntityDraftErrors[0]}`
       : null;
+  const sceneEntityEditDraftReason =
+    sceneEntityEditDraftErrors.length > 0
+      ? `Fix the entity edit form first: ${sceneEntityEditDraftErrors[0]}`
+      : null;
   const createCustomSceneReason =
     busyReason ?? missingSessionReason ?? dmOnlySceneReason ?? sceneDraftReason;
   const activateSceneReason =
@@ -2442,6 +2629,16 @@ export function RuntimeCockpit() {
     dmOnlySceneReason ??
     (scene ? null : 'Create, activate, or recover a scene first.') ??
     sceneEntityDraftReason;
+  const selectedPassiveEntityReason =
+    busyReason ??
+    missingSessionReason ??
+    dmOnlySceneReason ??
+    (scene ? null : 'Create, activate, or recover a scene first.') ??
+    (selectedSceneEntity ? null : 'Select a passive scene entity first.');
+  const updateSceneEntityReason =
+    selectedPassiveEntityReason ?? sceneEntityEditDraftReason;
+  const repositionSceneEntityReason = selectedPassiveEntityReason;
+  const deleteSceneEntityReason = selectedPassiveEntityReason;
   const combatantDraftReason =
     combatantDraftErrors.length > 0
       ? `Fix the combatant draft first: ${combatantDraftErrors[0]}`
@@ -2839,9 +3036,11 @@ export function RuntimeCockpit() {
                 grid={grid}
                 mode={mode}
                 onSelectCell={setSelectedCell}
+                onSelectSceneEntity={setSelectedSceneEntityId}
                 scene={scene}
                 selectedCell={selectedCell}
                 selectedCombatantId={selectedCombatantId}
+                selectedSceneEntityId={selectedSceneEntityId}
                 selectedTargetCombatantId={selectedTargetCombatantId}
                 selectedTargetParticipantId={selectedTarget}
               />
@@ -3066,19 +3265,33 @@ export function RuntimeCockpit() {
                 createDisabledReason={createCustomSceneReason}
                 entityDraft={sceneEntityDraft}
                 entityDraftErrors={sceneEntityDraftErrors}
+                entityEditDraft={sceneEntityEditDraft}
+                entityEditDraftErrors={sceneEntityEditDraftErrors}
+                passiveEntities={passiveSceneEntities}
                 onActivateScene={activateSelectedScene}
                 onActivationSceneIdChange={setSceneActivationId}
                 onCreateScene={createCustomScene}
+                onDeleteEntity={deleteSceneEntity}
+                onEditEntityFieldChange={updateSceneEntityEditDraftField}
+                onEditEntityFlagChange={updateSceneEntityEditDraftFlag}
                 onEntityFieldChange={updateSceneEntityDraftField}
                 onEntityFlagChange={updateSceneEntityDraftFlag}
                 onPlaceEntity={placeSceneEntity}
+                onRepositionEntity={repositionSceneEntity}
                 onSceneFieldChange={updateSceneDraftField}
+                onSelectEntity={setSelectedSceneEntityId}
+                onUpdateEntity={updateSceneEntity}
+                deleteEntityDisabledReason={deleteSceneEntityReason}
                 placeEntityDisabledReason={placeSceneEntityReason}
+                repositionEntityDisabledReason={repositionSceneEntityReason}
                 scene={scene}
                 sceneDraft={sceneDraft}
                 sceneDraftErrors={sceneDraftErrors}
+                selectedEntity={selectedSceneEntity}
+                selectedEntityId={selectedSceneEntityId}
                 selectedCell={selectedCell}
                 activateDisabledReason={activateSceneReason}
+                updateEntityDisabledReason={updateSceneEntityReason}
               />
             ) : null}
 
@@ -3929,30 +4142,57 @@ function SceneBuilderPanel({
   activationSceneId,
   activeSceneGuidance,
   createDisabledReason,
+  deleteEntityDisabledReason,
   entityDraft,
   entityDraftErrors,
+  entityEditDraft,
+  entityEditDraftErrors,
+  passiveEntities,
   onActivateScene,
   onActivationSceneIdChange,
   onCreateScene,
+  onDeleteEntity,
+  onEditEntityFieldChange,
+  onEditEntityFlagChange,
   onEntityFieldChange,
   onEntityFlagChange,
   onPlaceEntity,
+  onRepositionEntity,
   onSceneFieldChange,
+  onSelectEntity,
+  onUpdateEntity,
   placeEntityDisabledReason,
+  repositionEntityDisabledReason,
   scene,
   sceneDraft,
   sceneDraftErrors,
   selectedCell,
+  selectedEntity,
+  selectedEntityId,
+  updateEntityDisabledReason,
 }: {
   activateDisabledReason: string | null;
   activationSceneId: string;
   activeSceneGuidance: RuntimeEventSummary;
   createDisabledReason: string | null;
+  deleteEntityDisabledReason: string | null;
   entityDraft: SceneEntityDraftForm;
   entityDraftErrors: string[];
+  entityEditDraft: SceneEntityDraftForm;
+  entityEditDraftErrors: string[];
+  passiveEntities: Scene['entities'];
   onActivateScene: () => void | Promise<void>;
   onActivationSceneIdChange: (value: string) => void;
   onCreateScene: () => void | Promise<void>;
+  onDeleteEntity: () => void | Promise<void>;
+  onEditEntityFieldChange: (
+    field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
+    value: string,
+  ) => void;
+  onEditEntityFlagChange: (
+    field: 'blocksMovement' | 'blocksVision' | 'hidden',
+    value: boolean,
+  ) => void;
   onEntityFieldChange: (
     field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
     value: string,
@@ -3962,12 +4202,19 @@ function SceneBuilderPanel({
     value: boolean,
   ) => void;
   onPlaceEntity: () => void | Promise<void>;
+  onRepositionEntity: () => void | Promise<void>;
   onSceneFieldChange: (field: keyof SceneDraftForm, value: string) => void;
+  onSelectEntity: (entityId: string) => void;
+  onUpdateEntity: () => void | Promise<void>;
   placeEntityDisabledReason: string | null;
+  repositionEntityDisabledReason: string | null;
   scene: Scene | null;
   sceneDraft: SceneDraftForm;
   sceneDraftErrors: string[];
   selectedCell: Cell;
+  selectedEntity?: Scene['entities'][number];
+  selectedEntityId: string;
+  updateEntityDisabledReason: string | null;
 }) {
   return (
     <Panel
@@ -4107,12 +4354,129 @@ function SceneBuilderPanel({
             onClick={onPlaceEntity}
             variant="secondary"
           />
-          {scene?.entities.length ? (
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-amber-300/20 bg-black/25 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">
+              Edit passive entity
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              Combatants are intentionally excluded; use the Monster/NPC panel
+              for combatant HP, movement, and attacks.
+            </p>
+          </div>
+          {passiveEntities.length ? (
+            <SelectField
+              label="Passive entity"
+              onChange={onSelectEntity}
+              options={passiveEntities.map((entity) => ({
+                label: `${entity.name} (${entity.type}) at ${entity.position.x},${entity.position.y}`,
+                value: entity.id,
+              }))}
+              value={selectedEntityId}
+            />
+          ) : (
+            <EmptyState
+              detail="Place an object, terrain marker, or spawn marker before editing passive map entities."
+              title="No passive entities"
+            />
+          )}
+          {selectedEntity ? (
+            <div className="grid gap-3">
+              <StatusRow
+                label="Selected"
+                value={`${selectedEntity.name} at ${selectedEntity.position.x},${selectedEntity.position.y}`}
+              />
+              {entityEditDraftErrors.length ? (
+                <p className="text-xs leading-5 text-amber-200">
+                  {entityEditDraftErrors.slice(0, 3).join(' ')}
+                </p>
+              ) : null}
+              <SelectField
+                label="Entity type"
+                onChange={(value) => onEditEntityFieldChange('type', value)}
+                options={sceneEntityTypeOptions.map((entityType) => ({
+                  label: entityType.replaceAll('_', ' '),
+                  value: entityType,
+                }))}
+                value={entityEditDraft.type}
+              />
+              <LabeledInput
+                label="Name / label"
+                onChange={(value) => onEditEntityFieldChange('name', value)}
+                value={entityEditDraft.name}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <LabeledInput
+                  label="Footprint W"
+                  onChange={(value) =>
+                    onEditEntityFieldChange('footprintWidth', value)
+                  }
+                  value={entityEditDraft.footprintWidth}
+                />
+                <LabeledInput
+                  label="Footprint H"
+                  onChange={(value) =>
+                    onEditEntityFieldChange('footprintHeight', value)
+                  }
+                  value={entityEditDraft.footprintHeight}
+                />
+              </div>
+              <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
+                <CheckboxField
+                  checked={entityEditDraft.blocksMovement}
+                  label="Blocks movement"
+                  onChange={(checked) =>
+                    onEditEntityFlagChange('blocksMovement', checked)
+                  }
+                />
+                <CheckboxField
+                  checked={entityEditDraft.blocksVision}
+                  label="Blocks vision"
+                  onChange={(checked) =>
+                    onEditEntityFlagChange('blocksVision', checked)
+                  }
+                />
+                <CheckboxField
+                  checked={entityEditDraft.hidden}
+                  label="Hidden from map styling"
+                  onChange={(checked) =>
+                    onEditEntityFlagChange('hidden', checked)
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <ActionButton
+                  disabled={Boolean(updateEntityDisabledReason)}
+                  disabledReason={updateEntityDisabledReason ?? undefined}
+                  label="Update"
+                  onClick={onUpdateEntity}
+                  variant="secondary"
+                />
+                <ActionButton
+                  disabled={Boolean(repositionEntityDisabledReason)}
+                  disabledReason={repositionEntityDisabledReason ?? undefined}
+                  label={`Move to ${selectedCell.x},${selectedCell.y}`}
+                  onClick={onRepositionEntity}
+                  variant="secondary"
+                />
+                <ActionButton
+                  disabled={Boolean(deleteEntityDisabledReason)}
+                  disabledReason={deleteEntityDisabledReason ?? undefined}
+                  label="Delete"
+                  onClick={onDeleteEntity}
+                  variant="danger"
+                />
+              </div>
+            </div>
+          ) : null}
+          {passiveEntities.length ? (
             <div className="grid gap-2 text-xs text-amber-100/70">
               <p className="font-bold uppercase tracking-[0.14em] text-amber-300/70">
-                Loaded entities
+                Passive entities
               </p>
-              {scene.entities.slice(-5).map((entity) => (
+              {passiveEntities.slice(-5).map((entity) => (
                 <div
                   className="rounded-xl border border-amber-500/10 bg-black/20 px-3 py-2"
                   key={entity.id}
@@ -4632,9 +4996,11 @@ function TacticalGrid({
   grid,
   mode,
   onSelectCell,
+  onSelectSceneEntity,
   scene,
   selectedCell,
   selectedCombatantId,
+  selectedSceneEntityId,
   selectedTargetCombatantId,
   selectedTargetParticipantId,
 }: {
@@ -4649,9 +5015,11 @@ function TacticalGrid({
   };
   mode: RuntimeMode;
   onSelectCell: (cell: Cell) => void;
+  onSelectSceneEntity: (entityId: string) => void;
   scene: Scene | null;
   selectedCell: Cell;
   selectedCombatantId: string;
+  selectedSceneEntityId: string;
   selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
 }) {
@@ -4695,6 +5063,8 @@ function TacticalGrid({
           placement?.participantId === currentTurnParticipantId;
         const isSelected =
           selectedCell.x === cell.x && selectedCell.y === cell.y;
+        const isSelectedEntity =
+          primaryEntityCell?.entity.id === selectedSceneEntityId;
         const isActingToken = placement?.participantId === actingParticipantId;
         const isTarget =
           placement?.participantId === selectedTargetParticipantId;
@@ -4754,7 +5124,17 @@ function TacticalGrid({
                     : 'bg-[#211711] hover:bg-[#332316]'
             }`}
             key={`${cell.x}-${cell.y}`}
-            onClick={() => onSelectCell(cell)}
+            onClick={() => {
+              onSelectCell(cell);
+
+              if (
+                mode === 'dm' &&
+                primaryEntityCell &&
+                !primaryEntityCell.entity.combatant
+              ) {
+                onSelectSceneEntity(primaryEntityCell.entity.id);
+              }
+            }}
             type="button"
           >
             <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
@@ -4763,8 +5143,8 @@ function TacticalGrid({
             {primaryEntityCell ? (
               <span
                 className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
-                  primaryEntityCell.entity.hidden ? 'opacity-45' : ''
-                }`}
+                  isSelectedEntity ? 'ring-2 ring-amber-200/80' : ''
+                } ${primaryEntityCell.entity.hidden ? 'opacity-45' : ''}`}
                 title={primaryEntityCell.label}
               >
                 {primaryEntityCell.isOrigin

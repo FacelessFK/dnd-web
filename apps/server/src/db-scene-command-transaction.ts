@@ -23,6 +23,9 @@ import type { RuntimeSessionStore } from './session-store.js';
 export const DURABLE_SCENE_MUTATION_COMMAND_TYPES = [
   'create_scene',
   'place_entity_in_scene',
+  'update_scene_entity',
+  'reposition_scene_entity',
+  'delete_scene_entity',
 ] as const;
 
 export const DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES = [

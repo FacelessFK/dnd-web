@@ -103,6 +103,27 @@ export const sceneEntityInputSchema = z.object({
   meta: z.record(rulesConfigValueSchema).optional(),
 });
 
+export const sceneEntityUpdateInputSchema = z
+  .object({
+    type: sceneEntityTypeSchema.optional(),
+    name: sceneEntityNameSchema.optional(),
+    footprint: sceneEntityFootprintSchema.optional(),
+    blocksMovement: z.boolean().optional(),
+    blocksVision: z.boolean().optional(),
+    hidden: z.boolean().optional(),
+    meta: z.record(rulesConfigValueSchema).optional(),
+  })
+  .superRefine((update, context) => {
+    if (Object.keys(update).length > 0) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Scene entity update must include at least one editable field.',
+    });
+  });
+
 const sessionActorSchema = z.object({
   participantId: participantIdSchema,
 });
@@ -148,11 +169,49 @@ export const placeEntityInSceneCommandSchema = z.object({
   }),
 });
 
+export const updateSceneEntityCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('update_scene_entity'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    entityId: sceneEntityIdSchema,
+    entity: sceneEntityUpdateInputSchema,
+  }),
+});
+
+export const repositionSceneEntityCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('reposition_scene_entity'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    entityId: sceneEntityIdSchema,
+    position: scenePositionSchema,
+  }),
+});
+
+export const deleteSceneEntityCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('delete_scene_entity'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    entityId: sceneEntityIdSchema,
+  }),
+});
+
 export const sceneCommandSchema = z.discriminatedUnion('type', [
   createSceneCommandSchema,
   getSceneCommandSchema,
   activateSceneForSessionCommandSchema,
   placeEntityInSceneCommandSchema,
+  updateSceneEntityCommandSchema,
+  repositionSceneEntityCommandSchema,
+  deleteSceneEntityCommandSchema,
 ]);
 
 export const sceneCommandSuccessSchema = z.object({
@@ -187,6 +246,9 @@ export type SceneEntity = z.infer<typeof sceneEntitySchema>;
 export type Scene = z.infer<typeof sceneSchema>;
 export type SceneInput = z.infer<typeof sceneInputSchema>;
 export type SceneEntityInput = z.infer<typeof sceneEntityInputSchema>;
+export type SceneEntityUpdateInput = z.infer<
+  typeof sceneEntityUpdateInputSchema
+>;
 export type CreateSceneCommand = z.infer<typeof createSceneCommandSchema>;
 export type GetSceneCommand = z.infer<typeof getSceneCommandSchema>;
 export type ActivateSceneForSessionCommand = z.infer<
@@ -194,6 +256,15 @@ export type ActivateSceneForSessionCommand = z.infer<
 >;
 export type PlaceEntityInSceneCommand = z.infer<
   typeof placeEntityInSceneCommandSchema
+>;
+export type UpdateSceneEntityCommand = z.infer<
+  typeof updateSceneEntityCommandSchema
+>;
+export type RepositionSceneEntityCommand = z.infer<
+  typeof repositionSceneEntityCommandSchema
+>;
+export type DeleteSceneEntityCommand = z.infer<
+  typeof deleteSceneEntityCommandSchema
 >;
 export type SceneCommand = z.infer<typeof sceneCommandSchema>;
 export type SceneCommandSuccess = z.infer<typeof sceneCommandSuccessSchema>;

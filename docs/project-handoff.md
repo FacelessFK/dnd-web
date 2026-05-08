@@ -42,7 +42,8 @@ It can:
 - seed sample players and characters from DM mode,
 - create custom grid scenes from DM mode,
 - activate existing or newly created scenes from DM mode,
-- place simple scene entities/obstacles on the tactical grid from DM mode,
+- place, edit, reposition, and delete passive scene entities/obstacles on the
+  tactical grid from DM mode,
 - create, place, reposition, and set HP for narrow DM-controlled monster/NPC
   combatants,
 - place both sample characters from DM mode,
@@ -132,7 +133,8 @@ covered by the existing server tests and repo smoke tests.
 
 - No authentication or production deployment posture.
 - No durable event replay, stream cursor, or catch-up API.
-- No map asset pipeline, deletion tools, or final VTT-grade scene editor.
+- No map asset pipeline, adventure authoring workflow, or final VTT-grade scene
+  editor.
 - No multi-process SSE subscriber persistence or distributed coordination.
 - No opportunity attacks, out-of-turn reaction windows, full condition engine,
   death saves, spells, weapons, ranged attacks, full monster stat blocks, or
