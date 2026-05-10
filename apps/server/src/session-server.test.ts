@@ -8,6 +8,9 @@ import {
   type ActiveEncounterRecordDelete,
   type ActiveEncounterRecordRow,
   type ActiveEncounterRecordWrite,
+  type CharacterLibraryEntryDatabase,
+  type CharacterLibraryEntryRow,
+  type CharacterLibraryEntryWrite,
   type CharacterRecordDatabase,
   type CharacterRecordRow,
   type CharacterRecordWrite,
@@ -796,6 +799,92 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
   }
 }
 
+class InMemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabase {
+  private readonly rows = new Map<string, CharacterLibraryEntryRow>();
+
+  async getCharacterLibraryEntry(
+    params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerParticipantId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const row = this.rows.get(params.entryId);
+
+    if (!row || row.ownerParticipantId !== params.ownerParticipantId) {
+      return null;
+    }
+
+    return this.clone(row);
+  }
+
+  async insertCharacterLibraryEntry(
+    write: CharacterLibraryEntryWrite,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    if (this.rows.has(write.entryId)) {
+      return null;
+    }
+
+    const row = this.createRow(write);
+    this.rows.set(write.entryId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  async listCharacterLibraryEntries(
+    ownerParticipantId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.ownerParticipantId === ownerParticipantId)
+      .sort(
+        (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+      )
+      .map((row) => this.clone(row));
+  }
+
+  async updateCharacterLibraryEntry(
+    write: CharacterLibraryEntryWrite,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const existing = this.rows.get(write.entryId);
+
+    if (!existing || existing.ownerParticipantId !== write.ownerParticipantId) {
+      return null;
+    }
+
+    const row = {
+      ...this.createRow(write),
+      createdAt: existing.createdAt,
+    };
+    this.rows.set(write.entryId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  cloneRows(): CharacterLibraryEntryRow[] {
+    return [...this.rows.values()].map((row) => this.clone(row));
+  }
+
+  replaceRows(rows: CharacterLibraryEntryRow[]): void {
+    this.rows.clear();
+
+    for (const row of rows) {
+      this.rows.set(row.entryId, this.clone(row));
+    }
+  }
+
+  private createRow(
+    write: CharacterLibraryEntryWrite,
+  ): CharacterLibraryEntryRow {
+    return {
+      createdAt: new Date(0),
+      entry: structuredClone(write.entry),
+      entryId: write.entryId,
+      ownerParticipantId: write.ownerParticipantId,
+      updatedAt: new Date(),
+    };
+  }
+
+  private clone<T>(value: T): T {
+    return structuredClone(value);
+  }
+}
+
 class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   committedCount = 0;
   failBeforeCommit = false;
@@ -809,6 +898,7 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly sessions: InMemorySessionSnapshotDatabase = new InMemorySessionSnapshotDatabase(),
     private readonly scenes: InMemorySceneRecordDatabase = new InMemorySceneRecordDatabase(),
     private readonly commandIdempotencyClaims: InMemoryCommandIdempotencyClaimRecordDatabase = new InMemoryCommandIdempotencyClaimRecordDatabase(),
+    private readonly characterLibrary: InMemoryCharacterLibraryEntryDatabase = new InMemoryCharacterLibraryEntryDatabase(),
   ) {}
 
   async transaction<T>(
@@ -834,6 +924,8 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       const transactionalOutbox = new InMemoryCommandEventOutboxDatabase();
       const transactionalSessions = new InMemorySessionSnapshotDatabase();
       const transactionalScenes = new InMemorySceneRecordDatabase();
+      const transactionalCharacterLibrary =
+        new InMemoryCharacterLibraryEntryDatabase();
 
       transactionalCharacters.replaceRows(this.characters.cloneRows());
       transactionalCommandIdempotencyClaims.replaceRows(
@@ -846,8 +938,12 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       transactionalOutbox.replaceRows(this.outbox.cloneRows());
       transactionalSessions.replaceRows(this.sessions.cloneRows());
       transactionalScenes.replaceRows(this.scenes.cloneRows());
+      transactionalCharacterLibrary.replaceRows(
+        this.characterLibrary.cloneRows(),
+      );
 
       const result = await run({
+        characterLibrary: transactionalCharacterLibrary,
         characters: transactionalCharacters,
         commandIdempotencyClaims: transactionalCommandIdempotencyClaims,
         commandIdempotency: transactionalCommandIdempotency,
@@ -874,6 +970,9 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       );
       this.sessions.replaceRows(transactionalSessions.cloneRows());
       this.scenes.replaceRows(transactionalScenes.cloneRows());
+      this.characterLibrary.replaceRows(
+        transactionalCharacterLibrary.cloneRows(),
+      );
       this.committedCount += 1;
 
       return result;
@@ -1015,6 +1114,7 @@ class ConcurrentInMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly outbox: InMemoryCommandEventOutboxDatabase = new InMemoryCommandEventOutboxDatabase(),
     private readonly sessions: InMemorySessionSnapshotDatabase = new InMemorySessionSnapshotDatabase(),
     private readonly scenes: InMemorySceneRecordDatabase = new InMemorySceneRecordDatabase(),
+    private readonly characterLibrary: InMemoryCharacterLibraryEntryDatabase = new InMemoryCharacterLibraryEntryDatabase(),
     private readonly claimStore: CoordinatedCommandIdempotencyClaimStore = new CoordinatedCommandIdempotencyClaimStore(),
   ) {}
 
@@ -1027,6 +1127,7 @@ class ConcurrentInMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
 
     try {
       const result = await run({
+        characterLibrary: this.characterLibrary,
         characters: this.characters,
         commandIdempotencyClaims:
           new ConcurrentTransactionCommandIdempotencyClaimDatabase(

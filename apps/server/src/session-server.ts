@@ -10,6 +10,9 @@ import {
   characterCommandErrorSchema,
   characterCommandSchema,
   characterCommandSuccessSchema,
+  characterLibraryCommandErrorSchema,
+  characterLibraryCommandSchema,
+  characterLibraryCommandSuccessSchema,
   clientCommandSchema,
   dmCommandErrorSchema,
   dmCommandSchema,
@@ -32,6 +35,7 @@ import {
   type CharacterAssignmentSuccess,
   type CharacterCommandError,
   type CharacterCommandSuccess,
+  type CharacterLibraryCommandSuccess,
   type DmCommandError,
   type DmCommandSuccess,
   type EncounterCommandError,
@@ -48,6 +52,10 @@ import {
 } from '@dnd/protocol';
 
 import { CharacterStoreError } from './character-store.js';
+import {
+  CharacterLibraryService,
+  CharacterLibraryStoreError,
+} from './character-library-store.js';
 import {
   CommandIdempotencyError,
   InMemoryCommandIdempotencyStore,
@@ -86,6 +94,7 @@ const corsHeaders = {
 
 type RuntimeStoreError =
   | CharacterStoreError
+  | CharacterLibraryStoreError
   | CommandIdempotencyError
   | EncounterRuntimeError
   | EncounterStoreError
@@ -108,9 +117,11 @@ export function createSessionServer(
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
+  characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
 ): {
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
+  characterLibrary: CharacterLibraryService;
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
@@ -133,6 +144,7 @@ export function createSessionServer(
         encounterCommandTransaction,
         combatCommandTransaction,
         sceneCommandTransaction,
+        characterLibrary,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -142,6 +154,7 @@ export function createSessionServer(
   return {
     combatCommandTransaction,
     characterCommandTransaction,
+    characterLibrary,
     commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
@@ -164,6 +177,7 @@ export async function handleRequest(
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
+  characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -204,6 +218,19 @@ export async function handleRequest(
       idempotency,
       characterCommandTransaction,
       sessionCommandTransaction,
+    );
+    return;
+  }
+
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/api/character-library/command'
+  ) {
+    await handleCharacterLibraryCommandRequest(
+      request,
+      response,
+      characterLibrary,
+      idempotency,
     );
     return;
   }
@@ -637,6 +664,108 @@ async function handleCharacterCommandRequest(
     }
   } catch (error) {
     handleRuntimeError(response, error, characterCommandErrorSchema);
+  }
+}
+
+async function handleCharacterLibraryCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  characterLibrary: CharacterLibraryService,
+  idempotency: CommandIdempotencyStore,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(
+      response,
+      400,
+      {
+        ok: false,
+        error: {
+          code: 'invalid_command',
+          message: 'Request body must be valid JSON.',
+        },
+      },
+      characterLibraryCommandErrorSchema,
+    );
+    return;
+  }
+
+  const commandResult = characterLibraryCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(
+      response,
+      400,
+      {
+        ok: false,
+        error: {
+          code: 'invalid_command',
+          message:
+            commandResult.error.issues[0]?.message ??
+            'Invalid command payload.',
+        },
+      },
+      characterLibraryCommandErrorSchema,
+    );
+    return;
+  }
+
+  try {
+    const command = commandResult.data;
+    const idempotencyCategory: CommandIdempotencyCategory | null =
+      command.type === 'get_character_library_entry' ||
+      command.type === 'list_character_library_entries'
+        ? null
+        : 'character-library';
+    const cachedSuccess = idempotencyCategory
+      ? await idempotency.getCachedSuccess<CharacterLibraryCommandSuccess>({
+          category: idempotencyCategory,
+          command,
+        })
+      : null;
+
+    if (cachedSuccess) {
+      sendJson(
+        response,
+        200,
+        cachedSuccess,
+        characterLibraryCommandSuccessSchema,
+      );
+      return;
+    }
+
+    const data =
+      command.type === 'list_character_library_entries'
+        ? { entries: await characterLibrary.listEntries(command) }
+        : {
+            entry:
+              command.type === 'create_character_library_entry'
+                ? await characterLibrary.createEntry(command)
+                : command.type === 'update_character_library_entry'
+                  ? await characterLibrary.updateEntry(command)
+                  : command.type === 'finalize_character_library_entry'
+                    ? await characterLibrary.finalizeEntry(command)
+                    : await characterLibrary.getEntry(command),
+          };
+    const success: CharacterLibraryCommandSuccess = {
+      data,
+      ok: true,
+    };
+
+    if (idempotencyCategory) {
+      await idempotency.cacheSuccess({
+        category: idempotencyCategory,
+        command,
+        response: success,
+      });
+    }
+
+    sendJson(response, 200, success, characterLibraryCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, characterLibraryCommandErrorSchema);
   }
 }
 
@@ -1689,6 +1818,7 @@ function handleRuntimeError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof characterLibraryCommandErrorSchema
     | typeof dmCommandErrorSchema
     | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
@@ -1724,6 +1854,7 @@ function handleUnexpectedError(
   error: unknown,
   errorSchema:
     | typeof characterCommandErrorSchema
+    | typeof characterLibraryCommandErrorSchema
     | typeof dmCommandErrorSchema
     | typeof encounterCommandErrorSchema
     | typeof movementCommandErrorSchema
@@ -1827,6 +1958,7 @@ function buildStreamPath(sessionId: string, participantId: string): string {
 function errorCodeToStatus(code: RuntimeErrorCode): number {
   switch (code) {
     case 'character_not_found':
+    case 'character_library_entry_not_found':
     case 'participant_not_found':
     case 'rules_profile_not_found':
     case 'scene_not_found':
@@ -1868,6 +2000,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'invalid_command':
     case 'invalid_character_id':
     case 'invalid_character_hp':
+    case 'invalid_character_library_entry':
     case 'invalid_condition_list':
     case 'invalid_entity_position':
     case 'invalid_grid_size':
@@ -1886,6 +2019,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
 function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
     error instanceof CharacterStoreError ||
+    error instanceof CharacterLibraryStoreError ||
     error instanceof CommandIdempotencyError ||
     error instanceof EncounterRuntimeError ||
     error instanceof EncounterStoreError ||

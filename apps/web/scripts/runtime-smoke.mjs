@@ -9,6 +9,8 @@ import { createServer } from 'node:net';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../../..');
+const corepackCommand =
+  process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
 const storageKey = 'dnd-runtime-cockpit';
 const smokeTimeoutMs = Number.parseInt(
   process.env.RUNTIME_SMOKE_TIMEOUT_MS ?? '120000',
@@ -51,7 +53,7 @@ async function main() {
   console.log('[runtime-smoke] starting authoritative server');
   const serverProcess = startProcess(
     'server',
-    'corepack',
+    corepackCommand,
     ['pnpm', '--filter', '@dnd/server', 'dev'],
     {
       SERVER_PORT: String(serverPort),
@@ -66,7 +68,7 @@ async function main() {
   console.log('[runtime-smoke] starting Next runtime UI');
   const webProcess = startProcess(
     'web',
-    'corepack',
+    corepackCommand,
     [
       'pnpm',
       '--filter',
@@ -186,15 +188,21 @@ async function main() {
 }
 
 function startProcess(name, command, args, env = {}) {
-  const child = spawn(command, args, {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      ...env,
-      FORCE_COLOR: '0',
+  const usesWindowsCommandShim =
+    process.platform === 'win32' && command.endsWith('.cmd');
+  const child = spawn(
+    usesWindowsCommandShim ? (process.env.ComSpec ?? 'cmd.exe') : command,
+    usesWindowsCommandShim ? ['/d', '/s', '/c', command, ...args] : args,
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        ...env,
+        FORCE_COLOR: '0',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  );
 
   startedProcesses.push(child);
   processLogs.set(child.pid, {

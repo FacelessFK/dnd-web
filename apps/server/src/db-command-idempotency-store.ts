@@ -12,8 +12,11 @@ import {
 
 export const DURABLE_CHARACTER_MUTATION_COMMAND_TYPES = [
   'create_character',
+  'create_character_library_entry',
   'update_character',
+  'update_character_library_entry',
   'finalize_character',
+  'finalize_character_library_entry',
   'dm_set_character_current_hp',
   'dm_set_character_active_conditions',
 ] as const;

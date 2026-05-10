@@ -89,6 +89,39 @@ Notes:
   same `session_state` semantics as the runtime already had. Assignment clears
   that participant's pending character request.
 
+### `POST /api/character-library/command`
+
+Mutating commands:
+
+- `create_character_library_entry`
+- `update_character_library_entry`
+- `finalize_character_library_entry`
+
+Read commands:
+
+- `get_character_library_entry`
+- `list_character_library_entries`
+
+Notes:
+
+- This endpoint owns reusable Character Library entries, not live
+  runtime/session character overlays.
+- Entries are scoped to a provisional `ownerParticipantId`. This is a pre-auth
+  development ownership field, not production account security.
+- In DB persistence mode, entries are stored in
+  `character_library_entries`. The table stores a JSONB builder/library document
+  plus durable owner and timestamp columns.
+- `create` and `update` persist builder progress, rules profile, ability score
+  method, identity, selected species/race, class, background, abilities,
+  derived combat basics, proficiencies, languages, tools, equipment, spells,
+  and portrait references.
+- Uploaded portrait references must be JPEG, PNG, or WebP data URLs up to 1 MB.
+  Entries without uploads can store a selected species/race asset reference.
+- `finalize_character_library_entry` marks a reusable library entry finalized.
+  It does not submit the character into a runtime session.
+- Read/list commands are not idempotency-cached. Mutating commands use the
+  `character-library` idempotency category.
+
 ### `POST /api/scenes/command`
 
 Mutating commands:
@@ -247,6 +280,9 @@ Current behavior:
 - DB-backed transactional paths now include a narrow durable pre-execution
   idempotency-claim foundation for covered commands so concurrent duplicate
   requests cannot both apply side effects before one durable success wins.
+- Character Library mutating commands are idempotency-cached under their own
+  category. They are isolated from live runtime state; read/list library
+  commands are intentionally uncached.
 
 ## SSE Stream
 

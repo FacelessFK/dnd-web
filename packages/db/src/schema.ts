@@ -26,6 +26,10 @@ export type StoredCharacterRecordDocument = {
   overlay: EncounterOverlay;
 };
 
+export type StoredCharacterLibraryEntryDocument = {
+  [key: string]: unknown;
+};
+
 export type PersistedSessionParticipantDocument = {
   characterId: CharacterId | null;
   displayName: string;
@@ -60,6 +64,18 @@ export type StoredCommandEventOutboxPayloadDocument = {
 export const characterRecords = pgTable('character_records', {
   characterId: text('character_id').primaryKey().$type<CharacterId>(),
   record: jsonb('record').$type<StoredCharacterRecordDocument>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const characterLibraryEntries = pgTable('character_library_entries', {
+  entryId: text('entry_id').primaryKey(),
+  ownerParticipantId: text('owner_participant_id').notNull(),
+  entry: jsonb('entry').$type<StoredCharacterLibraryEntryDocument>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -166,6 +182,7 @@ export const commandEventOutboxRecords = pgTable(
 
 export const dbSchema = {
   activeEncounterRecords,
+  characterLibraryEntries,
   characterRecords,
   commandIdempotencyClaimRecords,
   commandEventOutboxRecords,
@@ -178,6 +195,8 @@ export type DbSchema = typeof dbSchema;
 export type ActiveEncounterRecordRow =
   typeof activeEncounterRecords.$inferSelect;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
+export type CharacterLibraryEntryRow =
+  typeof characterLibraryEntries.$inferSelect;
 export type CommandEventOutboxRow =
   typeof commandEventOutboxRecords.$inferSelect;
 export type CommandIdempotencyClaimRecordRow =

@@ -6,6 +6,40 @@ boundaries and remaining persistence gaps, without changing gameplay behavior.
 
 ## Current Boundary Audit
 
+### `CharacterLibraryEntryDatabase`
+
+Current interface:
+
+- `insertCharacterLibraryEntry(write)`
+- `getCharacterLibraryEntry({ entryId, ownerParticipantId })`
+- `listCharacterLibraryEntries(ownerParticipantId)`
+- `updateCharacterLibraryEntry(write)`
+
+Persistence implications:
+
+- Stores reusable Character Library entries separately from live runtime
+  character overlays in the `character_library_entries` table.
+- Stores the whole builder/library document as JSONB plus durable owner,
+  created, and updated columns.
+- Uses provisional `ownerParticipantId` ownership because production auth does
+  not exist yet.
+- Uploaded portraits are validated by MIME type and size, then stored as data
+  URL references in the library document for the MVP. There is no cloud object
+  storage or full asset pipeline in this slice.
+
+Durability notes:
+
+- `SERVER_PERSISTENCE_MODE=db` with a valid `DATABASE_URL` wires the Character
+  Library service to the Drizzle/Postgres adapter.
+- The default in-memory server path still exists for local development and
+  tests.
+- Mutating Character Library commands use the normal command idempotency store
+  category. In DB mode their idempotency success rows are durable, but this
+  slice does not add a separate multi-store transaction/outbox boundary because
+  the reusable library table is intentionally isolated from live runtime state.
+- Finalized library entries remain reusable records and are not submitted into
+  sessions or runtime overlays.
+
 ### `CharacterRepository`
 
 Current interface:

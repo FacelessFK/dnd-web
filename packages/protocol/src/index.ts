@@ -3,6 +3,7 @@ export * from './errors.js';
 export * from './rules-profile.js';
 export * from './session.js';
 export * from './character.js';
+export * from './character-library.js';
 export * from './scene.js';
 export * from './movement.js';
 export * from './encounter.js';

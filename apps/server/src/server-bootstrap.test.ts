@@ -9,6 +9,9 @@ import type {
   CharacterRecordDatabase,
   CharacterRecordRow,
   CharacterRecordWrite,
+  CharacterLibraryEntryDatabase,
+  CharacterLibraryEntryRow,
+  CharacterLibraryEntryWrite,
   CommandIdempotencyClaimRecordDatabase,
   CommandIdempotencyClaimRecordRow,
   CommandIdempotencyClaimRecordWrite,
@@ -248,11 +251,52 @@ class EmptyCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
   }
 }
 
+class EmptyCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabase {
+  async getCharacterLibraryEntry(
+    _params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerParticipantId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    void _params;
+    return null;
+  }
+
+  async insertCharacterLibraryEntry(
+    write: CharacterLibraryEntryWrite,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    return {
+      createdAt: new Date(0),
+      entry: structuredClone(write.entry),
+      entryId: write.entryId,
+      ownerParticipantId: write.ownerParticipantId,
+      updatedAt: new Date(0),
+    };
+  }
+
+  async listCharacterLibraryEntries(
+    _ownerParticipantId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    void _ownerParticipantId;
+    return [];
+  }
+
+  async updateCharacterLibraryEntry(
+    write: CharacterLibraryEntryWrite,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    return {
+      createdAt: new Date(0),
+      entry: structuredClone(write.entry),
+      entryId: write.entryId,
+      ownerParticipantId: write.ownerParticipantId,
+      updatedAt: new Date(0),
+    };
+  }
+}
+
 class StubUnitOfWork implements DndDatabaseUnitOfWork {
   async transaction<T>(
     run: (context: DndDatabaseUnitOfWorkContext) => Promise<T>,
   ): Promise<T> {
     return run({
+      characterLibrary: new EmptyCharacterLibraryEntryDatabase(),
       characters: new EmptyCharacterRecordDatabase(),
       commandIdempotencyClaims:
         new EmptyCommandIdempotencyClaimRecordDatabase(),
@@ -278,6 +322,8 @@ function createDbModeDependencies(params: {
   return {
     createActiveEncounterRecordDatabase: () =>
       new EmptyActiveEncounterRecordDatabase(),
+    createCharacterLibraryEntryDatabase: () =>
+      new EmptyCharacterLibraryEntryDatabase(),
     createCharacterRecordDatabase: () => new EmptyCharacterRecordDatabase(),
     createCommandIdempotencyRecordDatabase: () =>
       new EmptyCommandIdempotencyRecordDatabase(),

@@ -2,7 +2,12 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import type {
+  CharacterLibraryEntry,
+  CharacterLibraryEntryId,
+  CharacterLibraryPortraitReference,
+} from '@dnd/protocol';
 
 import {
   getCharacterBuilderAssetFallbackLabel,
@@ -16,7 +21,6 @@ import {
   backgroundChoices,
   builderSteps,
   classChoices,
-  mockCharacterLibraryEntries,
   speciesChoices,
   type AbilityKey,
   type BuilderStepId,
@@ -26,6 +30,7 @@ import {
 } from '../../lib/character-builder-data';
 import {
   createDefaultCharacterBuilderDraft,
+  defaultCharacterLibraryOwnerParticipantId,
   deriveCharacterBuilderSummary,
   filterCharacterLibraryEntries,
   formatAbilityModifier,
@@ -42,6 +47,21 @@ import {
   updateAbilityScore,
   updateAbilityScoreMethod,
 } from '../../lib/character-builder-helpers';
+import {
+  createCharacterLibraryEntry,
+  finalizeCharacterLibraryEntry,
+  getCharacterLibraryEntry,
+  listCharacterLibraryEntries,
+  updateCharacterLibraryEntry,
+} from '../../lib/character-library-api';
+import {
+  characterLibraryEntryToCard,
+  characterLibraryEntryToDraft,
+  draftToCharacterLibraryEntryInput,
+  getDraftPortraitReference,
+  getPortraitImageSource,
+} from '../../lib/character-library-mappers';
+import { downloadCharacterSheetPdf } from '../../lib/character-sheet-pdf';
 import {
   deriveAbilityScoreAssignmentState,
   deriveAbilityScorePreview,
@@ -83,15 +103,56 @@ const abilityLabels: Record<AbilityKey, string> = {
   wis: 'Wisdom',
 };
 
+const allowedPortraitTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const maxPortraitSizeBytes = 1_000_000;
+
+async function createUploadedPortraitReference(
+  file: File,
+): Promise<CharacterLibraryPortraitReference> {
+  if (!allowedPortraitTypes.has(file.type)) {
+    throw new Error('Portrait must be a JPEG, PNG, or WebP image.');
+  }
+
+  if (file.size > maxPortraitSizeBytes) {
+    throw new Error('Portrait must be 1 MB or smaller for this MVP.');
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+
+  return {
+    dataUrl,
+    fileName: file.name,
+    kind: 'uploaded',
+    mimeType: file.type as 'image/jpeg' | 'image/png' | 'image/webp',
+    sizeBytes: file.size,
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error('Unable to read portrait file.'));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(file);
+  });
+}
+
 function getDraftPortraitAssetKey(
   draft: CharacterBuilderDraft,
 ): CharacterBuilderAssetKey | undefined {
-  const normalizedDraftName = draft.name.trim().toLowerCase();
-  const libraryEntry = mockCharacterLibraryEntries.find(
-    (entry) => entry.name.toLowerCase() === normalizedDraftName,
-  );
+  const portrait = getDraftPortraitReference(draft);
 
-  return libraryEntry?.portraitAssetKey;
+  return portrait?.kind === 'asset'
+    ? (portrait.assetKey as CharacterBuilderAssetKey)
+    : undefined;
+}
+
+function getDraftPortraitImageSource(
+  draft: CharacterBuilderDraft,
+): string | null {
+  return getPortraitImageSource(getDraftPortraitReference(draft));
 }
 
 function getSpellOptionAssetKey(
@@ -197,8 +258,8 @@ function Shell({
               Builder MVP
             </p>
             <p className="mt-3 text-sm leading-6 text-amber-100/75">
-              Local mock data only. Backend library persistence, auth, and
-              account ownership are intentionally pending.
+              Persisted character library entries with pre-auth dev ownership.
+              Production auth and account ownership are intentionally pending.
             </p>
           </div>
         </aside>
@@ -292,19 +353,23 @@ function ParchmentPanel({
 
 function PlaceholderArt({
   assetKey,
+  imageSrc,
   label,
   size = 'large',
 }: {
   assetKey?: CharacterBuilderAssetKey;
+  imageSrc?: string | null;
   label: string;
   size?: 'avatar' | 'choice' | 'large' | 'portrait' | 'small' | 'wide';
 }) {
-  const imagePath = assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
+  const imagePath =
+    imageSrc ?? (assetKey ? getCharacterBuilderAssetPath(assetKey) : null);
   const [failedAssetPath, setFailedAssetPath] = useState<string | null>(null);
   const shouldShowImage = Boolean(imagePath && imagePath !== failedAssetPath);
-  const imagePositionClass = assetKey?.startsWith('portrait.')
-    ? 'object-top'
-    : 'object-center';
+  const imagePositionClass =
+    assetKey?.startsWith('portrait.') || imageSrc?.startsWith('data:')
+      ? 'object-top'
+      : 'object-center';
   const fallbackLabel = assetKey
     ? getCharacterBuilderAssetFallbackLabel(assetKey)
     : label;
@@ -457,15 +522,59 @@ function StatusBadge({ status }: { status: CharacterBuilderStatus }) {
 
 export function CharacterLibraryPage() {
   const [query, setQuery] = useState('');
+  const [ownerParticipantId, setOwnerParticipantId] = useState(
+    defaultCharacterLibraryOwnerParticipantId,
+  );
+  const [rawEntries, setRawEntries] = useState<CharacterLibraryEntry[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<CharacterBuilderStatus | 'all'>('all');
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadEntries() {
+      setLoading(true);
+      const result = await listCharacterLibraryEntries(ownerParticipantId);
+
+      if (!active) {
+        return;
+      }
+
+      if (result.ok) {
+        setRawEntries(result.data);
+        setLoadError(null);
+      } else {
+        setRawEntries([]);
+        setLoadError(result.error.message);
+      }
+
+      setLoading(false);
+    }
+
+    void loadEntries();
+
+    return () => {
+      active = false;
+    };
+  }, [ownerParticipantId]);
+
+  const cards = useMemo(
+    () => rawEntries.map(characterLibraryEntryToCard),
+    [rawEntries],
+  );
 
   const entries = useMemo(
     () =>
-      filterCharacterLibraryEntries(mockCharacterLibraryEntries, {
+      filterCharacterLibraryEntries(cards, {
         query,
         status,
       }),
-    [query, status],
+    [cards, query, status],
+  );
+  const entriesById = useMemo(
+    () => new Map(rawEntries.map((entry) => [entry.id, entry])),
+    [rawEntries],
   );
 
   return (
@@ -477,8 +586,9 @@ export function CharacterLibraryPage() {
               Character Library
             </h2>
             <p className="mt-3 max-w-2xl text-lg leading-8 text-amber-100/70">
-              Your heroes, their stories, and the realms they will shape. These
-              entries are local mock data until library persistence lands.
+              Your heroes, their stories, and the realms they will shape.
+              Entries are loaded from the Character Library backend for the
+              selected pre-auth owner.
             </p>
           </div>
           <Link
@@ -499,6 +609,19 @@ export function CharacterLibraryPage() {
                 placeholder="Search characters..."
                 type="search"
                 value={query}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-amber-200/75">
+                Dev Owner
+              </span>
+              <input
+                className="w-full rounded-2xl border border-amber-500/25 bg-black/35 px-4 py-3 text-amber-50 outline-none transition placeholder:text-amber-100/35 focus:border-purple-300/70 focus:ring-2 focus:ring-purple-400/25 xl:w-56"
+                onChange={(event) =>
+                  setOwnerParticipantId(event.target.value.trim())
+                }
+                value={ownerParticipantId}
               />
             </label>
 
@@ -553,19 +676,40 @@ export function CharacterLibraryPage() {
           </div>
         </ParchmentPanel>
 
+        {loadError ? (
+          <ParchmentPanel className="mt-6">
+            <p className="text-lg font-black text-red-100">
+              Character Library could not load.
+            </p>
+            <p className="mt-2 text-sm text-amber-100/70">{loadError}</p>
+          </ParchmentPanel>
+        ) : null}
+
+        {loading ? (
+          <ParchmentPanel className="mt-6 text-center">
+            <p className="text-lg font-bold text-amber-50">
+              Loading persisted characters...
+            </p>
+          </ParchmentPanel>
+        ) : null}
+
         <div className="mt-6 grid gap-5 md:grid-cols-2 2xl:grid-cols-4">
           {entries.map((entry) => (
-            <CharacterCard entry={entry} key={entry.id} />
+            <CharacterCard
+              entry={entry}
+              key={entry.id}
+              libraryEntry={entriesById.get(entry.id)}
+            />
           ))}
         </div>
 
-        {entries.length === 0 ? (
+        {!loading && !loadError && entries.length === 0 ? (
           <ParchmentPanel className="mt-6 text-center">
             <p className="text-lg font-bold text-amber-50">
-              No characters match that search.
+              No persisted characters match that search.
             </p>
             <p className="mt-2 text-sm text-amber-100/65">
-              Clear the filters or create a new local draft.
+              Clear the filters or create a new character for this dev owner.
             </p>
           </ParchmentPanel>
         ) : null}
@@ -574,11 +718,18 @@ export function CharacterLibraryPage() {
   );
 }
 
-function CharacterCard({ entry }: { entry: CharacterBuilderLibraryEntry }) {
+function CharacterCard({
+  entry,
+  libraryEntry,
+}: {
+  entry: CharacterBuilderLibraryEntry;
+  libraryEntry?: CharacterLibraryEntry;
+}) {
   return (
     <article className="overflow-hidden rounded-3xl border border-amber-500/30 bg-[#20160d] shadow-2xl shadow-black/40">
       <PlaceholderArt
         assetKey={entry.portraitAssetKey}
+        imageSrc={getPortraitImageSource(entry.portrait)}
         label={entry.name}
         size="portrait"
       />
@@ -612,6 +763,18 @@ function CharacterCard({ entry }: { entry: CharacterBuilderLibraryEntry }) {
             Edit
           </Link>
           <button
+            className="rounded-xl border border-amber-700/45 bg-amber-950/75 px-4 py-2 text-sm font-black text-amber-100 transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={!libraryEntry}
+            onClick={() => {
+              if (libraryEntry) {
+                downloadCharacterSheetPdf(libraryEntry);
+              }
+            }}
+            type="button"
+          >
+            Download Character Sheet PDF
+          </button>
+          <button
             className="rounded-xl bg-stone-950/75 px-4 py-2 text-sm font-bold text-amber-100/55"
             disabled
             type="button"
@@ -642,31 +805,63 @@ export function CharacterBuilderPage({
   characterId,
   mode,
 }: CharacterBuilderPageProps) {
-  const matchingEntry = mockCharacterLibraryEntries.find(
-    (entry) => entry.id === characterId,
-  );
   const [draft, setDraft] = useState(() =>
-    createDefaultCharacterBuilderDraft(
-      matchingEntry
-        ? {
-            armorClass: matchingEntry.armorClass,
-            className: matchingEntry.className,
-            level: matchingEntry.level,
-            name: matchingEntry.name,
-            speciesOrRace: matchingEntry.speciesOrRace,
-            status:
-              matchingEntry.status === 'in_session'
-                ? 'ready'
-                : matchingEntry.status,
-          }
-        : {},
-    ),
+    createDefaultCharacterBuilderDraft({
+      ownerParticipantId: defaultCharacterLibraryOwnerParticipantId,
+    }),
   );
+  const [persistedEntry, setPersistedEntry] =
+    useState<CharacterLibraryEntry | null>(null);
+  const [loadingEntry, setLoadingEntry] = useState(mode === 'edit');
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState(
     mode === 'edit'
-      ? 'Loaded a mock character into the local builder. Backend library persistence is pending.'
-      : 'New local draft started. Save and finalize actions are placeholders for now.',
+      ? 'Loading persisted character from the Character Library backend.'
+      : 'New character draft started. Save Draft persists it to the Character Library backend.',
   );
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadEntry() {
+      if (mode !== 'edit' || !characterId) {
+        setLoadingEntry(false);
+        return;
+      }
+
+      const result = await getCharacterLibraryEntry(
+        defaultCharacterLibraryOwnerParticipantId,
+        characterId as CharacterLibraryEntryId,
+      );
+
+      if (!active) {
+        return;
+      }
+
+      if (result.ok) {
+        const nextDraft = characterLibraryEntryToDraft(result.data);
+        setDraft(nextDraft);
+        setPersistedEntry(result.data);
+        setNotice(
+          result.data.status === 'finalized'
+            ? 'Loaded a finalized library character. Changes will update the reusable library entry.'
+            : 'Loaded persisted draft from the Character Library backend.',
+        );
+      } else {
+        setNotice(
+          `Unable to load persisted character: ${result.error.message}`,
+        );
+      }
+
+      setLoadingEntry(false);
+    }
+
+    void loadEntry();
+
+    return () => {
+      active = false;
+    };
+  }, [characterId, mode]);
 
   const currentStepIndex = getBuilderStepIndex(draft.builderStep);
   const validationIssues = validateCharacterBuilderDraft(draft);
@@ -679,9 +874,98 @@ export function CharacterBuilderPage({
   );
   const draftIsValid = isCharacterBuilderDraftValid(draft);
   const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const isBusy = saving || loadingEntry;
 
   const updateDraft = (nextDraft: CharacterBuilderDraft) => {
     setDraft(normalizeCharacterBuilderDraft(nextDraft));
+  };
+
+  const persistDraft = async (): Promise<CharacterLibraryEntry | null> => {
+    const normalizedDraft = normalizeCharacterBuilderDraft(draft);
+    const ownerParticipantId = normalizedDraft.ownerParticipantId.trim();
+
+    if (!ownerParticipantId) {
+      setNotice('Choose a dev owner before saving this character.');
+      return null;
+    }
+
+    setSaving(true);
+    const entryInput = draftToCharacterLibraryEntryInput({
+      ...normalizedDraft,
+      ownerParticipantId,
+    });
+    const result = normalizedDraft.id
+      ? await updateCharacterLibraryEntry(
+          ownerParticipantId,
+          normalizedDraft.id as CharacterLibraryEntryId,
+          entryInput,
+        )
+      : await createCharacterLibraryEntry(ownerParticipantId, entryInput);
+
+    setSaving(false);
+
+    if (!result.ok) {
+      setNotice(`Save failed: ${result.error.message}`);
+      return null;
+    }
+
+    const nextDraft = characterLibraryEntryToDraft(result.data);
+    setDraft(nextDraft);
+    setPersistedEntry(result.data);
+    setNotice(
+      result.data.status === 'finalized'
+        ? 'Character changes saved to the finalized library entry.'
+        : 'Draft saved to the Character Library backend.',
+    );
+
+    return result.data;
+  };
+
+  const finalizeDraft = async (): Promise<void> => {
+    if (!draftIsValid) {
+      setNotice('Resolve the required builder issues before finalizing.');
+      return;
+    }
+
+    const savedEntry = await persistDraft();
+
+    if (!savedEntry) {
+      return;
+    }
+
+    if (savedEntry.status === 'finalized') {
+      setNotice('This character is already finalized and saved.');
+      return;
+    }
+
+    setSaving(true);
+    const result = await finalizeCharacterLibraryEntry(
+      savedEntry.ownerParticipantId,
+      savedEntry.id,
+    );
+    setSaving(false);
+
+    if (!result.ok) {
+      setNotice(`Finalize failed: ${result.error.message}`);
+      return;
+    }
+
+    setPersistedEntry(result.data);
+    setDraft(characterLibraryEntryToDraft(result.data));
+    setNotice('Character finalized and saved as a reusable library entry.');
+  };
+
+  const downloadReviewPdf = async (): Promise<void> => {
+    const savedEntry = await persistDraft();
+
+    if (!savedEntry) {
+      return;
+    }
+
+    downloadCharacterSheetPdf(savedEntry);
+    setNotice(
+      'Downloaded a character sheet PDF from persisted character data.',
+    );
   };
 
   return (
@@ -700,7 +984,19 @@ export function CharacterBuilderPage({
 
         <div className="mt-6 grid gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ParchmentPanel className="min-w-0">
-            <BuilderStepContent draft={draft} setDraft={updateDraft} />
+            {loadingEntry ? (
+              <div className="rounded-3xl border border-amber-500/20 bg-black/25 p-8 text-center text-amber-100/75">
+                Loading persisted character...
+              </div>
+            ) : (
+              <BuilderStepContent
+                draft={draft}
+                onDownloadPdf={downloadReviewPdf}
+                persistedEntry={persistedEntry}
+                saving={saving}
+                setDraft={updateDraft}
+              />
+            )}
             <ValidationPanel
               issues={
                 draft.builderStep === 'review'
@@ -716,7 +1012,7 @@ export function CharacterBuilderPage({
 
             <div className="mt-8 flex flex-col gap-3 border-t border-amber-500/20 pt-5 md:flex-row md:items-center md:justify-between">
               <SecondaryButton
-                disabled={draft.builderStep === 'identity'}
+                disabled={draft.builderStep === 'identity' || isBusy}
                 onClick={() =>
                   updateDraft({
                     ...draft,
@@ -728,32 +1024,29 @@ export function CharacterBuilderPage({
               </SecondaryButton>
               <div className="flex flex-col gap-3 md:flex-row">
                 <SecondaryButton
-                  onClick={() =>
-                    setNotice(
-                      'Draft save acknowledged locally. Backend persistence integration is pending.',
-                    )
-                  }
+                  disabled={isBusy}
+                  onClick={() => void persistDraft()}
                 >
-                  Save Draft
+                  {saving ? 'Saving...' : 'Save Draft'}
                 </SecondaryButton>
                 {draft.builderStep === 'review' ? (
                   <PrimaryButton
-                    disabled={!draftIsValid}
-                    onClick={() => {
-                      updateDraft({
-                        ...draft,
-                        status: 'ready',
-                      });
-                      setNotice(
-                        'Finalize is local-only in this scaffold. Backend character library integration is pending.',
-                      );
-                    }}
+                    disabled={
+                      !draftIsValid ||
+                      isBusy ||
+                      persistedEntry?.status === 'finalized'
+                    }
+                    onClick={() => void finalizeDraft()}
                   >
-                    Finalize Character
+                    {persistedEntry?.status === 'finalized'
+                      ? 'Finalized'
+                      : 'Finalize Character'}
                   </PrimaryButton>
                 ) : (
                   <PrimaryButton
-                    disabled={currentStepIndex < 0 || currentStepHasErrors}
+                    disabled={
+                      currentStepIndex < 0 || currentStepHasErrors || isBusy
+                    }
                     onClick={() =>
                       updateDraft({
                         ...draft,
@@ -832,9 +1125,15 @@ function Stepper({
 
 function BuilderStepContent({
   draft,
+  onDownloadPdf,
+  persistedEntry,
+  saving,
   setDraft,
 }: {
   draft: CharacterBuilderDraft;
+  onDownloadPdf: () => Promise<void>;
+  persistedEntry: CharacterLibraryEntry | null;
+  saving: boolean;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   switch (draft.builderStep) {
@@ -855,7 +1154,14 @@ function BuilderStepContent({
     case 'spells':
       return <SpellsStep draft={draft} setDraft={setDraft} />;
     case 'review':
-      return <ReviewStep draft={draft} />;
+      return (
+        <ReviewStep
+          draft={draft}
+          onDownloadPdf={onDownloadPdf}
+          persistedEntry={persistedEntry}
+          saving={saving}
+        />
+      );
   }
 }
 
@@ -912,7 +1218,28 @@ function IdentityStep({
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const portraitImageSource = getDraftPortraitImageSource(draft);
   const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handlePortraitFile = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const portrait = await createUploadedPortraitReference(file);
+      setUploadError(null);
+      setDraft({
+        ...draft,
+        portrait,
+      });
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : 'Portrait upload failed.',
+      );
+    }
+  };
 
   return (
     <>
@@ -923,7 +1250,7 @@ function IdentityStep({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-5">
           <Field
-            hint="This is local state only; it is not saved to the backend yet."
+            hint="This name is saved with the persisted Character Library entry."
             label="Character Name"
           >
             <input
@@ -936,6 +1263,22 @@ function IdentityStep({
                 })
               }
               value={draft.name}
+            />
+          </Field>
+          <Field
+            hint="Temporary pre-auth owner ID. This is not production authentication."
+            label="Dev Owner ID"
+          >
+            <input
+              className={inputClass}
+              maxLength={64}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  ownerParticipantId: event.target.value.trim(),
+                })
+              }
+              value={draft.ownerParticipantId}
             />
           </Field>
           <Field label="Pronouns">
@@ -1023,16 +1366,45 @@ function IdentityStep({
           </p>
           <PlaceholderArt
             assetKey={portraitAssetKey}
+            imageSrc={portraitImageSource}
             label={draft.name || 'Adventurer'}
             size="avatar"
           />
-          <button
-            className="mt-4 w-full rounded-2xl border border-amber-400/25 bg-black/35 px-4 py-3 text-sm font-bold text-amber-100/45"
-            disabled
-            type="button"
-          >
-            Upload Image · Backend storage pending
-          </button>
+          <label className="mt-4 block w-full cursor-pointer rounded-2xl border border-amber-400/25 bg-black/35 px-4 py-3 text-center text-sm font-bold text-amber-100 transition hover:border-amber-300/55">
+            Upload Portrait
+            <input
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              onChange={(event) =>
+                void handlePortraitFile(event.target.files?.[0])
+              }
+              type="file"
+            />
+          </label>
+          {draft.portrait?.kind === 'uploaded' ? (
+            <button
+              className="mt-3 w-full rounded-2xl border border-amber-400/20 bg-black/20 px-4 py-2 text-sm font-bold text-amber-100/70"
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  portrait: null,
+                })
+              }
+              type="button"
+            >
+              Use Species Fallback Art
+            </button>
+          ) : null}
+          {uploadError ? (
+            <p className="mt-3 rounded-2xl border border-red-300/25 bg-red-950/25 px-3 py-2 text-sm text-red-100">
+              {uploadError}
+            </p>
+          ) : (
+            <p className="mt-3 text-xs leading-5 text-amber-100/50">
+              JPEG, PNG, or WebP up to 1 MB. Without an upload, the saved entry
+              uses the selected species art as its portrait reference.
+            </p>
+          )}
         </div>
       </div>
     </>
@@ -1798,22 +2170,51 @@ function SpellsStep({
   );
 }
 
-function ReviewStep({ draft }: { draft: CharacterBuilderDraft }) {
+function ReviewStep({
+  draft,
+  onDownloadPdf,
+  persistedEntry,
+  saving,
+}: {
+  draft: CharacterBuilderDraft;
+  onDownloadPdf: () => Promise<void>;
+  persistedEntry: CharacterLibraryEntry | null;
+  saving: boolean;
+}) {
   const summary = deriveCharacterBuilderSummary(draft);
   const abilityPreview = deriveAbilityScorePreview(draft);
   const ruleReview = deriveCharacterRuleReviewSummary(draft);
   const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const portraitImageSource = getDraftPortraitImageSource(draft);
   const selectedProfile = getRuleProfileById(draft.rulesProfileId);
 
   return (
     <>
       <StepHeading
-        intro="Review the local draft. Finalization is a visible placeholder until backend library persistence exists."
+        intro="Review persisted-ready character data before finalization. PDF export saves first, then downloads from persisted data."
         title="Step 9 — Review"
-      />
+      >
+        <button
+          className="mt-5 rounded-2xl border border-amber-300/45 bg-amber-950/65 px-5 py-3 text-sm font-black text-amber-100 transition hover:border-amber-200 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={saving}
+          onClick={() => void onDownloadPdf()}
+          type="button"
+        >
+          {saving ? 'Saving...' : 'Download Character Sheet PDF'}
+        </button>
+        {persistedEntry ? (
+          <p className="mt-2 text-xs text-amber-100/55">
+            Last persisted status: {persistedEntry.status}.
+          </p>
+        ) : null}
+      </StepHeading>
       <div className="grid gap-5 xl:grid-cols-[20rem_1fr]">
         <div className="overflow-hidden rounded-3xl border border-amber-500/25 bg-[linear-gradient(180deg,#d6bb83,#b9965f)] text-stone-950">
-          <PlaceholderArt assetKey={portraitAssetKey} label={draft.name} />
+          <PlaceholderArt
+            assetKey={portraitAssetKey}
+            imageSrc={portraitImageSource}
+            label={draft.name}
+          />
           <div className="p-5">
             <h3 className="text-3xl font-black">{summary.name}</h3>
             <p className="mt-1 font-bold">{summary.title}</p>
@@ -2156,6 +2557,7 @@ function CharacterSummaryPanel({
   const completionCount = getBuilderCompletionCount(draft);
   const ruleReview = deriveCharacterRuleReviewSummary(draft);
   const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const portraitImageSource = getDraftPortraitImageSource(draft);
   const selectedProfile = getRuleProfileById(draft.rulesProfileId);
 
   return (
@@ -2164,6 +2566,7 @@ function CharacterSummaryPanel({
       <div className="mt-5 flex items-start gap-4">
         <PlaceholderArt
           assetKey={portraitAssetKey}
+          imageSrc={portraitImageSource}
           label={summary.name}
           size="small"
         />

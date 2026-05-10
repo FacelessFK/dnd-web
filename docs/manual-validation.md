@@ -40,12 +40,18 @@ runs the DM fresh demo setup through headless Chrome, validates read-model
 recovery after reload, checks Player mode guardrails, and confirms Local Reset
 clears only browser state. It is intentionally not a full production E2E suite.
 
-For the frontend-only character product scaffold, start the web app and open
-`http://localhost:3000/characters`. Confirm the mock Character Library loads,
-select **Create New Character**, walk the 9-step local builder, and verify Save
-Draft/Finalize show backend-integration-pending feedback rather than claiming a
-durable save. Placeholder art is expected until the assets listed in
-`docs/character-builder-asset-request.md` are provided.
+For the persisted character product MVP, start the server and web app, then
+open `http://localhost:3000/characters`. Confirm the Character Library loads for
+the default pre-auth dev owner. Select **Create New Character**, upload a JPEG,
+PNG, or WebP portrait under 1 MB in Step 1, choose a rules profile, select
+species/race, class, and background, adjust ability scores, and confirm derived
+HP, AC, speed, initiative, proficiency, proficiencies, equipment, and spell
+setup update. Click **Save Draft**, return to `/characters`, and confirm the new
+card appears from the persisted list. Open **Edit**, move to Review, finalize
+the character, and download the generated character sheet PDF from Review. Then
+return to `/characters`, download the same generated PDF from the card, reload
+the browser, and confirm the finalized card still appears. If no portrait is
+uploaded, confirm the card and summary fall back to selected species/race art.
 
 For the rule-aware builder slice, also check:
 

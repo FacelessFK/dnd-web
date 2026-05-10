@@ -1,5 +1,6 @@
 import {
   characterCommandResponseSchema,
+  characterLibraryCommandResponseSchema,
   dmCommandResponseSchema,
   encounterCommandResponseSchema,
   movementCommandResponseSchema,
@@ -7,6 +8,8 @@ import {
   sessionCommandResponseSchema,
   type CharacterCommand,
   type CharacterCommandResponse,
+  type CharacterLibraryCommand,
+  type CharacterLibraryCommandResponse,
   type ClientCommand,
   type DmCommand,
   type DmCommandResponse,
@@ -72,6 +75,10 @@ export type CharacterCommandSuccessResponse = Extract<
   CharacterCommandResponse,
   { ok: true }
 >;
+export type CharacterLibraryCommandSuccessResponse = Extract<
+  CharacterLibraryCommandResponse,
+  { ok: true }
+>;
 export type DmCommandSuccessResponse = Extract<DmCommandResponse, { ok: true }>;
 export type EncounterCommandSuccessResponse = Extract<
   EncounterCommandResponse,
@@ -131,6 +138,16 @@ export async function sendCharacterCommand(
     '/api/characters/command',
     command,
     characterCommandResponseSchema,
+  );
+}
+
+export async function sendCharacterLibraryCommand(
+  command: CharacterLibraryCommand,
+): Promise<RuntimeApiResult<CharacterLibraryCommandSuccessResponse>> {
+  return postCommand(
+    '/api/character-library/command',
+    command,
+    characterLibraryCommandResponseSchema,
   );
 }
 

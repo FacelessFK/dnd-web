@@ -5,8 +5,8 @@
 The repository is a TypeScript pnpm monorepo with:
 
 - `apps/server`: authoritative Node runtime and HTTP/SSE command surface.
-- `apps/web`: Next.js role-aware runtime surface plus frontend-only character
-  library/builder scaffold.
+- `apps/web`: Next.js role-aware runtime surface plus persisted Character
+  Library / Builder MVP.
 - `packages/protocol`: shared Zod schemas and inferred protocol types.
 - `packages/shared`: shared domain primitives.
 - `packages/rules`: deterministic rules and derived-stat helpers.
@@ -74,7 +74,7 @@ The UI intentionally submits commands to the authoritative server instead of
 treating browser state as truth. It is role-aware, but it is not production
 authentication or authorization.
 
-## Character Library / Builder Scaffold
+## Character Library / Builder MVP
 
 The frontend-only character product surface lives at:
 
@@ -84,11 +84,15 @@ http://localhost:3000/characters
 
 It provides:
 
-- a mock-data Character Library with search, status filters, character cards,
-  placeholder actions, and a Create New Character button,
+- a persisted Character Library with search, status filters, character cards,
+  PDF downloads, and a Create New Character button,
 - a 9-step local Character Builder flow at `/characters/new`,
-- an edit-route scaffold at `/characters/:characterId/edit` that loads mock
-  entries into the same local builder,
+- an edit route at `/characters/:characterId/edit` that loads persisted
+  library entries into the same builder,
+- draft save and finalize flows backed by `POST /api/character-library/command`,
+- a dedicated reusable-library persistence table,
+  `character_library_entries`, when the server is started with DB persistence,
+- pre-auth `ownerParticipantId` ownership controls for local development,
 - local SRD 5.2.1-compatible rules data for builder species, classes,
   backgrounds, skills, languages, tools, equipment metadata, class
   spellcasting metadata, and level 1 spells,
@@ -101,19 +105,22 @@ It provides:
 - local generated assets for visible character portraits, species cards, class
   emblems, background icons, equipment icons, spell icons, textures, frames, and
   ornaments, with CSS placeholder fallback for any missing asset,
-- local-only Save Draft and Finalize feedback that explicitly says backend
-  integration is pending,
+- a Step 1 portrait uploader for JPEG, PNG, and WebP images up to 1 MB. Uploaded
+  portraits are stored as validated data URL references in the library entry for
+  this MVP; entries without uploads reference selected species fallback art,
+- a repo-owned generated character sheet PDF download on Review and library
+  cards. The PDF is generated from persisted character data and does not embed a
+  copyrighted official sheet template,
 - an asset request/status document at
   `docs/character-builder-asset-request.md`, generated asset notes at
   `docs/character-builder-generated-assets.md`, and rules/source notes at
   `docs/character-builder-rules-source-plan.md`.
 
-This surface does not call server APIs, persist character library records,
-upload portraits, submit characters into sessions, enforce account ownership,
-or implement full D&D character automation. It also does not yet automate
-higher-level spells, subclasses, level-up, full point buy, inventory rules,
-equipment alternatives, spell effects, or species/background choice storage
-beyond the current local preview metadata.
+This surface still does not submit library characters into live runtime
+sessions, enforce production authentication/account ownership, provide cloud
+asset storage, or implement full D&D character automation. It also does not yet
+automate higher-level spells, subclasses, level-up, full inventory rules,
+equipment alternatives, or spell effects.
 
 ## Running Locally
 
@@ -139,6 +146,19 @@ Override the runtime server used by the web app:
 ```bash
 NEXT_PUBLIC_SERVER_URL=http://localhost:2567 pnpm --filter @dnd/web dev
 ```
+
+To exercise the persisted Character Library against Postgres, start the server
+with:
+
+```bash
+SERVER_PERSISTENCE_MODE=db
+DATABASE_URL=postgres://user:password@localhost:5432/dnd_web
+```
+
+Apply the SQL migrations in `packages/db/migrations/`, including
+`0008_character_library_entries.sql`, before using DB mode. Without DB mode the
+Character Library uses the server's in-memory fallback, which is useful for
+tests but does not survive process restart.
 
 Manual backend validation remains documented in:
 
@@ -182,12 +202,12 @@ covered by the existing server tests and repo smoke tests.
 ## Known Limitations
 
 - No authentication or production deployment posture.
-- The `/characters` Character Library and Builder are frontend-only. Builder
-  choices now use local SRD data and local derived previews, but there is no
-  backend persistence, auth/account ownership, upload pipeline, full official
-  automation, or submit-to-session integration there yet. Local generated
-  assets are scaffold art only; missing files still fall back to CSS
-  placeholders.
+- The `/characters` Character Library and Builder now persist reusable library
+  entries through the backend, but ownership is pre-auth only. There is no
+  production auth/account ownership, cloud upload pipeline, full official
+  automation, or submit-to-session integration there yet. Uploaded portraits are
+  stored as MVP data URLs inside library entries; local generated assets remain
+  scaffold art and missing files still fall back to CSS placeholders.
 - No durable event replay, stream cursor, or catch-up API.
 - No map asset pipeline, full adventure/campaign authoring workflow,
   automatic player-triggered transitions, traps/locks/scripts, fog/LOS,

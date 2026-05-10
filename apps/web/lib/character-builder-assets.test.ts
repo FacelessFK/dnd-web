@@ -69,8 +69,9 @@ describe('character builder asset mapping', () => {
     assert.ok(
       mockCharacterLibraryEntries.every(
         (entry) =>
+          entry.portraitAssetKey &&
           getCharacterBuilderAssetStatus(entry.portraitAssetKey) ===
-          'generated',
+            'generated',
       ),
     );
     assert.ok(

@@ -11,6 +11,7 @@ export type IdempotentCommand = {
 
 export type CommandIdempotencyCategory =
   | 'character'
+  | 'character-library'
   | 'dm'
   | 'encounter'
   | 'movement'

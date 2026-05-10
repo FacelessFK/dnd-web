@@ -1,6 +1,7 @@
 import {
   createNodePostgresDndDatabaseConnection,
   DrizzleActiveEncounterRecordDatabase,
+  DrizzleCharacterLibraryEntryDatabase,
   DrizzleCharacterRecordDatabase,
   DrizzleCommandIdempotencyRecordDatabase,
   DrizzleCommandEventOutboxDatabase,
@@ -8,6 +9,7 @@ import {
   DrizzleSceneRecordDatabase,
   DrizzleSessionSnapshotDatabase,
   type ActiveEncounterRecordDatabase,
+  type CharacterLibraryEntryDatabase,
   type CharacterRecordDatabase,
   type CommandIdempotencyRecordDatabase,
   type CommandEventOutboxDatabase,
@@ -21,6 +23,10 @@ import {
   CommandEventOutboxDispatcher,
   type CommandEventOutboxDispatcherLike,
 } from './command-event-outbox-dispatcher.js';
+import {
+  CharacterLibraryService,
+  DbBackedCharacterLibraryRepository,
+} from './character-library-store.js';
 import { DbBackedCommandIdempotencyStore } from './db-command-idempotency-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
@@ -51,6 +57,9 @@ export type ServerBootstrapDependencies = {
   createActiveEncounterRecordDatabase: (
     db: DndDatabase,
   ) => ActiveEncounterRecordDatabase;
+  createCharacterLibraryEntryDatabase: (
+    db: DndDatabase,
+  ) => CharacterLibraryEntryDatabase;
   createCharacterRecordDatabase: (db: DndDatabase) => CharacterRecordDatabase;
   createCommandIdempotencyRecordDatabase: (
     db: DndDatabase,
@@ -72,6 +81,8 @@ export type ServerBootstrapDependencies = {
 const defaultDependencies: ServerBootstrapDependencies = {
   createActiveEncounterRecordDatabase: (db) =>
     new DrizzleActiveEncounterRecordDatabase(db),
+  createCharacterLibraryEntryDatabase: (db) =>
+    new DrizzleCharacterLibraryEntryDatabase(db),
   createCharacterRecordDatabase: (db) => new DrizzleCharacterRecordDatabase(db),
   createCommandIdempotencyRecordDatabase: (db) =>
     new DrizzleCommandIdempotencyRecordDatabase(db),
@@ -142,6 +153,8 @@ export async function createBootstrappedSessionServer(
     const characterRecords = dependencies.createCharacterRecordDatabase(
       connection.db,
     );
+    const characterLibraryEntries =
+      dependencies.createCharacterLibraryEntryDatabase(connection.db);
     const sceneRecords = dependencies.createSceneRecordDatabase(connection.db);
     const encounterRecords = dependencies.createActiveEncounterRecordDatabase(
       connection.db,
@@ -160,6 +173,9 @@ export async function createBootstrappedSessionServer(
     );
     const idempotency = new DbBackedCommandIdempotencyStore(
       commandIdempotencyRecords,
+    );
+    const characterLibrary = new CharacterLibraryService(
+      new DbBackedCharacterLibraryRepository(characterLibraryEntries),
     );
     const commandEventOutboxDispatcher =
       dependencies.createCommandEventOutboxDispatcher(
@@ -200,6 +216,7 @@ export async function createBootstrappedSessionServer(
         combatCommandTransaction,
         commandEventOutboxDispatcher,
         sceneCommandTransaction,
+        characterLibrary,
       ),
       closePersistence,
       persistenceMode,

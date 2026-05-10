@@ -28,17 +28,22 @@ assignment, view pending or assigned character and active-scene
 map/entity/combatant state, move its own token, use its own turn resources, and
 attack legal player or active non-defeated combatant targets.
 
-The `/characters` product area is intentionally separate from `/runtime`. It
-contains a mock-data Character Library and a 9-step local Character Builder
-scaffold with a dark fantasy shell, parchment cards, gold accents, purple
-active states, a progress stepper, and a right-side summary rail. Builder
+The `/characters` product area is intentionally separate from `/runtime`. It now
+has a persisted Character Library MVP backed by
+`POST /api/character-library/command` and a dedicated
+`character_library_entries` table when the server runs in DB mode. The 9-step
+Character Builder keeps the dark fantasy shell, parchment cards, gold accents,
+purple active states, progress stepper, and right-side summary rail. Builder
 species, class, background, proficiency, equipment, and level 1 spell choices
-are now driven by local SRD 5.2.1-compatible rules data, with derived local
-previews for ability modifiers, HP, AC, speed, saving throws, and proficiency
-bonus. The most visible library and builder cards now resolve local generated
-assets with CSS placeholder fallback for missing files. It still does not call
-backend APIs, persist drafts, upload images, submit characters into sessions,
-or implement full D&D character automation.
+are driven by local SRD 5.2.1-compatible rules data, with derived local previews
+for ability modifiers, HP, AC, speed, saving throws, and proficiency bonus.
+Draft saves, edit loads, and finalization now go through the Character Library
+backend surface; uploaded portraits are validated and stored with the library
+entry as MVP data URLs, and missing uploads fall back to selected species art.
+Review and library cards can download a repo-owned generated character sheet
+PDF built from persisted character data. This remains pre-auth ownership only:
+there is no production account model, cloud upload pipeline, submit-to-session
+integration, or full D&D automation.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -53,8 +58,9 @@ Implemented so far:
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
   database packages
 - Next.js role-aware runtime surface at `/runtime`
-- frontend-only Character Library and 9-step rule-aware Character Builder
-  scaffold at `/characters`, using local generated/placeholder assets
+- persisted Character Library and 9-step rule-aware Character Builder MVP at
+  `/characters`, using local generated/placeholder assets, pre-auth owner IDs,
+  local portrait data URL storage, and generated PDF export
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -108,8 +114,8 @@ Not implemented yet:
 - command-surface-wide durable idempotency, event replay, event cursors, or
   distributed coordination beyond the currently covered DB-backed slices
 - full transaction/outbox persistence boundaries across every command path
-- backend-backed character library persistence, real draft saves, image upload,
-  account ownership, or submit-to-session integration from `/characters`
+- production account ownership, cloud portrait storage, or submit-to-session
+  integration from `/characters`
 - full official character-builder automation beyond the current local SRD
   species/class/background/proficiency/equipment/level 1 spell previews
 - production-grade player UX, full map/adventure editor, automatic
@@ -182,6 +188,7 @@ command, SSE, idempotency, and recovery surface. Current command endpoints:
 
 - `POST /api/session/command`
 - `POST /api/characters/command`
+- `POST /api/character-library/command`
 - `POST /api/scenes/command`
 - `POST /api/movement/command`
 - `POST /api/encounters/command`
@@ -193,14 +200,15 @@ Current stream endpoint:
 
 Current high-level command groups:
 
-| Endpoint                  | Main commands                                        | Read commands            |
-| ------------------------- | ---------------------------------------------------- | ------------------------ |
-| `/api/session/command`    | create, join, reconnect                              | reconnect recovery       |
-| `/api/characters/command` | create, update, finalize, submit, assign             | `get_character`          |
-| `/api/scenes/command`     | create, activate, place/edit entity, transitions     | `get_scene`              |
-| `/api/movement/command`   | place character, move character                      | `get_active_scene_state` |
-| `/api/encounters/command` | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
-| `/api/dm/command`         | HP, conditions, reposition, combatants, turns, end   | none                     |
+| Endpoint                         | Main commands                                        | Read commands            |
+| -------------------------------- | ---------------------------------------------------- | ------------------------ |
+| `/api/session/command`           | create, join, reconnect                              | reconnect recovery       |
+| `/api/characters/command`        | create, update, finalize, submit, assign             | `get_character`          |
+| `/api/character-library/command` | create/update/finalize reusable library entries      | get/list library entries |
+| `/api/scenes/command`            | create, activate, place/edit entity, transitions     | `get_scene`              |
+| `/api/movement/command`          | place character, move character                      | `get_active_scene_state` |
+| `/api/encounters/command`        | start, advance, use turn resources, movement, attack | `get_encounter_state`    |
+| `/api/dm/command`                | HP, conditions, reposition, combatants, turns, end   | none                     |
 
 Current SSE event types:
 
@@ -237,15 +245,17 @@ character sheet draft flow backed by character commands and can submit finalized
 characters for DM assignment; DM assignment remains authoritative. Local Reset
 clears browser state only.
 
-For the frontend-only character product scaffold, open
-`http://localhost:3000/characters`. The page uses mock character entries and
-links to `/characters/new` plus `/characters/:characterId/edit`. The builder
-uses local SRD 5.2.1-compatible rules data for species, classes, backgrounds,
-proficiencies, equipment suggestions, level 1 spell metadata, and derived
-previews, but all state is still local/mock. Save Draft and Finalize are visible
-local placeholders with backend integration pending. Character cards and builder
-choices use local generated assets where available and CSS placeholders where
-assets are missing. Asset status is tracked in
+For the persisted character product MVP, open
+`http://localhost:3000/characters`. The page lists Character Library entries
+for the selected pre-auth dev owner via the backend command endpoint. Create New
+Character opens `/characters/new`, Save Draft creates or updates a reusable
+library entry, `/characters/:characterId/edit` reloads persisted data, and
+Finalize marks the entry finalized while keeping it separate from live runtime
+session overlays. Step 1 accepts JPEG, PNG, or WebP portraits up to 1 MB; if no
+portrait is uploaded, the saved entry references selected species fallback art.
+Review and library cards expose generated PDF downloads. Character cards and
+builder choices use local generated assets where available and CSS placeholders
+where assets are missing. Asset status is tracked in
 [docs/character-builder-asset-request.md](docs/character-builder-asset-request.md),
 generated asset notes live in
 [docs/character-builder-generated-assets.md](docs/character-builder-generated-assets.md),
@@ -316,6 +326,17 @@ baseline includes:
 
 The server loads environment variables at startup via `dotenv/config`, so a
 repo-root `.env` file works for local development.
+
+To run the persisted Character Library against Postgres, set:
+
+```bash
+SERVER_PERSISTENCE_MODE=db
+DATABASE_URL=postgres://user:password@localhost:5432/dnd_web
+```
+
+Apply the SQL migrations in `packages/db/migrations/` against that database,
+including `0008_character_library_entries.sql`. Without DB mode, the server
+keeps the Character Library in memory for local development and tests.
 
 ## Main Docs
 

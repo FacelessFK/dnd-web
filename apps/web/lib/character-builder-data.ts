@@ -1,3 +1,5 @@
+import type { CharacterLibraryPortraitReference } from '@dnd/protocol';
+
 import type { CharacterBuilderAssetKey } from './character-builder-assets';
 import {
   rareLanguages,
@@ -49,9 +51,12 @@ export type CharacterBuilderDraft = {
     max: number;
     temp: number;
   };
+  id?: string;
   level: number;
   name: string;
   notes: string;
+  ownerParticipantId: string;
+  portrait: CharacterLibraryPortraitReference | null;
   pronouns: string;
   rulesProfileId: string;
   speciesOrRace: string;
@@ -65,7 +70,9 @@ export type CharacterBuilderLibraryEntry = {
   id: string;
   level: number;
   name: string;
-  portraitAssetKey: CharacterBuilderAssetKey;
+  ownerParticipantId?: string;
+  portrait: CharacterLibraryPortraitReference | null;
+  portraitAssetKey?: CharacterBuilderAssetKey;
   speciesOrRace: string;
   status: CharacterBuilderStatus;
   summary: string;
@@ -117,6 +124,8 @@ export const mockCharacterLibraryEntries: CharacterBuilderLibraryEntry[] = [
     id: 'mock-elara-nightbloom',
     level: 1,
     name: 'Elara Nightbloom',
+    ownerParticipantId: 'dev-player-001',
+    portrait: null,
     portraitAssetKey: 'portrait.elara',
     speciesOrRace: 'Elf',
     status: 'draft',
@@ -128,6 +137,8 @@ export const mockCharacterLibraryEntries: CharacterBuilderLibraryEntry[] = [
     id: 'mock-thorn-blackoak',
     level: 3,
     name: 'Thorn Blackoak',
+    ownerParticipantId: 'dev-player-001',
+    portrait: null,
     portraitAssetKey: 'portrait.thorn',
     speciesOrRace: 'Human',
     status: 'ready',
@@ -139,6 +150,8 @@ export const mockCharacterLibraryEntries: CharacterBuilderLibraryEntry[] = [
     id: 'mock-mirelle-dawnsong',
     level: 2,
     name: 'Mirelle Dawnsong',
+    ownerParticipantId: 'dev-player-001',
+    portrait: null,
     portraitAssetKey: 'portrait.mirelle',
     speciesOrRace: 'Dwarf',
     status: 'in_session',
@@ -150,6 +163,8 @@ export const mockCharacterLibraryEntries: CharacterBuilderLibraryEntry[] = [
     id: 'mock-kael-emberstep',
     level: 4,
     name: 'Kael Emberstep',
+    ownerParticipantId: 'dev-player-001',
+    portrait: null,
     portraitAssetKey: 'portrait.kael',
     speciesOrRace: 'Tiefling',
     status: 'ready',

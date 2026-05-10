@@ -33,6 +33,8 @@ export type CharacterLibraryFilter = {
   status: CharacterBuilderStatus | 'all';
 };
 
+export const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
+
 export type CharacterBuilderSummary = {
   armorClass: number;
   className: string;
@@ -87,11 +89,15 @@ export function createDefaultCharacterBuilderDraft(
       max: overrides.hp?.max ?? 1,
       temp: overrides.hp?.temp ?? 0,
     },
+    id: overrides.id,
     level,
     name: overrides.name ?? 'Elara Nightbloom',
     notes:
       overrides.notes ??
       'Curious, contemplative, and quietly determined. Keeps a journal of impossible stars.',
+    ownerParticipantId:
+      overrides.ownerParticipantId ?? defaultCharacterLibraryOwnerParticipantId,
+    portrait: overrides.portrait ?? null,
     pronouns: overrides.pronouns ?? 'she / her',
     rulesProfileId: overrides.rulesProfileId ?? defaultRulesProfileId,
     speciesOrRace: overrides.speciesOrRace ?? 'Elf',
