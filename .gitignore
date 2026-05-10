@@ -29,3 +29,4 @@ yarn-error.log*
 
 docs/concept
 docs/design
+apps/web/public/assets

@@ -6,3 +6,4 @@ coverage
 pnpm-lock.yaml
 .codex
 *.zip
+apps/web/public/assets/character-builder/**/*.svg

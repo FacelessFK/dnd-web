@@ -31,9 +31,14 @@ attack legal player or active non-defeated combatant targets.
 The `/characters` product area is intentionally separate from `/runtime`. It
 contains a mock-data Character Library and a 9-step local Character Builder
 scaffold with a dark fantasy shell, parchment cards, gold accents, purple
-active states, a progress stepper, and a right-side summary rail. It does not
-call backend APIs, persist drafts, upload images, submit characters into
-sessions, or implement full D&D character automation yet.
+active states, a progress stepper, and a right-side summary rail. Builder
+species, class, background, proficiency, equipment, and level 1 spell choices
+are now driven by local SRD 5.2.1-compatible rules data, with derived local
+previews for ability modifiers, HP, AC, speed, saving throws, and proficiency
+bonus. The most visible library and builder cards now resolve local generated
+assets with CSS placeholder fallback for missing files. It still does not call
+backend APIs, persist drafts, upload images, submit characters into sessions,
+or implement full D&D character automation.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -48,8 +53,8 @@ Implemented so far:
 - pnpm workspace monorepo with shared domain, protocol, rules, server, web, and
   database packages
 - Next.js role-aware runtime surface at `/runtime`
-- frontend-only Character Library and 9-step Character Builder scaffold at
-  `/characters`
+- frontend-only Character Library and 9-step rule-aware Character Builder
+  scaffold at `/characters`, using local generated/placeholder assets
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -105,6 +110,8 @@ Not implemented yet:
 - full transaction/outbox persistence boundaries across every command path
 - backend-backed character library persistence, real draft saves, image upload,
   account ownership, or submit-to-session integration from `/characters`
+- full official character-builder automation beyond the current local SRD
+  species/class/background/proficiency/equipment/level 1 spell previews
 - production-grade player UX, full map/adventure editor, automatic
   player-triggered scene transitions, or authenticated DM panel
 - opportunity attacks or out-of-turn reaction windows
@@ -232,10 +239,18 @@ clears browser state only.
 
 For the frontend-only character product scaffold, open
 `http://localhost:3000/characters`. The page uses mock character entries and
-links to `/characters/new` plus `/characters/:characterId/edit`. Save Draft and
-Finalize are visible local placeholders with backend integration pending. Asset
-needs for replacing the generated placeholders are listed in
-[docs/character-builder-asset-request.md](docs/character-builder-asset-request.md).
+links to `/characters/new` plus `/characters/:characterId/edit`. The builder
+uses local SRD 5.2.1-compatible rules data for species, classes, backgrounds,
+proficiencies, equipment suggestions, level 1 spell metadata, and derived
+previews, but all state is still local/mock. Save Draft and Finalize are visible
+local placeholders with backend integration pending. Character cards and builder
+choices use local generated assets where available and CSS placeholders where
+assets are missing. Asset status is tracked in
+[docs/character-builder-asset-request.md](docs/character-builder-asset-request.md),
+generated asset notes live in
+[docs/character-builder-generated-assets.md](docs/character-builder-generated-assets.md),
+and rules/source notes live in
+[docs/character-builder-rules-source-plan.md](docs/character-builder-rules-source-plan.md).
 
 Automated browser smoke coverage for this surface is available with:
 
@@ -315,6 +330,9 @@ repo-root `.env` file works for local development.
 - [docs/manual-validation.md](docs/manual-validation.md)
 - [docs/api-surface.md](docs/api-surface.md)
 - [docs/project-handoff.md](docs/project-handoff.md)
+- [docs/character-builder-rules-source-plan.md](docs/character-builder-rules-source-plan.md)
+- [docs/character-builder-asset-request.md](docs/character-builder-asset-request.md)
+- [docs/character-builder-generated-assets.md](docs/character-builder-generated-assets.md)
 - [dnd_project_handoff_context.md](dnd_project_handoff_context.md)
 - [TASKS_PHASE_0.md](TASKS_PHASE_0.md)
 - [TASKS_PHASE_1.md](TASKS_PHASE_1.md)

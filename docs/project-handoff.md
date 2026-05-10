@@ -89,17 +89,31 @@ It provides:
 - a 9-step local Character Builder flow at `/characters/new`,
 - an edit-route scaffold at `/characters/:characterId/edit` that loads mock
   entries into the same local builder,
+- local SRD 5.2.1-compatible rules data for builder species, classes,
+  backgrounds, skills, languages, tools, equipment metadata, class
+  spellcasting metadata, and level 1 spells,
+- rule-derived local previews for background ability boosts, final ability
+  modifiers, proficiency bonus, HP, AC, speed, saving throws, skill choices,
+  languages, tools, equipment, and caster/non-caster spell setup,
 - a dark fantasy product shell inspired by the provided reference screenshots:
   left navigation, parchment cards, gold accents, purple active states, top
   progress stepper, and right summary rail,
+- local generated assets for visible character portraits, species cards, class
+  emblems, background icons, equipment icons, spell icons, textures, frames, and
+  ornaments, with CSS placeholder fallback for any missing asset,
 - local-only Save Draft and Finalize feedback that explicitly says backend
   integration is pending,
-- placeholder art blocks and an asset request document at
-  `docs/character-builder-asset-request.md`.
+- an asset request/status document at
+  `docs/character-builder-asset-request.md`, generated asset notes at
+  `docs/character-builder-generated-assets.md`, and rules/source notes at
+  `docs/character-builder-rules-source-plan.md`.
 
 This surface does not call server APIs, persist character library records,
 upload portraits, submit characters into sessions, enforce account ownership,
-or implement full D&D character automation yet.
+or implement full D&D character automation. It also does not yet automate
+higher-level spells, subclasses, level-up, full point buy, inventory rules,
+equipment alternatives, spell effects, or species/background choice storage
+beyond the current local preview metadata.
 
 ## Running Locally
 
@@ -157,16 +171,23 @@ covered by the existing server tests and repo smoke tests.
   surface.
 - `docs/manual-validation.md`: copy-paste backend manual validation flow.
 - `docs/persistence-boundaries.md`: persistence and transaction boundary notes.
-- `docs/character-builder-asset-request.md`: requested local assets for
-  replacing Character Builder placeholders.
+- `docs/character-builder-asset-request.md`: requested and generated local
+  assets for replacing Character Builder placeholders.
+- `docs/character-builder-generated-assets.md`: generated asset batches,
+  source capability, style notes, and replacement guidance.
+- `docs/character-builder-rules-source-plan.md`: Character Builder SRD source,
+  license, implemented data, and known data gaps.
 - `TASKS_PHASE_9.md`: Phase 9 documentation/handoff checklist history.
 
 ## Known Limitations
 
 - No authentication or production deployment posture.
-- The `/characters` Character Library and Builder are mock-data frontend
-  scaffolds only; no backend persistence, auth/account ownership, upload
-  pipeline, or submit-to-session integration exists there yet.
+- The `/characters` Character Library and Builder are frontend-only. Builder
+  choices now use local SRD data and local derived previews, but there is no
+  backend persistence, auth/account ownership, upload pipeline, full official
+  automation, or submit-to-session integration there yet. Local generated
+  assets are scaffold art only; missing files still fall back to CSS
+  placeholders.
 - No durable event replay, stream cursor, or catch-up API.
 - No map asset pipeline, full adventure/campaign authoring workflow,
   automatic player-triggered transitions, traps/locks/scripts, fog/LOS,

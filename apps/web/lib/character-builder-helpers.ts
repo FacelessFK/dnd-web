@@ -13,6 +13,20 @@ import {
   type ClassChoiceCard,
   speciesChoices,
 } from './character-builder-data';
+import {
+  changeAbilityScoreMethod,
+  deriveDefaultBuilderSelections,
+  deriveRuleDerivedPreview,
+  getProficiencyBonus,
+  getRuleProfileById,
+  getValidationIssuesForStep,
+  sanitizeRuleSelections,
+  toggleRuleSelection,
+} from './character-builder-rules-helpers';
+import {
+  defaultRulesProfileId,
+  type AbilityScoreMethod,
+} from './character-builder-rules-data';
 
 export type CharacterLibraryFilter = {
   query: string;
@@ -37,7 +51,7 @@ const defaultAbilities: Record<AbilityKey, number> = {
   cha: 10,
   con: 13,
   dex: 14,
-  int: 16,
+  int: 15,
   str: 8,
   wis: 12,
 };
@@ -50,22 +64,18 @@ export function createDefaultCharacterBuilderDraft(
     ...overrides.abilities,
   };
   const level = overrides.level ?? 1;
-  const hitPoints = Math.max(
-    1,
-    overrides.hp?.max ?? 6 + getAbilityModifier(abilities.con),
-  );
-
-  return {
+  const draftBase: CharacterBuilderDraft = {
     abilities,
+    abilityScoreMethod: overrides.abilityScoreMethod ?? 'standard-array',
     armorClass: overrides.armorClass ?? 10 + getAbilityModifier(abilities.dex),
     background: overrides.background ?? 'Sage',
     builderSelections: {
-      cantrips: ['Fire Bolt', 'Mage Hand', 'Prestidigitation'],
+      cantrips: ['Light', 'Mage Hand', 'Ray of Frost'],
       equipment: ['Quarterstaff', 'Arcane Focus', "Scholar's Pack"],
       languages: ['Common', 'Elvish', 'Draconic'],
-      skills: ['Arcana', 'Investigation'],
-      spells: ['Magic Missile', 'Shield'],
-      tools: ["Scholar's Kit"],
+      skills: ['Arcana', 'History', 'Investigation', 'Insight'],
+      spells: ['Detect Magic', 'Mage Armor', 'Magic Missile', 'Shield'],
+      tools: ["Calligrapher's Supplies"],
       ...overrides.builderSelections,
     },
     builderStep: overrides.builderStep ?? 'identity',
@@ -73,8 +83,8 @@ export function createDefaultCharacterBuilderDraft(
     concept:
       overrides.concept ?? 'A moonlit scholar drawn to forgotten arcane ruins.',
     hp: {
-      current: overrides.hp?.current ?? hitPoints,
-      max: hitPoints,
+      current: overrides.hp?.current ?? 1,
+      max: overrides.hp?.max ?? 1,
       temp: overrides.hp?.temp ?? 0,
     },
     level,
@@ -83,9 +93,31 @@ export function createDefaultCharacterBuilderDraft(
       overrides.notes ??
       'Curious, contemplative, and quietly determined. Keeps a journal of impossible stars.',
     pronouns: overrides.pronouns ?? 'she / her',
+    rulesProfileId: overrides.rulesProfileId ?? defaultRulesProfileId,
     speciesOrRace: overrides.speciesOrRace ?? 'Elf',
     speed: overrides.speed ?? 30,
     status: overrides.status ?? 'draft',
+  };
+  const defaultSelections = deriveDefaultBuilderSelections(draftBase);
+  const sanitizedDraft = sanitizeRuleSelections({
+    ...draftBase,
+    builderSelections: {
+      ...defaultSelections,
+      ...overrides.builderSelections,
+    },
+  });
+  const preview = deriveRuleDerivedPreview(sanitizedDraft);
+  const hitPoints = Math.max(1, overrides.hp?.max ?? preview.hitPoints.value);
+
+  return {
+    ...sanitizedDraft,
+    armorClass: overrides.armorClass ?? preview.armorClass.value,
+    hp: {
+      current: overrides.hp?.current ?? hitPoints,
+      max: hitPoints,
+      temp: overrides.hp?.temp ?? 0,
+    },
+    speed: overrides.speed ?? preview.speed,
   };
 }
 
@@ -128,9 +160,22 @@ export function updateAbilityScore(
   ability: AbilityKey,
   delta: number,
 ): CharacterBuilderDraft {
+  const profile = getRuleProfileById(draft.rulesProfileId);
+  const scoreMethod = draft.abilityScoreMethod;
+  const min =
+    scoreMethod === 'manual'
+      ? profile.abilityScoreRules.manualMin
+      : profile.abilityScoreRules.pointBuyMin;
+  const max =
+    scoreMethod === 'manual'
+      ? profile.abilityScoreRules.manualMax
+      : profile.abilityScoreRules.pointBuyMax;
   const abilities = {
     ...draft.abilities,
-    [ability]: clampAbilityScore(draft.abilities[ability] + delta),
+    [ability]: Math.min(
+      max,
+      Math.max(min, Math.trunc(draft.abilities[ability] + delta)),
+    ),
   };
 
   return normalizeCharacterBuilderDraft({
@@ -159,9 +204,10 @@ export function normalizeCharacterBuilderDraft(
   const maxHp = Math.max(1, Math.trunc(draft.hp.max));
   const tempHp = Math.max(0, Math.trunc(draft.hp.temp));
 
-  return {
+  return sanitizeRuleSelections({
     ...draft,
     abilities,
+    abilityScoreMethod: draft.abilityScoreMethod,
     armorClass: Math.max(1, Math.trunc(draft.armorClass)),
     hp: {
       current: Math.min(maxHp, Math.max(0, Math.trunc(draft.hp.current))),
@@ -170,7 +216,7 @@ export function normalizeCharacterBuilderDraft(
     },
     level: Math.min(20, Math.max(1, Math.trunc(draft.level))),
     speed: Math.max(0, Math.trunc(draft.speed)),
-  };
+  });
 }
 
 export function getBuilderStepIndex(stepId: BuilderStepId): number {
@@ -195,6 +241,12 @@ export function isStepComplete(
   draft: CharacterBuilderDraft,
   stepId: BuilderStepId,
 ): boolean {
+  const stepIssues = getValidationIssuesForStep(draft, stepId);
+
+  if (stepIssues.some((issue) => issue.severity === 'error')) {
+    return false;
+  }
+
   switch (stepId) {
     case 'identity':
       return draft.name.trim().length > 0;
@@ -222,6 +274,13 @@ export function isStepComplete(
   }
 }
 
+export function updateAbilityScoreMethod(
+  draft: CharacterBuilderDraft,
+  method: AbilityScoreMethod,
+): CharacterBuilderDraft {
+  return changeAbilityScoreMethod(draft, method);
+}
+
 export function getBuilderCompletionCount(
   draft: CharacterBuilderDraft,
 ): number {
@@ -232,21 +291,18 @@ export function deriveCharacterBuilderSummary(
   draft: CharacterBuilderDraft,
 ): CharacterBuilderSummary {
   const normalizedDraft = normalizeCharacterBuilderDraft(draft);
-  const proficiencyBonus = Math.max(
-    2,
-    Math.ceil(normalizedDraft.level / 4) + 1,
-  );
+  const preview = deriveRuleDerivedPreview(normalizedDraft);
 
   return {
-    armorClass: normalizedDraft.armorClass,
+    armorClass: preview.armorClass.value,
     className: normalizedDraft.className || 'Unchosen Class',
-    hitPoints: normalizedDraft.hp.max,
-    initiative: getAbilityModifier(normalizedDraft.abilities.dex),
+    hitPoints: preview.hitPoints.value,
+    initiative: preview.initiative,
     level: normalizedDraft.level,
     name: normalizedDraft.name.trim() || 'Unnamed Adventurer',
-    proficiencyBonus,
+    proficiencyBonus: getProficiencyBonus(normalizedDraft.level),
     speciesOrRace: normalizedDraft.speciesOrRace || 'Unchosen Species',
-    speed: normalizedDraft.speed,
+    speed: preview.speed,
     status: normalizedDraft.status,
     title: [
       `Level ${normalizedDraft.level}`,
@@ -282,15 +338,11 @@ export function toggleBuilderSelection(
   value: string,
   maxSelected?: number,
 ): string[] {
-  if (values.includes(value)) {
-    return values.filter((candidate) => candidate !== value);
-  }
-
-  if (maxSelected && values.length >= maxSelected) {
-    return [...values.slice(1), value];
-  }
-
-  return [...values, value];
+  return toggleRuleSelection(
+    values,
+    value,
+    maxSelected ?? Number.MAX_SAFE_INTEGER,
+  );
 }
 
 export function getStatusLabel(status: CharacterBuilderStatus): string {

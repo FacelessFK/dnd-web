@@ -34,12 +34,22 @@ describe('character builder helpers', () => {
     assert.equal(draft.speciesOrRace, 'Elf');
     assert.equal(draft.className, 'Wizard');
     assert.equal(draft.background, 'Sage');
+    assert.equal(draft.rulesProfileId, 'dnd-2025-srd-5-2-1');
+    assert.equal(draft.abilityScoreMethod, 'standard-array');
     assert.equal(draft.status, 'draft');
     assert.equal(draft.builderStep, 'identity');
-    assert.equal(draft.abilities.int, 16);
+    assert.equal(draft.abilities.int, 15);
     assert.deepEqual(draft.builderSelections.skills, [
       'Arcana',
+      'History',
       'Investigation',
+      'Insight',
+    ]);
+    assert.deepEqual(draft.builderSelections.spells, [
+      'Detect Magic',
+      'Mage Armor',
+      'Magic Missile',
+      'Shield',
     ]);
   });
 
@@ -57,11 +67,11 @@ describe('character builder helpers', () => {
 
     assert.equal(formatAbilityModifier(8), '-1');
     assert.equal(formatAbilityModifier(14), '+2');
-    assert.equal(updateAbilityScore(draft, 'int', 5).abilities.int, 20);
-    assert.equal(updateAbilityScore(draft, 'str', -5).abilities.str, 3);
+    assert.equal(updateAbilityScore(draft, 'int', 5).abilities.int, 15);
+    assert.equal(updateAbilityScore(draft, 'str', -5).abilities.str, 8);
   });
 
-  it('normalizes numeric draft fields without pretending to apply rules', () => {
+  it('normalizes numeric draft fields while preserving local-only state', () => {
     const draft = normalizeCharacterBuilderDraft(
       createDefaultCharacterBuilderDraft({
         armorClass: -1,
@@ -120,18 +130,18 @@ describe('character builder helpers', () => {
     assert.equal(summary.title, 'Level 1 Elf Wizard (Sage)');
     assert.equal(summary.proficiencyBonus, 2);
     assert.equal(summary.initiative, 2);
+    assert.equal(summary.hitPoints, 8);
   });
 
   it('tracks step completeness for local scaffold guidance', () => {
     const completeDraft = createDefaultCharacterBuilderDraft();
     const incompleteDraft = createDefaultCharacterBuilderDraft({
       name: '',
-      speciesOrRace: '',
     });
 
     assert.equal(isStepComplete(completeDraft, 'identity'), true);
     assert.equal(isStepComplete(incompleteDraft, 'identity'), false);
-    assert.equal(isStepComplete(incompleteDraft, 'species'), false);
+    assert.equal(isStepComplete(incompleteDraft, 'species'), true);
     assert.equal(getBuilderCompletionCount(completeDraft), 9);
   });
 
@@ -143,7 +153,7 @@ describe('character builder helpers', () => {
     ]);
     assert.deepEqual(
       toggleBuilderSelection(['Arcana', 'History'], 'Investigation', 2),
-      ['History', 'Investigation'],
+      ['Arcana', 'History'],
     );
   });
 

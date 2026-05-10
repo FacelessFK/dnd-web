@@ -47,6 +47,28 @@ Draft/Finalize show backend-integration-pending feedback rather than claiming a
 durable save. Placeholder art is expected until the assets listed in
 `docs/character-builder-asset-request.md` are provided.
 
+For the rule-aware builder slice, also check:
+
+- Select different species and confirm the summary rail and Species step show
+  rule data such as speed, size, and traits.
+- Select different classes and confirm hit die, saving throws, skill choice
+  limits, equipment suggestions, and spell setup update.
+- Select Acolyte, Criminal, Sage, and Soldier backgrounds and confirm ability
+  options, fixed skills, tools, origin feat labels, and equipment metadata
+  update.
+- Adjust base ability scores and confirm final scores, modifiers, HP preview,
+  AC preview, speed, initiative, and proficiency bonus update immediately.
+- Open Choices & Proficiencies and confirm fixed grants are separate from
+  limited local choices, with over-selection disabled.
+- Open Equipment and confirm the recommended loadout changes by
+  class/background and remains metadata only.
+- Open Spells with a caster such as Wizard and confirm level/school filtering
+  and cantrip/level 1 spell limits. Then choose a non-caster such as Fighter
+  and confirm the "No spell setup required for this class in this MVP" state.
+- Open Review and confirm it summarizes species, class, background, final
+  ability scores, HP, AC, speed, proficiency bonus, saving throws, skills,
+  languages, tools, equipment, and spells from local rule data.
+
 ## What This Covers
 
 - Session create, join, reconnect, and SSE subscription.

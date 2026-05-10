@@ -1,25 +1,23 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useMemo, useState, type ReactNode } from 'react';
 
 import {
   getCharacterBuilderAssetFallbackLabel,
+  getCharacterBuilderAssetPath,
+  getCharacterBuilderEquipmentAssetKey,
+  getCharacterBuilderSpellAssetKey,
   type CharacterBuilderAssetKey,
 } from '../../lib/character-builder-assets';
 import {
   abilityKeys,
   backgroundChoices,
   builderSteps,
-  cantripOptions,
   classChoices,
-  equipmentOptions,
-  languageOptions,
   mockCharacterLibraryEntries,
-  skillOptions,
-  spellOptions,
   speciesChoices,
-  toolOptions,
   type AbilityKey,
   type BuilderStepId,
   type CharacterBuilderDraft,
@@ -42,7 +40,34 @@ import {
   normalizeCharacterBuilderDraft,
   toggleBuilderSelection,
   updateAbilityScore,
+  updateAbilityScoreMethod,
 } from '../../lib/character-builder-helpers';
+import {
+  deriveAbilityScoreAssignmentState,
+  deriveAbilityScorePreview,
+  deriveCharacterRuleReviewSummary,
+  deriveDefaultBuilderSelections,
+  deriveEquipmentSuggestions,
+  deriveProficiencyChoiceState,
+  deriveRuleDerivedPreview,
+  getAbilityScoreMethodLabel,
+  getAvailableSpellsForClass,
+  getRuleBackgroundById,
+  getRuleClassById,
+  getRuleProfileById,
+  getRuleSpeciesById,
+  getRuleSpellByName,
+  getRulesProfileLabel,
+  getSpellSchoolsForClass,
+  getValidationIssuesForStep,
+  isCharacterBuilderDraftValid,
+  sanitizeDraftForRulesProfile,
+  validateCharacterBuilderDraft,
+} from '../../lib/character-builder-rules-helpers';
+import {
+  rulesProfiles,
+  type AbilityScoreMethod,
+} from '../../lib/character-builder-rules-data';
 
 type CharacterBuilderPageProps = {
   mode: 'new' | 'edit';
@@ -58,14 +83,25 @@ const abilityLabels: Record<AbilityKey, string> = {
   wis: 'Wisdom',
 };
 
-const casterClasses = new Set([
-  'Bard',
-  'Cleric',
-  'Paladin',
-  'Ranger',
-  'Warlock',
-  'Wizard',
-]);
+function getDraftPortraitAssetKey(
+  draft: CharacterBuilderDraft,
+): CharacterBuilderAssetKey | undefined {
+  const normalizedDraftName = draft.name.trim().toLowerCase();
+  const libraryEntry = mockCharacterLibraryEntries.find(
+    (entry) => entry.name.toLowerCase() === normalizedDraftName,
+  );
+
+  return libraryEntry?.portraitAssetKey;
+}
+
+function getSpellOptionAssetKey(
+  spellName: string,
+): CharacterBuilderAssetKey | null {
+  return getCharacterBuilderSpellAssetKey(
+    spellName,
+    getRuleSpellByName(spellName)?.school,
+  );
+}
 
 function statusClasses(status: CharacterBuilderStatus): string {
   switch (status) {
@@ -78,6 +114,28 @@ function statusClasses(status: CharacterBuilderStatus): string {
   }
 }
 
+function applyRuleDefaults(
+  draft: CharacterBuilderDraft,
+): CharacterBuilderDraft {
+  const builderSelections = deriveDefaultBuilderSelections(draft);
+  const nextDraft = {
+    ...draft,
+    builderSelections,
+  };
+  const preview = deriveRuleDerivedPreview(nextDraft);
+
+  return {
+    ...nextDraft,
+    armorClass: preview.armorClass.value,
+    hp: {
+      ...nextDraft.hp,
+      current: Math.min(nextDraft.hp.current, preview.hitPoints.value),
+      max: preview.hitPoints.value,
+    },
+    speed: preview.speed,
+  };
+}
+
 function Shell({
   active,
   children,
@@ -87,11 +145,22 @@ function Shell({
   children: ReactNode;
   title: string;
 }) {
+  const sidebarTexturePath = getCharacterBuilderAssetPath('texture.sidebar');
+
   return (
     <main className="min-h-screen overflow-hidden bg-[#090806] text-amber-50">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,0.22),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(217,119,6,0.18),transparent_28%),linear-gradient(135deg,#100b09_0%,#080b10_55%,#050403_100%)]" />
       <div className="relative grid min-h-screen lg:grid-cols-[18rem_1fr]">
-        <aside className="border-r border-amber-700/30 bg-black/35 px-5 py-6 shadow-2xl shadow-black/50 backdrop-blur">
+        <aside
+          className="border-r border-amber-700/30 bg-black/35 bg-cover bg-center px-5 py-6 shadow-2xl shadow-black/50 backdrop-blur"
+          style={
+            sidebarTexturePath
+              ? {
+                  backgroundImage: `linear-gradient(rgba(5,3,2,0.68), rgba(5,3,2,0.86)), url(${sidebarTexturePath})`,
+                }
+              : undefined
+          }
+        >
           <Link
             className="group flex items-center gap-4 text-amber-100"
             href="/"
@@ -228,8 +297,14 @@ function PlaceholderArt({
 }: {
   assetKey?: CharacterBuilderAssetKey;
   label: string;
-  size?: 'small' | 'large' | 'wide';
+  size?: 'avatar' | 'choice' | 'large' | 'portrait' | 'small' | 'wide';
 }) {
+  const imagePath = assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
+  const [failedAssetPath, setFailedAssetPath] = useState<string | null>(null);
+  const shouldShowImage = Boolean(imagePath && imagePath !== failedAssetPath);
+  const imagePositionClass = assetKey?.startsWith('portrait.')
+    ? 'object-top'
+    : 'object-center';
   const fallbackLabel = assetKey
     ? getCharacterBuilderAssetFallbackLabel(assetKey)
     : label;
@@ -242,21 +317,54 @@ function PlaceholderArt({
 
   return (
     <div
-      aria-label={`${label} placeholder art`}
+      aria-label={`${label} ${shouldShowImage ? 'art' : 'placeholder art'}`}
       className={[
         'relative grid overflow-hidden rounded-2xl border border-amber-400/35 bg-[radial-gradient(circle_at_28%_18%,rgba(168,85,247,0.55),transparent_24%),radial-gradient(circle_at_72%_80%,rgba(217,119,6,0.38),transparent_30%),linear-gradient(135deg,#1b1225,#101827_55%,#21140c)] shadow-inner shadow-black/45',
+        size === 'avatar'
+          ? 'mx-auto aspect-[4/5] w-full max-w-sm rounded-3xl'
+          : '',
+        size === 'choice' ? 'aspect-square w-full rounded-b-none' : '',
         size === 'small' ? 'h-20 w-20' : '',
         size === 'large' ? 'h-48 w-full' : '',
+        size === 'portrait' ? 'h-72 w-full sm:h-80 md:h-72 2xl:h-64' : '',
         size === 'wide' ? 'h-40 w-full' : '',
       ].join(' ')}
     >
-      <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_46%,rgba(251,191,36,0.12)_48%,transparent_50%)]" />
-      <span className="m-auto rounded-full border border-amber-200/35 bg-black/35 px-4 py-2 text-xl font-black tracking-[0.18em] text-amber-100">
-        {initials || 'CB'}
-      </span>
-      <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-black/45 px-2 py-1 text-center text-[0.65rem] uppercase tracking-[0.18em] text-amber-100/70">
-        Placeholder
-      </span>
+      {shouldShowImage && imagePath ? (
+        <Image
+          alt=""
+          className={`object-cover ${imagePositionClass}`}
+          fill
+          onError={() => setFailedAssetPath(imagePath)}
+          sizes={
+            size === 'small'
+              ? '80px'
+              : size === 'avatar'
+                ? '(min-width: 1280px) 384px, min(100vw, 384px)'
+                : size === 'choice'
+                  ? '(min-width: 1280px) 25vw, (min-width: 768px) 50vw, 100vw'
+                  : size === 'wide'
+                    ? '(min-width: 1280px) 360px, 100vw'
+                    : size === 'portrait'
+                      ? '(min-width: 1536px) 25vw, (min-width: 768px) 50vw, 100vw'
+                      : '(min-width: 1280px) 420px, 100vw'
+          }
+          src={imagePath}
+        />
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_46%,rgba(251,191,36,0.12)_48%,transparent_50%)]" />
+          <span className="m-auto rounded-full border border-amber-200/35 bg-black/35 px-4 py-2 text-xl font-black tracking-[0.18em] text-amber-100">
+            {initials || 'CB'}
+          </span>
+          <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-black/45 px-2 py-1 text-center text-[0.65rem] uppercase tracking-[0.18em] text-amber-100/70">
+            Placeholder
+          </span>
+        </>
+      )}
+      {shouldShowImage ? (
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(5,3,2,0.02),rgba(5,3,2,0.2))]" />
+      ) : null}
     </div>
   );
 }
@@ -300,6 +408,37 @@ function SecondaryButton({
     >
       {children}
     </button>
+  );
+}
+
+function ValidationPanel({
+  issues,
+  title,
+}: {
+  issues: ReturnType<typeof validateCharacterBuilderDraft>;
+  title: string;
+}) {
+  if (issues.length === 0) {
+    return (
+      <div className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-950/20 px-4 py-3 text-sm font-bold text-emerald-100/75">
+        {title}: ready.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-950/25 px-4 py-3 text-sm text-amber-100/82">
+      <p className="font-black uppercase tracking-[0.14em] text-amber-200">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-1">
+        {issues.map((issue) => (
+          <li key={`${issue.step}-${issue.message}`}>
+            {issue.severity === 'error' ? 'Required' : 'Note'}: {issue.message}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -441,7 +580,7 @@ function CharacterCard({ entry }: { entry: CharacterBuilderLibraryEntry }) {
       <PlaceholderArt
         assetKey={entry.portraitAssetKey}
         label={entry.name}
-        size="large"
+        size="portrait"
       />
       <div className="bg-[linear-gradient(180deg,#d8bd84,#b9965f)] p-5 text-stone-950">
         <div className="flex items-start justify-between gap-3">
@@ -530,6 +669,16 @@ export function CharacterBuilderPage({
   );
 
   const currentStepIndex = getBuilderStepIndex(draft.builderStep);
+  const validationIssues = validateCharacterBuilderDraft(draft);
+  const currentStepIssues = getValidationIssuesForStep(
+    draft,
+    draft.builderStep,
+  );
+  const currentStepHasErrors = currentStepIssues.some(
+    (issue) => issue.severity === 'error',
+  );
+  const draftIsValid = isCharacterBuilderDraftValid(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
 
   const updateDraft = (nextDraft: CharacterBuilderDraft) => {
     setDraft(normalizeCharacterBuilderDraft(nextDraft));
@@ -546,11 +695,24 @@ export function CharacterBuilderPage({
               builderStep: step,
             })
           }
+          speciesLabel={selectedProfile.speciesLabel}
         />
 
         <div className="mt-6 grid gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ParchmentPanel className="min-w-0">
             <BuilderStepContent draft={draft} setDraft={updateDraft} />
+            <ValidationPanel
+              issues={
+                draft.builderStep === 'review'
+                  ? validationIssues
+                  : currentStepIssues
+              }
+              title={
+                draft.builderStep === 'review'
+                  ? 'Finalize Requirements'
+                  : 'Step Requirements'
+              }
+            />
 
             <div className="mt-8 flex flex-col gap-3 border-t border-amber-500/20 pt-5 md:flex-row md:items-center md:justify-between">
               <SecondaryButton
@@ -576,6 +738,7 @@ export function CharacterBuilderPage({
                 </SecondaryButton>
                 {draft.builderStep === 'review' ? (
                   <PrimaryButton
+                    disabled={!draftIsValid}
                     onClick={() => {
                       updateDraft({
                         ...draft,
@@ -590,7 +753,7 @@ export function CharacterBuilderPage({
                   </PrimaryButton>
                 ) : (
                   <PrimaryButton
-                    disabled={currentStepIndex < 0}
+                    disabled={currentStepIndex < 0 || currentStepHasErrors}
                     onClick={() =>
                       updateDraft({
                         ...draft,
@@ -619,9 +782,11 @@ export function CharacterBuilderPage({
 function Stepper({
   currentStep,
   onStepChange,
+  speciesLabel,
 }: {
   currentStep: BuilderStepId;
   onStepChange: (step: BuilderStepId) => void;
+  speciesLabel: string;
 }) {
   const currentIndex = getBuilderStepIndex(currentStep);
 
@@ -631,6 +796,7 @@ function Stepper({
         {builderSteps.map((step, index) => {
           const active = step.id === currentStep;
           const complete = index < currentIndex;
+          const label = step.id === 'species' ? speciesLabel : step.label;
 
           return (
             <li className="relative text-center" key={step.id}>
@@ -654,7 +820,7 @@ function Stepper({
                   active ? 'text-amber-50' : 'text-amber-200/65',
                 ].join(' ')}
               >
-                {step.label}
+                {label}
               </p>
             </li>
           );
@@ -745,6 +911,9 @@ function IdentityStep({
   draft: CharacterBuilderDraft;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
+  const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+
   return (
     <>
       <StepHeading
@@ -787,6 +956,38 @@ function IdentityStep({
             </select>
           </Field>
           <Field
+            hint="Controls which local rules data, ability bonus source, score limits, and legal options are used later in the builder."
+            label="Rules Profile"
+          >
+            <select
+              className={inputClass}
+              onChange={(event) =>
+                setDraft(
+                  applyRuleDefaults(
+                    sanitizeDraftForRulesProfile(draft, event.target.value),
+                  ),
+                )
+              }
+              value={draft.rulesProfileId}
+            >
+              {rulesProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {getRulesProfileLabel(profile)}
+                </option>
+              ))}
+            </select>
+            <div className="mt-3 rounded-2xl border border-purple-300/20 bg-purple-950/20 p-3 text-xs leading-5 text-amber-100/68">
+              <p className="font-black text-amber-200">
+                {selectedProfile.sourceName} · {selectedProfile.version}
+              </p>
+              <p>{selectedProfile.notes}</p>
+              <p className="mt-1">
+                Ability bonuses come from {selectedProfile.abilityBonusSource};
+                options are labeled as {selectedProfile.speciesLabel}.
+              </p>
+            </div>
+          </Field>
+          <Field
             hint="A short phrase that captures the character's essence."
             label="Short Concept"
           >
@@ -820,7 +1021,11 @@ function IdentityStep({
           <p className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-amber-300">
             Portrait / Avatar
           </p>
-          <PlaceholderArt label={draft.name || 'Adventurer'} />
+          <PlaceholderArt
+            assetKey={portraitAssetKey}
+            label={draft.name || 'Adventurer'}
+            size="avatar"
+          />
           <button
             className="mt-4 w-full rounded-2xl border border-amber-400/25 bg-black/35 px-4 py-3 text-sm font-bold text-amber-100/45"
             disabled
@@ -842,34 +1047,57 @@ function SpeciesStep({
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   const selectedSpecies = getSelectedSpecies(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const selectedSpeciesRules = getRuleSpeciesById(
+    draft.speciesOrRace,
+    draft.rulesProfileId,
+  );
+  const profileSpeciesChoices = speciesChoices.filter((choice) =>
+    selectedProfile.availableSpeciesIds.includes(choice.id),
+  );
 
   return (
     <>
       <StepHeading
-        intro="Choose your character's species. This scaffold shows descriptive metadata only."
-        title="Step 2 — Species"
+        intro={`Choose a legal ${selectedProfile.speciesLabel.toLowerCase()} for ${selectedProfile.displayName}. Size, speed, traits, and later previews are read from local profile data.`}
+        title={`Step 2 — ${selectedProfile.speciesLabel}`}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {speciesChoices.map((choice) => (
+        {profileSpeciesChoices.map((choice) => (
           <ChoiceCard
             choice={choice}
             key={choice.id}
             onSelect={() =>
-              setDraft({
-                ...draft,
-                speciesOrRace: choice.id,
-              })
+              setDraft(
+                applyRuleDefaults({
+                  ...draft,
+                  speciesOrRace: choice.id,
+                }),
+              )
             }
             selected={draft.speciesOrRace === choice.id}
           />
         ))}
       </div>
-      {selectedSpecies ? (
-        <PreviewStrip
-          icon="✦"
-          items={selectedSpecies.metadata}
-          title={`${selectedSpecies.title} Traits`}
-        />
+      {selectedSpecies && selectedSpeciesRules ? (
+        <>
+          <PreviewStrip
+            icon="✦"
+            items={selectedSpeciesRules.traits.map((trait) => trait.label)}
+            title={`${selectedSpecies.title} Traits`}
+          />
+          <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/20 bg-black/25 p-4 text-sm md:grid-cols-3">
+            <PreviewRow
+              label="Creature Type"
+              value={selectedSpeciesRules.creatureType}
+            />
+            <PreviewRow label="Size" value={selectedSpeciesRules.size} />
+            <PreviewRow
+              label="Speed"
+              value={`${selectedSpeciesRules.speed} ft.`}
+            />
+          </div>
+        </>
       ) : null}
     </>
   );
@@ -883,24 +1111,34 @@ function ClassStep({
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   const selectedClass = getSelectedClass(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const selectedClassRules = getRuleClassById(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const profileClassChoices = classChoices.filter((choice) =>
+    selectedProfile.availableClassIds.includes(choice.id),
+  );
 
   return (
     <>
       <StepHeading
-        intro="Choose training, role, and combat identity. No runtime combat integration is performed here yet."
+        intro={`Choose a legal class for ${selectedProfile.displayName}. Runtime combat integration is still out of scope.`}
         title="Step 3 — Class"
       />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {classChoices.map((choice) => (
+          {profileClassChoices.map((choice) => (
             <ChoiceCard
               choice={choice}
               key={choice.id}
               onSelect={() =>
-                setDraft({
-                  ...draft,
-                  className: choice.id,
-                })
+                setDraft(
+                  applyRuleDefaults({
+                    ...draft,
+                    className: choice.id,
+                  }),
+                )
               }
               selected={draft.className === choice.id}
             >
@@ -910,7 +1148,7 @@ function ClassStep({
             </ChoiceCard>
           ))}
         </div>
-        {selectedClass ? (
+        {selectedClass && selectedClassRules ? (
           <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-5">
             <PlaceholderArt
               assetKey={selectedClass.assetKey}
@@ -927,10 +1165,34 @@ function ClassStep({
               <PreviewRow label="Role" value={selectedClass.role} />
               <PreviewRow
                 label="Primary Ability"
-                value={abilityLabels[selectedClass.primaryAbility]}
+                value={selectedClassRules.primaryAbilities
+                  .map((ability) => abilityLabels[ability])
+                  .join(', ')}
+              />
+              <PreviewRow
+                label="Hit Die"
+                value={`d${selectedClassRules.hitDie}`}
+              />
+              <PreviewRow
+                label="Saving Throws"
+                value={selectedClassRules.savingThrowProficiencies
+                  .map((ability) => ability.toUpperCase())
+                  .join(', ')}
               />
               <PreviewRow label="Armor" value={selectedClass.armor} />
               <PreviewRow label="Weapons" value={selectedClass.weapons} />
+              <PreviewRow
+                label="Skills"
+                value={`Choose ${selectedClassRules.skillChoices.choose}`}
+              />
+              <PreviewRow
+                label="Spellcasting"
+                value={
+                  selectedClassRules.spellcasting
+                    ? `${abilityLabels[selectedClassRules.spellcasting.ability]} / ${selectedClassRules.spellcasting.preparedSpells} level 1 spells`
+                    : 'None at level 1'
+                }
+              />
             </dl>
             <p className="mt-5 text-sm font-black uppercase tracking-[0.16em] text-amber-300">
               Level 1 Features
@@ -955,16 +1217,24 @@ function BackgroundStep({
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   const selectedBackground = getSelectedBackground(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const selectedBackgroundRules = getRuleBackgroundById(
+    draft.background,
+    draft.rulesProfileId,
+  );
+  const profileBackgroundChoices = backgroundChoices.filter((choice) =>
+    selectedProfile.availableBackgroundIds.includes(choice.id),
+  );
 
   return (
     <>
       <StepHeading
-        intro="Your background frames who you were before the first adventure."
+        intro={`Choose a legal background for ${selectedProfile.displayName}. It supplies profile-specific ability bonuses or metadata, fixed skills, tools, and starting equipment.`}
         title="Step 4 — Background"
       />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-3">
-          {backgroundChoices.map((choice) => (
+          {profileBackgroundChoices.map((choice) => (
             <button
               className={[
                 'flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition',
@@ -974,16 +1244,12 @@ function BackgroundStep({
               ].join(' ')}
               key={choice.id}
               onClick={() =>
-                setDraft({
-                  ...draft,
-                  background: choice.id,
-                  builderSelections: {
-                    ...draft.builderSelections,
-                    languages: choice.languages,
-                    skills: choice.proficiencies,
-                    tools: choice.tools,
-                  },
-                })
+                setDraft(
+                  applyRuleDefaults({
+                    ...draft,
+                    background: choice.id,
+                  }),
+                )
               }
               type="button"
             >
@@ -1003,7 +1269,7 @@ function BackgroundStep({
             </button>
           ))}
         </div>
-        {selectedBackground ? (
+        {selectedBackground && selectedBackgroundRules ? (
           <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-5">
             <h3 className="text-3xl font-black text-amber-50">
               {selectedBackground.title}
@@ -1013,13 +1279,15 @@ function BackgroundStep({
             </p>
             <PreviewStrip
               icon="✧"
-              items={selectedBackground.proficiencies}
+              items={selectedBackgroundRules.skills}
               title="Proficiencies"
             />
             <PreviewStrip
               icon="◌"
-              items={selectedBackground.languages}
-              title="Languages"
+              items={selectedBackgroundRules.abilityScoreOptions.map(
+                (ability) => abilityLabels[ability],
+              )}
+              title="Ability Options"
             />
             <PreviewStrip
               icon="◆"
@@ -1028,13 +1296,20 @@ function BackgroundStep({
             />
             <div className="mt-4 rounded-2xl border border-purple-300/25 bg-purple-950/25 p-4">
               <p className="font-black text-amber-200">
-                Feature: {selectedBackground.feature}
+                Origin Feat: {selectedBackgroundRules.originFeat}
               </p>
               <p className="mt-2 text-sm leading-6 text-amber-100/65">
-                Descriptive metadata only. No rules effects are applied in this
-                scaffold.
+                {selectedProfile.abilityBonusSource === 'background'
+                  ? "Ability boosts are previewed from this background's legal options."
+                  : `${selectedProfile.displayName} uses ${selectedProfile.speciesLabel.toLowerCase()} ability boosts; this background's options are metadata only.`}{' '}
+                Feat benefits are metadata only.
               </p>
             </div>
+            <PreviewStrip
+              icon="*"
+              items={selectedBackgroundRules.equipment}
+              title="Suggested Equipment"
+            />
           </div>
         ) : null}
       </div>
@@ -1050,20 +1325,75 @@ function AbilityScoresStep({
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
   const summary = deriveCharacterBuilderSummary(draft);
+  const abilityPreview = deriveAbilityScorePreview(draft);
+  const rulePreview = deriveRuleDerivedPreview(draft);
+  const assignmentState = deriveAbilityScoreAssignmentState(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
   const selectedClass = getSelectedClass(draft);
+  const selectedClassRules = getRuleClassById(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const selectedBackgroundRules = getRuleBackgroundById(
+    draft.background,
+    draft.rulesProfileId,
+  );
 
   return (
     <>
       <StepHeading
-        intro="Tune local ability previews with simple min/max constraints. This is not full official point-buy automation."
+        intro={`Assign base scores using ${selectedProfile.displayName}. The builder enforces score method limits, legal bonuses, final caps, and derived combat basics as a local preview.`}
         title="Step 5 — Ability Scores"
       >
-        {selectedClass ? (
+        <div className="mt-5 grid gap-3 rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-sm text-amber-100/75 md:grid-cols-[minmax(0,1fr)_16rem] md:items-center">
+          <div>
+            <p className="font-black text-amber-200">
+              Score Method: {getAbilityScoreMethodLabel(assignmentState.method)}
+            </p>
+            <p className="mt-1">
+              Base range {assignmentState.minBase}-{assignmentState.maxBase};
+              final cap {assignmentState.finalScoreCap}.
+              {assignmentState.remaining !== null
+                ? ` Point buy remaining: ${assignmentState.remaining}/${assignmentState.budget}.`
+                : ` Standard array: ${assignmentState.standardArray.join(', ')}.`}
+            </p>
+          </div>
+          <select
+            className={inputClass}
+            onChange={(event) =>
+              setDraft(
+                updateAbilityScoreMethod(
+                  draft,
+                  event.target.value as AbilityScoreMethod,
+                ),
+              )
+            }
+            value={assignmentState.method}
+          >
+            {assignmentState.allowedMethods.map((method) => (
+              <option key={method} value={method}>
+                {getAbilityScoreMethodLabel(method)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {selectedClass && selectedClassRules ? (
           <div className="mt-5 rounded-2xl border border-amber-500/20 bg-black/30 p-4 text-sm text-amber-100/75">
             Recommended for {selectedClass.title}:{' '}
             <span className="font-black text-amber-200">
-              {abilityLabels[selectedClass.primaryAbility]}
+              {selectedClassRules.primaryAbilities
+                .map((ability) => abilityLabels[ability])
+                .join(', ')}
             </span>
+            {selectedBackgroundRules &&
+            selectedProfile.abilityBonusSource === 'background' ? (
+              <span className="mt-2 block">
+                {selectedBackgroundRules.displayName} can boost:{' '}
+                {selectedBackgroundRules.abilityScoreOptions
+                  .map((ability) => abilityLabels[ability])
+                  .join(', ')}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </StepHeading>
@@ -1076,12 +1406,18 @@ function AbilityScoresStep({
             <p className="text-xl font-black uppercase">{ability}</p>
             <p className="text-xs font-bold">{abilityLabels[ability]}</p>
             <p className="my-4 text-6xl font-black">
-              {draft.abilities[ability]}
+              {abilityPreview[ability].final}
             </p>
             <p className="text-2xl font-black">
-              {formatAbilityModifier(draft.abilities[ability])}
+              {formatAbilityModifier(abilityPreview[ability].final)}
             </p>
             <p className="text-xs font-semibold uppercase">Modifier</p>
+            <p className="mt-2 text-xs font-bold">
+              Base {abilityPreview[ability].base}
+              {abilityPreview[ability].rulesBonus
+                ? ` +${abilityPreview[ability].rulesBonus} ${abilityPreview[ability].rulesBonusLabel}`
+                : ` +0 ${abilityPreview[ability].rulesBonusLabel}`}
+            </p>
             <div className="mt-4 flex justify-center gap-2">
               <button
                 className="rounded-xl bg-stone-950 px-3 py-2 text-amber-100"
@@ -1115,6 +1451,17 @@ function AbilityScoresStep({
         <StatTile label="Speed" value={`${summary.speed} ft.`} />
         <StatTile label="Proficiency" value={`+${summary.proficiencyBonus}`} />
       </div>
+      <p className="mt-4 text-sm text-amber-100/60">
+        Combat Basics Preview: HP uses class hit die d
+        {rulePreview.hitPoints.hitDie}, final CON modifier{' '}
+        {rulePreview.hitPoints.conModifier >= 0 ? '+' : ''}
+        {rulePreview.hitPoints.conModifier}, and any species HP trait. AC uses{' '}
+        {rulePreview.armorClass.armorLabel}
+        {rulePreview.armorClass.shieldLabel
+          ? ` plus ${rulePreview.armorClass.shieldLabel}`
+          : ''}{' '}
+        as a local preview.
+      </p>
     </>
   );
 }
@@ -1126,75 +1473,82 @@ function ProficienciesStep({
   draft: CharacterBuilderDraft;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
+  const proficiencyState = deriveProficiencyChoiceState(draft);
+
   return (
     <>
       <StepHeading
-        intro="Choose skills, languages, tools, and special options as local metadata. Counts are intentionally lightweight."
+        intro="Class and background grants are fixed, while the remaining local choices are limited by the selected SRD class, background, and language rules."
         title="Step 6 — Choices & Proficiencies"
       />
+      <div className="mb-5 grid gap-4 xl:grid-cols-4">
+        <RuleGrantPanel
+          title="Background Skills"
+          values={proficiencyState.fixedSkills}
+        />
+        <RuleGrantPanel
+          title="Saving Throws"
+          values={proficiencyState.savingThrows.map((ability) =>
+            ability.toUpperCase(),
+          )}
+        />
+        <RuleGrantPanel
+          title="Fixed Languages"
+          values={proficiencyState.fixedLanguages}
+        />
+        <RuleGrantPanel
+          title="Fixed Tools"
+          values={proficiencyState.fixedTools}
+        />
+      </div>
       <div className="grid gap-5 xl:grid-cols-3">
         <SelectionGroup
-          maxSelected={2}
-          options={skillOptions}
-          selected={draft.builderSelections.skills}
-          title="Skill Proficiencies"
+          maxSelected={proficiencyState.skillChoiceLimit}
+          options={proficiencyState.skillOptions}
+          selected={proficiencyState.selectedSkillChoices}
+          title={`${draft.className} Skill Choices`}
           update={(skills) =>
             setDraft({
               ...draft,
               builderSelections: {
                 ...draft.builderSelections,
-                skills,
+                skills: [...proficiencyState.fixedSkills, ...skills],
               },
             })
           }
         />
         <SelectionGroup
-          maxSelected={3}
-          options={languageOptions}
-          selected={draft.builderSelections.languages}
-          title="Languages"
+          maxSelected={proficiencyState.languageChoiceLimit}
+          options={proficiencyState.languageOptions}
+          selected={proficiencyState.selectedLanguages}
+          title="Standard Languages"
           update={(languages) =>
             setDraft({
               ...draft,
               builderSelections: {
                 ...draft.builderSelections,
-                languages,
+                languages: [...proficiencyState.fixedLanguages, ...languages],
               },
             })
           }
         />
         <SelectionGroup
-          maxSelected={1}
-          options={toolOptions}
-          selected={draft.builderSelections.tools}
-          title="Tool Proficiencies"
+          maxSelected={proficiencyState.toolChoiceLimit}
+          options={proficiencyState.toolOptions}
+          selected={proficiencyState.selectedToolChoices}
+          title="Tool Choices"
           update={(tools) =>
             setDraft({
               ...draft,
               builderSelections: {
                 ...draft.builderSelections,
-                tools,
+                tools: [...proficiencyState.fixedTools, ...tools],
               },
             })
           }
         />
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <SelectionGroup
-          maxSelected={3}
-          options={cantripOptions}
-          selected={draft.builderSelections.cantrips}
-          title="Cantrips / Special Choices"
-          update={(cantrips) =>
-            setDraft({
-              ...draft,
-              builderSelections: {
-                ...draft.builderSelections,
-                cantrips,
-              },
-            })
-          }
-        />
         <div className="rounded-3xl border border-purple-300/25 bg-purple-950/20 p-5">
           <p className="text-sm font-black uppercase tracking-[0.16em] text-purple-200">
             Metadata-only promise
@@ -1217,10 +1571,16 @@ function EquipmentStep({
   draft: CharacterBuilderDraft;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
+  const equipmentSuggestions = deriveEquipmentSuggestions(draft);
+  const rulePreview = deriveRuleDerivedPreview(draft);
+  const recommendedAssetKey = getCharacterBuilderEquipmentAssetKey(
+    equipmentSuggestions[0] ?? draft.className,
+  );
+
   return (
     <>
       <StepHeading
-        intro="Accept a recommended loadout or choose equipment metadata manually. No inventory or weapon rules are wired."
+        intro="Accept the SRD class/background equipment metadata or choose local equipment labels manually. No inventory, attacks, money, or encumbrance are wired."
         title="Step 7 — Equipment"
       />
       <div className="grid gap-5 xl:grid-cols-[20rem_1fr]">
@@ -1229,23 +1589,22 @@ function EquipmentStep({
             Recommended Loadout
           </h3>
           <p className="mt-2 text-sm text-amber-100/65">
-            A balanced starting package for a {draft.className}{' '}
-            {draft.background}.
+            Based on {draft.className} and {draft.background}. AC preview now:{' '}
+            {rulePreview.armorClass.value}.
           </p>
-          <PlaceholderArt label={`${draft.className} loadout`} size="wide" />
+          <PlaceholderArt
+            assetKey={recommendedAssetKey}
+            label={`${draft.className} loadout`}
+            size="wide"
+          />
+          <TagList values={equipmentSuggestions.slice(0, 8)} />
           <PrimaryButton
             onClick={() =>
               setDraft({
                 ...draft,
                 builderSelections: {
                   ...draft.builderSelections,
-                  equipment: [
-                    'Quarterstaff',
-                    'Arcane Focus',
-                    "Scholar's Pack",
-                    'Spellbook',
-                    'Traveling Clothes',
-                  ],
+                  equipment: equipmentSuggestions,
                 },
               })
             }
@@ -1254,10 +1613,11 @@ function EquipmentStep({
           </PrimaryButton>
         </div>
         <SelectionGroup
-          maxSelected={6}
-          options={equipmentOptions}
+          getOptionAssetKey={getCharacterBuilderEquipmentAssetKey}
+          maxSelected={12}
+          options={equipmentSuggestions}
           selected={draft.builderSelections.equipment}
-          title="Manual Choice"
+          title="Suggested Equipment Choices"
           update={(equipment) =>
             setDraft({
               ...draft,
@@ -1280,50 +1640,157 @@ function SpellsStep({
   draft: CharacterBuilderDraft;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
-  const isCaster = casterClasses.has(draft.className);
+  const selectedClassRules = getRuleClassById(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const spellcasting = selectedClassRules?.spellcasting;
+  const [levelFilter, setLevelFilter] = useState('all');
+  const [schoolFilter, setSchoolFilter] = useState('all');
+  const availableSpells = getAvailableSpellsForClass(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const schoolOptions = getSpellSchoolsForClass(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const filteredSpells = availableSpells.filter((spell) => {
+    const matchesLevel =
+      levelFilter === 'all' || String(spell.level) === levelFilter;
+    const matchesSchool =
+      schoolFilter === 'all' || spell.school === schoolFilter;
+
+    return matchesLevel && matchesSchool;
+  });
+  const filteredCantrips = filteredSpells
+    .filter((spell) => spell.level === 0)
+    .map((spell) => spell.name);
+  const filteredLeveledSpells = filteredSpells
+    .filter((spell) => spell.level > 0)
+    .map((spell) => spell.name);
+  const previewSpellName =
+    draft.builderSelections.spells[0] ??
+    draft.builderSelections.cantrips[0] ??
+    '';
+  const previewSpellAssetKey = previewSpellName
+    ? getSpellOptionAssetKey(previewSpellName)
+    : selectedClassRules?.assetKey;
 
   return (
     <>
       <StepHeading
-        intro="Prepare spell metadata for future library integration. No spellcasting rules or effects are implemented."
+        intro="Prepare spell metadata from the selected class spell list. This stays local metadata; spell effects, slots in play, attacks, saves, and casting rules are not wired."
         title="Step 8 — Spells"
       />
-      {isCaster ? (
+      {spellcasting ? (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <SelectionGroup
-            maxSelected={4}
-            options={spellOptions}
-            selected={draft.builderSelections.spells}
-            title={`${draft.className} Spell List`}
-            update={(spells) =>
-              setDraft({
-                ...draft,
-                builderSelections: {
-                  ...draft.builderSelections,
-                  spells,
-                },
-              })
-            }
-          />
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-3 rounded-3xl border border-amber-500/20 bg-black/30 p-4">
+              <label className="text-sm font-bold text-amber-100/75">
+                Level
+                <select
+                  className="ml-2 rounded-xl border border-amber-500/25 bg-black/40 px-3 py-2 text-amber-50"
+                  onChange={(event) => setLevelFilter(event.target.value)}
+                  value={levelFilter}
+                >
+                  <option value="all">All</option>
+                  <option value="0">Cantrips</option>
+                  <option value="1">Level 1</option>
+                </select>
+              </label>
+              <label className="text-sm font-bold text-amber-100/75">
+                School
+                <select
+                  className="ml-2 rounded-xl border border-amber-500/25 bg-black/40 px-3 py-2 text-amber-50"
+                  onChange={(event) => setSchoolFilter(event.target.value)}
+                  value={schoolFilter}
+                >
+                  <option value="all">All</option>
+                  {schoolOptions.map((school) => (
+                    <option key={school} value={school}>
+                      {school}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {spellcasting.cantripsKnown > 0 ? (
+              <SelectionGroup
+                getOptionAssetKey={getSpellOptionAssetKey}
+                maxSelected={spellcasting.cantripsKnown}
+                options={filteredCantrips}
+                selected={draft.builderSelections.cantrips.filter((spell) =>
+                  filteredCantrips.includes(spell),
+                )}
+                title={`${draft.className} Cantrips`}
+                update={(cantrips) =>
+                  setDraft({
+                    ...draft,
+                    builderSelections: {
+                      ...draft.builderSelections,
+                      cantrips,
+                    },
+                  })
+                }
+              />
+            ) : null}
+            <SelectionGroup
+              getOptionAssetKey={getSpellOptionAssetKey}
+              maxSelected={spellcasting.preparedSpells}
+              options={filteredLeveledSpells}
+              selected={draft.builderSelections.spells.filter((spell) =>
+                filteredLeveledSpells.includes(spell),
+              )}
+              title={`${draft.className} Level 1 Spells`}
+              update={(spells) =>
+                setDraft({
+                  ...draft,
+                  builderSelections: {
+                    ...draft.builderSelections,
+                    spells,
+                  },
+                })
+              }
+            />
+          </div>
           <div className="rounded-3xl border border-purple-300/25 bg-black/30 p-5">
-            <PlaceholderArt label="Magic Missile" size="wide" />
+            <PlaceholderArt
+              assetKey={previewSpellAssetKey ?? undefined}
+              label={previewSpellName || draft.className}
+              size="wide"
+            />
             <h3 className="mt-4 text-2xl font-black text-amber-50">
-              Spell Preview
+              {draft.className} Spell Setup
             </h3>
             <p className="mt-3 text-sm leading-6 text-amber-100/65">
-              Spell descriptions are mock metadata. Runtime spellcasting, slots,
-              attacks, saves, and effects are intentionally out of scope.
+              Ability {abilityLabels[spellcasting.ability]}. Choose{' '}
+              {spellcasting.cantripsKnown} cantrips and{' '}
+              {spellcasting.preparedSpells} level 1 spells from local SRD
+              metadata. Class slots are noted as {spellcasting.spellSlotsLevel1}{' '}
+              level 1 slot(s), but not executed here.
             </p>
+            <PreviewStrip
+              icon="*"
+              items={draft.builderSelections.cantrips}
+              title="Selected Cantrips"
+            />
+            <PreviewStrip
+              icon="*"
+              items={draft.builderSelections.spells}
+              title="Selected Spells"
+            />
           </div>
         </div>
       ) : (
         <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-8 text-center">
           <p className="text-2xl font-black text-amber-50">
-            No spell setup required yet.
+            No spell setup required for this class in this MVP.
           </p>
           <p className="mt-3 text-amber-100/65">
-            {draft.className} is treated as a non-caster for this local
-            scaffold.
+            {draft.className} has no level 1 class spellcasting metadata in the
+            local builder. Background origin feats and species spell traits are
+            noted elsewhere but not automated as spell choices yet.
           </p>
         </div>
       )}
@@ -1333,6 +1800,10 @@ function SpellsStep({
 
 function ReviewStep({ draft }: { draft: CharacterBuilderDraft }) {
   const summary = deriveCharacterBuilderSummary(draft);
+  const abilityPreview = deriveAbilityScorePreview(draft);
+  const ruleReview = deriveCharacterRuleReviewSummary(draft);
+  const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
 
   return (
     <>
@@ -1342,21 +1813,37 @@ function ReviewStep({ draft }: { draft: CharacterBuilderDraft }) {
       />
       <div className="grid gap-5 xl:grid-cols-[20rem_1fr]">
         <div className="overflow-hidden rounded-3xl border border-amber-500/25 bg-[linear-gradient(180deg,#d6bb83,#b9965f)] text-stone-950">
-          <PlaceholderArt label={draft.name} />
+          <PlaceholderArt assetKey={portraitAssetKey} label={draft.name} />
           <div className="p-5">
             <h3 className="text-3xl font-black">{summary.name}</h3>
             <p className="mt-1 font-bold">{summary.title}</p>
+            <p className="mt-2 text-xs font-black uppercase tracking-[0.12em] text-stone-700">
+              {selectedProfile.displayName}
+            </p>
             <p className="mt-4 text-sm leading-6">{draft.concept}</p>
           </div>
         </div>
         <div className="grid gap-4 xl:grid-cols-2">
+          <ReviewCard title="Rules Profile">
+            <PreviewRow label="Source" value={selectedProfile.sourceName} />
+            <PreviewRow label="Version" value={selectedProfile.version} />
+            <PreviewRow label="Year" value={selectedProfile.year} />
+            <PreviewRow
+              label="Type"
+              value={`${selectedProfile.status} ${selectedProfile.sourceType}`}
+            />
+            <PreviewRow
+              label="Ability Bonuses"
+              value={selectedProfile.abilityBonusSource}
+            />
+          </ReviewCard>
           <ReviewCard title="Ability Scores">
             {abilityKeys.map((ability) => (
               <PreviewRow
                 key={ability}
                 label={abilityLabels[ability]}
-                value={`${draft.abilities[ability]} (${formatAbilityModifier(
-                  draft.abilities[ability],
+                value={`${abilityPreview[ability].final} (${formatAbilityModifier(
+                  abilityPreview[ability].final,
                 )})`}
               />
             ))}
@@ -1364,21 +1851,35 @@ function ReviewStep({ draft }: { draft: CharacterBuilderDraft }) {
           <ReviewCard title="Derived Preview">
             <PreviewRow label="Hit Points" value={summary.hitPoints} />
             <PreviewRow label="Armor Class" value={summary.armorClass} />
+            <PreviewRow
+              label="Initiative"
+              value={
+                ruleReview.initiative >= 0
+                  ? `+${ruleReview.initiative}`
+                  : ruleReview.initiative
+              }
+            />
             <PreviewRow label="Speed" value={`${summary.speed} ft.`} />
             <PreviewRow
               label="Proficiency"
               value={`+${summary.proficiencyBonus}`}
             />
+            <PreviewRow
+              label="Saving Throws"
+              value={ruleReview.savingThrows
+                .map((ability) => ability.toUpperCase())
+                .join(', ')}
+            />
           </ReviewCard>
           <ReviewCard title="Proficiencies">
-            <TagList values={draft.builderSelections.skills} />
-            <TagList values={draft.builderSelections.languages} />
-            <TagList values={draft.builderSelections.tools} />
+            <TagList values={ruleReview.skills} />
+            <TagList values={ruleReview.languages} />
+            <TagList values={ruleReview.tools} />
           </ReviewCard>
           <ReviewCard title="Equipment & Spells">
-            <TagList values={draft.builderSelections.equipment} />
-            <TagList values={draft.builderSelections.cantrips} />
-            <TagList values={draft.builderSelections.spells} />
+            <TagList values={ruleReview.equipment} />
+            <TagList values={ruleReview.spells.cantrips} />
+            <TagList values={ruleReview.spells.leveled} />
           </ReviewCard>
         </div>
       </div>
@@ -1417,7 +1918,7 @@ function ChoiceCard({
       <PlaceholderArt
         assetKey={choice.assetKey}
         label={choice.title}
-        size="wide"
+        size="choice"
       />
       <div className="bg-[linear-gradient(180deg,#d8bd84,#b9965f)] p-4 text-stone-950">
         <div className="flex items-start justify-between gap-3">
@@ -1484,13 +1985,72 @@ function StatTile({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function RuleGrantPanel({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
+  return (
+    <div className="rounded-2xl border border-amber-500/20 bg-black/25 p-4">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-300">
+        {title}
+      </p>
+      <TagList values={values} />
+    </div>
+  );
+}
+
+function AssetThumb({
+  assetKey,
+  label,
+}: {
+  assetKey?: CharacterBuilderAssetKey | null;
+  label: string;
+}) {
+  const imagePath = assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
+  const [failedAssetPath, setFailedAssetPath] = useState<string | null>(null);
+  const shouldShowImage = Boolean(imagePath && imagePath !== failedAssetPath);
+  const fallbackLabel = assetKey
+    ? getCharacterBuilderAssetFallbackLabel(assetKey)
+    : label;
+  const initials = fallbackLabel
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('');
+
+  return (
+    <span className="relative grid h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-amber-300/25 bg-[radial-gradient(circle_at_25%_15%,rgba(168,85,247,0.5),transparent_35%),linear-gradient(135deg,#21140c,#0b0a0a)]">
+      {shouldShowImage && imagePath ? (
+        <Image
+          alt=""
+          className="object-cover"
+          fill
+          onError={() => setFailedAssetPath(imagePath)}
+          sizes="44px"
+          src={imagePath}
+        />
+      ) : (
+        <span className="m-auto text-xs font-black text-amber-100/80">
+          {initials || 'CB'}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function SelectionGroup({
+  getOptionAssetKey,
   maxSelected,
   options,
   selected,
   title,
   update,
 }: {
+  getOptionAssetKey?: (option: string) => CharacterBuilderAssetKey | null;
   maxSelected: number;
   options: string[];
   selected: string[];
@@ -1506,8 +2066,15 @@ function SelectionGroup({
         </span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
+        {options.length === 0 ? (
+          <p className="rounded-2xl border border-amber-500/15 bg-black/20 px-4 py-3 text-sm text-amber-100/45">
+            No selectable options for the current rules choices.
+          </p>
+        ) : null}
         {options.map((option) => {
           const active = selected.includes(option);
+          const disabled = !active && selected.length >= maxSelected;
+          const optionAssetKey = getOptionAssetKey?.(option) ?? null;
 
           return (
             <button
@@ -1515,8 +2082,11 @@ function SelectionGroup({
                 'rounded-2xl border px-4 py-3 text-left text-sm font-bold transition',
                 active
                   ? 'border-purple-300/70 bg-purple-950/65 text-amber-50'
-                  : 'border-amber-500/20 bg-black/25 text-amber-100/65 hover:border-amber-300/45',
+                  : disabled
+                    ? 'cursor-not-allowed border-amber-500/10 bg-black/15 text-amber-100/35'
+                    : 'border-amber-500/20 bg-black/25 text-amber-100/65 hover:border-amber-300/45',
               ].join(' ')}
+              disabled={disabled}
               key={option}
               onClick={() =>
                 update(toggleBuilderSelection(selected, option, maxSelected))
@@ -1524,7 +2094,12 @@ function SelectionGroup({
               type="button"
             >
               {active ? '✓ ' : '○ '}
-              {option}
+              {optionAssetKey ? (
+                <span className="mx-3 inline-flex align-middle">
+                  <AssetThumb assetKey={optionAssetKey} label={option} />
+                </span>
+              ) : null}
+              <span>{option}</span>
             </button>
           );
         })}
@@ -1579,12 +2154,19 @@ function CharacterSummaryPanel({
   const selectedClass = getSelectedClass(draft);
   const selectedBackground = getSelectedBackground(draft);
   const completionCount = getBuilderCompletionCount(draft);
+  const ruleReview = deriveCharacterRuleReviewSummary(draft);
+  const portraitAssetKey = getDraftPortraitAssetKey(draft);
+  const selectedProfile = getRuleProfileById(draft.rulesProfileId);
 
   return (
     <aside className="rounded-3xl border border-amber-500/25 bg-black/35 p-5 shadow-2xl shadow-black/40">
       <h2 className="text-xl font-black text-amber-50">Character Summary</h2>
       <div className="mt-5 flex items-start gap-4">
-        <PlaceholderArt label={summary.name} size="small" />
+        <PlaceholderArt
+          assetKey={portraitAssetKey}
+          label={summary.name}
+          size="small"
+        />
         <div>
           <h3 className="text-xl font-black text-amber-50">{summary.name}</h3>
           <p className="text-sm text-amber-100/60">{summary.title}</p>
@@ -1595,7 +2177,11 @@ function CharacterSummaryPanel({
       </div>
 
       <dl className="mt-6 space-y-2 text-sm">
-        <PreviewRow label="Species" value={selectedSpecies?.title ?? '—'} />
+        <PreviewRow label="Rules" value={selectedProfile.displayName} />
+        <PreviewRow
+          label={selectedProfile.speciesLabel}
+          value={selectedSpecies?.title ?? '—'}
+        />
         <PreviewRow label="Class" value={selectedClass?.title ?? '—'} />
         <PreviewRow
           label="Background"
@@ -1605,6 +2191,14 @@ function CharacterSummaryPanel({
         <PreviewRow label="HP" value={summary.hitPoints} />
         <PreviewRow label="AC" value={summary.armorClass} />
         <PreviewRow label="Speed" value={`${summary.speed} ft.`} />
+        <PreviewRow
+          label="Proficiency"
+          value={`+${ruleReview.proficiencyBonus}`}
+        />
+        <PreviewRow
+          label="Skills"
+          value={`${ruleReview.skills.length} total`}
+        />
       </dl>
 
       <div className="mt-6 border-t border-amber-500/15 pt-5">
@@ -1615,6 +2209,8 @@ function CharacterSummaryPanel({
           {builderSteps.map((step, index) => {
             const active = step.id === draft.builderStep;
             const complete = index < completionCount;
+            const label =
+              step.id === 'species' ? selectedProfile.speciesLabel : step.label;
 
             return (
               <span
@@ -1627,7 +2223,7 @@ function CharacterSummaryPanel({
                       : 'border-amber-500/25 bg-black/30 text-amber-100/55',
                 ].join(' ')}
                 key={step.id}
-                title={step.label}
+                title={label}
               >
                 {index + 1}
               </span>
