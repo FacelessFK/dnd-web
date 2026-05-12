@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 import type { CharacterLibraryEntry } from '@dnd/protocol';
+import { PDFDocument } from 'pdf-lib';
 
 import { createDefaultCharacterBuilderDraft } from './character-builder-helpers';
 import {
@@ -14,7 +17,13 @@ import {
   draftToCharacterLibraryEntryInput,
   getPortraitImageSource,
 } from './character-library-mappers';
-import { generateCharacterSheetPdf } from './character-sheet-pdf';
+import {
+  generateCharacterSheetPdf,
+  mapCharacterSheetFields,
+  selectCharacterSheetPdfTemplate,
+  type CharacterSheetTemplateDescriptor,
+  type CharacterSheetTemplateId,
+} from './character-sheet-pdf';
 
 const originalFetch = globalThis.fetch;
 
@@ -22,7 +31,9 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function createEntry(): CharacterLibraryEntry {
+function createEntry(
+  overrides: Partial<CharacterLibraryEntry> = {},
+): CharacterLibraryEntry {
   const input = draftToCharacterLibraryEntryInput(
     createDefaultCharacterBuilderDraft({
       className: 'Fighter',
@@ -39,7 +50,43 @@ function createEntry(): CharacterLibraryEntry {
     ownerParticipantId: 'dev-player-001',
     status: 'draft',
     updatedAt: new Date(0).toISOString(),
+    ...overrides,
   };
+}
+
+async function loadProvidedTemplate(
+  template: CharacterSheetTemplateDescriptor,
+): Promise<Uint8Array> {
+  const fileNameByTemplate: Partial<Record<CharacterSheetTemplateId, string>> =
+    {
+      'dnd-2014-template': 'dnd_5e_charactersheet_formfillable.pdf',
+      'dnd-2024-template': 'DnD_2024_Character-Sheet.pdf',
+    };
+  const fileName = fileNameByTemplate[template.id];
+
+  if (!fileName) {
+    throw new Error(`No fixture template for ${template.id}`);
+  }
+
+  return new Uint8Array(
+    await readFile(
+      fileURLToPath(
+        new URL(
+          `../../../docs/concept/character-builder/${fileName}`,
+          import.meta.url,
+        ),
+      ),
+    ),
+  );
+}
+
+async function createBlankTemplate(): Promise<Uint8Array> {
+  const document = await PDFDocument.create();
+
+  document.addPage([603, 774]);
+  document.addPage([603, 774]);
+
+  return document.save();
 }
 
 describe('character library mappers', () => {
@@ -71,15 +118,101 @@ describe('character library mappers', () => {
     );
   });
 
-  it('generates a repo-owned PDF containing key character fields', () => {
-    const pdfText = Buffer.from(
-      generateCharacterSheetPdf(createEntry()),
-    ).toString('latin1');
+  it('selects 2024 and 2014 sheet templates from the rules profile', () => {
+    assert.equal(
+      selectCharacterSheetPdfTemplate('dnd-2025-srd-5-2-1').id,
+      'dnd-2024-template',
+    );
+    assert.equal(
+      selectCharacterSheetPdfTemplate('dnd-2014-srd-5-1').id,
+      'dnd-2014-template',
+    );
+    assert.equal(
+      selectCharacterSheetPdfTemplate(undefined).id,
+      'dnd-2024-template',
+    );
+    assert.equal(
+      selectCharacterSheetPdfTemplate('dnd-2014-basic-rules', [
+        'dnd-2024-template',
+      ]).id,
+      'dnd-2024-template',
+    );
+  });
 
+  it('maps persisted character fields for template filling', () => {
+    const mapped = mapCharacterSheetFields(createEntry());
+
+    assert.equal(mapped.fieldValues.CharacterName, 'Persisted Test Hero');
+    assert.equal(mapped.fieldValues.ClassLevel, 'Fighter 1');
+    assert.equal(mapped.fieldValues['Race '], 'Human');
+    assert.equal(mapped.fieldValues.AC, '16');
+    assert.equal(mapped.fieldValues.ProfBonus, '+2');
+  });
+
+  it('fills the provided 2014 AcroForm template with key fields', async () => {
+    const result = await generateCharacterSheetPdf(
+      createEntry({
+        rulesProfileId: 'dnd-2014-srd-5-1',
+      }),
+      {
+        availableTemplateIds: ['dnd-2014-template'],
+        loadTemplateBytes: loadProvidedTemplate,
+      },
+    );
+    const pdfText = Buffer.from(result.bytes).toString('latin1');
+    const document = await PDFDocument.load(result.bytes);
+    const form = document.getForm();
+
+    assert.equal(result.template.id, 'dnd-2014-template');
+    assert.ok(result.bytes.length > 100_000);
+    assert.ok(pdfText.startsWith('%PDF-'));
+    assert.equal(
+      form.getTextField('CharacterName').getText(),
+      'Persisted Test Hero',
+    );
+    assert.equal(form.getTextField('ClassLevel').getText(), 'Fighter 1');
+    assert.equal(form.getTextField('Race ').getText(), 'Human');
+  });
+
+  it('overlays the 2024 template when no AcroForm fields are available', async () => {
+    const result = await generateCharacterSheetPdf(createEntry(), {
+      availableTemplateIds: ['dnd-2024-template'],
+      loadTemplateBytes: async () => createBlankTemplate(),
+    });
+
+    assert.equal(result.template.id, 'dnd-2024-template');
+    assert.ok(Buffer.from(result.bytes).toString('latin1').startsWith('%PDF-'));
+    assert.ok(result.bytes.length > 700);
+  });
+
+  it('falls back to the simple PDF when template loading fails', async () => {
+    const result = await generateCharacterSheetPdf(createEntry(), {
+      loadTemplateBytes: async () => {
+        throw new Error('missing fixture template');
+      },
+    });
+    const pdfText = Buffer.from(result.bytes).toString('latin1');
+
+    assert.equal(result.template.id, 'simple-fallback');
+    assert.match(result.fallbackReason ?? '', /missing fixture template/);
     assert.ok(pdfText.startsWith('%PDF-1.4'));
     assert.match(pdfText, /Persisted Test Hero/);
-    assert.match(pdfText, /Human Fighter 1/);
-    assert.match(pdfText, /Armor|AC|HP/);
+  });
+
+  it('handles missing optional character fields without crashing PDF generation', async () => {
+    const result = await generateCharacterSheetPdf(
+      createEntry({
+        concept: '',
+        notes: null,
+        portrait: null,
+      }),
+      {
+        forceFallback: true,
+      },
+    );
+
+    assert.equal(result.template.id, 'simple-fallback');
+    assert.ok(result.bytes.length > 500);
   });
 });
 

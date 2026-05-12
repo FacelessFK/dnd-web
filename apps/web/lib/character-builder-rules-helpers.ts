@@ -90,6 +90,18 @@ export type ProficiencyChoiceState = {
   toolOptions: string[];
 };
 
+export type OriginFeatChoiceState = {
+  abilityOptions: AbilityKey[];
+  cantripOptions: string[];
+  featLabel: string;
+  isMagicInitiate: boolean;
+  selectedAbility: AbilityKey | '';
+  selectedCantrips: string[];
+  selectedSpell: string;
+  spellList: string;
+  spellOptions: string[];
+};
+
 export type CharacterRuleReviewSummary = {
   armorClass: number;
   background: string;
@@ -106,6 +118,7 @@ export type CharacterRuleReviewSummary = {
   spells: {
     cantrips: string[];
     leveled: string[];
+    originFeat: string[];
   };
   tools: string[];
 };
@@ -339,6 +352,7 @@ export function validateCharacterBuilderDraft(
   const issues: CharacterBuilderValidationIssue[] = [];
   const profile = getRuleProfileById(draft.rulesProfileId);
   const proficiencyState = deriveProficiencyChoiceState(draft);
+  const originFeatState = deriveOriginFeatChoiceState(draft);
   const characterClass = getRuleClassById(draft.className, profile.id);
   const spellcasting = characterClass?.spellcasting;
 
@@ -417,6 +431,32 @@ export function validateCharacterBuilderDraft(
       severity: 'error',
       step: 'proficiencies',
     });
+  }
+
+  if (originFeatState.isMagicInitiate) {
+    if (!originFeatState.selectedAbility) {
+      issues.push({
+        message: `Choose a spellcasting ability for ${originFeatState.featLabel}.`,
+        severity: 'error',
+        step: 'background',
+      });
+    }
+
+    if (originFeatState.selectedCantrips.length < 2) {
+      issues.push({
+        message: `Choose 2 cantrips for ${originFeatState.featLabel}.`,
+        severity: 'error',
+        step: 'background',
+      });
+    }
+
+    if (!originFeatState.selectedSpell) {
+      issues.push({
+        message: `Choose 1 level 1 spell for ${originFeatState.featLabel}.`,
+        severity: 'error',
+        step: 'background',
+      });
+    }
   }
 
   if (draft.builderSelections.equipment.length === 0) {
@@ -712,6 +752,47 @@ export function deriveProficiencyChoiceState(
   };
 }
 
+export function deriveOriginFeatChoiceState(
+  draft: CharacterBuilderDraft,
+): OriginFeatChoiceState {
+  const background = getRuleBackgroundById(
+    draft.background,
+    draft.rulesProfileId,
+  );
+  const spellList = background?.originFeatSpellList ?? '';
+  const cantripOptions = rulesSpells
+    .filter((spell) => spell.classes.includes(spellList) && spell.level === 0)
+    .map((spell) => spell.name);
+  const spellOptions = rulesSpells
+    .filter((spell) => spell.classes.includes(spellList) && spell.level === 1)
+    .map((spell) => spell.name);
+  const selectedCantrips = (draft.builderSelections.originFeatCantrips ?? [])
+    .filter((spell) => cantripOptions.includes(spell))
+    .slice(0, 2);
+  const selectedSpell = spellOptions.includes(
+    draft.builderSelections.originFeatSpell ?? '',
+  )
+    ? draft.builderSelections.originFeatSpell
+    : '';
+  const selectedAbility = isOriginFeatAbility(
+    draft.builderSelections.originFeatAbility ?? '',
+  )
+    ? draft.builderSelections.originFeatAbility
+    : '';
+
+  return {
+    abilityOptions: ['int', 'wis', 'cha'],
+    cantripOptions,
+    featLabel: background?.originFeat ?? '',
+    isMagicInitiate: Boolean(background?.originFeatSpellList),
+    selectedAbility,
+    selectedCantrips,
+    selectedSpell,
+    spellList,
+    spellOptions,
+  };
+}
+
 export function getAvailableSpellsForClass(
   classId: string,
   profileId?: string,
@@ -814,6 +895,23 @@ export function deriveDefaultBuilderSelections(
     limit: proficiencyState.toolChoiceLimit,
     options: proficiencyState.toolOptions,
   });
+  const originFeatState = deriveOriginFeatChoiceState(draft);
+  const originFeatAbility =
+    originFeatState.selectedAbility || originFeatState.abilityOptions[0] || '';
+  const selectedOriginFeatCantrips = chooseWithExisting({
+    existing: draft.builderSelections.originFeatCantrips ?? [],
+    fallback: originFeatState.cantripOptions,
+    limit: originFeatState.isMagicInitiate ? 2 : 0,
+    options: originFeatState.cantripOptions,
+  });
+  const selectedOriginFeatSpell = chooseWithExisting({
+    existing: originFeatState.selectedSpell
+      ? [originFeatState.selectedSpell]
+      : [],
+    fallback: originFeatState.spellOptions,
+    limit: originFeatState.isMagicInitiate ? 1 : 0,
+    options: originFeatState.spellOptions,
+  })[0];
 
   return sanitizeRuleSelections({
     ...draft,
@@ -821,6 +919,11 @@ export function deriveDefaultBuilderSelections(
       cantrips: selectedCantrips,
       equipment: deriveEquipmentSuggestions(draft),
       languages: [...proficiencyState.fixedLanguages, ...selectedLanguages],
+      originFeatAbility: originFeatState.isMagicInitiate
+        ? originFeatAbility
+        : '',
+      originFeatCantrips: selectedOriginFeatCantrips,
+      originFeatSpell: selectedOriginFeatSpell ?? '',
       skills: [...proficiencyState.fixedSkills, ...selectedSkillChoices],
       spells: selectedSpells,
       tools: [...proficiencyState.fixedTools, ...selectedToolChoices],
@@ -871,6 +974,14 @@ export function sanitizeRuleSelections(
   const equipmentOptions = new Set(
     rulesEquipment.map((equipment) => equipment.name),
   );
+  const originFeatState = deriveOriginFeatChoiceState(profileDraft);
+  const originFeatAbility =
+    originFeatState.isMagicInitiate &&
+    originFeatState.abilityOptions.includes(
+      (profileDraft.builderSelections.originFeatAbility ?? '') as AbilityKey,
+    )
+      ? profileDraft.builderSelections.originFeatAbility
+      : '';
 
   return {
     ...profileDraft,
@@ -898,6 +1009,21 @@ export function sanitizeRuleSelections(
           )
           .slice(0, proficiencyState.languageChoiceLimit),
       ]),
+      originFeatAbility,
+      originFeatCantrips: originFeatState.isMagicInitiate
+        ? uniqueValues(
+            (profileDraft.builderSelections.originFeatCantrips ?? []).filter(
+              (cantrip) => originFeatState.cantripOptions.includes(cantrip),
+            ),
+          ).slice(0, 2)
+        : [],
+      originFeatSpell:
+        originFeatState.isMagicInitiate &&
+        originFeatState.spellOptions.includes(
+          profileDraft.builderSelections.originFeatSpell ?? '',
+        )
+          ? profileDraft.builderSelections.originFeatSpell
+          : '',
       skills: uniqueValues([
         ...proficiencyState.fixedSkills,
         ...profileDraft.builderSelections.skills
@@ -924,6 +1050,7 @@ export function deriveCharacterRuleReviewSummary(
 ): CharacterRuleReviewSummary {
   const preview = deriveRuleDerivedPreview(draft);
   const proficiencyState = deriveProficiencyChoiceState(draft);
+  const originFeatState = deriveOriginFeatChoiceState(draft);
 
   return {
     armorClass: preview.armorClass.value,
@@ -953,6 +1080,13 @@ export function deriveCharacterRuleReviewSummary(
     spells: {
       cantrips: draft.builderSelections.cantrips,
       leveled: draft.builderSelections.spells,
+      originFeat: originFeatState.isMagicInitiate
+        ? [
+            `${originFeatState.featLabel}: ${originFeatState.selectedAbility.toUpperCase() || 'ability pending'}`,
+            ...originFeatState.selectedCantrips,
+            originFeatState.selectedSpell,
+          ].filter(Boolean)
+        : [],
     },
     tools: uniqueValues([
       ...proficiencyState.fixedTools,
@@ -1235,4 +1369,8 @@ function getUnarmoredClassBase(
 
 function uniqueValues<T>(values: T[]): T[] {
   return Array.from(new Set(values));
+}
+
+function isOriginFeatAbility(value: string): value is AbilityKey {
+  return ['int', 'wis', 'cha'].includes(value);
 }

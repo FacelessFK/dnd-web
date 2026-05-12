@@ -48,10 +48,15 @@ species/race, class, and background, adjust ability scores, and confirm derived
 HP, AC, speed, initiative, proficiency, proficiencies, equipment, and spell
 setup update. Click **Save Draft**, return to `/characters`, and confirm the new
 card appears from the persisted list. Open **Edit**, move to Review, finalize
-the character, and download the generated character sheet PDF from Review. Then
-return to `/characters`, download the same generated PDF from the card, reload
-the browser, and confirm the finalized card still appears. If no portrait is
-uploaded, confirm the card and summary fall back to selected species/race art.
+the character, and download the template-filled character sheet PDF from
+Review. Confirm current or 2024-style rules profiles use the 2024 local
+template, legacy 2014-style profiles use the 2014 fillable local template, and
+any visible fallback notice clearly explains why the repo-owned simple PDF was
+used. Then return to `/characters`, download the same template-filled PDF from
+the card, reload the browser, and confirm the finalized card still appears. If
+no portrait is uploaded, confirm the card and summary fall back to selected
+species/race art. Portrait embedding into the PDF is not required for this MVP;
+the exported PDF may remain text-only.
 
 For the rule-aware builder slice, also check:
 

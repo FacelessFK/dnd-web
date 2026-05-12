@@ -45,6 +45,22 @@ export const characterLibrarySelectionsSchema = z.object({
   cantrips: z.array(z.string().trim().min(1).max(128)).max(100),
   equipment: z.array(z.string().trim().min(1).max(128)).max(100),
   languages: z.array(z.string().trim().min(1).max(128)).max(100),
+  originFeatAbility: z
+    .enum(['str', 'dex', 'con', 'int', 'wis', 'cha'])
+    .or(z.literal(''))
+    .optional()
+    .default(''),
+  originFeatCantrips: z
+    .array(z.string().trim().min(1).max(128))
+    .max(100)
+    .optional()
+    .default([]),
+  originFeatSpell: z
+    .string()
+    .trim()
+    .max(128)
+    .optional()
+    .default(''),
   skills: z.array(z.string().trim().min(1).max(128)).max(100),
   spells: z.array(z.string().trim().min(1).max(128)).max(100),
   tools: z.array(z.string().trim().min(1).max(128)).max(100),

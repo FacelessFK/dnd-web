@@ -111,6 +111,7 @@ export type RuleBackground = {
   equipment: string[];
   id: string;
   originFeat: string;
+  originFeatSpellList?: string;
   shortSummary: string;
   skills: string[];
   toolChoice?: RuleChoice;
@@ -1235,6 +1236,7 @@ export const rulesBackgrounds: RuleBackground[] = [
     ],
     id: 'Acolyte',
     originFeat: 'Magic Initiate (Cleric)',
+    originFeatSpellList: 'Cleric',
     shortSummary:
       'A temple-taught character shaped by rites, study, and sacred service.',
     skills: ['Insight', 'Religion'],
@@ -1271,6 +1273,7 @@ export const rulesBackgrounds: RuleBackground[] = [
     ],
     id: 'Sage',
     originFeat: 'Magic Initiate (Wizard)',
+    originFeatSpellList: 'Wizard',
     shortSummary:
       'A scholar formed by records, research, and hard-won knowledge.',
     skills: ['Arcana', 'History'],

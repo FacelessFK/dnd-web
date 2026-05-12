@@ -19,6 +19,7 @@ import {
   deriveCharacterRuleReviewSummary,
   deriveDefaultBuilderSelections,
   deriveHitPointPreview,
+  deriveOriginFeatChoiceState,
   deriveProficiencyChoiceState,
   deriveSpeedPreview,
   getAvailableRuleClasses,
@@ -232,6 +233,25 @@ describe('character builder rules data and helpers', () => {
     assert.deepEqual(state.fixedLanguages, ['Common']);
   });
 
+  it('derives Magic Initiate choices from eligible backgrounds', () => {
+    const sage = createDefaultCharacterBuilderDraft({
+      background: 'Sage',
+      className: 'Fighter',
+    });
+    const state = deriveOriginFeatChoiceState(sage);
+    const review = deriveCharacterRuleReviewSummary(sage);
+
+    assert.equal(state.isMagicInitiate, true);
+    assert.equal(state.spellList, 'Wizard');
+    assert.deepEqual(state.abilityOptions, ['int', 'wis', 'cha']);
+    assert.equal(state.selectedCantrips.length, 2);
+    assert.equal(state.selectedSpell, 'Detect Magic');
+    assert.equal(
+      review.spells.originFeat.includes('Magic Initiate (Wizard): INT'),
+      true,
+    );
+  });
+
   it('enforces local selection limits without replacing existing choices', () => {
     assert.deepEqual(toggleRuleSelection(['Arcana'], 'Arcana', 2), []);
     assert.deepEqual(toggleRuleSelection(['Arcana'], 'History', 2), [
@@ -249,6 +269,9 @@ describe('character builder rules data and helpers', () => {
           cantrips: ['Light', 'Mage Hand', 'Ray of Frost', 'Fire Bolt'],
           equipment: [],
           languages: ['Common', 'Elvish', 'Draconic', 'Dwarvish'],
+          originFeatAbility: 'int',
+          originFeatCantrips: ['Light', 'Mage Hand'],
+          originFeatSpell: 'Detect Magic',
           skills: ['Arcana', 'History', 'Investigation', 'Insight', 'Religion'],
           spells: [
             'Detect Magic',

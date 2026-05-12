@@ -61,13 +61,17 @@ import {
   getDraftPortraitReference,
   getPortraitImageSource,
 } from '../../lib/character-library-mappers';
-import { downloadCharacterSheetPdf } from '../../lib/character-sheet-pdf';
+import {
+  downloadCharacterSheetPdf,
+  selectCharacterSheetPdfTemplate,
+} from '../../lib/character-sheet-pdf';
 import {
   deriveAbilityScoreAssignmentState,
   deriveAbilityScorePreview,
   deriveCharacterRuleReviewSummary,
   deriveDefaultBuilderSelections,
   deriveEquipmentSuggestions,
+  deriveOriginFeatChoiceState,
   deriveProficiencyChoiceState,
   deriveRuleDerivedPreview,
   getAbilityScoreMethodLabel,
@@ -77,7 +81,6 @@ import {
   getRuleProfileById,
   getRuleSpeciesById,
   getRuleSpellByName,
-  getRulesProfileLabel,
   getSpellSchoolsForClass,
   getValidationIssuesForStep,
   isCharacterBuilderDraftValid,
@@ -209,11 +212,11 @@ function Shell({
   const sidebarTexturePath = getCharacterBuilderAssetPath('texture.sidebar');
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#090806] text-amber-50">
+    <main className="min-h-screen overflow-x-hidden bg-[#090806] text-amber-50">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,0.22),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(217,119,6,0.18),transparent_28%),linear-gradient(135deg,#100b09_0%,#080b10_55%,#050403_100%)]" />
       <div className="relative grid min-h-screen lg:grid-cols-[18rem_1fr]">
         <aside
-          className="border-r border-amber-700/30 bg-black/35 bg-cover bg-center px-5 py-6 shadow-2xl shadow-black/50 backdrop-blur"
+          className="border-b border-amber-700/30 bg-black/35 bg-cover bg-center px-4 py-4 shadow-2xl shadow-black/50 backdrop-blur lg:border-b-0 lg:border-r lg:px-5 lg:py-6"
           style={
             sidebarTexturePath
               ? {
@@ -223,23 +226,23 @@ function Shell({
           }
         >
           <Link
-            className="group flex items-center gap-4 text-amber-100"
+            className="group flex items-center gap-3 text-amber-100 lg:gap-4"
             href="/"
           >
-            <span className="grid h-14 w-14 place-items-center rounded-full border border-amber-300/60 bg-gradient-to-br from-amber-400/25 to-purple-950/60 text-3xl shadow-lg shadow-amber-950/40">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-amber-300/60 bg-gradient-to-br from-amber-400/25 to-purple-950/60 text-2xl shadow-lg shadow-amber-950/40 lg:h-14 lg:w-14 lg:text-3xl">
               ✦
             </span>
             <span>
-              <span className="block text-xl font-black uppercase tracking-[0.24em] text-amber-200 group-hover:text-amber-100">
+              <span className="block text-lg font-black uppercase tracking-[0.18em] text-amber-200 group-hover:text-amber-100 lg:text-xl lg:tracking-[0.24em]">
                 DND Web
               </span>
-              <span className="text-xs uppercase tracking-[0.38em] text-amber-400/70">
+              <span className="text-[0.6rem] uppercase tracking-[0.22em] text-amber-400/70 lg:text-xs lg:tracking-[0.38em]">
                 Adventurer&apos;s Archive
               </span>
             </span>
           </Link>
 
-          <nav className="mt-10 space-y-2 text-sm">
+          <nav className="mt-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6 lg:mt-10 lg:block lg:space-y-2 lg:text-sm">
             <ShellNavLink href="/" icon="⌂" label="Dashboard" />
             <ShellNavLink
               active={active === 'library'}
@@ -253,7 +256,7 @@ function Shell({
             <ShellNavLink disabled icon="✎" label="Journal" />
           </nav>
 
-          <div className="mt-10 rounded-3xl border border-amber-500/25 bg-gradient-to-br from-amber-950/30 to-purple-950/30 p-5 text-center shadow-inner shadow-black/50">
+          <div className="mt-10 hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-amber-950/30 to-purple-950/30 p-5 text-center shadow-inner shadow-black/50 lg:block">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-amber-300">
               Builder MVP
             </p>
@@ -265,16 +268,16 @@ function Shell({
         </aside>
 
         <section className="min-w-0">
-          <header className="flex flex-col gap-4 border-b border-amber-700/25 bg-black/25 px-6 py-5 backdrop-blur md:flex-row md:items-center md:justify-between">
+          <header className="flex flex-col gap-4 border-b border-amber-700/25 bg-black/25 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between lg:px-6 lg:py-5">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-purple-200/75">
                 Character product scaffold
               </p>
-              <h1 className="mt-1 text-2xl font-black text-amber-50">
+              <h1 className="mt-1 text-xl font-black text-amber-50 sm:text-2xl">
                 {title}
               </h1>
             </div>
-            <div className="flex items-center gap-3 text-sm text-amber-100/75">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-amber-100/75 sm:gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-full border border-amber-300/30 bg-black/35">
                 ?
               </span>
@@ -307,7 +310,7 @@ function ShellNavLink({
   label: string;
 }) {
   const className = [
-    'flex items-center gap-3 rounded-2xl border px-4 py-3 transition',
+    'flex min-w-0 items-center justify-center gap-2 rounded-2xl border px-2 py-2 text-center transition lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left',
     active
       ? 'border-purple-300/55 bg-purple-950/65 text-amber-50 shadow-lg shadow-purple-950/35'
       : 'border-transparent text-amber-100/70 hover:border-amber-500/25 hover:bg-amber-950/20 hover:text-amber-50',
@@ -317,7 +320,9 @@ function ShellNavLink({
   const content = (
     <>
       <span className="w-6 text-center text-lg text-amber-300">{icon}</span>
-      <span>{label}</span>
+      <span className="sr-only lg:not-sr-only lg:min-w-0 lg:truncate">
+        {label}
+      </span>
     </>
   );
 
@@ -342,7 +347,7 @@ function ParchmentPanel({
   return (
     <section
       className={[
-        'rounded-3xl border border-amber-500/25 bg-[linear-gradient(145deg,rgba(27,21,15,0.96),rgba(9,8,7,0.94))] p-5 shadow-2xl shadow-black/35',
+        'rounded-2xl border border-amber-500/25 bg-[linear-gradient(145deg,rgba(27,21,15,0.96),rgba(9,8,7,0.94))] p-4 shadow-2xl shadow-black/35 sm:rounded-3xl sm:p-5',
         className,
       ].join(' ')}
     >
@@ -355,11 +360,13 @@ function PlaceholderArt({
   assetKey,
   imageSrc,
   label,
+  priority = false,
   size = 'large',
 }: {
   assetKey?: CharacterBuilderAssetKey;
   imageSrc?: string | null;
   label: string;
+  priority?: boolean;
   size?: 'avatar' | 'choice' | 'large' | 'portrait' | 'small' | 'wide';
 }) {
   const imagePath =
@@ -401,6 +408,7 @@ function PlaceholderArt({
           className={`object-cover ${imagePositionClass}`}
           fill
           onError={() => setFailedAssetPath(imagePath)}
+          priority={priority}
           sizes={
             size === 'small'
               ? '80px'
@@ -528,6 +536,7 @@ export function CharacterLibraryPage() {
   const [rawEntries, setRawEntries] = useState<CharacterLibraryEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pdfNotice, setPdfNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<CharacterBuilderStatus | 'all'>('all');
 
   useEffect(() => {
@@ -579,10 +588,10 @@ export function CharacterLibraryPage() {
 
   return (
     <Shell active="library" title="Character Library">
-      <div className="px-6 py-8">
+      <div className="px-4 py-6 lg:px-6 lg:py-8">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h2 className="text-5xl font-black tracking-tight text-amber-50">
+            <h2 className="text-3xl font-black tracking-tight text-amber-50 sm:text-5xl">
               Character Library
             </h2>
             <p className="mt-3 max-w-2xl text-lg leading-8 text-amber-100/70">
@@ -685,6 +694,12 @@ export function CharacterLibraryPage() {
           </ParchmentPanel>
         ) : null}
 
+        {pdfNotice ? (
+          <ParchmentPanel className="mt-6">
+            <p className="text-sm font-bold text-amber-50">{pdfNotice}</p>
+          </ParchmentPanel>
+        ) : null}
+
         {loading ? (
           <ParchmentPanel className="mt-6 text-center">
             <p className="text-lg font-bold text-amber-50">
@@ -699,6 +714,7 @@ export function CharacterLibraryPage() {
               entry={entry}
               key={entry.id}
               libraryEntry={entriesById.get(entry.id)}
+              onPdfNotice={setPdfNotice}
             />
           ))}
         </div>
@@ -721,10 +737,39 @@ export function CharacterLibraryPage() {
 function CharacterCard({
   entry,
   libraryEntry,
+  onPdfNotice,
 }: {
   entry: CharacterBuilderLibraryEntry;
   libraryEntry?: CharacterLibraryEntry;
+  onPdfNotice: (notice: string) => void;
 }) {
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const downloadPdf = async (): Promise<void> => {
+    if (!libraryEntry) {
+      return;
+    }
+
+    setDownloadingPdf(true);
+
+    try {
+      const result = await downloadCharacterSheetPdf(libraryEntry);
+      const templateMessage = result.fallbackReason
+        ? `Downloaded fallback character sheet PDF: ${result.fallbackReason}`
+        : `Downloaded ${result.template.label} from persisted character data.`;
+
+      onPdfNotice(templateMessage);
+    } catch (error) {
+      onPdfNotice(
+        error instanceof Error
+          ? `Character sheet PDF download failed: ${error.message}`
+          : 'Character sheet PDF download failed.',
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   return (
     <article className="overflow-hidden rounded-3xl border border-amber-500/30 bg-[#20160d] shadow-2xl shadow-black/40">
       <PlaceholderArt
@@ -764,15 +809,13 @@ function CharacterCard({
           </Link>
           <button
             className="rounded-xl border border-amber-700/45 bg-amber-950/75 px-4 py-2 text-sm font-black text-amber-100 transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={!libraryEntry}
-            onClick={() => {
-              if (libraryEntry) {
-                downloadCharacterSheetPdf(libraryEntry);
-              }
-            }}
+            disabled={!libraryEntry || downloadingPdf}
+            onClick={() => void downloadPdf()}
             type="button"
           >
-            Download Character Sheet PDF
+            {downloadingPdf
+              ? 'Preparing PDF...'
+              : 'Download Character Sheet PDF'}
           </button>
           <button
             className="rounded-xl bg-stone-950/75 px-4 py-2 text-sm font-bold text-amber-100/55"
@@ -962,15 +1005,25 @@ export function CharacterBuilderPage({
       return;
     }
 
-    downloadCharacterSheetPdf(savedEntry);
-    setNotice(
-      'Downloaded a character sheet PDF from persisted character data.',
-    );
+    try {
+      const result = await downloadCharacterSheetPdf(savedEntry);
+      setNotice(
+        result.fallbackReason
+          ? `Downloaded fallback character sheet PDF: ${result.fallbackReason}`
+          : `Downloaded ${result.template.label} from persisted character data.`,
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? `PDF download failed: ${error.message}`
+          : 'PDF download failed.',
+      );
+    }
   };
 
   return (
     <Shell active="builder" title="Character Builder">
-      <div className="px-4 py-6 xl:px-6">
+      <div className="px-3 py-4 sm:px-4 sm:py-6 xl:px-6">
         <Stepper
           currentStep={draft.builderStep}
           onStepChange={(step) =>
@@ -1084,8 +1137,8 @@ function Stepper({
   const currentIndex = getBuilderStepIndex(currentStep);
 
   return (
-    <div className="overflow-x-auto rounded-3xl border border-amber-500/20 bg-black/25 px-4 py-5">
-      <ol className="grid min-w-[58rem] grid-cols-9 gap-3">
+    <div className="rounded-2xl border border-amber-500/20 bg-black/25 px-3 py-4 sm:rounded-3xl sm:px-4 sm:py-5">
+      <ol className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-9">
         {builderSteps.map((step, index) => {
           const active = step.id === currentStep;
           const complete = index < currentIndex;
@@ -1095,7 +1148,7 @@ function Stepper({
             <li className="relative text-center" key={step.id}>
               <button
                 className={[
-                  'mx-auto grid h-11 w-11 place-items-center rounded-full border text-sm font-black transition',
+                  'mx-auto grid h-10 w-10 place-items-center rounded-full border text-sm font-black transition sm:h-11 sm:w-11',
                   active
                     ? 'border-purple-200 bg-purple-700 text-white shadow-[0_0_22px_rgba(192,132,252,0.85)]'
                     : complete
@@ -1109,7 +1162,7 @@ function Stepper({
               </button>
               <p
                 className={[
-                  'mt-2 text-xs font-bold',
+                  'mt-2 break-words text-[0.68rem] font-bold leading-tight sm:text-xs',
                   active ? 'text-amber-50' : 'text-amber-200/65',
                 ].join(' ')}
               >
@@ -1176,7 +1229,9 @@ function StepHeading({
 }) {
   return (
     <div className="mb-6">
-      <h2 className="text-4xl font-black text-amber-50">{title}</h2>
+      <h2 className="text-2xl font-black text-amber-50 sm:text-4xl">
+        {title}
+      </h2>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-100/68">
         {intro}
       </p>
@@ -1195,7 +1250,7 @@ function Field({
   label: string;
 }) {
   return (
-    <label className="block">
+    <div className="block">
       <span className="block text-sm font-black text-amber-200">{label}</span>
       {hint ? (
         <span className="mb-2 mt-1 block text-xs text-amber-100/55">
@@ -1203,7 +1258,7 @@ function Field({
         </span>
       ) : null}
       {children}
-    </label>
+    </div>
   );
 }
 
@@ -1302,23 +1357,42 @@ function IdentityStep({
             hint="Controls which local rules data, ability bonus source, score limits, and legal options are used later in the builder."
             label="Rules Profile"
           >
-            <select
-              className={inputClass}
-              onChange={(event) =>
-                setDraft(
-                  applyRuleDefaults(
-                    sanitizeDraftForRulesProfile(draft, event.target.value),
-                  ),
-                )
-              }
-              value={draft.rulesProfileId}
-            >
-              {rulesProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {getRulesProfileLabel(profile)}
-                </option>
-              ))}
-            </select>
+            <div className="grid gap-3 md:grid-cols-2">
+              {rulesProfiles.map((profile) => {
+                const active = profile.id === draft.rulesProfileId;
+
+                return (
+                  <button
+                    className={[
+                      'rounded-2xl border p-4 text-left transition',
+                      active
+                        ? 'border-purple-300/70 bg-purple-950/65 text-amber-50 shadow-lg shadow-purple-950/25'
+                        : 'border-amber-500/20 bg-black/25 text-amber-100/68 hover:border-amber-300/45',
+                    ].join(' ')}
+                    key={profile.id}
+                    onClick={() =>
+                      setDraft(
+                        applyRuleDefaults(
+                          sanitizeDraftForRulesProfile(draft, profile.id),
+                        ),
+                      )
+                    }
+                    type="button"
+                  >
+                    <span className="block text-sm font-black text-amber-100">
+                      {profile.displayName}
+                    </span>
+                    <span className="mt-1 block text-xs uppercase tracking-[0.16em] text-amber-300/75">
+                      {profile.year} / {profile.status} {profile.sourceType}
+                    </span>
+                    <span className="mt-2 block text-xs leading-5">
+                      {profile.speciesLabel}; ability bonuses from{' '}
+                      {profile.abilityBonusSource}.
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <div className="mt-3 rounded-2xl border border-purple-300/20 bg-purple-950/20 p-3 text-xs leading-5 text-amber-100/68">
               <p className="font-black text-amber-200">
                 {selectedProfile.sourceName} · {selectedProfile.version}
@@ -1327,6 +1401,11 @@ function IdentityStep({
               <p className="mt-1">
                 Ability bonuses come from {selectedProfile.abilityBonusSource};
                 options are labeled as {selectedProfile.speciesLabel}.
+              </p>
+              <p className="mt-1">
+                Source note: docs/dnd5eng.pdf is a useful legacy 2014 rules
+                reference. Current profiles use local SRD-style metadata, so
+                older background text is treated as reference material.
               </p>
             </div>
           </Field>
@@ -1368,6 +1447,7 @@ function IdentityStep({
             assetKey={portraitAssetKey}
             imageSrc={portraitImageSource}
             label={draft.name || 'Adventurer'}
+            priority
             size="avatar"
           />
           <label className="mt-4 block w-full cursor-pointer rounded-2xl border border-amber-400/25 bg-black/35 px-4 py-3 text-center text-sm font-bold text-amber-100 transition hover:border-amber-300/55">
@@ -1458,16 +1538,44 @@ function SpeciesStep({
             items={selectedSpeciesRules.traits.map((trait) => trait.label)}
             title={`${selectedSpecies.title} Traits`}
           />
-          <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/20 bg-black/25 p-4 text-sm md:grid-cols-3">
-            <PreviewRow
-              label="Creature Type"
-              value={selectedSpeciesRules.creatureType}
-            />
-            <PreviewRow label="Size" value={selectedSpeciesRules.size} />
-            <PreviewRow
-              label="Speed"
-              value={`${selectedSpeciesRules.speed} ft.`}
-            />
+          <div className="mt-4 grid gap-4 rounded-2xl border border-amber-500/20 bg-black/25 p-4 text-sm xl:grid-cols-[18rem_1fr]">
+            <dl className="space-y-2">
+              <PreviewRow
+                label="Creature Type"
+                value={selectedSpeciesRules.creatureType}
+              />
+              <PreviewRow label="Size" value={selectedSpeciesRules.size} />
+              <PreviewRow
+                label="Speed"
+                value={`${selectedSpeciesRules.speed} ft.`}
+              />
+            </dl>
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.16em] text-amber-300">
+                Selection Details
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {selectedSpeciesRules.traits.map((trait) => (
+                  <div
+                    className="rounded-2xl border border-amber-500/15 bg-black/25 p-3"
+                    key={trait.label}
+                  >
+                    <p className="font-black text-amber-100">{trait.label}</p>
+                    <p className="mt-1 text-amber-100/62">{trait.summary}</p>
+                  </div>
+                ))}
+              </div>
+              {selectedSpeciesRules.builderChoices ? (
+                <PreviewStrip
+                  icon="◇"
+                  items={selectedSpeciesRules.builderChoices.map(
+                    (choice) =>
+                      `${choice.label}: choose ${choice.choose} from ${choice.from.join(', ')}`,
+                  )}
+                  title="Follow-up Choices"
+                />
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}
@@ -1594,6 +1702,7 @@ function BackgroundStep({
     draft.background,
     draft.rulesProfileId,
   );
+  const originFeatState = deriveOriginFeatChoiceState(draft);
   const profileBackgroundChoices = backgroundChoices.filter((choice) =>
     selectedProfile.availableBackgroundIds.includes(choice.id),
   );
@@ -1604,7 +1713,7 @@ function BackgroundStep({
         intro={`Choose a legal background for ${selectedProfile.displayName}. It supplies profile-specific ability bonuses or metadata, fixed skills, tools, and starting equipment.`}
         title="Step 4 — Background"
       />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(18rem,8fr)_minmax(32rem,10fr)]">
         <div className="space-y-3">
           {profileBackgroundChoices.map((choice) => (
             <button
@@ -1642,7 +1751,7 @@ function BackgroundStep({
           ))}
         </div>
         {selectedBackground && selectedBackgroundRules ? (
-          <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-5">
+          <div className="min-w-0 rounded-3xl border border-amber-500/20 bg-black/30 p-5">
             <h3 className="text-3xl font-black text-amber-50">
               {selectedBackground.title}
             </h3>
@@ -1677,6 +1786,92 @@ function BackgroundStep({
                 Feat benefits are metadata only.
               </p>
             </div>
+            {originFeatState.isMagicInitiate ? (
+              <div className="mt-4 rounded-2xl border border-amber-400/25 bg-black/30 p-4">
+                <p className="text-sm font-black uppercase tracking-[0.16em] text-amber-300">
+                  Background Feat Choices
+                </p>
+                <h4 className="mt-2 text-2xl font-black text-amber-50">
+                  {originFeatState.featLabel}
+                </h4>
+                <p className="mt-2 text-sm leading-6 text-amber-100/65">
+                  {selectedBackground.title} grants this feat. Choose the
+                  spellcasting ability for the feat, then pick 2{' '}
+                  {originFeatState.spellList} cantrips and 1 level 1{' '}
+                  {originFeatState.spellList} spell. These are tracked
+                  separately from class spell choices.
+                </p>
+                <div className="mt-4">
+                  <SelectionGroup
+                    maxSelected={1}
+                    options={originFeatState.abilityOptions.map(
+                      (ability) => abilityLabels[ability],
+                    )}
+                    selected={
+                      originFeatState.selectedAbility
+                        ? [abilityLabels[originFeatState.selectedAbility]]
+                        : []
+                    }
+                    title="Feat Spellcasting Ability"
+                    update={(values) => {
+                      const selectedLabel = values[0];
+                      const selectedAbility =
+                        originFeatState.abilityOptions.find(
+                          (ability) => abilityLabels[ability] === selectedLabel,
+                        ) ?? '';
+
+                      setDraft({
+                        ...draft,
+                        builderSelections: {
+                          ...draft.builderSelections,
+                          originFeatAbility: selectedAbility,
+                        },
+                      });
+                    }}
+                  />
+                </div>
+                <div className="mt-4 grid gap-4 2xl:grid-cols-2">
+                  <SelectionGroup
+                    columns="single"
+                    getOptionAssetKey={getSpellOptionAssetKey}
+                    maxSelected={2}
+                    options={originFeatState.cantripOptions}
+                    selected={originFeatState.selectedCantrips}
+                    title={`${originFeatState.spellList} Cantrips`}
+                    update={(originFeatCantrips) =>
+                      setDraft({
+                        ...draft,
+                        builderSelections: {
+                          ...draft.builderSelections,
+                          originFeatCantrips,
+                        },
+                      })
+                    }
+                  />
+                  <SelectionGroup
+                    columns="single"
+                    getOptionAssetKey={getSpellOptionAssetKey}
+                    maxSelected={1}
+                    options={originFeatState.spellOptions}
+                    selected={
+                      originFeatState.selectedSpell
+                        ? [originFeatState.selectedSpell]
+                        : []
+                    }
+                    title={`${originFeatState.spellList} Level 1 Spell`}
+                    update={(values) =>
+                      setDraft({
+                        ...draft,
+                        builderSelections: {
+                          ...draft.builderSelections,
+                          originFeatSpell: values[0] ?? '',
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
             <PreviewStrip
               icon="*"
               items={selectedBackgroundRules.equipment}
@@ -1943,16 +2138,40 @@ function EquipmentStep({
   draft: CharacterBuilderDraft;
   setDraft: (draft: CharacterBuilderDraft) => void;
 }) {
+  const selectedClassRules = getRuleClassById(
+    draft.className,
+    draft.rulesProfileId,
+  );
+  const selectedBackgroundRules = getRuleBackgroundById(
+    draft.background,
+    draft.rulesProfileId,
+  );
+  const classEquipment = selectedClassRules?.equipment ?? [];
+  const backgroundEquipment = selectedBackgroundRules?.equipment ?? [];
   const equipmentSuggestions = deriveEquipmentSuggestions(draft);
   const rulePreview = deriveRuleDerivedPreview(draft);
   const recommendedAssetKey = getCharacterBuilderEquipmentAssetKey(
     equipmentSuggestions[0] ?? draft.className,
   );
+  const missingRecommendedEquipment = equipmentSuggestions.filter(
+    (equipment) => !draft.builderSelections.equipment.includes(equipment),
+  );
+  const extraEquipment = draft.builderSelections.equipment.filter(
+    (equipment) => !equipmentSuggestions.includes(equipment),
+  );
+  const applyRecommendedEquipment = () =>
+    setDraft({
+      ...draft,
+      builderSelections: {
+        ...draft.builderSelections,
+        equipment: equipmentSuggestions,
+      },
+    });
 
   return (
     <>
       <StepHeading
-        intro="Accept the SRD class/background equipment metadata or choose local equipment labels manually. No inventory, attacks, money, or encumbrance are wired."
+        intro="Accept the SRD class/background starting package. These are granted equipment labels from the local rules data, not individual pick-any choices yet."
         title="Step 7 — Equipment"
       />
       <div className="grid gap-5 xl:grid-cols-[20rem_1fr]">
@@ -1970,38 +2189,105 @@ function EquipmentStep({
             size="wide"
           />
           <TagList values={equipmentSuggestions.slice(0, 8)} />
-          <PrimaryButton
-            onClick={() =>
-              setDraft({
-                ...draft,
-                builderSelections: {
-                  ...draft.builderSelections,
-                  equipment: equipmentSuggestions,
-                },
-              })
-            }
-          >
+          <PrimaryButton onClick={applyRecommendedEquipment}>
             Use Recommended
           </PrimaryButton>
         </div>
-        <SelectionGroup
-          getOptionAssetKey={getCharacterBuilderEquipmentAssetKey}
-          maxSelected={12}
-          options={equipmentSuggestions}
-          selected={draft.builderSelections.equipment}
-          title="Suggested Equipment Choices"
-          update={(equipment) =>
-            setDraft({
-              ...draft,
-              builderSelections: {
-                ...draft.builderSelections,
-                equipment,
-              },
-            })
-          }
-        />
+        <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black text-amber-50">
+                Granted Starting Equipment
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-amber-100/62">
+                The current rules model grants the class package plus the
+                background kit. Alternative gear picks and starting-gold mode
+                are not modeled in this scaffold yet.
+              </p>
+            </div>
+            <span className="rounded-full border border-amber-400/25 px-3 py-1 text-xs font-bold text-amber-100/65">
+              {draft.builderSelections.equipment.length} selected
+            </span>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <EquipmentSourceList
+              title={`${draft.className} Class Package`}
+              values={classEquipment}
+            />
+            <EquipmentSourceList
+              title={`${draft.background} Background Kit`}
+              values={backgroundEquipment}
+            />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-amber-500/15 bg-black/20 p-4">
+            <p className="text-sm font-black uppercase tracking-[0.16em] text-amber-300">
+              Selected Package
+            </p>
+            <TagList values={draft.builderSelections.equipment} />
+            {missingRecommendedEquipment.length > 0 ||
+            extraEquipment.length > 0 ? (
+              <div className="mt-4 rounded-2xl border border-purple-300/25 bg-purple-950/20 p-3 text-sm leading-6 text-amber-100/68">
+                {missingRecommendedEquipment.length > 0 ? (
+                  <p>
+                    Missing from recommended package:{' '}
+                    {missingRecommendedEquipment.join(', ')}.
+                  </p>
+                ) : null}
+                {extraEquipment.length > 0 ? (
+                  <p>Custom labels kept: {extraEquipment.join(', ')}.</p>
+                ) : null}
+                <button
+                  className="mt-3 rounded-xl border border-amber-400/30 bg-black/30 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-amber-100 transition hover:border-amber-300/60"
+                  onClick={applyRecommendedEquipment}
+                  type="button"
+                >
+                  Reset Package
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </>
+  );
+}
+
+function EquipmentSourceList({
+  title,
+  values,
+}: {
+  title: string;
+  values: string[];
+}) {
+  return (
+    <section className="rounded-2xl border border-amber-500/15 bg-black/20 p-4">
+      <p className="text-sm font-black uppercase tracking-[0.16em] text-amber-300">
+        {title}
+      </p>
+      <div className="mt-3 grid gap-2">
+        {values.length > 0 ? (
+          values.map((value) => {
+            const assetKey = getCharacterBuilderEquipmentAssetKey(value);
+
+            return (
+              <div
+                className="flex items-center gap-3 rounded-2xl border border-amber-500/15 bg-black/25 px-3 py-2 text-sm font-bold text-amber-100/78"
+                key={value}
+              >
+                <AssetThumb assetKey={assetKey} label={value} />
+                <span>{value}</span>
+              </div>
+            );
+          })
+        ) : (
+          <p className="text-sm text-amber-100/45">
+            No equipment listed for this source.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -2187,6 +2473,9 @@ function ReviewStep({
   const portraitAssetKey = getDraftPortraitAssetKey(draft);
   const portraitImageSource = getDraftPortraitImageSource(draft);
   const selectedProfile = getRuleProfileById(draft.rulesProfileId);
+  const selectedTemplate = selectCharacterSheetPdfTemplate(
+    draft.rulesProfileId,
+  );
 
   return (
     <>
@@ -2207,6 +2496,9 @@ function ReviewStep({
             Last persisted status: {persistedEntry.status}.
           </p>
         ) : null}
+        <p className="mt-2 text-xs text-amber-100/55">
+          PDF export will use: {selectedTemplate.label}.
+        </p>
       </StepHeading>
       <div className="grid gap-5 xl:grid-cols-[20rem_1fr]">
         <div className="overflow-hidden rounded-3xl border border-amber-500/25 bg-[linear-gradient(180deg,#d6bb83,#b9965f)] text-stone-950">
@@ -2281,6 +2573,7 @@ function ReviewStep({
             <TagList values={ruleReview.equipment} />
             <TagList values={ruleReview.spells.cantrips} />
             <TagList values={ruleReview.spells.leveled} />
+            <TagList values={ruleReview.spells.originFeat} />
           </ReviewCard>
         </div>
       </div>
@@ -2444,6 +2737,7 @@ function AssetThumb({
 }
 
 function SelectionGroup({
+  columns = 'auto',
   getOptionAssetKey,
   maxSelected,
   options,
@@ -2451,6 +2745,7 @@ function SelectionGroup({
   title,
   update,
 }: {
+  columns?: 'auto' | 'single';
   getOptionAssetKey?: (option: string) => CharacterBuilderAssetKey | null;
   maxSelected: number;
   options: string[];
@@ -2459,14 +2754,19 @@ function SelectionGroup({
   update: (values: string[]) => void;
 }) {
   return (
-    <div className="rounded-3xl border border-amber-500/20 bg-black/30 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h3 className="text-xl font-black text-amber-50">{title}</h3>
-        <span className="rounded-full border border-amber-400/25 px-3 py-1 text-xs font-bold text-amber-100/65">
+    <div className="min-w-0 rounded-3xl border border-amber-500/20 bg-black/30 p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <h3 className="min-w-0 text-xl font-black text-amber-50">{title}</h3>
+        <span className="shrink-0 rounded-full border border-amber-400/25 px-3 py-1 text-xs font-bold text-amber-100/65">
           {selected.length} / {maxSelected}
         </span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div
+        className={[
+          'grid gap-2',
+          columns === 'auto' ? 'sm:grid-cols-2' : '',
+        ].join(' ')}
+      >
         {options.length === 0 ? (
           <p className="rounded-2xl border border-amber-500/15 bg-black/20 px-4 py-3 text-sm text-amber-100/45">
             No selectable options for the current rules choices.
@@ -2480,7 +2780,7 @@ function SelectionGroup({
           return (
             <button
               className={[
-                'rounded-2xl border px-4 py-3 text-left text-sm font-bold transition',
+                'flex min-w-0 items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-bold transition',
                 active
                   ? 'border-purple-300/70 bg-purple-950/65 text-amber-50'
                   : disabled
@@ -2496,11 +2796,11 @@ function SelectionGroup({
             >
               {active ? '✓ ' : '○ '}
               {optionAssetKey ? (
-                <span className="mx-3 inline-flex align-middle">
+                <span className="shrink-0">
                   <AssetThumb assetKey={optionAssetKey} label={option} />
                 </span>
               ) : null}
-              <span>{option}</span>
+              <span className="min-w-0 break-words">{option}</span>
             </button>
           );
         })}

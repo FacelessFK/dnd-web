@@ -108,19 +108,25 @@ It provides:
 - a Step 1 portrait uploader for JPEG, PNG, and WebP images up to 1 MB. Uploaded
   portraits are stored as validated data URL references in the library entry for
   this MVP; entries without uploads reference selected species fallback art,
-- a repo-owned generated character sheet PDF download on Review and library
-  cards. The PDF is generated from persisted character data and does not embed a
-  copyrighted official sheet template,
+- a template-filled character sheet PDF download on Review and library cards.
+  Current or 2024-style rules profiles prefer the local
+  `DnD_2024_Character-Sheet.pdf` template, legacy 2014-style profiles prefer
+  the local `dnd_5e_charactersheet_formfillable.pdf` template, and the
+  repo-owned simple PDF layout is retained only as a fallback if template
+  loading or filling fails,
 - an asset request/status document at
   `docs/character-builder-asset-request.md`, generated asset notes at
-  `docs/character-builder-generated-assets.md`, and rules/source notes at
-  `docs/character-builder-rules-source-plan.md`.
+  `docs/character-builder-generated-assets.md`, rules/source notes at
+  `docs/character-builder-rules-source-plan.md`, and PDF template field notes
+  at `docs/character-sheet-pdf-template-map.md`.
 
 This surface still does not submit library characters into live runtime
 sessions, enforce production authentication/account ownership, provide cloud
 asset storage, or implement full D&D character automation. It also does not yet
 automate higher-level spells, subclasses, level-up, full inventory rules,
-equipment alternatives, or spell effects.
+equipment alternatives, spell effects, or portrait embedding inside exported
+PDFs. The local sheet templates are project-provided assets and should receive
+production/legal distribution review before public release.
 
 ## Running Locally
 

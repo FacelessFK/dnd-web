@@ -39,6 +39,9 @@ export type CharacterBuilderDraft = {
     cantrips: string[];
     equipment: string[];
     languages: string[];
+    originFeatAbility: AbilityKey | '';
+    originFeatCantrips: string[];
+    originFeatSpell: string;
     skills: string[];
     spells: string[];
     tools: string[];

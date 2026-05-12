@@ -13,7 +13,7 @@ controls, and durable persistence.
 ## Current Status
 
 The repository now has a role-aware browser runtime surface at `/runtime`, a
-frontend-only Character Library at `/characters`, plus refreshed Phase 9 API and
+persisted Character Library at `/characters`, plus refreshed Phase 9 API and
 handoff documentation. The runtime UI presents a dark fantasy tactical tabletop
 with DM and Player modes. A DM can create and seed sessions, create custom
 tactical scenes, activate scenes, author DM-controlled transition nodes between
@@ -40,10 +40,12 @@ for ability modifiers, HP, AC, speed, saving throws, and proficiency bonus.
 Draft saves, edit loads, and finalization now go through the Character Library
 backend surface; uploaded portraits are validated and stored with the library
 entry as MVP data URLs, and missing uploads fall back to selected species art.
-Review and library cards can download a repo-owned generated character sheet
-PDF built from persisted character data. This remains pre-auth ownership only:
-there is no production account model, cloud upload pipeline, submit-to-session
-integration, or full D&D automation.
+Review and library cards download template-filled character sheet PDFs from
+persisted character data, using local project-provided 2024 or 2014 sheet PDFs
+when available and a repo-owned simple PDF only as a fallback. This remains
+pre-auth ownership only: there is no production account model, cloud upload
+pipeline, submit-to-session integration, or full D&D automation. Production
+distribution of the included sheet templates still needs legal/asset review.
 
 The backend is ahead of the original Phase 9 cleanup goal. Recent persistence
 work includes DB-backed character, session snapshot, scene, active-encounter,
@@ -60,7 +62,7 @@ Implemented so far:
 - Next.js role-aware runtime surface at `/runtime`
 - persisted Character Library and 9-step rule-aware Character Builder MVP at
   `/characters`, using local generated/placeholder assets, pre-auth owner IDs,
-  local portrait data URL storage, and generated PDF export
+  local portrait data URL storage, and template-based PDF export
 - authoritative Node.js TypeScript session server
 - session create, join, reconnect, presence tracking, and SSE session sync
 - rules profile foundation
@@ -253,14 +255,20 @@ library entry, `/characters/:characterId/edit` reloads persisted data, and
 Finalize marks the entry finalized while keeping it separate from live runtime
 session overlays. Step 1 accepts JPEG, PNG, or WebP portraits up to 1 MB; if no
 portrait is uploaded, the saved entry references selected species fallback art.
-Review and library cards expose generated PDF downloads. Character cards and
-builder choices use local generated assets where available and CSS placeholders
-where assets are missing. Asset status is tracked in
+Review and library cards expose template-based PDF downloads. Current or
+2024-style rules profiles prefer `DnD_2024_Character-Sheet.pdf`; legacy
+2014-style profiles prefer `dnd_5e_charactersheet_formfillable.pdf`. If a
+template cannot be loaded or filled, the browser falls back to the repo-owned
+simple PDF layout and reports the fallback reason. Character cards and builder
+choices use local generated assets where available and CSS placeholders where
+assets are missing. Asset status is tracked in
 [docs/character-builder-asset-request.md](docs/character-builder-asset-request.md),
 generated asset notes live in
 [docs/character-builder-generated-assets.md](docs/character-builder-generated-assets.md),
-and rules/source notes live in
+rules/source notes live in
 [docs/character-builder-rules-source-plan.md](docs/character-builder-rules-source-plan.md).
+PDF template field notes live in
+[docs/character-sheet-pdf-template-map.md](docs/character-sheet-pdf-template-map.md).
 
 Automated browser smoke coverage for this surface is available with:
 
