@@ -65,6 +65,8 @@ import {
   downloadCharacterSheetPdf,
   selectCharacterSheetPdfTemplate,
 } from '../../lib/character-sheet-pdf';
+import { LanguageSwitcher, useI18n } from '../../lib/i18n';
+import SimpleCharacterBuilder from './simple-builder/App';
 import {
   deriveAbilityScoreAssignmentState,
   deriveAbilityScorePreview,
@@ -209,83 +211,84 @@ function Shell({
   children: ReactNode;
   title: string;
 }) {
-  const sidebarTexturePath = getCharacterBuilderAssetPath('texture.sidebar');
+  const { t } = useI18n();
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#090806] text-amber-50">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(124,58,237,0.22),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(217,119,6,0.18),transparent_28%),linear-gradient(135deg,#100b09_0%,#080b10_55%,#050403_100%)]" />
-      <div className="relative grid min-h-screen lg:grid-cols-[18rem_1fr]">
-        <aside
-          className="border-b border-amber-700/30 bg-black/35 bg-cover bg-center px-4 py-4 shadow-2xl shadow-black/50 backdrop-blur lg:border-b-0 lg:border-r lg:px-5 lg:py-6"
-          style={
-            sidebarTexturePath
-              ? {
-                  backgroundImage: `linear-gradient(rgba(5,3,2,0.68), rgba(5,3,2,0.86)), url(${sidebarTexturePath})`,
-                }
-              : undefined
-          }
-        >
+    <main className="min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(245,158,11,0.12),transparent_30%),linear-gradient(135deg,#0b1020_0%,#111827_52%,#0f172a_100%)]" />
+      <div className="relative grid min-h-screen lg:grid-cols-[16rem_1fr]">
+        <aside className="border-b border-slate-700/70 bg-slate-950/80 px-4 py-4 shadow-xl shadow-black/25 backdrop-blur lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
           <Link
-            className="group flex items-center gap-3 text-amber-100 lg:gap-4"
+            className="group flex items-center gap-3 text-slate-100"
             href="/"
           >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-amber-300/60 bg-gradient-to-br from-amber-400/25 to-purple-950/60 text-2xl shadow-lg shadow-amber-950/40 lg:h-14 lg:w-14 lg:text-3xl">
-              ✦
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-amber-300/35 bg-amber-400 text-sm font-black text-slate-950 shadow-lg shadow-black/25">
+              D20
             </span>
             <span>
-              <span className="block text-lg font-black uppercase tracking-[0.18em] text-amber-200 group-hover:text-amber-100 lg:text-xl lg:tracking-[0.24em]">
+              <span className="block text-base font-black uppercase tracking-[0.12em] text-slate-50 group-hover:text-amber-200">
                 DND Web
               </span>
-              <span className="text-[0.6rem] uppercase tracking-[0.22em] text-amber-400/70 lg:text-xs lg:tracking-[0.38em]">
-                Adventurer&apos;s Archive
+              <span className="text-xs font-semibold text-slate-400">
+                {t('nav.characterWorkspace')}
               </span>
             </span>
           </Link>
 
-          <nav className="mt-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6 lg:mt-10 lg:block lg:space-y-2 lg:text-sm">
-            <ShellNavLink href="/" icon="⌂" label="Dashboard" />
+          <nav className="mt-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6 lg:mt-8 lg:block lg:space-y-2 lg:text-sm">
+            <ShellNavLink href="/" icon="Home" label={t('common.dashboard')} />
             <ShellNavLink
               active={active === 'library'}
               href="/characters"
-              icon="♟"
-              label="Character Library"
+              icon="Library"
+              label={t('nav.characterLibrary')}
             />
-            <ShellNavLink href="/runtime" icon="⚔" label="Runtime Table" />
-            <ShellNavLink disabled icon="✧" label="Campaigns" />
-            <ShellNavLink disabled icon="☉" label="Compendium" />
-            <ShellNavLink disabled icon="✎" label="Journal" />
+            <ShellNavLink
+              href="/runtime"
+              icon="Table"
+              label={t('nav.runtimeTable')}
+            />
+            <ShellNavLink
+              disabled
+              icon={t('nav.soon')}
+              label={t('nav.campaigns')}
+            />
+            <ShellNavLink
+              disabled
+              icon={t('nav.soon')}
+              label={t('nav.compendium')}
+            />
+            <ShellNavLink
+              disabled
+              icon={t('nav.soon')}
+              label={t('nav.journal')}
+            />
           </nav>
 
-          <div className="mt-10 hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-amber-950/30 to-purple-950/30 p-5 text-center shadow-inner shadow-black/50 lg:block">
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-amber-300">
-              Builder MVP
+          <div className="mt-8 hidden rounded-2xl border border-slate-700 bg-slate-900/80 p-4 text-sm shadow-inner shadow-black/25 lg:block">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
+              {t('shell.builderMvp.title')}
             </p>
-            <p className="mt-3 text-sm leading-6 text-amber-100/75">
-              Persisted character library entries with pre-auth dev ownership.
-              Production auth and account ownership are intentionally pending.
+            <p className="mt-3 leading-6 text-slate-400">
+              {t('shell.builderMvp.body')}
             </p>
           </div>
         </aside>
 
         <section className="min-w-0">
-          <header className="flex flex-col gap-4 border-b border-amber-700/25 bg-black/25 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between lg:px-6 lg:py-5">
+          <header className="sticky top-0 z-20 flex flex-col gap-4 border-b border-slate-700/70 bg-slate-950/82 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between lg:px-6">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-purple-200/75">
-                Character product scaffold
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300/80">
+                {t('shell.characterTools')}
               </p>
-              <h1 className="mt-1 text-xl font-black text-amber-50 sm:text-2xl">
+              <h1 className="mt-1 text-xl font-black text-slate-50 sm:text-2xl">
                 {title}
               </h1>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-amber-100/75 sm:gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-full border border-amber-300/30 bg-black/35">
-                ?
-              </span>
-              <span className="grid h-10 w-10 place-items-center rounded-full border border-amber-300/30 bg-black/35">
-                ◇
-              </span>
-              <span className="rounded-full border border-amber-300/30 bg-black/35 px-4 py-2">
-                Demo Profile
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+              <LanguageSwitcher />
+              <span className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2">
+                {t('shell.demoProfile')}
               </span>
             </div>
           </header>
@@ -310,16 +313,18 @@ function ShellNavLink({
   label: string;
 }) {
   const className = [
-    'flex min-w-0 items-center justify-center gap-2 rounded-2xl border px-2 py-2 text-center transition lg:justify-start lg:gap-3 lg:px-4 lg:py-3 lg:text-left',
+    'flex min-w-0 items-center justify-center gap-2 rounded-xl border px-2 py-2 text-center font-bold transition lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5 lg:text-left',
     active
-      ? 'border-purple-300/55 bg-purple-950/65 text-amber-50 shadow-lg shadow-purple-950/35'
-      : 'border-transparent text-amber-100/70 hover:border-amber-500/25 hover:bg-amber-950/20 hover:text-amber-50',
+      ? 'border-amber-300/45 bg-amber-400 text-slate-950 shadow-lg shadow-black/20'
+      : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-50',
     disabled ? 'cursor-not-allowed opacity-55 hover:bg-transparent' : '',
   ].join(' ');
 
   const content = (
     <>
-      <span className="w-6 text-center text-lg text-amber-300">{icon}</span>
+      <span className="w-12 text-center text-[0.62rem] uppercase tracking-[0.12em] text-current lg:w-14">
+        {icon}
+      </span>
       <span className="sr-only lg:not-sr-only lg:min-w-0 lg:truncate">
         {label}
       </span>
@@ -347,7 +352,7 @@ function ParchmentPanel({
   return (
     <section
       className={[
-        'rounded-2xl border border-amber-500/25 bg-[linear-gradient(145deg,rgba(27,21,15,0.96),rgba(9,8,7,0.94))] p-4 shadow-2xl shadow-black/35 sm:rounded-3xl sm:p-5',
+        'rounded-2xl border border-slate-700 bg-slate-900/88 p-4 shadow-xl shadow-black/25 sm:p-5',
         className,
       ].join(' ')}
     >
@@ -453,7 +458,7 @@ function PrimaryButton({
 }) {
   return (
     <button
-      className="rounded-2xl border border-amber-300/55 bg-gradient-to-r from-purple-950 via-purple-800 to-purple-950 px-5 py-3 text-sm font-black text-amber-50 shadow-lg shadow-purple-950/35 transition hover:border-amber-200 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-50"
       disabled={disabled}
       onClick={onClick}
       type="button"
@@ -474,7 +479,7 @@ function SecondaryButton({
 }) {
   return (
     <button
-      className="rounded-2xl border border-amber-300/25 bg-black/30 px-5 py-3 text-sm font-bold text-amber-100 transition hover:border-amber-200/60 hover:bg-amber-950/25 disabled:cursor-not-allowed disabled:opacity-45"
+      className="rounded-xl border border-slate-600 bg-slate-950/35 px-5 py-3 text-sm font-bold text-slate-100 transition hover:border-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
       disabled={disabled}
       onClick={onClick}
       type="button"
@@ -529,6 +534,7 @@ function StatusBadge({ status }: { status: CharacterBuilderStatus }) {
 }
 
 export function CharacterLibraryPage() {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [ownerParticipantId, setOwnerParticipantId] = useState(
     defaultCharacterLibraryOwnerParticipantId,
@@ -587,24 +593,23 @@ export function CharacterLibraryPage() {
   );
 
   return (
-    <Shell active="library" title="Character Library">
+    <Shell active="library" title={t('page.characterLibrary.title')}>
       <div className="px-4 py-6 lg:px-6 lg:py-8">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h2 className="text-3xl font-black tracking-tight text-amber-50 sm:text-5xl">
-              Character Library
+            <h2 className="text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
+              {t('page.characterLibrary.title')}
             </h2>
-            <p className="mt-3 max-w-2xl text-lg leading-8 text-amber-100/70">
-              Your heroes, their stories, and the realms they will shape.
-              Entries are loaded from the Character Library backend for the
-              selected pre-auth owner.
+            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-400">
+              Browse persisted characters for the selected dev owner, open a
+              draft, or export a sheet without leaving the workspace.
             </p>
           </div>
           <Link
-            className="inline-flex w-fit rounded-2xl border border-amber-300/55 bg-gradient-to-r from-purple-950 via-purple-800 to-purple-950 px-6 py-4 text-sm font-black uppercase tracking-[0.16em] text-amber-50 shadow-lg shadow-purple-950/35 transition hover:border-amber-200 hover:brightness-110"
+            className="inline-flex w-fit rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
             href="/characters/new"
           >
-            ✦ Create New Character
+            Create New Character
           </Link>
         </div>
 
@@ -613,7 +618,7 @@ export function CharacterLibraryPage() {
             <label className="block">
               <span className="sr-only">Search characters</span>
               <input
-                className="w-full rounded-2xl border border-amber-500/25 bg-black/35 px-4 py-3 text-amber-50 outline-none transition placeholder:text-amber-100/35 focus:border-purple-300/70 focus:ring-2 focus:ring-purple-400/25"
+                className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search characters..."
                 type="search"
@@ -626,7 +631,7 @@ export function CharacterLibraryPage() {
                 Dev Owner
               </span>
               <input
-                className="w-full rounded-2xl border border-amber-500/25 bg-black/35 px-4 py-3 text-amber-50 outline-none transition placeholder:text-amber-100/35 focus:border-purple-300/70 focus:ring-2 focus:ring-purple-400/25 xl:w-56"
+                className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 xl:w-56"
                 onChange={(event) =>
                   setOwnerParticipantId(event.target.value.trim())
                 }
@@ -645,8 +650,8 @@ export function CharacterLibraryPage() {
                   className={[
                     'rounded-xl border px-4 py-2 text-sm font-bold transition',
                     status === value
-                      ? 'border-purple-300/70 bg-purple-950/70 text-amber-50'
-                      : 'border-amber-500/25 bg-black/25 text-amber-100/70 hover:border-amber-300/50',
+                      ? 'border-amber-300/45 bg-amber-400 text-slate-950'
+                      : 'border-slate-600 bg-slate-950/35 text-slate-300 hover:border-slate-400',
                   ].join(' ')}
                   key={value}
                   onClick={() =>
@@ -662,7 +667,7 @@ export function CharacterLibraryPage() {
             <div className="flex gap-2 text-sm">
               <select
                 aria-label="Sort characters"
-                className="rounded-xl border border-amber-500/25 bg-black/35 px-4 py-2 text-amber-100 outline-none"
+                className="rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-2 text-slate-200 outline-none"
                 defaultValue="recent"
               >
                 <option value="recent">Sort by: Recently Updated</option>
@@ -670,13 +675,13 @@ export function CharacterLibraryPage() {
                 <option value="level">Sort by: Level</option>
               </select>
               <button
-                className="rounded-xl border border-amber-500/25 bg-black/35 px-3 py-2 text-amber-200"
+                className="rounded-xl border border-slate-600 bg-slate-950/40 px-3 py-2 text-slate-200"
                 type="button"
               >
                 ▦
               </button>
               <button
-                className="rounded-xl border border-amber-500/25 bg-black/35 px-3 py-2 text-amber-200/55"
+                className="rounded-xl border border-slate-700 bg-slate-950/30 px-3 py-2 text-slate-500"
                 type="button"
               >
                 ☰
@@ -771,44 +776,46 @@ function CharacterCard({
   };
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-amber-500/30 bg-[#20160d] shadow-2xl shadow-black/40">
+    <article className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-xl shadow-black/25">
       <PlaceholderArt
         assetKey={entry.portraitAssetKey}
         imageSrc={getPortraitImageSource(entry.portrait)}
         label={entry.name}
         size="portrait"
       />
-      <div className="bg-[linear-gradient(180deg,#d8bd84,#b9965f)] p-5 text-stone-950">
+      <div className="p-5 text-slate-100">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-2xl font-black">{entry.name}</h3>
-            <p className="mt-1 text-sm font-semibold">
+            <p className="mt-1 text-sm font-semibold text-slate-400">
               {entry.speciesOrRace} {entry.className}
             </p>
           </div>
-          <span className="rounded-2xl border border-stone-950/35 bg-stone-950 px-3 py-2 text-center text-sm font-black text-amber-100">
+          <span className="rounded-xl border border-amber-300/35 bg-amber-400 px-3 py-2 text-center text-sm font-black text-slate-950">
             {entry.level}
             <span className="block text-[0.55rem] uppercase tracking-[0.18em]">
               Level
             </span>
           </span>
         </div>
-        <p className="mt-4 min-h-12 text-sm leading-6 text-stone-800">
+        <p className="mt-4 min-h-12 text-sm leading-6 text-slate-300">
           {entry.summary}
         </p>
-        <div className="mt-4 flex items-center justify-between border-t border-stone-900/20 pt-4">
+        <div className="mt-4 flex items-center justify-between border-t border-slate-700 pt-4">
           <StatusBadge status={entry.status} />
-          <span className="text-sm font-bold">AC {entry.armorClass}</span>
+          <span className="text-sm font-bold text-slate-300">
+            AC {entry.armorClass}
+          </span>
         </div>
         <div className="mt-4 grid gap-2">
           <Link
-            className="rounded-xl bg-stone-950 px-4 py-2 text-center text-sm font-bold text-amber-100 transition hover:bg-stone-800"
+            className="rounded-xl bg-amber-400 px-4 py-2 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-300"
             href={`/characters/${entry.id}/edit`}
           >
             Edit
           </Link>
           <button
-            className="rounded-xl border border-amber-700/45 bg-amber-950/75 px-4 py-2 text-sm font-black text-amber-100 transition hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-45"
+            className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
             disabled={!libraryEntry || downloadingPdf}
             onClick={() => void downloadPdf()}
             type="button"
@@ -818,25 +825,25 @@ function CharacterCard({
               : 'Download Character Sheet PDF'}
           </button>
           <button
-            className="rounded-xl bg-stone-950/75 px-4 py-2 text-sm font-bold text-amber-100/55"
+            className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-slate-500"
             disabled
             type="button"
           >
-            Duplicate · Pending
+            Duplicate - Pending
           </button>
           <button
-            className="rounded-xl bg-stone-950/75 px-4 py-2 text-sm font-bold text-red-200/55"
+            className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-red-200/55"
             disabled
             type="button"
           >
-            Delete · Pending
+            Delete - Pending
           </button>
           <button
-            className="rounded-xl border border-purple-700/45 bg-purple-950/75 px-4 py-2 text-sm font-black text-purple-100/65"
+            className="rounded-xl border border-slate-700 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-500"
             disabled
             type="button"
           >
-            Use in Session · Pending
+            Use in Session - Pending
           </button>
         </div>
       </div>
@@ -844,10 +851,17 @@ function CharacterCard({
   );
 }
 
-export function CharacterBuilderPage({
+export function CharacterBuilderPage(props: CharacterBuilderPageProps) {
+  void props;
+
+  return <SimpleCharacterBuilder />;
+}
+
+export function LegacyCharacterBuilderPage({
   characterId,
   mode,
 }: CharacterBuilderPageProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(() =>
     createDefaultCharacterBuilderDraft({
       ownerParticipantId: defaultCharacterLibraryOwnerParticipantId,
@@ -1022,8 +1036,8 @@ export function CharacterBuilderPage({
   };
 
   return (
-    <Shell active="builder" title="Character Builder">
-      <div className="px-3 py-4 sm:px-4 sm:py-6 xl:px-6">
+    <Shell active="builder" title={t('page.characterBuilder.title')}>
+      <div className="px-4 py-5 lg:px-6">
         <Stepper
           currentStep={draft.builderStep}
           onStepChange={(step) =>
@@ -1035,7 +1049,7 @@ export function CharacterBuilderPage({
           speciesLabel={selectedProfile.speciesLabel}
         />
 
-        <div className="mt-6 grid gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="mt-5 grid gap-5 2xl:grid-cols-[minmax(0,1fr)_22rem]">
           <ParchmentPanel className="min-w-0">
             {loadingEntry ? (
               <div className="rounded-3xl border border-amber-500/20 bg-black/25 p-8 text-center text-amber-100/75">
@@ -1117,7 +1131,7 @@ export function CharacterBuilderPage({
           <CharacterSummaryPanel draft={draft} notice={notice} />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-purple-300/25 bg-purple-950/25 px-4 py-3 text-sm text-purple-100/85">
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm text-slate-300">
           {notice}
         </div>
       </div>
@@ -1137,23 +1151,23 @@ function Stepper({
   const currentIndex = getBuilderStepIndex(currentStep);
 
   return (
-    <div className="rounded-2xl border border-amber-500/20 bg-black/25 px-3 py-4 sm:rounded-3xl sm:px-4 sm:py-5">
-      <ol className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-9">
+    <div className="rounded-2xl border border-slate-700 bg-slate-900/82 px-3 py-3 shadow-lg shadow-black/20">
+      <ol className="flex gap-2 overflow-x-auto pb-1">
         {builderSteps.map((step, index) => {
           const active = step.id === currentStep;
           const complete = index < currentIndex;
           const label = step.id === 'species' ? speciesLabel : step.label;
 
           return (
-            <li className="relative text-center" key={step.id}>
+            <li className="relative min-w-[7rem] text-center" key={step.id}>
               <button
                 className={[
-                  'mx-auto grid h-10 w-10 place-items-center rounded-full border text-sm font-black transition sm:h-11 sm:w-11',
+                  'mx-auto grid h-9 w-9 place-items-center rounded-full border text-sm font-black transition',
                   active
-                    ? 'border-purple-200 bg-purple-700 text-white shadow-[0_0_22px_rgba(192,132,252,0.85)]'
+                    ? 'border-amber-300 bg-amber-400 text-slate-950 shadow-lg shadow-black/25'
                     : complete
-                      ? 'border-amber-300/70 bg-amber-950 text-amber-100'
-                      : 'border-amber-500/35 bg-black/45 text-amber-100/75',
+                      ? 'border-emerald-300/50 bg-emerald-950 text-emerald-100'
+                      : 'border-slate-600 bg-slate-950/50 text-slate-300',
                 ].join(' ')}
                 onClick={() => onStepChange(step.id)}
                 type="button"
@@ -1163,7 +1177,7 @@ function Stepper({
               <p
                 className={[
                   'mt-2 break-words text-[0.68rem] font-bold leading-tight sm:text-xs',
-                  active ? 'text-amber-50' : 'text-amber-200/65',
+                  active ? 'text-slate-50' : 'text-slate-400',
                 ].join(' ')}
               >
                 {label}
@@ -1229,9 +1243,7 @@ function StepHeading({
 }) {
   return (
     <div className="mb-6">
-      <h2 className="text-2xl font-black text-amber-50 sm:text-4xl">
-        {title}
-      </h2>
+      <h2 className="text-2xl font-black text-amber-50 sm:text-4xl">{title}</h2>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-100/68">
         {intro}
       </p>
@@ -1395,7 +1407,7 @@ function IdentityStep({
             </div>
             <div className="mt-3 rounded-2xl border border-purple-300/20 bg-purple-950/20 p-3 text-xs leading-5 text-amber-100/68">
               <p className="font-black text-amber-200">
-                {selectedProfile.sourceName} · {selectedProfile.version}
+                {selectedProfile.sourceName} - {selectedProfile.version}
               </p>
               <p>{selectedProfile.notes}</p>
               <p className="mt-1">

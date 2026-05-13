@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 
 import type {
   ActiveSceneState,
@@ -24,6 +25,7 @@ import {
   sendSessionCommand,
   type RuntimeApiResult,
 } from '../../lib/runtime-api';
+import { LanguageSwitcher, useI18n } from '../../lib/i18n';
 import {
   abilityKeys,
   characterInputFromDraft,
@@ -120,6 +122,7 @@ type LastResponse = {
 type TurnUsageDraft = Encounter['currentTurnUsage'];
 
 export function RuntimeCockpit() {
+  const { t } = useI18n();
   const [dmParticipantId, setDmParticipantId] = useState<string>(
     defaultDm.participantId,
   );
@@ -3221,43 +3224,67 @@ export function RuntimeCockpit() {
     .slice(0, 8);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#120d0a] text-amber-50">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(245,158,11,0.18),transparent_34%),radial-gradient(circle_at_90%_12%,rgba(14,165,233,0.12),transparent_30%),linear-gradient(135deg,rgba(36,22,12,0.9),rgba(7,10,18,0.98))]" />
-      <div className="pointer-events-none fixed inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(251,191,36,0.6)_1px,transparent_1px),linear-gradient(90deg,rgba(251,191,36,0.6)_1px,transparent_1px)] [background-size:48px_48px]" />
+    <main className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(245,158,11,0.12),transparent_30%),linear-gradient(135deg,#0b1020_0%,#111827_52%,#0f172a_100%)]" />
 
       <div className="relative mx-auto flex max-w-[1560px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="overflow-hidden rounded-3xl border border-amber-500/25 bg-[#1c130d]/85 p-5 shadow-2xl shadow-black/40 backdrop-blur">
+        <header className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/88 p-5 shadow-xl shadow-black/25 backdrop-blur">
+          <nav className="mb-4 flex flex-wrap gap-2 text-sm font-bold">
+            <Link
+              className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 text-slate-300 transition hover:border-slate-500 hover:text-slate-50"
+              href="/"
+            >
+              {t('common.dashboard')}
+            </Link>
+            <Link
+              className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 text-slate-300 transition hover:border-slate-500 hover:text-slate-50"
+              href="/characters"
+            >
+              {t('runtime.nav.characters')}
+            </Link>
+            <LanguageSwitcher />
+          </nav>
           <div className="flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-300/80">
-                Authoritative table surface
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-300/80">
+                {t('runtime.eyebrow')}
               </p>
-              <h1 className="mt-2 text-4xl font-black tracking-tight text-amber-50 sm:text-5xl">
-                Runtime War Table
+              <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
+                {t('runtime.title')}
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-100/75">
-                A role-aware browser surface for the existing backend. The
-                server still owns truth; SSE is live-only, and recovery rebuilds
-                state from read models.
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+                {t('runtime.summary')}
               </p>
             </div>
-            <div className="grid gap-2 text-xs text-amber-100/75 sm:grid-cols-3 xl:min-w-[520px]">
+            <div className="grid gap-2 text-xs text-slate-300 sm:grid-cols-3 xl:min-w-[520px]">
               <StatusBadge
-                label={mode === 'dm' ? 'DM Mode' : 'Player Mode'}
+                label={
+                  mode === 'dm'
+                    ? t('runtime.mode.dm')
+                    : t('runtime.mode.player')
+                }
                 tone={mode === 'dm' ? 'warning' : 'success'}
               />
               <StatusBadge
                 label={
-                  streamEnabled ? `Stream ${stream.status}` : 'Stream idle'
+                  streamEnabled
+                    ? t('runtime.status.stream', { status: stream.status })
+                    : t('runtime.status.streamIdle')
                 }
                 tone={streamEnabled ? 'success' : 'info'}
               />
               <StatusBadge
-                label={busyLabel ? `Busy: ${busyLabel}` : 'Ready'}
+                label={
+                  busyLabel
+                    ? t('runtime.status.busy', { label: busyLabel })
+                    : t('common.ready')
+                }
                 tone={busyLabel ? 'warning' : 'success'}
               />
-              <div className="sm:col-span-3 rounded-2xl border border-amber-500/20 bg-black/20 px-3 py-2">
-                <span className="font-semibold text-amber-200">Server</span>{' '}
+              <div className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 sm:col-span-3">
+                <span className="font-semibold text-amber-200">
+                  {t('common.server')}
+                </span>{' '}
                 {runtimeServerUrl}
               </div>
             </div>

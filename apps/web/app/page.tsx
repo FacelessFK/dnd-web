@@ -1,46 +1,56 @@
+'use client';
+
 import Link from 'next/link';
+import { LanguageSwitcher, useI18n } from '../lib/i18n';
 
 export default function HomePage() {
+  const { t } = useI18n();
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-6 px-6 py-16 text-amber-50">
-      <span className="inline-flex w-fit rounded-full border border-amber-300/30 bg-amber-950/40 px-3 py-1 text-sm font-semibold text-amber-100">
-        Phase 9 handoff + runtime war table
-      </span>
-      <div className="space-y-4">
-        <h1 className="text-4xl font-black tracking-tight">
-          D&amp;D DM-Driven Platform
-        </h1>
-        <p className="text-lg leading-8 text-amber-100/75">
-          The backend runtime is now operable from the browser. Use the
-          role-aware runtime surface to create sessions, seed sample characters
-          and scenes, drive encounters, inspect read models, and watch live SSE
-          events on a tactical tabletop. A separate frontend-only Character
-          Library and step-by-step Character Builder scaffold is also available
-          for product exploration.
-        </p>
-      </div>
-      <div className="rounded-3xl border border-amber-500/20 bg-[#1c130d]/85 p-6 shadow-2xl shadow-black/30">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-300/75">
-          Runtime tools
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3">
+    <main className="min-h-screen text-slate-100">
+      <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-8 px-5 py-12 sm:px-8">
+        <div className="flex max-w-3xl flex-col items-start gap-4">
+          <LanguageSwitcher />
+          <span className="inline-flex w-fit rounded-full border border-amber-300/25 bg-amber-400/10 px-3 py-1 text-sm font-semibold text-amber-200">
+            {t('home.eyebrow')}
+          </span>
+          <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+            {t('home.title')}
+          </h1>
+          <p className="text-lg leading-8 text-slate-300">{t('home.intro')}</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
           <Link
-            className="rounded-xl border border-amber-300/55 bg-amber-400 px-4 py-2 text-sm font-bold text-stone-950 transition hover:bg-amber-300"
+            className="rounded-2xl border border-amber-300/35 bg-amber-400 px-5 py-4 font-bold text-slate-950 shadow-lg shadow-black/25 transition hover:bg-amber-300"
             href="/runtime"
           >
-            Open Runtime War Table
+            <span className="block text-lg">
+              {t('home.card.runtime.title')}
+            </span>
+            <span className="mt-1 block text-sm font-medium text-slate-900/75">
+              {t('home.card.runtime.description')}
+            </span>
           </Link>
           <Link
-            className="rounded-xl border border-purple-300/45 bg-purple-950/70 px-4 py-2 text-sm font-bold text-purple-50 transition hover:border-purple-200"
+            className="rounded-2xl border border-slate-600/70 bg-slate-900/70 px-5 py-4 font-bold text-slate-50 shadow-lg shadow-black/20 transition hover:border-slate-400"
             href="/characters"
           >
-            Open Character Library
+            <span className="block text-lg">
+              {t('home.card.characters.title')}
+            </span>
+            <span className="mt-1 block text-sm font-medium text-slate-300">
+              {t('home.card.characters.description')}
+            </span>
           </Link>
           <a
-            className="rounded-xl border border-amber-300/25 bg-black/20 px-4 py-2 text-sm font-bold text-amber-50 transition hover:border-amber-200/55"
+            className="rounded-2xl border border-slate-700 bg-slate-950/50 px-5 py-4 font-bold text-slate-100 shadow-lg shadow-black/20 transition hover:border-amber-300/50"
             href="http://localhost:2567/"
           >
-            Check Server Status
+            <span className="block text-lg">{t('home.card.server.title')}</span>
+            <span className="mt-1 block text-sm font-medium text-slate-400">
+              {t('home.card.server.description')}
+            </span>
           </a>
         </div>
       </div>
