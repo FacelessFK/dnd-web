@@ -1,7 +1,8 @@
-import { useCharacterStore } from '../../store/characterStore'
-import type { Alignment } from '../../types'
+import { useBuilderI18n } from '../../localization';
+import { useCharacterStore } from '../../store/characterStore';
+import type { Alignment } from '../../types';
 
-const ALIGNMENTS: { value: Alignment; short: string }[] = [
+const ALIGNMENTS: { short: string; value: Alignment }[] = [
   { value: 'Lawful Good', short: 'LG' },
   { value: 'Neutral Good', short: 'NG' },
   { value: 'Chaotic Good', short: 'CG' },
@@ -11,130 +12,186 @@ const ALIGNMENTS: { value: Alignment; short: string }[] = [
   { value: 'Lawful Evil', short: 'LE' },
   { value: 'Neutral Evil', short: 'NE' },
   { value: 'Chaotic Evil', short: 'CE' },
-]
+];
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  children,
+  label,
+  required,
+}: {
+  children: React.ReactNode;
+  label: string;
+  required?: boolean;
+}) {
   return (
     <div>
-      <label className="block text-xs font-semibold mb-1.5 tracking-wide" style={{ color: 'var(--color-text-muted)' }}>
-        {label} {required && <span style={{ color: 'var(--color-error)' }}>*</span>}
+      <label
+        className="mb-1.5 block text-xs font-semibold tracking-wide"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}{' '}
+        {required ? (
+          <span style={{ color: 'var(--color-error)' }}>*</span>
+        ) : null}
       </label>
       {children}
     </div>
-  )
+  );
 }
 
 const inputStyle = {
   background: 'var(--color-surface)',
   borderColor: 'var(--color-border)',
   color: 'var(--color-text)',
-}
+};
 
 export function CharacterDetailsStep() {
-  const { name, alignment, age, height, weight, pronouns, backstory,
-    setName, setAlignment, setAge, setHeight, setWeight, setPronouns, setBackstory } = useCharacterStore()
+  const {
+    age,
+    alignment,
+    backstory,
+    height,
+    name,
+    pronouns,
+    setAge,
+    setAlignment,
+    setBackstory,
+    setHeight,
+    setName,
+    setPronouns,
+    setWeight,
+    weight,
+  } = useCharacterStore();
+  const { alignment: alignmentLabel, copy, isFa } = useBuilderI18n();
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
-          Character Details
+        <h2
+          className="mb-1 text-2xl font-bold"
+          style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}
+        >
+          {copy.detailsTitle}
         </h2>
         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-          Give your character a name and personality.
+          {copy.detailsDescription}
         </p>
       </div>
 
       <div className="max-w-xl space-y-5">
-        <Field label="Character Name" required>
+        <Field label={copy.fieldCharacterName} required>
           <input
+            className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+            onChange={(event) => setName(event.target.value)}
+            placeholder={
+              isFa
+                ? 'نام کاراکتر را وارد کن...'
+                : "Enter your character's name..."
+            }
+            style={inputStyle}
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Enter your character's name…"
-            className="w-full px-4 py-3 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors"
-            style={inputStyle}
           />
-          {name.trim() === '' && (
-            <p className="text-xs mt-1" style={{ color: 'var(--color-error)' }}>Name is required</p>
-          )}
+          {name.trim() === '' ? (
+            <p className="mt-1 text-xs" style={{ color: 'var(--color-error)' }}>
+              {copy.nameRequired}
+            </p>
+          ) : null}
         </Field>
 
-        <Field label="Alignment">
+        <Field label={copy.fieldAlignment}>
           <div className="grid grid-cols-3 gap-2">
-            {ALIGNMENTS.map((a) => (
+            {ALIGNMENTS.map((item) => (
               <button
-                key={a.value}
-                onClick={() => setAlignment(a.value === alignment ? null : a.value)}
-                className="py-2.5 px-2 rounded-xl border text-xs font-medium transition-all duration-100"
+                className="rounded-xl border px-2 py-2.5 text-xs font-medium transition-all duration-100"
+                key={item.value}
+                onClick={() =>
+                  setAlignment(item.value === alignment ? null : item.value)
+                }
                 style={{
-                  background: alignment === a.value ? 'var(--color-gold-dim)' : 'var(--color-surface)',
-                  borderColor: alignment === a.value ? 'var(--color-gold)' : 'var(--color-border)',
-                  color: alignment === a.value ? 'var(--color-gold)' : 'var(--color-text)',
+                  background:
+                    alignment === item.value
+                      ? 'var(--color-gold-dim)'
+                      : 'var(--color-surface)',
+                  borderColor:
+                    alignment === item.value
+                      ? 'var(--color-gold)'
+                      : 'var(--color-border)',
+                  color:
+                    alignment === item.value
+                      ? 'var(--color-gold)'
+                      : 'var(--color-text)',
                 }}
+                type="button"
               >
-                <div className="font-bold">{a.short}</div>
-                <div className="text-[10px] mt-0.5 opacity-70">{a.value}</div>
+                <div className="font-bold">{item.short}</div>
+                <div className="mt-0.5 text-[10px] opacity-70">
+                  {alignmentLabel(item.value)}
+                </div>
               </button>
             ))}
           </div>
         </Field>
 
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Age">
+          <Field label={copy.fieldAge}>
             <input
+              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+              onChange={(event) => setAge(event.target.value)}
+              placeholder={isFa ? 'مثلا ۲۷' : 'e.g. 27'}
+              style={inputStyle}
               type="text"
               value={age}
-              onChange={(e) => setAge(e.target.value)}
-              placeholder="e.g. 27"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors"
-              style={inputStyle}
             />
           </Field>
-          <Field label="Height">
+          <Field label={copy.fieldHeight}>
             <input
+              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+              onChange={(event) => setHeight(event.target.value)}
+              placeholder={isFa ? 'مثلا ۱۷۸ سانتی‌متر' : 'e.g. 5ft 10in'}
+              style={inputStyle}
               type="text"
               value={height}
-              onChange={(e) => setHeight(e.target.value)}
-              placeholder="e.g. 5ft 10in"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors"
-              style={inputStyle}
             />
           </Field>
-          <Field label="Weight">
+          <Field label={copy.fieldWeight}>
             <input
+              className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+              onChange={(event) => setWeight(event.target.value)}
+              placeholder={isFa ? 'مثلا ۷۵ کیلو' : 'e.g. 165 lbs'}
+              style={inputStyle}
               type="text"
               value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              placeholder="e.g. 165 lbs"
-              className="w-full px-3 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors"
-              style={inputStyle}
             />
           </Field>
         </div>
 
-        <Field label="Pronouns">
+        <Field label={copy.fieldPronouns}>
           <input
+            className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+            onChange={(event) => setPronouns(event.target.value)}
+            placeholder={isFa ? 'مثلا او/ایشان' : 'e.g. they/them'}
+            style={inputStyle}
             type="text"
             value={pronouns}
-            onChange={(e) => setPronouns(e.target.value)}
-            placeholder="e.g. they/them"
-            className="w-full px-4 py-2.5 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors"
-            style={inputStyle}
           />
         </Field>
 
-        <Field label="Backstory">
+        <Field label={copy.fieldBackstory}>
           <textarea
-            value={backstory}
-            onChange={(e) => setBackstory(e.target.value)}
-            placeholder="Describe your character's history, motivations, and goals…"
+            className="w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"
+            onChange={(event) => setBackstory(event.target.value)}
+            placeholder={
+              isFa
+                ? 'تاریخچه، انگیزه‌ها و هدف‌های کاراکترت را بنویس...'
+                : "Describe your character's history, motivations, and goals..."
+            }
             rows={4}
-            className="w-full px-4 py-3 rounded-xl border text-sm outline-none focus:border-[var(--color-gold)] transition-colors resize-none"
             style={inputStyle}
+            value={backstory}
           />
         </Field>
       </div>
     </div>
-  )
+  );
 }

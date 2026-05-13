@@ -1,150 +1,209 @@
-import { useState } from 'react'
-import { BACKGROUNDS } from '../../data/backgrounds'
-import { useCharacterStore } from '../../store/characterStore'
-import { getConflictingSkill } from '../../store/selectors'
-import { ALL_SKILLS } from '../../data/skills'
-import { EntityCard } from '../shared/EntityCard'
-import { EntityDetailPanel, PanelSection, TraitCard, StatPill } from '../shared/EntityDetailPanel'
-import type { Background, SkillName } from '../../types'
+import { useState } from 'react';
+import { BACKGROUNDS } from '../../data/backgrounds';
+import { ALL_SKILLS } from '../../data/skills';
+import { useBuilderI18n } from '../../localization';
+import { useCharacterStore } from '../../store/characterStore';
+import { getConflictingSkill } from '../../store/selectors';
+import type { Background, SkillName } from '../../types';
+import { EntityCard } from '../shared/EntityCard';
+import {
+  EntityDetailPanel,
+  PanelSection,
+  StatPill,
+  TraitCard,
+} from '../shared/EntityDetailPanel';
 
 export function BackgroundStep() {
-  const store = useCharacterStore()
-  const { background, backgroundSkillOverride, setBackground, setBackgroundSkillOverride } = store
-  const [panelBg, setPanelBg] = useState<Background | null>(null)
+  const store = useCharacterStore();
+  const {
+    background,
+    backgroundSkillOverride,
+    setBackground,
+    setBackgroundSkillOverride,
+  } = store;
+  const { backgroundName, copy, feature, list, phrase, skill, tagline } =
+    useBuilderI18n();
+  const [panelBg, setPanelBg] = useState<Background | null>(null);
 
-  const conflict = getConflictingSkill(store)
+  const conflict = getConflictingSkill(store);
 
   const openPanel = (id: string) => {
-    const bg = BACKGROUNDS.find((b) => b.id === id) ?? null
-    setPanelBg(bg)
-  }
+    setPanelBg(BACKGROUNDS.find((candidate) => candidate.id === id) ?? null);
+  };
 
   const handleSelect = () => {
-    if (!panelBg) return
-    setBackground(panelBg)
-    setBackgroundSkillOverride(null)
-  }
+    if (!panelBg) return;
+    setBackground(panelBg);
+    setBackgroundSkillOverride(null);
+  };
 
   const usedSkills = new Set([
     ...store.classSkillChoices,
     ...(panelBg?.skillProficiencies ?? []),
-  ])
-  const availableOverrides = ALL_SKILLS.filter((s) => !usedSkills.has(s))
+  ]);
+  const availableOverrides = ALL_SKILLS.filter(
+    (value) => !usedSkills.has(value),
+  );
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
-          Choose Your Background
+        <h2
+          className="mb-1 text-2xl font-bold"
+          style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}
+        >
+          {copy.chooseBackgroundTitle}
         </h2>
         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-          Your background tells the story of who you were before you became an adventurer.
+          {copy.chooseBackgroundDescription}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        {BACKGROUNDS.map((bg) => (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {BACKGROUNDS.map((candidate) => (
           <EntityCard
-            key={bg.id}
-            id={bg.id}
-            name={bg.name}
-            tagline={bg.tagline}
-            imageUrl={bg.imageUrl}
-            selected={background?.id === bg.id}
+            id={candidate.id}
+            imageUrl={candidate.imageUrl}
+            key={candidate.id}
+            name={backgroundName(candidate)}
             onSelect={openPanel}
+            selected={background?.id === candidate.id}
+            tagline={tagline(candidate)}
           />
         ))}
       </div>
 
-      {background && (
-        <div className="mt-4 p-4 rounded-xl border" style={{ background: 'var(--color-gold-dim)', borderColor: 'var(--color-gold-border)' }}>
-          <span className="text-sm font-medium" style={{ color: 'var(--color-gold)' }}>
-            Selected: {background.name}
+      {background ? (
+        <div
+          className="mt-4 rounded-xl border p-4"
+          style={{
+            background: 'var(--color-gold-dim)',
+            borderColor: 'var(--color-gold-border)',
+          }}
+        >
+          <span
+            className="text-sm font-medium"
+            style={{ color: 'var(--color-gold)' }}
+          >
+            {copy.selected}: {backgroundName(background)}
           </span>
-          {conflict && !backgroundSkillOverride && (
+          {conflict && !backgroundSkillOverride ? (
             <div className="mt-3">
-              <p className="text-xs mb-2" style={{ color: 'var(--color-error)' }}>
-                Skill conflict: you already have <strong>{conflict}</strong> from your class. Choose a replacement:
+              <p
+                className="mb-2 text-xs"
+                style={{ color: 'var(--color-error)' }}
+              >
+                {copy.skillConflict(skill(conflict))}
               </p>
               <select
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                onChange={(event) =>
+                  setBackgroundSkillOverride(event.target.value as SkillName)
+                }
+                style={{
+                  background: 'var(--color-surface)',
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text)',
+                }}
                 value={backgroundSkillOverride ?? ''}
-                onChange={(e) => setBackgroundSkillOverride(e.target.value as SkillName)}
-                className="w-full px-3 py-2 rounded-lg text-sm border"
-                style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
               >
-                <option value="">Select replacement skill…</option>
-                {availableOverrides.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                <option value="">{copy.selectReplacementSkill}</option>
+                {availableOverrides.map((nextSkill) => (
+                  <option key={nextSkill} value={nextSkill}>
+                    {skill(nextSkill)}
+                  </option>
                 ))}
               </select>
             </div>
-          )}
-          {conflict && backgroundSkillOverride && (
-            <span className="text-xs ml-2" style={{ color: 'var(--color-text-muted)' }}>
-              Replaced {conflict} with {backgroundSkillOverride}
+          ) : null}
+          {conflict && backgroundSkillOverride ? (
+            <span
+              className="ml-2 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              {copy.skillReplacement(
+                skill(conflict),
+                skill(backgroundSkillOverride),
+              )}
             </span>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       <EntityDetailPanel
-        open={!!panelBg}
-        onClose={() => setPanelBg(null)}
-        title={panelBg?.name ?? ''}
         imageUrl={panelBg?.imageUrl ?? ''}
+        onClose={() => setPanelBg(null)}
         onSelect={handleSelect}
-        selectLabel={`Select ${panelBg?.name ?? ''}`}
+        open={Boolean(panelBg)}
+        selectLabel={`${phrase('Select')} ${panelBg ? backgroundName(panelBg) : ''}`}
+        title={panelBg ? backgroundName(panelBg) : ''}
       >
-        {panelBg && (
+        {panelBg ? (
           <>
-            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{panelBg.tagline}</p>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              {tagline(panelBg)}
+            </p>
 
-            <PanelSection title="Skill Proficiencies">
+            <PanelSection title={phrase('Skill Proficiencies')}>
               <div className="flex flex-wrap gap-1">
-                {panelBg.skillProficiencies.map((s) => (
-                  <StatPill key={s} label="" value={s} />
+                {panelBg.skillProficiencies.map((value) => (
+                  <StatPill key={value} label="" value={skill(value)} />
                 ))}
               </div>
             </PanelSection>
 
-            {panelBg.toolProficiencies.length > 0 && (
-              <PanelSection title="Tool Proficiencies">
-                <div className="text-sm" style={{ color: 'var(--color-text)' }}>{panelBg.toolProficiencies.join(', ')}</div>
-              </PanelSection>
-            )}
-
-            {panelBg.languages > 0 && (
-              <PanelSection title="Languages">
+            {panelBg.toolProficiencies.length > 0 ? (
+              <PanelSection title={phrase('Tool Proficiencies')}>
                 <div className="text-sm" style={{ color: 'var(--color-text)' }}>
-                  {panelBg.languages} language{panelBg.languages > 1 ? 's' : ''} of your choice
+                  {list(panelBg.toolProficiencies)}
                 </div>
               </PanelSection>
-            )}
+            ) : null}
 
-            <PanelSection title="Background Feature">
-              <TraitCard name={panelBg.feature.name} description={panelBg.feature.description} />
+            {panelBg.languages > 0 ? (
+              <PanelSection title={phrase('Languages')}>
+                <div className="text-sm" style={{ color: 'var(--color-text)' }}>
+                  {copy.languageChoice(panelBg.languages)}
+                </div>
+              </PanelSection>
+            ) : null}
+
+            <PanelSection title={phrase('Background Feature')}>
+              <TraitCard {...feature(panelBg.feature)} />
             </PanelSection>
 
-            <PanelSection title="Starting Equipment">
+            <PanelSection title={phrase('Starting Equipment')}>
               <ul className="space-y-1">
-                {panelBg.equipment.map((item, i) => (
-                  <li key={i} className="text-xs flex gap-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                    <span style={{ color: 'var(--color-gold)' }}>•</span> {item}
+                {panelBg.equipment.map((item) => (
+                  <li
+                    className="flex gap-1.5 text-xs"
+                    key={item}
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <span style={{ color: 'var(--color-gold)' }}>•</span>{' '}
+                    {phrase(item)}
                   </li>
                 ))}
               </ul>
             </PanelSection>
 
-            <PanelSection title="Personality Traits">
-              {panelBg.personalityTraits.map((t, i) => (
-                <div key={i} className="text-xs italic mb-1 p-2 rounded-lg" style={{ background: 'var(--color-surface-elevated)', color: 'var(--color-text-muted)' }}>
-                  "{t}"
+            <PanelSection title={phrase('Personality Traits')}>
+              {panelBg.personalityTraits.map((trait) => (
+                <div
+                  className="mb-1 rounded-lg p-2 text-xs italic"
+                  key={trait}
+                  style={{
+                    background: 'var(--color-surface-elevated)',
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  "{phrase(trait)}"
                 </div>
               ))}
             </PanelSection>
           </>
-        )}
+        ) : null}
       </EntityDetailPanel>
     </div>
-  )
+  );
 }

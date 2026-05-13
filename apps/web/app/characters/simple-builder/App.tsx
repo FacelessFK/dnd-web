@@ -1,135 +1,170 @@
-'use client'
+'use client';
 
+import { LanguageSwitcher } from '../../../lib/i18n';
+import { CharacterSheet } from './components/sheet/CharacterSheet';
+import { AbilityScoresStep } from './components/steps/AbilityScoresStep';
+import { BackgroundStep } from './components/steps/BackgroundStep';
+import { CharacterDetailsStep } from './components/steps/CharacterDetailsStep';
+import { ClassStep } from './components/steps/ClassStep';
+import { RaceStep } from './components/steps/RaceStep';
+import { StepLayout } from './components/layout/StepLayout';
+import { useBuilderI18n } from './localization';
 import {
   CharacterStoreProvider,
   useCharacterStore,
-} from './store/characterStore'
-import { getConflictingSkill } from './store/selectors'
-import { StepLayout } from './components/layout/StepLayout'
-import { RaceStep } from './components/steps/RaceStep'
-import { ClassStep } from './components/steps/ClassStep'
-import { BackgroundStep } from './components/steps/BackgroundStep'
-import { AbilityScoresStep } from './components/steps/AbilityScoresStep'
-import { CharacterDetailsStep } from './components/steps/CharacterDetailsStep'
-import { CharacterSheet } from './components/sheet/CharacterSheet'
-import type { StepId } from './types'
+} from './store/characterStore';
+import { getConflictingSkill } from './store/selectors';
+import type { StepId } from './types';
 
-const STEP_ORDER: StepId[] = ['race', 'class', 'background', 'abilityScores', 'details', 'sheet']
+const STEP_ORDER: StepId[] = [
+  'race',
+  'class',
+  'background',
+  'abilityScores',
+  'details',
+  'sheet',
+];
 
 function useStepValidity(): boolean {
-  const store = useCharacterStore()
-  const { currentStep, race, subrace, dndClass, classSkillChoices, background,
-    backgroundSkillOverride, name } = store
+  const store = useCharacterStore();
+  const {
+    background,
+    backgroundSkillOverride,
+    classSkillChoices,
+    currentStep,
+    dndClass,
+    name,
+    race,
+    subrace,
+  } = store;
 
   switch (currentStep) {
     case 'race':
-      if (!race) return false
-      if (race.subraces && !subrace) return false
-      return true
+      if (!race) return false;
+      if (race.subraces && !subrace) return false;
+      return true;
     case 'class':
-      if (!dndClass) return false
-      if (classSkillChoices.length < dndClass.numSkillChoices) return false
-      return true
+      if (!dndClass) return false;
+      if (classSkillChoices.length < dndClass.numSkillChoices) return false;
+      return true;
     case 'background': {
-      if (!background) return false
-      const conflict = getConflictingSkill(store)
-      if (conflict && !backgroundSkillOverride) return false
-      return true
+      if (!background) return false;
+      const conflict = getConflictingSkill(store);
+      if (conflict && !backgroundSkillOverride) return false;
+      return true;
     }
     case 'abilityScores':
-      return true
+      return true;
     case 'details':
-      return name.trim().length > 0
+      return name.trim().length > 0;
     case 'sheet':
-      return true
+      return true;
     default:
-      return false
+      return false;
   }
 }
 
 function BuilderApp() {
-  const { currentStep, setStep } = useCharacterStore()
-  const isValid = useStepValidity()
+  const { currentStep, setStep } = useCharacterStore();
+  const { copy } = useBuilderI18n();
+  const isValid = useStepValidity();
 
-  const currentIndex = STEP_ORDER.indexOf(currentStep)
-  const isFirstStep = currentIndex === 0
-  const isLastStep = currentStep === 'details'
+  const currentIndex = STEP_ORDER.indexOf(currentStep);
+  const isFirstStep = currentIndex === 0;
+  const isLastStep = currentStep === 'details';
 
   const handleNext = () => {
-    if (!isValid) return
-    const nextIndex = currentIndex + 1
-    const nextStep = STEP_ORDER[nextIndex]
+    if (!isValid) return;
+    const nextStep = STEP_ORDER[currentIndex + 1];
     if (nextStep) {
-      setStep(nextStep)
+      setStep(nextStep);
     }
-  }
+  };
 
   const handleBack = () => {
-    const prevIndex = currentIndex - 1
-    const previousStep = STEP_ORDER[prevIndex]
+    const previousStep = STEP_ORDER[currentIndex - 1];
     if (previousStep) {
-      setStep(previousStep)
+      setStep(previousStep);
     }
-  }
+  };
 
   const handleNavigate = (step: StepId) => {
-    const targetIndex = STEP_ORDER.indexOf(step)
+    const targetIndex = STEP_ORDER.indexOf(step);
     if (targetIndex < currentIndex) {
-      setStep(step)
+      setStep(step);
     }
-  }
+  };
 
   const renderStep = () => {
     switch (currentStep) {
-      case 'race': return <RaceStep />
-      case 'class': return <ClassStep />
-      case 'background': return <BackgroundStep />
-      case 'abilityScores': return <AbilityScoresStep />
-      case 'details': return <CharacterDetailsStep />
-      case 'sheet': return <CharacterSheet />
-      default: return null
+      case 'race':
+        return <RaceStep />;
+      case 'class':
+        return <ClassStep />;
+      case 'background':
+        return <BackgroundStep />;
+      case 'abilityScores':
+        return <AbilityScoresStep />;
+      case 'details':
+        return <CharacterDetailsStep />;
+      case 'sheet':
+        return <CharacterSheet />;
+      default:
+        return null;
     }
-  }
+  };
 
   if (currentStep === 'sheet') {
     return (
       <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-        <header className="no-print sticky top-0 z-50 backdrop-blur-sm border-b border-[var(--color-border)]"
-          style={{ background: 'rgba(15,17,23,0.85)' }}>
-          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+        <header
+          className="no-print sticky top-0 z-50 border-b border-[var(--color-border)] backdrop-blur-sm"
+          style={{ background: 'rgba(15,17,23,0.85)' }}
+        >
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3 px-4 py-3">
             <button
+              className="rounded-lg border px-3 py-1.5 text-sm transition-colors hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
               onClick={() => setStep('details')}
-              className="text-sm px-3 py-1.5 rounded-lg border transition-colors hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text-muted)',
+              }}
+              type="button"
             >
-              ← Back
+              {copy.back}
             </button>
-            <span className="text-2xl">⚔️</span>
-            <h1 className="text-lg font-bold tracking-wide" style={{ color: 'var(--color-gold)' }}>
-              D&D Character Builder
+            <span className="text-2xl">D20</span>
+            <h1
+              className="text-lg font-bold tracking-wide"
+              style={{ color: 'var(--color-gold)' }}
+            >
+              {copy.builderTitle}
             </h1>
+            <div className="ml-auto">
+              <LanguageSwitcher />
+            </div>
           </div>
         </header>
-        <main className="max-w-5xl mx-auto px-4 py-6">
+        <main className="mx-auto max-w-5xl px-4 py-6">
           <CharacterSheet />
         </main>
       </div>
-    )
+    );
   }
 
   return (
     <StepLayout
       currentStep={currentStep}
-      onNavigate={handleNavigate}
-      onNext={handleNext}
-      onBack={handleBack}
-      isValid={isValid}
       isFirstStep={isFirstStep}
       isLastStep={isLastStep}
+      isValid={isValid}
+      onBack={handleBack}
+      onNavigate={handleNavigate}
+      onNext={handleNext}
     >
       {renderStep()}
     </StepLayout>
-  )
+  );
 }
 
 export default function App() {
@@ -137,5 +172,5 @@ export default function App() {
     <CharacterStoreProvider>
       <BuilderApp />
     </CharacterStoreProvider>
-  )
+  );
 }

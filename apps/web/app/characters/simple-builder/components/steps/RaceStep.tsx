@@ -1,146 +1,219 @@
-import { useState } from 'react'
-import { RACES } from '../../data/races'
-import { useCharacterStore } from '../../store/characterStore'
-import { EntityCard } from '../shared/EntityCard'
-import { EntityDetailPanel, PanelSection, TraitCard, StatPill } from '../shared/EntityDetailPanel'
-import type { Race, Subrace } from '../../types'
+import { useState } from 'react';
+import { RACES } from '../../data/races';
+import { useBuilderI18n } from '../../localization';
+import { useCharacterStore } from '../../store/characterStore';
+import type { AbilityName, Race, Subrace } from '../../types';
+import { EntityCard } from '../shared/EntityCard';
+import {
+  EntityDetailPanel,
+  PanelSection,
+  StatPill,
+  TraitCard,
+} from '../shared/EntityDetailPanel';
 
-const ABILITY_LABELS: Record<string, string> = {
-  STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution',
-  INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma',
-}
-
-function fmtAsi(asi: Partial<Record<string, number>>): string {
-  return Object.entries(asi)
-    .filter(([, v]) => v)
-    .map(([k, v]) => `+${v} ${ABILITY_LABELS[k] ?? k}`)
-    .join(', ') || 'None'
+function fmtAsi(
+  asi: Partial<Record<string, number>>,
+  ability: (value: AbilityName) => string,
+  noneLabel: string,
+): string {
+  return (
+    Object.entries(asi)
+      .filter(([, value]) => value)
+      .map(([key, value]) => `+${value} ${ability(key as AbilityName)}`)
+      .join('، ') || noneLabel
+  );
 }
 
 export function RaceStep() {
-  const { race, subrace, setRace, setSubrace } = useCharacterStore()
-  const [panelRace, setPanelRace] = useState<Race | null>(null)
-  const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null)
+  const { race, setRace, setSubrace, subrace } = useCharacterStore();
+  const { ability, copy, dirClass, feature, list, phrase, raceName, tagline } =
+    useBuilderI18n();
+  const [panelRace, setPanelRace] = useState<Race | null>(null);
+  const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
 
   const openPanel = (id: string) => {
-    const r = RACES.find((r) => r.id === id) ?? null
-    setPanelRace(r)
-    setLocalSubrace(r?.id === race?.id ? subrace : null)
-  }
+    const nextRace = RACES.find((candidate) => candidate.id === id) ?? null;
+    setPanelRace(nextRace);
+    setLocalSubrace(nextRace?.id === race?.id ? subrace : null);
+  };
 
   const handleSelect = () => {
-    if (!panelRace) return
-    setRace(panelRace)
-    setSubrace(panelRace.subraces ? localSubrace : null)
-  }
+    if (!panelRace) return;
+    setRace(panelRace);
+    setSubrace(panelRace.subraces ? localSubrace : null);
+  };
 
-  const needsSubrace = !!panelRace?.subraces && !localSubrace
-  const selectDisabled = needsSubrace
+  const selectDisabled = Boolean(panelRace?.subraces && !localSubrace);
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
-          Choose Your Race
+        <h2
+          className="mb-1 text-2xl font-bold"
+          style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}
+        >
+          {copy.chooseRaceTitle}
         </h2>
         <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-          Your race determines your base traits, ability bonuses, and physical features.
+          {copy.chooseRaceDescription}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-        {RACES.map((r) => (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {RACES.map((candidate) => (
           <EntityCard
-            key={r.id}
-            id={r.id}
-            name={r.name}
-            tagline={r.tagline}
-            imageUrl={r.imageUrl}
-            selected={race?.id === r.id}
+            id={candidate.id}
+            imageUrl={candidate.imageUrl}
+            key={candidate.id}
+            name={raceName(candidate)}
             onSelect={openPanel}
+            selected={race?.id === candidate.id}
+            tagline={tagline(candidate)}
           />
         ))}
       </div>
 
-      {race && (
-        <div className="mt-4 p-4 rounded-xl border" style={{ background: 'var(--color-gold-dim)', borderColor: 'var(--color-gold-border)' }}>
-          <span className="text-sm font-medium" style={{ color: 'var(--color-gold)' }}>
-            Selected: {race.name}{subrace ? ` (${subrace.name})` : ''}
+      {race ? (
+        <div
+          className="mt-4 rounded-xl border p-4"
+          style={{
+            background: 'var(--color-gold-dim)',
+            borderColor: 'var(--color-gold-border)',
+          }}
+        >
+          <span
+            className="text-sm font-medium"
+            style={{ color: 'var(--color-gold)' }}
+          >
+            {copy.selected}: {raceName(race, subrace)}
           </span>
-          {race.subraces && !subrace && (
-            <span className="text-xs ml-2" style={{ color: 'var(--color-text-muted)' }}>
-              — Choose a subrace to continue
+          {race.subraces && !subrace ? (
+            <span
+              className="ml-2 text-xs"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              - {copy.subraceRequired}
             </span>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       <EntityDetailPanel
-        open={!!panelRace}
-        onClose={() => setPanelRace(null)}
-        title={panelRace?.name ?? ''}
         imageUrl={panelRace?.imageUrl ?? ''}
+        onClose={() => setPanelRace(null)}
         onSelect={handleSelect}
-        selectLabel={`Select ${panelRace?.name ?? ''}`}
+        open={Boolean(panelRace)}
         selectDisabled={selectDisabled}
+        selectLabel={`${phrase('Select')} ${panelRace ? raceName(panelRace) : ''}`}
+        title={panelRace ? raceName(panelRace) : ''}
       >
-        {panelRace && (
+        {panelRace ? (
           <>
-            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>{panelRace.tagline}</p>
+            <p
+              className={`text-sm ${dirClass}`}
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              {tagline(panelRace)}
+            </p>
 
-            <PanelSection title="Core Stats">
-              <StatPill label="Speed" value={`${panelRace.speed} ft`} />
-              <StatPill label="Size" value={panelRace.size} />
+            <PanelSection title={phrase('Core Stats')}>
+              <StatPill
+                label={phrase('Speed')}
+                value={`${panelRace.speed} ft`}
+              />
+              <StatPill label={phrase('Size')} value={phrase(panelRace.size)} />
             </PanelSection>
 
-            <PanelSection title="Ability Score Increases">
-              <div className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-                {fmtAsi(panelRace.asi)}
+            <PanelSection title={phrase('Ability Score Increase')}>
+              <div
+                className="text-sm font-medium"
+                style={{ color: 'var(--color-text)' }}
+              >
+                {fmtAsi(panelRace.asi, ability, copy.noValue)}
               </div>
             </PanelSection>
 
-            <PanelSection title="Languages">
+            <PanelSection title={phrase('Languages')}>
               <div className="text-sm" style={{ color: 'var(--color-text)' }}>
-                {panelRace.languages.join(', ')}
+                {list(panelRace.languages)}
               </div>
             </PanelSection>
 
-            <PanelSection title="Racial Traits">
-              {panelRace.traits.map((t) => (
-                <TraitCard key={t.name} name={t.name} description={t.description} />
+            <PanelSection title={phrase('Features & Traits')}>
+              {panelRace.traits.map((trait) => (
+                <TraitCard key={trait.name} {...feature(trait)} />
               ))}
             </PanelSection>
 
-            {panelRace.subraces && (
-              <PanelSection title="Choose Subrace">
+            {panelRace.subraces ? (
+              <PanelSection title={copy.subraceRequired}>
                 <div className="space-y-2">
-                  {panelRace.subraces.map((sr) => (
-                    <button
-                      key={sr.id}
-                      onClick={() => setLocalSubrace(sr)}
-                      className="w-full text-left p-3 rounded-xl border transition-all duration-150"
-                      style={{
-                        background: localSubrace?.id === sr.id ? 'var(--color-gold-dim)' : 'var(--color-surface-elevated)',
-                        borderColor: localSubrace?.id === sr.id ? 'var(--color-gold)' : 'var(--color-border)',
-                      }}
-                    >
-                      <div className="text-sm font-semibold mb-0.5" style={{ color: localSubrace?.id === sr.id ? 'var(--color-gold)' : 'var(--color-text)' }}>
-                        {sr.name}
-                      </div>
-                      <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{sr.description}</div>
-                      {localSubrace?.id === sr.id && sr.traits.map((t) => (
-                        <div key={t.name} className="mt-2 text-xs p-2 rounded-lg" style={{ background: 'var(--color-surface)', color: 'var(--color-text-muted)' }}>
-                          <strong style={{ color: 'var(--color-gold)' }}>{t.name}:</strong> {t.description}
+                  {panelRace.subraces.map((candidate) => {
+                    const active = localSubrace?.id === candidate.id;
+
+                    return (
+                      <button
+                        className={`w-full rounded-xl border p-3 transition-all duration-150 ${dirClass}`}
+                        key={candidate.id}
+                        onClick={() => setLocalSubrace(candidate)}
+                        style={{
+                          background: active
+                            ? 'var(--color-gold-dim)'
+                            : 'var(--color-surface-elevated)',
+                          borderColor: active
+                            ? 'var(--color-gold)'
+                            : 'var(--color-border)',
+                        }}
+                        type="button"
+                      >
+                        <div
+                          className="mb-0.5 text-sm font-semibold"
+                          style={{
+                            color: active
+                              ? 'var(--color-gold)'
+                              : 'var(--color-text)',
+                          }}
+                        >
+                          {phrase(candidate.name)}
                         </div>
-                      ))}
-                    </button>
-                  ))}
+                        <div
+                          className="text-xs"
+                          style={{ color: 'var(--color-text-muted)' }}
+                        >
+                          {phrase(candidate.description)}
+                        </div>
+                        {active
+                          ? candidate.traits.map((trait) => {
+                              const localizedTrait = feature(trait);
+
+                              return (
+                                <div
+                                  className="mt-2 rounded-lg p-2 text-xs"
+                                  key={trait.name}
+                                  style={{
+                                    background: 'var(--color-surface)',
+                                    color: 'var(--color-text-muted)',
+                                  }}
+                                >
+                                  <strong
+                                    style={{ color: 'var(--color-gold)' }}
+                                  >
+                                    {localizedTrait.name}:
+                                  </strong>{' '}
+                                  {localizedTrait.description}
+                                </div>
+                              );
+                            })
+                          : null}
+                      </button>
+                    );
+                  })}
                 </div>
               </PanelSection>
-            )}
+            ) : null}
           </>
-        )}
+        ) : null}
       </EntityDetailPanel>
     </div>
-  )
+  );
 }

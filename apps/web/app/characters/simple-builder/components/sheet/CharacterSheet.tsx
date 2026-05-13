@@ -1,275 +1,533 @@
-import { useState } from 'react'
-import { useCharacterStore } from '../../store/characterStore'
+import { useState } from 'react';
+import { useBuilderI18n } from '../../localization';
+import { useCharacterStore } from '../../store/characterStore';
 import {
-  getFinalAbilityScores, getAbilityModifiers,
-  getSavingThrows, getSkills, getPassivePerception,
-  getHP, getAC, getInitiative, getSpeed,
-  getAllLanguages, getAllProficiencies, getAllFeatures, getAllEquipment,
-} from '../../store/selectors'
-import { SheetSection } from './SheetSection'
-import type { AbilityName } from '../../types'
+  getAC,
+  getAllEquipment,
+  getAllFeatures,
+  getAllLanguages,
+  getAllProficiencies,
+  getAbilityModifiers,
+  getFinalAbilityScores,
+  getHP,
+  getInitiative,
+  getPassivePerception,
+  getSavingThrows,
+  getSkills,
+  getSpeed,
+} from '../../store/selectors';
+import type { AbilityName } from '../../types';
+import { SheetSection } from './SheetSection';
 
 function fmtMod(mod: number): string {
-  return mod >= 0 ? `+${mod}` : `${mod}`
-}
-
-const ABILITY_FULL: Record<AbilityName, string> = {
-  STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution',
-  INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma',
+  return mod >= 0 ? `+${mod}` : `${mod}`;
 }
 
 export function CharacterSheet() {
-  const store = useCharacterStore()
-  const { name, alignment, age, height, weight, pronouns, backstory, race, subrace, dndClass, background } = store
+  const store = useCharacterStore();
+  const {
+    age,
+    alignment,
+    background,
+    backstory,
+    dndClass,
+    height,
+    name,
+    pronouns,
+    race,
+    subrace,
+    weight,
+  } = store;
+  const {
+    ability,
+    alignment: alignmentLabel,
+    backgroundName,
+    className,
+    copy,
+    feature,
+    phrase,
+    raceName,
+    skill,
+    source,
+  } = useBuilderI18n();
 
-  const finals = getFinalAbilityScores(store)
-  const mods = getAbilityModifiers(store)
-  const savingThrows = getSavingThrows(store)
-  const skills = getSkills(store)
-  const passivePerception = getPassivePerception(store)
-  const hp = getHP(store)
-  const ac = getAC(store)
-  const initiative = getInitiative(store)
-  const speed = getSpeed(store)
-  const languages = getAllLanguages(store)
-  const proficiencies = getAllProficiencies(store)
-  const features = getAllFeatures(store)
-  const equipment = getAllEquipment(store)
-
-  const isCaster = !!(dndClass?.spellcasting && dndClass.spellcasting.spellSlots.length > 0)
-  const raceName = race ? `${race.name}${subrace ? ` (${subrace.name})` : ''}` : '—'
+  const finals = getFinalAbilityScores(store);
+  const mods = getAbilityModifiers(store);
+  const savingThrows = getSavingThrows(store);
+  const skills = getSkills(store);
+  const passivePerception = getPassivePerception(store);
+  const hp = getHP(store);
+  const ac = getAC(store);
+  const initiative = getInitiative(store);
+  const speed = getSpeed(store);
+  const languages = getAllLanguages(store);
+  const proficiencies = getAllProficiencies(store);
+  const features = getAllFeatures(store);
+  const equipment = getAllEquipment(store);
+  const isCaster = Boolean(
+    dndClass?.spellcasting && dndClass.spellcasting.spellSlots.length > 0,
+  );
 
   return (
     <div>
-      {/* Print / nav header */}
-      <div className="no-print mb-6 flex items-center justify-between gap-4 flex-wrap">
+      <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
-            Character Sheet
+          <h2
+            className="text-2xl font-bold"
+            style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}
+          >
+            {copy.sheetTitle}
           </h2>
-          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Level 1 · D&D 5e</p>
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {phrase('Level')} 1 - D&D 5e
+          </p>
         </div>
         <button
+          className="rounded-xl border px-5 py-2.5 text-sm font-medium transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
           onClick={() => window.print()}
-          className="px-5 py-2.5 rounded-xl border text-sm font-medium transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+          style={{
+            borderColor: 'var(--color-border)',
+            color: 'var(--color-text-muted)',
+          }}
+          type="button"
         >
-          🖨 Print Sheet
+          {copy.printSheet}
         </button>
       </div>
 
       <div className="space-y-4">
-        {/* Header */}
-        <SheetSection title="Character">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
-            <InfoRow label="Name" value={name || '—'} />
-            <InfoRow label="Race" value={raceName} />
-            <InfoRow label="Class" value={dndClass?.name ?? '—'} />
-            <InfoRow label="Background" value={background?.name ?? '—'} />
-            <InfoRow label="Alignment" value={alignment ?? '—'} />
-            <InfoRow label="Level" value="1" />
+        <SheetSection title={phrase('Character')}>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            <InfoRow label={phrase('Name')} value={name || copy.noValue} />
+            <InfoRow
+              label={copy.stepLabels.race ?? 'Race'}
+              value={raceName(race, subrace)}
+            />
+            <InfoRow
+              label={copy.stepLabels.class ?? 'Class'}
+              value={className(dndClass)}
+            />
+            <InfoRow
+              label={copy.stepLabels.background ?? 'Background'}
+              value={backgroundName(background)}
+            />
+            <InfoRow
+              label={copy.fieldAlignment}
+              value={alignmentLabel(alignment)}
+            />
+            <InfoRow label={phrase('Level')} value="1" />
             <InfoRow label="XP" value="0" />
-            {age && <InfoRow label="Age" value={age} />}
-            {height && <InfoRow label="Height" value={height} />}
-            {weight && <InfoRow label="Weight" value={weight} />}
-            {pronouns && <InfoRow label="Pronouns" value={pronouns} />}
+            {age ? <InfoRow label={copy.fieldAge} value={age} /> : null}
+            {height ? (
+              <InfoRow label={copy.fieldHeight} value={height} />
+            ) : null}
+            {weight ? (
+              <InfoRow label={copy.fieldWeight} value={weight} />
+            ) : null}
+            {pronouns ? (
+              <InfoRow label={copy.fieldPronouns} value={pronouns} />
+            ) : null}
           </div>
         </SheetSection>
 
-        {/* Ability Scores */}
-        <SheetSection title="Ability Scores">
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {(Object.keys(finals) as AbilityName[]).map((a) => (
-              <div key={a} className="flex flex-col items-center gap-1 p-3 rounded-xl border" style={{ background: 'var(--color-surface-elevated)', borderColor: 'var(--color-border)' }}>
-                <span className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--color-text-muted)' }}>{a}</span>
-                <span className="text-2xl font-bold" style={{ color: 'var(--color-text)' }}>{finals[a]}</span>
-                <span className="text-base font-semibold" style={{ color: 'var(--color-gold)' }}>{fmtMod(mods[a])}</span>
-                <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{ABILITY_FULL[a]}</span>
-              </div>
-            ))}
-          </div>
-        </SheetSection>
-
-        {/* Combat */}
-        <SheetSection title="Combat">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <CombatStat label="Armor Class" value={ac} />
-            <CombatStat label="Initiative" value={fmtMod(initiative)} />
-            <CombatStat label="Speed" value={`${speed} ft`} />
-            <CombatStat label="Max HP" value={hp} />
-            <CombatStat label="Hit Dice" value={`1d${dndClass?.hitDie ?? 8}`} />
-          </div>
-          <div className="mt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            Proficiency Bonus: <span className="font-bold" style={{ color: 'var(--color-gold)' }}>+2</span>
-          </div>
-        </SheetSection>
-
-        {/* Saving Throws */}
-        <SheetSection title="Saving Throws">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {savingThrows.map((st) => (
-              <div key={st.ability} className="flex items-center gap-2.5 px-3 py-2 rounded-lg" style={{ background: 'var(--color-surface-elevated)' }}>
-                <ProfDot proficient={st.proficient} />
-                <span className="text-xs font-medium flex-1" style={{ color: 'var(--color-text)' }}>{st.ability}</span>
-                <span className="text-sm font-bold" style={{ color: st.proficient ? 'var(--color-gold)' : 'var(--color-text-muted)' }}>
-                  {fmtMod(st.value)}
+        <SheetSection title={copy.stepLabels.abilityScores ?? 'Abilities'}>
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            {(Object.keys(finals) as AbilityName[]).map((item) => (
+              <div
+                className="flex flex-col items-center gap-1 rounded-xl border p-3"
+                key={item}
+                style={{
+                  background: 'var(--color-surface-elevated)',
+                  borderColor: 'var(--color-border)',
+                }}
+              >
+                <span
+                  className="text-[10px] font-bold tracking-widest"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  {item}
+                </span>
+                <span
+                  className="text-2xl font-bold"
+                  style={{ color: 'var(--color-text)' }}
+                >
+                  {finals[item]}
+                </span>
+                <span
+                  className="text-base font-semibold"
+                  style={{ color: 'var(--color-gold)' }}
+                >
+                  {fmtMod(mods[item])}
+                </span>
+                <span
+                  className="text-[10px]"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  {ability(item)}
                 </span>
               </div>
             ))}
           </div>
         </SheetSection>
 
-        {/* Skills */}
-        <SheetSection title="Skills">
-          <div className="mb-3 text-xs p-2 rounded-lg inline-block" style={{ background: 'var(--color-gold-dim)', color: 'var(--color-gold)' }}>
-            Passive Perception: {passivePerception}
+        <SheetSection title={phrase('Combat')}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <CombatStat label={phrase('Armor Class')} value={ac} />
+            <CombatStat
+              label={phrase('Initiative')}
+              value={fmtMod(initiative)}
+            />
+            <CombatStat label={phrase('Speed')} value={`${speed} ft`} />
+            <CombatStat label="HP" value={hp} />
+            <CombatStat
+              label={phrase('Hit Dice')}
+              value={`1d${dndClass?.hitDie ?? 8}`}
+            />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-            {skills.map((s) => (
-              <div key={s.skill} className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--color-surface-elevated)' }}>
-                <ProfDot proficient={s.proficient} />
-                <span className="text-xs flex-1" style={{ color: 'var(--color-text)' }}>
-                  {s.skill}
-                  <span className="ml-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>({s.ability})</span>
+          <div
+            className="mt-3 text-xs"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            {phrase('Proficiency Bonus')}:{' '}
+            <span className="font-bold" style={{ color: 'var(--color-gold)' }}>
+              +2
+            </span>
+          </div>
+        </SheetSection>
+
+        <SheetSection title={phrase('Saving Throws')}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {savingThrows.map((item) => (
+              <div
+                className="flex items-center gap-2.5 rounded-lg px-3 py-2"
+                key={item.ability}
+                style={{ background: 'var(--color-surface-elevated)' }}
+              >
+                <ProfDot proficient={item.proficient} />
+                <span
+                  className="flex-1 text-xs font-medium"
+                  style={{ color: 'var(--color-text)' }}
+                >
+                  {ability(item.ability)}
                 </span>
-                <span className="text-sm font-bold" style={{ color: s.proficient ? 'var(--color-gold)' : 'var(--color-text-muted)' }}>
-                  {fmtMod(s.value)}
+                <span
+                  className="text-sm font-bold"
+                  style={{
+                    color: item.proficient
+                      ? 'var(--color-gold)'
+                      : 'var(--color-text-muted)',
+                  }}
+                >
+                  {fmtMod(item.value)}
                 </span>
               </div>
             ))}
           </div>
         </SheetSection>
 
-        {/* Proficiencies & Languages */}
-        <SheetSection title="Proficiencies & Languages">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {proficiencies.armor.length > 0 && <ProfList label="Armor" items={proficiencies.armor} />}
-            <ProfList label="Weapons" items={proficiencies.weapons} />
-            {proficiencies.tools.length > 0 && <ProfList label="Tools" items={proficiencies.tools} />}
-            <ProfList label="Languages" items={languages} />
+        <SheetSection title={phrase('Skill Proficiencies')}>
+          <div
+            className="mb-3 inline-block rounded-lg p-2 text-xs"
+            style={{
+              background: 'var(--color-gold-dim)',
+              color: 'var(--color-gold)',
+            }}
+          >
+            {phrase('Perception')}: {passivePerception}
+          </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {skills.map((item) => (
+              <div
+                className="flex items-center gap-2.5 rounded-lg px-3 py-1.5"
+                key={item.skill}
+                style={{ background: 'var(--color-surface-elevated)' }}
+              >
+                <ProfDot proficient={item.proficient} />
+                <span
+                  className="flex-1 text-xs"
+                  style={{ color: 'var(--color-text)' }}
+                >
+                  {skill(item.skill)}
+                  <span
+                    className="ml-1 text-[10px]"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    ({ability(item.ability)})
+                  </span>
+                </span>
+                <span
+                  className="text-sm font-bold"
+                  style={{
+                    color: item.proficient
+                      ? 'var(--color-gold)'
+                      : 'var(--color-text-muted)',
+                  }}
+                >
+                  {fmtMod(item.value)}
+                </span>
+              </div>
+            ))}
           </div>
         </SheetSection>
 
-        {/* Features & Traits */}
-        <SheetSection title="Features & Traits">
+        <SheetSection title={phrase('Proficiencies & Languages')}>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {proficiencies.armor.length > 0 ? (
+              <ProfList
+                label={phrase('Armor')}
+                items={proficiencies.armor.map(phrase)}
+              />
+            ) : null}
+            <ProfList
+              label={phrase('Weapons')}
+              items={proficiencies.weapons.map(phrase)}
+            />
+            {proficiencies.tools.length > 0 ? (
+              <ProfList
+                label={phrase('Tools')}
+                items={proficiencies.tools.map(phrase)}
+              />
+            ) : null}
+            <ProfList
+              label={phrase('Languages')}
+              items={languages.map(phrase)}
+            />
+          </div>
+        </SheetSection>
+
+        <SheetSection title={phrase('Features & Traits')}>
           <div className="space-y-2">
-            {features.map((f, i) => (
-              <FeatureCard key={i} name={f.name} source={f.source} description={f.description} />
+            {features.map((item) => (
+              <FeatureCard
+                key={`${item.source}-${item.name}`}
+                {...feature(item)}
+                source={source(item.source)}
+              />
             ))}
           </div>
         </SheetSection>
 
-        {/* Equipment */}
-        <SheetSection title="Equipment">
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-            {equipment.map((item, i) => (
-              <li key={i} className="flex gap-2 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                <span style={{ color: 'var(--color-gold)' }}>•</span> {item}
+        <SheetSection title={phrase('Equipment')}>
+          <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {equipment.map((item) => (
+              <li
+                className="flex gap-2 text-sm"
+                key={item}
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                <span style={{ color: 'var(--color-gold)' }}>•</span>{' '}
+                {phrase(item)}
               </li>
             ))}
           </ul>
         </SheetSection>
 
-        {/* Spells (casters only) */}
-        {isCaster && dndClass?.spellcasting && (
-          <SheetSection title="Spellcasting">
+        {isCaster && dndClass?.spellcasting ? (
+          <SheetSection title={phrase('Spellcasting')}>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <InfoBadge label="Ability" value={dndClass.spellcasting.ability} />
-                {dndClass.spellcasting.cantripsKnown > 0 && (
-                  <InfoBadge label="Cantrips Known" value={dndClass.spellcasting.cantripsKnown} />
-                )}
-                {dndClass.spellcasting.spellsKnown !== undefined && (
-                  <InfoBadge label="Spells Known" value={dndClass.spellcasting.spellsKnown} />
-                )}
-                {dndClass.spellcasting.spellSlots.map((s) => (
-                  <InfoBadge key={s.level} label={`Level ${s.level} Slots`} value={s.slots} />
+                <InfoBadge
+                  label={phrase('Ability')}
+                  value={ability(dndClass.spellcasting.ability)}
+                />
+                {dndClass.spellcasting.cantripsKnown > 0 ? (
+                  <InfoBadge
+                    label={phrase('Cantrips')}
+                    value={dndClass.spellcasting.cantripsKnown}
+                  />
+                ) : null}
+                {dndClass.spellcasting.spellsKnown !== undefined ? (
+                  <InfoBadge
+                    label={phrase('Spellcasting')}
+                    value={dndClass.spellcasting.spellsKnown}
+                  />
+                ) : null}
+                {dndClass.spellcasting.spellSlots.map((slot) => (
+                  <InfoBadge
+                    key={slot.level}
+                    label={`${phrase('Level')} ${slot.level}`}
+                    value={slot.slots}
+                  />
                 ))}
               </div>
-              {dndClass.spellcasting.cantrips && dndClass.spellcasting.cantrips.length > 0 && (
-                <ProfList label="Starting Cantrips" items={dndClass.spellcasting.cantrips} />
-              )}
+              {dndClass.spellcasting.cantrips?.length ? (
+                <ProfList
+                  label={phrase('Starting Cantrips')}
+                  items={dndClass.spellcasting.cantrips.map(phrase)}
+                />
+              ) : null}
             </div>
           </SheetSection>
-        )}
+        ) : null}
 
-        {/* Backstory */}
-        {backstory && (
-          <SheetSection title="Backstory">
-            <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{backstory}</p>
+        {backstory ? (
+          <SheetSection title={copy.fieldBackstory}>
+            <p
+              className="text-sm leading-relaxed"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              {backstory}
+            </p>
           </SheetSection>
-        )}
+        ) : null}
       </div>
     </div>
-  )
+  );
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div>
-      <div className="text-[10px] font-bold tracking-widest uppercase" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
-      <div className="text-sm font-semibold mt-0.5" style={{ color: 'var(--color-text)' }}>{value}</div>
+      <div
+        className="text-[10px] font-bold uppercase tracking-widest"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="mt-0.5 text-sm font-semibold"
+        style={{ color: 'var(--color-text)' }}
+      >
+        {value}
+      </div>
     </div>
-  )
+  );
 }
 
-function CombatStat({ label, value }: { label: string; value: string | number }) {
+function CombatStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center p-3 rounded-xl border text-center" style={{ background: 'var(--color-surface-elevated)', borderColor: 'var(--color-border)' }}>
-      <div className="text-[10px] font-bold tracking-widest uppercase" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
-      <div className="text-2xl font-bold mt-1" style={{ color: 'var(--color-gold)' }}>{value}</div>
+    <div
+      className="flex flex-col items-center justify-center rounded-xl border p-3 text-center"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <div
+        className="text-[10px] font-bold uppercase tracking-widest"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="mt-1 text-2xl font-bold"
+        style={{ color: 'var(--color-gold)' }}
+      >
+        {value}
+      </div>
     </div>
-  )
+  );
 }
 
 function ProfDot({ proficient }: { proficient: boolean }) {
   return (
     <div
-      className="w-3 h-3 rounded-full flex-shrink-0"
-      style={{ background: proficient ? 'var(--color-gold)' : 'var(--color-border)' }}
+      className="h-3 w-3 flex-shrink-0 rounded-full"
+      style={{
+        background: proficient ? 'var(--color-gold)' : 'var(--color-border)',
+      }}
     />
-  )
+  );
 }
 
-function ProfList({ label, items }: { label: string; items: string[] }) {
+function ProfList({ label, items }: { items: string[]; label: string }) {
   return (
     <div>
-      <div className="text-[10px] font-bold tracking-widest uppercase mb-1.5" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
-      <div className="text-sm" style={{ color: 'var(--color-text)' }}>{items.join(', ') || '—'}</div>
+      <div
+        className="mb-1.5 text-[10px] font-bold uppercase tracking-widest"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}
+      </div>
+      <div className="text-sm" style={{ color: 'var(--color-text)' }}>
+        {items.join('، ') || '-'}
+      </div>
     </div>
-  )
+  );
 }
 
-function FeatureCard({ name, source, description }: { name: string; source: string; description: string }) {
-  const [open, setOpen] = useState(false)
+function FeatureCard({
+  description,
+  name,
+  source,
+}: {
+  description: string;
+  name: string;
+  source: string;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+    <div
+      className="overflow-hidden rounded-xl border"
+      style={{ borderColor: 'var(--color-border)' }}
+    >
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors hover:bg-white/5"
+        onClick={() => setOpen((value) => !value)}
         style={{ background: 'var(--color-surface-elevated)' }}
+        type="button"
       >
         <div>
-          <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>{name}</span>
-          <span className="text-xs ml-2" style={{ color: 'var(--color-text-muted)' }}>{source}</span>
+          <span
+            className="text-sm font-semibold"
+            style={{ color: 'var(--color-text)' }}
+          >
+            {name}
+          </span>
+          <span
+            className="ml-2 text-xs"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            {source}
+          </span>
         </div>
-        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{open ? '▲' : '▼'}</span>
+        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          {open ? '▲' : '▼'}
+        </span>
       </button>
-      {open && (
-        <div className="px-4 py-3 text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+      {open ? (
+        <div
+          className="px-4 py-3 text-xs leading-relaxed"
+          style={{ color: 'var(--color-text-muted)' }}
+        >
           {description}
         </div>
-      )}
+      ) : null}
     </div>
-  )
+  );
 }
 
-function InfoBadge({ label, value }: { label: string; value: string | number }) {
+function InfoBadge({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
-    <div className="px-3 py-2 rounded-lg border" style={{ background: 'var(--color-surface-elevated)', borderColor: 'var(--color-border)' }}>
-      <div className="text-[10px] tracking-widest uppercase" style={{ color: 'var(--color-text-muted)' }}>{label}</div>
-      <div className="text-sm font-bold" style={{ color: 'var(--color-gold)' }}>{value}</div>
+    <div
+      className="rounded-lg border px-3 py-2"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <div
+        className="text-[10px] uppercase tracking-widest"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}
+      </div>
+      <div className="text-sm font-bold" style={{ color: 'var(--color-gold)' }}>
+        {value}
+      </div>
     </div>
-  )
+  );
 }

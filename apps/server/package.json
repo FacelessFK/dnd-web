@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
+    "serve": "node --import tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "node --import tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"

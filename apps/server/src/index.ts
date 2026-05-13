@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { createBootstrappedSessionServer } from './server-bootstrap.js';
 
 const port = Number(process.env.SERVER_PORT ?? 2567);
-const host = '127.0.0.1';
+const host = process.env.SERVER_HOST ?? '127.0.0.1';
 
 const bootstrap = await createBootstrappedSessionServer();
 const { closePersistence, persistenceMode, server } = bootstrap;
