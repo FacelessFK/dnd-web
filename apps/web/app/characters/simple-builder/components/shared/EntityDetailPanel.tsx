@@ -1,18 +1,38 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from 'react';
+
+import type { GenderedImageUrls } from '../../types';
 
 interface Props {
-  open: boolean
-  onClose: () => void
-  title: string
-  imageUrl: string
-  children: ReactNode
-  onSelect: () => void
-  selectLabel?: string
-  selectDisabled?: boolean
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  imageUrl: string;
+  imageUrls?: GenderedImageUrls;
+  children: ReactNode;
+  onSelect: () => void;
+  selectLabel?: string;
+  selectDisabled?: boolean;
 }
 
-export function EntityDetailPanel({ open, onClose, title, imageUrl, children, onSelect, selectLabel = 'Select', selectDisabled = false }: Props) {
-  if (!open) return null
+export function EntityDetailPanel({
+  open,
+  onClose,
+  title,
+  imageUrl,
+  imageUrls,
+  children,
+  onSelect,
+  selectLabel = 'Select',
+  selectDisabled = false,
+}: Props) {
+  if (!open) return null;
+
+  const images = imageUrls
+    ? [
+        { alt: `${title} male`, src: imageUrls.male },
+        { alt: `${title} female`, src: imageUrls.female },
+      ]
+    : [{ alt: title, src: imageUrl }];
 
   return (
     <>
@@ -40,15 +60,34 @@ export function EntityDetailPanel({ open, onClose, title, imageUrl, children, on
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-4 p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+        <div
+          className="flex items-center gap-4 p-5 border-b flex-shrink-0"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
           <div
-            className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border"
-            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface-elevated)' }}
+            className={[
+              'w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border',
+              imageUrls ? 'grid grid-cols-2' : '',
+            ].join(' ')}
+            style={{
+              borderColor: 'var(--color-border)',
+              background: 'var(--color-surface-elevated)',
+            }}
           >
-            <img src={imageUrl} alt={title} className="w-full h-full object-cover" />
+            {images.map((image) => (
+              <img
+                src={image.src}
+                alt={image.alt}
+                className="w-full h-full object-cover object-top"
+                key={image.src}
+              />
+            ))}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}>
+            <h2
+              className="text-xl font-bold"
+              style={{ color: 'var(--color-text)', letterSpacing: '-0.3px' }}
+            >
               {title}
             </h2>
           </div>
@@ -62,20 +101,28 @@ export function EntityDetailPanel({ open, onClose, title, imageUrl, children, on
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {children}
-        </div>
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">{children}</div>
 
         {/* Footer */}
-        <div className="p-5 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+        <div
+          className="p-5 border-t flex-shrink-0"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
           <button
-            onClick={() => { onSelect(); onClose() }}
+            onClick={() => {
+              onSelect();
+              onClose();
+            }}
             disabled={selectDisabled}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
             style={{
-              background: selectDisabled ? 'var(--color-border)' : 'var(--color-gold)',
+              background: selectDisabled
+                ? 'var(--color-border)'
+                : 'var(--color-gold)',
               color: selectDisabled ? 'var(--color-text-muted)' : '#0f1117',
-              boxShadow: selectDisabled ? 'none' : '0 0 16px rgba(201,168,76,0.3)',
+              boxShadow: selectDisabled
+                ? 'none'
+                : '0 0 16px rgba(201,168,76,0.3)',
             }}
           >
             {selectLabel}
@@ -83,38 +130,79 @@ export function EntityDetailPanel({ open, onClose, title, imageUrl, children, on
         </div>
       </div>
     </>
-  )
+  );
 }
 
 /** Reusable section inside the panel */
-export function PanelSection({ title, children }: { title: string; children: ReactNode }) {
+export function PanelSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <div>
-      <h3 className="text-[11px] font-bold tracking-widest uppercase mb-2" style={{ color: 'var(--color-text-muted)' }}>
+      <h3
+        className="text-[11px] font-bold tracking-widest uppercase mb-2"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
         {title}
       </h3>
       {children}
     </div>
-  )
+  );
 }
 
-export function TraitCard({ name, description }: { name: string; description: string }) {
+export function TraitCard({
+  name,
+  description,
+}: {
+  name: string;
+  description: string;
+}) {
   return (
-    <div className="rounded-xl p-3 mb-2" style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}>
-      <div className="text-sm font-semibold mb-1" style={{ color: 'var(--color-gold)' }}>{name}</div>
-      <div className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{description}</div>
+    <div
+      className="rounded-xl p-3 mb-2"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        border: '1px solid var(--color-border)',
+      }}
+    >
+      <div
+        className="text-sm font-semibold mb-1"
+        style={{ color: 'var(--color-gold)' }}
+      >
+        {name}
+      </div>
+      <div
+        className="text-xs leading-relaxed"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {description}
+      </div>
     </div>
-  )
+  );
 }
 
-export function StatPill({ label, value }: { label: string; value: string | number }) {
+export function StatPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | number;
+}) {
   return (
     <span
       className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full mr-2 mb-2"
-      style={{ background: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)', color: 'var(--color-text)' }}
+      style={{
+        background: 'var(--color-surface-elevated)',
+        border: '1px solid var(--color-border)',
+        color: 'var(--color-text)',
+      }}
     >
       <span style={{ color: 'var(--color-text-muted)' }}>{label}</span>
       <span className="font-semibold">{value}</span>
     </span>
-  )
+  );
 }

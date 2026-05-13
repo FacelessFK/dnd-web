@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { RACES } from '../../data/races';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
-import type { AbilityName, Race, Subrace } from '../../types';
+import type {
+  AbilityName,
+  GenderedImageUrls,
+  Race,
+  Subrace,
+} from '../../types';
 import { EntityCard } from '../shared/EntityCard';
 import {
   EntityDetailPanel,
@@ -21,6 +26,39 @@ function fmtAsi(
       .filter(([, value]) => value)
       .map(([key, value]) => `+${value} ${ability(key as AbilityName)}`)
       .join('، ') || noneLabel
+  );
+}
+
+function PortraitPair({
+  imageUrls,
+  title,
+}: {
+  imageUrls: GenderedImageUrls;
+  title: string;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {[
+        { alt: `${title} male portrait`, src: imageUrls.male },
+        { alt: `${title} female portrait`, src: imageUrls.female },
+      ].map((image) => (
+        <div
+          className="aspect-square overflow-hidden rounded-xl border"
+          key={image.src}
+          style={{
+            background: 'var(--color-surface-elevated)',
+            borderColor: 'var(--color-border)',
+          }}
+        >
+          <img
+            alt={image.alt}
+            className="h-full w-full object-cover object-top"
+            loading="lazy"
+            src={image.src}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -64,6 +102,7 @@ export function RaceStep() {
           <EntityCard
             id={candidate.id}
             imageUrl={candidate.imageUrl}
+            imageUrls={candidate.portraitUrls}
             key={candidate.id}
             name={raceName(candidate)}
             onSelect={openPanel}
@@ -100,6 +139,7 @@ export function RaceStep() {
 
       <EntityDetailPanel
         imageUrl={panelRace?.imageUrl ?? ''}
+        imageUrls={panelRace?.portraitUrls}
         onClose={() => setPanelRace(null)}
         onSelect={handleSelect}
         open={Boolean(panelRace)}
@@ -115,6 +155,11 @@ export function RaceStep() {
             >
               {tagline(panelRace)}
             </p>
+
+            <PortraitPair
+              imageUrls={panelRace.portraitUrls}
+              title={raceName(panelRace)}
+            />
 
             <PanelSection title={phrase('Core Stats')}>
               <StatPill
@@ -166,6 +211,36 @@ export function RaceStep() {
                         }}
                         type="button"
                       >
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                          {[
+                            {
+                              alt: `${candidate.name} male portrait`,
+                              src: candidate.portraitUrls.male,
+                            },
+                            {
+                              alt: `${candidate.name} female portrait`,
+                              src: candidate.portraitUrls.female,
+                            },
+                          ].map((image) => (
+                            <span
+                              className="block aspect-square overflow-hidden rounded-lg border"
+                              key={image.src}
+                              style={{
+                                background: 'var(--color-surface)',
+                                borderColor: active
+                                  ? 'var(--color-gold-border)'
+                                  : 'var(--color-border)',
+                              }}
+                            >
+                              <img
+                                alt={image.alt}
+                                className="h-full w-full object-cover object-top"
+                                loading="lazy"
+                                src={image.src}
+                              />
+                            </span>
+                          ))}
+                        </div>
                         <div
                           className="mb-0.5 text-sm font-semibold"
                           style={{
