@@ -15,6 +15,8 @@ import {
   StatPill,
   TraitCard,
 } from '../shared/EntityDetailPanel';
+import { InfoButton, InfoModal } from '../shared/InfoModal';
+import { SelectableOption } from '../shared/SelectableOption';
 
 function ClassPreviewImage({
   imageUrl,
@@ -64,6 +66,9 @@ export function ClassStep() {
     cantrips: [] as string[],
     preparedSpells: [] as string[],
   });
+  const [helpTopic, setHelpTopic] = useState<'cantrips' | 'spells' | null>(
+    null,
+  );
 
   const openPanel = (id: string) => {
     const nextClass = CLASSES.find((candidate) => candidate.id === id) ?? null;
@@ -309,37 +314,16 @@ export function ClassStep() {
                           );
 
                           return (
-                            <button
-                              className="w-full rounded-lg px-3 py-2 text-left text-xs transition-all"
+                            <SelectableOption
+                              description={list(option.items)}
                               key={option.id}
                               onClick={() =>
                                 chooseEquipmentOption(group.id, option.items)
                               }
-                              style={{
-                                background: chosen
-                                  ? 'var(--color-gold-dim)'
-                                  : 'var(--color-surface-elevated)',
-                                border: `1px solid ${
-                                  chosen
-                                    ? 'var(--color-gold)'
-                                    : 'var(--color-border)'
-                                }`,
-                                color: chosen
-                                  ? 'var(--color-gold)'
-                                  : 'var(--color-text)',
-                              }}
-                              type="button"
+                              selected={chosen}
                             >
-                              <span className="font-semibold">
-                                {phrase(option.label)}
-                              </span>
-                              <span
-                                className="mt-0.5 block"
-                                style={{ color: 'var(--color-text-muted)' }}
-                              >
-                                {list(option.items)}
-                              </span>
-                            </button>
+                              {phrase(option.label)}
+                            </SelectableOption>
                           );
                         })}
                       </div>
@@ -353,6 +337,12 @@ export function ClassStep() {
               <PanelSection
                 title={`${phrase('Cantrips')}: ${panelClass.spellcasting.cantripsKnown}`}
               >
+                <div className="mb-2 flex justify-end">
+                  <InfoButton
+                    label="What are cantrips?"
+                    onClick={() => setHelpTopic('cantrips')}
+                  />
+                </div>
                 <SpellChoiceGrid
                   limit={panelClass.spellcasting.cantripsKnown}
                   onToggle={(spell) =>
@@ -373,6 +363,12 @@ export function ClassStep() {
               <PanelSection
                 title={`${phrase('Prepared Spells')}: ${getPreparedSpellLimit(previewState)}`}
               >
+                <div className="mb-2 flex justify-end">
+                  <InfoButton
+                    label="What are spells?"
+                    onClick={() => setHelpTopic('spells')}
+                  />
+                </div>
                 <SpellChoiceGrid
                   limit={getPreparedSpellLimit(previewState)}
                   onToggle={(spell) =>
@@ -451,6 +447,22 @@ export function ClassStep() {
           </>
         ) : null}
       </EntityDetailPanel>
+      <InfoModal
+        onClose={() => setHelpTopic(null)}
+        open={helpTopic === 'cantrips'}
+        title={phrase('Cantrips')}
+      >
+        Cantrips are simple spells your character can cast at will. They do not
+        use spell slots and are always available once chosen.
+      </InfoModal>
+      <InfoModal
+        onClose={() => setHelpTopic(null)}
+        open={helpTopic === 'spells'}
+        title={phrase('Spells')}
+      >
+        Spells are magical effects powered by your class. Prepared or known
+        spells are the options your character can cast during play.
+      </InfoModal>
     </div>
   );
 }
@@ -476,24 +488,14 @@ function SpellChoiceGrid({
           const disabled = !chosen && selected.length >= limit;
 
           return (
-            <button
-              className="rounded-lg px-3 py-2 text-left text-xs transition-all duration-100 disabled:opacity-40"
+            <SelectableOption
               disabled={disabled}
               key={option}
               onClick={() => onToggle(option)}
-              style={{
-                background: chosen
-                  ? 'var(--color-gold-dim)'
-                  : 'var(--color-surface-elevated)',
-                border: `1px solid ${
-                  chosen ? 'var(--color-gold)' : 'var(--color-border)'
-                }`,
-                color: chosen ? 'var(--color-gold)' : 'var(--color-text)',
-              }}
-              type="button"
+              selected={chosen}
             >
               {phrase(option)}
-            </button>
+            </SelectableOption>
           );
         })}
       </div>
@@ -510,6 +512,9 @@ function SpellChoiceGrid({
 function toggleChoice<T>(values: T[], value: T, maxSelected: number): T[] {
   if (values.includes(value)) {
     return values.filter((candidate) => candidate !== value);
+  }
+  if (maxSelected === 1) {
+    return [value];
   }
   if (values.length >= maxSelected) {
     return values;

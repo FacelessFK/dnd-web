@@ -18,7 +18,7 @@ export function EntityCard({
   return (
     <button
       onClick={() => onSelect(id)}
-      className="flex flex-col items-center gap-3 p-4 rounded-2xl border text-left w-full transition-all duration-150 active:scale-[0.97]"
+      className="flex w-full flex-col items-center gap-3 rounded-2xl border p-4 text-left transition-all duration-150 active:scale-[0.97]"
       style={{
         background: selected ? 'var(--color-gold-dim)' : 'var(--color-surface)',
         borderColor: selected ? 'var(--color-gold)' : 'var(--color-border)',

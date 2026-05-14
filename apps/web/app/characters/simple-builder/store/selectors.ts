@@ -142,6 +142,69 @@ export function getAllProficiencies(state: CharacterState): {
   return { armor, weapons, tools }
 }
 
+const SKILL_DESCRIPTIONS: Record<SkillName, string> = {
+  'Acrobatics': 'Balance, tumbling, and agile movement',
+  'Animal Handling': 'Calming, guiding, and reading animals',
+  'Arcana': 'Knowledge of magic, spells, and arcane lore',
+  'Athletics': 'Climbing, jumping, swimming, and feats of strength',
+  'Deception': 'Lying, disguise, and misleading others',
+  'History': 'Knowledge of past events, cultures, and people',
+  'Insight': 'Reading intentions, moods, and body language',
+  'Intimidation': 'Threats, pressure, and forceful presence',
+  'Investigation': 'Finding clues and making deductions',
+  'Medicine': 'Stabilizing creatures and diagnosing illness',
+  'Nature': 'Knowledge of terrain, plants, animals, and weather',
+  'Perception': 'Noticing details, danger, and hidden things',
+  'Performance': 'Entertaining through music, acting, or speech',
+  'Persuasion': 'Diplomacy, etiquette, and winning people over',
+  'Religion': 'Knowledge of deities, rites, and sacred lore',
+  'Sleight of Hand': 'Manual trickery, palming, and pickpocketing',
+  'Stealth': 'Moving quietly and staying unseen',
+  'Survival': 'Tracking, foraging, navigation, and wilderness signs',
+}
+
+export function getOtherProficienciesAndLanguagesSummary(state: CharacterState): {
+  languages: string[]
+  skillGroups: { source: string; skills: { name: SkillName; description: string }[] }[]
+  tools: string[]
+} {
+  const skillGroups: { source: string; skills: { name: SkillName; description: string }[] }[] = []
+  const addSkillGroup = (source: string | undefined, skills: SkillName[]) => {
+    const uniqueSkills = Array.from(new Set(skills))
+    if (!source || uniqueSkills.length === 0) return
+    skillGroups.push({
+      source,
+      skills: uniqueSkills.map((name) => ({
+        description: SKILL_DESCRIPTIONS[name],
+        name,
+      })),
+    })
+  }
+
+  addSkillGroup(state.dndClass?.name, state.classSkillChoices)
+
+  const backgroundSkills = getEffectiveBackgroundSkills(state)
+  addSkillGroup(state.background?.name, backgroundSkills)
+
+  addSkillGroup(state.race?.name, [
+    ...getFixedRaceSkills(state),
+    ...state.raceSkillChoices,
+  ])
+
+  const tools = Array.from(
+    new Set([
+      ...(state.dndClass?.toolProficiencies ?? []),
+      ...(state.background?.toolProficiencies ?? []),
+    ]),
+  )
+
+  return {
+    languages: getAllLanguages(state),
+    skillGroups,
+    tools,
+  }
+}
+
 export interface Feature {
   name: string
   description: string
@@ -300,6 +363,18 @@ function getClassGrantedLanguages(state: CharacterState): string[] {
   if (state.dndClass?.id === 'druid') return ['Druidic']
   if (state.dndClass?.id === 'rogue') return ["Thieves' Cant"]
   return []
+}
+
+function getEffectiveBackgroundSkills(state: CharacterState): SkillName[] {
+  const bgSkills = state.background?.skillProficiencies ?? []
+  const conflict = getConflictingSkill(state)
+  const override = state.backgroundSkillOverride
+
+  if (conflict && override) {
+    return bgSkills.filter((skill) => skill !== conflict).concat(override)
+  }
+
+  return bgSkills
 }
 
 function getFixedRaceSkills(state: CharacterState): SkillName[] {

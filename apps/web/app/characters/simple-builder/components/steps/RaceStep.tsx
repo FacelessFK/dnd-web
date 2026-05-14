@@ -21,6 +21,8 @@ import {
   StatPill,
   TraitCard,
 } from '../shared/EntityDetailPanel';
+import { InfoButton, InfoModal } from '../shared/InfoModal';
+import { SelectableOption } from '../shared/SelectableOption';
 
 function fmtAsi(
   asi: Partial<Record<string, number>>,
@@ -78,6 +80,7 @@ export function RaceStep() {
   const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
   const [localSkills, setLocalSkills] = useState<SkillName[]>([]);
+  const [helpTopic, setHelpTopic] = useState<'languages' | null>(null);
 
   const openPanel = (id: string) => {
     const nextRace = RACES.find((candidate) => candidate.id === id) ?? null;
@@ -223,6 +226,12 @@ export function RaceStep() {
               <PanelSection
                 title={`${phrase('Languages')}: ${raceLanguageLimit} ${phrase('choice')}`}
               >
+                <div className="mb-2 flex justify-end">
+                  <InfoButton
+                    label="What are languages?"
+                    onClick={() => setHelpTopic('languages')}
+                  />
+                </div>
                 <ChoiceGrid
                   options={getAvailableLanguageChoices(previewState, 'race')}
                   selected={localLanguages}
@@ -349,6 +358,14 @@ export function RaceStep() {
           </>
         ) : null}
       </EntityDetailPanel>
+      <InfoModal
+        onClose={() => setHelpTopic(null)}
+        open={helpTopic === 'languages'}
+        title={phrase('Languages')}
+      >
+        Languages decide which spoken and written tongues your character can
+        understand. They come from race, class, background, and your choices.
+      </InfoModal>
     </div>
   );
 }
@@ -370,23 +387,13 @@ function ChoiceGrid<T extends string>({
         const chosen = selected.includes(option);
 
         return (
-          <button
-            className="rounded-lg px-3 py-2 text-left text-xs transition-all duration-100"
+          <SelectableOption
             key={option}
             onClick={() => onToggle(option)}
-            style={{
-              background: chosen
-                ? 'var(--color-gold-dim)'
-                : 'var(--color-surface-elevated)',
-              border: `1px solid ${
-                chosen ? 'var(--color-gold)' : 'var(--color-border)'
-              }`,
-              color: chosen ? 'var(--color-gold)' : 'var(--color-text)',
-            }}
-            type="button"
+            selected={chosen}
           >
             {phrase(option)}
-          </button>
+          </SelectableOption>
         );
       })}
     </div>
@@ -415,6 +422,9 @@ function ChoiceCount({
 function toggleChoice<T>(values: T[], value: T, maxSelected: number): T[] {
   if (values.includes(value)) {
     return values.filter((candidate) => candidate !== value);
+  }
+  if (maxSelected === 1) {
+    return [value];
   }
   if (values.length >= maxSelected) {
     return values;

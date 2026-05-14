@@ -5,8 +5,6 @@ import {
   getAC,
   getAllEquipment,
   getAllFeatures,
-  getAllLanguages,
-  getAllProficiencies,
   getAbilityModifiers,
   getFinalAbilityScores,
   getHP,
@@ -14,10 +12,11 @@ import {
   getPassivePerception,
   getSavingThrows,
   getSkills,
+  getOtherProficienciesAndLanguagesSummary,
   getSpellcastingSummary,
   getSpeed,
 } from '../../store/selectors';
-import type { AbilityName } from '../../types';
+import type { AbilityName, SkillName } from '../../types';
 import { SheetSection } from './SheetSection';
 
 function fmtMod(mod: number): string {
@@ -62,8 +61,7 @@ export function CharacterSheet() {
   const ac = getAC(store);
   const initiative = getInitiative(store);
   const speed = getSpeed(store);
-  const languages = getAllLanguages(store);
-  const proficiencies = getAllProficiencies(store);
+  const otherProficiencies = getOtherProficienciesAndLanguagesSummary(store);
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
   const spellcastingSummary = getSpellcastingSummary(store);
@@ -295,27 +293,26 @@ export function CharacterSheet() {
         </SheetSection>
 
         <SheetSection title={phrase('Proficiencies & Languages')}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {proficiencies.armor.length > 0 ? (
-              <ProfList
-                label={phrase('Armor')}
-                items={proficiencies.armor.map(phrase)}
-              />
-            ) : null}
-            <ProfList
-              label={phrase('Weapons')}
-              items={proficiencies.weapons.map(phrase)}
-            />
-            {proficiencies.tools.length > 0 ? (
-              <ProfList
-                label={phrase('Tools')}
-                items={proficiencies.tools.map(phrase)}
-              />
-            ) : null}
+          <div className="space-y-4">
             <ProfList
               label={phrase('Languages')}
-              items={languages.map(phrase)}
+              items={otherProficiencies.languages.map(phrase)}
             />
+            {otherProficiencies.skillGroups.map((group) => (
+              <SkillSummaryGroup
+                key={group.source}
+                label={`${source(group.source)} ${phrase('Skills')}`}
+                phrase={phrase}
+                skill={skill}
+                skills={group.skills}
+              />
+            ))}
+            {otherProficiencies.tools.length > 0 ? (
+              <ProfList
+                label={phrase('Tools')}
+                items={otherProficiencies.tools.map(phrase)}
+              />
+            ) : null}
           </div>
         </SheetSection>
 
@@ -487,6 +484,41 @@ function ProfList({ label, items }: { items: string[]; label: string }) {
       </div>
       <div className="text-sm" style={{ color: 'var(--color-text)' }}>
         {items.join('، ') || '-'}
+      </div>
+    </div>
+  );
+}
+
+function SkillSummaryGroup({
+  label,
+  phrase,
+  skill,
+  skills,
+}: {
+  label: string;
+  phrase: (value: string) => string;
+  skill: (value: SkillName) => string;
+  skills: { name: SkillName; description: string }[];
+}) {
+  return (
+    <div>
+      <div
+        className="mb-1.5 text-[10px] font-bold uppercase tracking-widest"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {label}
+      </div>
+      <div className="space-y-1">
+        {skills.map((item) => (
+          <div className="text-sm" key={item.name}>
+            <span className="font-semibold" style={{ color: 'var(--color-text)' }}>
+              {skill(item.name)}:
+            </span>{' '}
+            <span style={{ color: 'var(--color-text-muted)' }}>
+              {phrase(item.description)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -5,7 +5,6 @@ import {
   getCostToIncrease,
   getFinalAbilityScores,
   getPointsRemaining,
-  getSpellcastingSummary,
 } from '../../store/selectors';
 import type { AbilityName } from '../../types';
 
@@ -19,15 +18,12 @@ export function AbilityScoresStep() {
   const store = useCharacterStore();
   const {
     abilityScores,
-    classSpellChoices,
     resetAbilityScores,
     setAbilityScore,
-    setClassSpellChoices,
   } = store;
   const { ability, abilityDescription, copy, phrase } = useBuilderI18n();
   const finals = getFinalAbilityScores(store);
   const pointsLeft = getPointsRemaining(abilityScores);
-  const spellcasting = getSpellcastingSummary(store);
 
   const raceAsi = store.race?.asi ?? {};
   const subraceAsi = store.subrace?.asi ?? {};
@@ -54,17 +50,6 @@ export function AbilityScoresStep() {
   };
 
   const pointsExhausted = pointsLeft === 0;
-
-  const toggleSpell = (
-    type: 'cantrips' | 'preparedSpells',
-    spell: string,
-    limit: number,
-  ) => {
-    setClassSpellChoices({
-      ...classSpellChoices,
-      [type]: toggleChoice(classSpellChoices[type], spell, limit),
-    });
-  };
 
   return (
     <div>
@@ -247,124 +232,6 @@ export function AbilityScoresStep() {
         </strong>
       </div>
 
-      {spellcasting &&
-      (spellcasting.cantripOptions.length > 0 ||
-        spellcasting.preparedSpellOptions.length > 0) ? (
-        <div
-          className="mt-6 rounded-xl border p-4"
-          style={{
-            background: 'var(--color-surface)',
-            borderColor: 'var(--color-border)',
-          }}
-        >
-          <div className="mb-3">
-            <h3
-              className="text-lg font-bold"
-              style={{ color: 'var(--color-text)' }}
-            >
-              {phrase('Spellcasting')}
-            </h3>
-            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {phrase('Spell Save DC')}: {spellcasting.spellSaveDc} -{' '}
-              {phrase('Spell Attack')}: {fmtMod(spellcasting.spellAttackBonus)}
-            </p>
-          </div>
-
-          {spellcasting.cantripOptions.length > 0 ? (
-            <SpellChoiceGrid
-              label={`${phrase('Cantrips')} (${classSpellChoices.cantrips.length}/${spellcasting.cantripsKnown})`}
-              limit={spellcasting.cantripsKnown}
-              onToggle={(spell) =>
-                toggleSpell('cantrips', spell, spellcasting.cantripsKnown)
-              }
-              options={spellcasting.cantripOptions}
-              phrase={phrase}
-              selected={classSpellChoices.cantrips}
-            />
-          ) : null}
-
-          {spellcasting.preparedSpellOptions.length > 0 ? (
-            <SpellChoiceGrid
-              label={`${phrase('Prepared Spells')} (${classSpellChoices.preparedSpells.length}/${spellcasting.preparedLimit})`}
-              limit={spellcasting.preparedLimit}
-              onToggle={(spell) =>
-                toggleSpell(
-                  'preparedSpells',
-                  spell,
-                  spellcasting.preparedLimit,
-                )
-              }
-              options={spellcasting.preparedSpellOptions}
-              phrase={phrase}
-              selected={classSpellChoices.preparedSpells}
-            />
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
-}
-
-function SpellChoiceGrid({
-  label,
-  limit,
-  onToggle,
-  options,
-  phrase,
-  selected,
-}: {
-  label: string;
-  limit: number;
-  onToggle: (spell: string) => void;
-  options: string[];
-  phrase: (value: string) => string;
-  selected: string[];
-}) {
-  return (
-    <div className="mt-4">
-      <div
-        className="mb-2 text-xs font-bold uppercase tracking-widest"
-        style={{ color: 'var(--color-text-muted)' }}
-      >
-        {label}
-      </div>
-      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-        {options.map((option) => {
-          const chosen = selected.includes(option);
-          const disabled = !chosen && selected.length >= limit;
-
-          return (
-            <button
-              className="rounded-lg px-3 py-2 text-left text-xs transition-all duration-100 disabled:opacity-40"
-              disabled={disabled}
-              key={option}
-              onClick={() => onToggle(option)}
-              style={{
-                background: chosen
-                  ? 'var(--color-gold-dim)'
-                  : 'var(--color-surface-elevated)',
-                border: `1px solid ${
-                  chosen ? 'var(--color-gold)' : 'var(--color-border)'
-                }`,
-                color: chosen ? 'var(--color-gold)' : 'var(--color-text)',
-              }}
-              type="button"
-            >
-              {phrase(option)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function toggleChoice<T>(values: T[], value: T, maxSelected: number): T[] {
-  if (values.includes(value)) {
-    return values.filter((candidate) => candidate !== value);
-  }
-  if (values.length >= maxSelected) {
-    return values;
-  }
-  return [...values, value];
 }

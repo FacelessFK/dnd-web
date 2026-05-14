@@ -78,7 +78,7 @@ function useStepValidity(): boolean {
       return true;
     }
     case 'abilityScores':
-      return hasValidSpellChoices(store);
+      return true;
     case 'details':
       return name.trim().length > 0;
     case 'sheet':

@@ -16,6 +16,8 @@ import {
   StatPill,
   TraitCard,
 } from '../shared/EntityDetailPanel';
+import { InfoButton, InfoModal } from '../shared/InfoModal';
+import { SelectableOption } from '../shared/SelectableOption';
 
 function BackgroundPreviewImage({
   imageUrl,
@@ -56,6 +58,7 @@ export function BackgroundStep() {
     useBuilderI18n();
   const [panelBg, setPanelBg] = useState<Background | null>(null);
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
+  const [helpTopic, setHelpTopic] = useState<'languages' | null>(null);
 
   const conflict = getConflictingSkill(store);
 
@@ -89,6 +92,9 @@ export function BackgroundStep() {
     setLocalLanguages((current) => {
       if (current.includes(language)) {
         return current.filter((candidate) => candidate !== language);
+      }
+      if (languageLimit === 1) {
+        return [language];
       }
       if (current.length >= languageLimit) {
         return current;
@@ -232,6 +238,12 @@ export function BackgroundStep() {
 
             {panelBg.languages > 0 ? (
               <PanelSection title={phrase('Languages')}>
+                <div className="mb-2 flex justify-end">
+                  <InfoButton
+                    label="What are languages?"
+                    onClick={() => setHelpTopic('languages')}
+                  />
+                </div>
                 <div
                   className="mb-2 text-sm"
                   style={{ color: 'var(--color-text)' }}
@@ -246,27 +258,13 @@ export function BackgroundStep() {
                     const chosen = localLanguages.includes(language);
 
                     return (
-                      <button
-                        className="rounded-lg px-3 py-2 text-left text-xs transition-all"
+                      <SelectableOption
                         key={language}
                         onClick={() => toggleLanguage(language)}
-                        style={{
-                          background: chosen
-                            ? 'var(--color-gold-dim)'
-                            : 'var(--color-surface-elevated)',
-                          border: `1px solid ${
-                            chosen
-                              ? 'var(--color-gold)'
-                              : 'var(--color-border)'
-                          }`,
-                          color: chosen
-                            ? 'var(--color-gold)'
-                            : 'var(--color-text)',
-                        }}
-                        type="button"
+                        selected={chosen}
                       >
                         {phrase(language)}
-                      </button>
+                      </SelectableOption>
                     );
                   })}
                 </div>
@@ -316,6 +314,14 @@ export function BackgroundStep() {
           </>
         ) : null}
       </EntityDetailPanel>
+      <InfoModal
+        onClose={() => setHelpTopic(null)}
+        open={helpTopic === 'languages'}
+        title={phrase('Languages')}
+      >
+        Languages decide which spoken and written tongues your character can
+        understand. They come from race, class, background, and your choices.
+      </InfoModal>
     </div>
   );
 }
