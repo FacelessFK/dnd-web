@@ -3,9 +3,9 @@ import { I18nProvider } from '../lib/i18n';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'D&D DM-Driven Platform',
+  title: 'پلتفرم D&D با هدایت DM',
   description:
-    'DM-authoritative runtime and developer cockpit for the D&D platform.',
+    'میز اجرای معتبر با کنترل DM و کابین توسعه برای پلتفرم D&D.',
 };
 
 type RootLayoutProps = {
@@ -14,7 +14,7 @@ type RootLayoutProps = {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en">
+    <html dir="rtl" lang="fa">
       <body>
         <I18nProvider>{children}</I18nProvider>
       </body>

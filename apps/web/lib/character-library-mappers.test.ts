@@ -157,6 +157,7 @@ describe('character library mappers', () => {
       {
         availableTemplateIds: ['dnd-2014-template'],
         loadTemplateBytes: loadProvidedTemplate,
+        preserveFormFields: true,
       },
     );
     const pdfText = Buffer.from(result.bytes).toString('latin1');
@@ -172,6 +173,44 @@ describe('character library mappers', () => {
     );
     assert.equal(form.getTextField('ClassLevel').getText(), 'Fighter 1');
     assert.equal(form.getTextField('Race ').getText(), 'Human');
+  });
+
+  it('keeps template exports on the official sheet when text has smart punctuation', async () => {
+    const result = await generateCharacterSheetPdf(
+      createEntry({
+        notes: 'Curly’s dash — test',
+        rulesProfileId: 'dnd-2014-srd-5-1',
+      }),
+      {
+        availableTemplateIds: ['dnd-2014-template'],
+        loadTemplateBytes: loadProvidedTemplate,
+        preserveFormFields: true,
+        templateId: 'dnd-2014-template',
+      },
+    );
+    const document = await PDFDocument.load(result.bytes);
+    const form = document.getForm();
+
+    assert.equal(result.template.id, 'dnd-2014-template');
+    assert.equal(result.fallbackReason, undefined);
+    assert.equal(form.getTextField('Bonds').getText(), "Curly's dash - test");
+  });
+
+  it('flattens explicit 2014 template exports so filled text is visible in PDF viewers', async () => {
+    const result = await generateCharacterSheetPdf(
+      createEntry({
+        rulesProfileId: 'dnd-2014-srd-5-1',
+      }),
+      {
+        availableTemplateIds: ['dnd-2014-template'],
+        loadTemplateBytes: loadProvidedTemplate,
+        templateId: 'dnd-2014-template',
+      },
+    );
+    const document = await PDFDocument.load(result.bytes);
+
+    assert.equal(result.template.id, 'dnd-2014-template');
+    assert.equal(document.getForm().getFields().length, 0);
   });
 
   it('overlays the 2024 template when no AcroForm fields are available', async () => {

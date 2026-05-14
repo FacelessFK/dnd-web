@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BACKGROUNDS } from '../../data/backgrounds';
+import { getLanguageDescription } from '../../data/languages';
 import { ALL_SKILLS } from '../../data/skills';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
@@ -16,7 +17,6 @@ import {
   StatPill,
   TraitCard,
 } from '../shared/EntityDetailPanel';
-import { InfoButton, InfoModal } from '../shared/InfoModal';
 import { SelectableOption } from '../shared/SelectableOption';
 
 function BackgroundPreviewImage({
@@ -58,7 +58,6 @@ export function BackgroundStep() {
     useBuilderI18n();
   const [panelBg, setPanelBg] = useState<Background | null>(null);
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
-  const [helpTopic, setHelpTopic] = useState<'languages' | null>(null);
 
   const conflict = getConflictingSkill(store);
 
@@ -238,12 +237,6 @@ export function BackgroundStep() {
 
             {panelBg.languages > 0 ? (
               <PanelSection title={phrase('Languages')}>
-                <div className="mb-2 flex justify-end">
-                  <InfoButton
-                    label="What are languages?"
-                    onClick={() => setHelpTopic('languages')}
-                  />
-                </div>
                 <div
                   className="mb-2 text-sm"
                   style={{ color: 'var(--color-text)' }}
@@ -259,6 +252,7 @@ export function BackgroundStep() {
 
                     return (
                       <SelectableOption
+                        description={phrase(getLanguageDescription(language))}
                         key={language}
                         onClick={() => toggleLanguage(language)}
                         selected={chosen}
@@ -314,14 +308,6 @@ export function BackgroundStep() {
           </>
         ) : null}
       </EntityDetailPanel>
-      <InfoModal
-        onClose={() => setHelpTopic(null)}
-        open={helpTopic === 'languages'}
-        title={phrase('Languages')}
-      >
-        Languages decide which spoken and written tongues your character can
-        understand. They come from race, class, background, and your choices.
-      </InfoModal>
     </div>
   );
 }

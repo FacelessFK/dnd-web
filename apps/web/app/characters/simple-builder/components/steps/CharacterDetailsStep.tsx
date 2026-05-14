@@ -125,7 +125,7 @@ export function CharacterDetailsStep() {
             >
               {portraitDataUrl ? (
                 <img
-                  alt="Character portrait preview"
+                  alt="پیش‌نمایش پرتره کاراکتر"
                   className="h-full w-full object-cover object-top"
                   src={portraitDataUrl}
                 />

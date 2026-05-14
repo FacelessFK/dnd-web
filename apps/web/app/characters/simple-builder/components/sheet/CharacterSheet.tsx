@@ -1,4 +1,10 @@
 import { useState } from 'react';
+import type { CharacterLibraryEntry } from '@dnd/protocol';
+
+import {
+  downloadCharacterSheetPdf,
+  type CharacterSheetTemplateId,
+} from '../../../../../lib/character-sheet-pdf';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import {
@@ -16,15 +22,27 @@ import {
   getSpellcastingSummary,
   getSpeed,
 } from '../../store/selectors';
-import type { AbilityName, SkillName } from '../../types';
+import type { AbilityName, CharacterState, SkillName } from '../../types';
 import { SheetSection } from './SheetSection';
 
 function fmtMod(mod: number): string {
   return mod >= 0 ? `+${mod}` : `${mod}`;
 }
 
+const abilityNameToKey = {
+  CHA: 'cha',
+  CON: 'con',
+  DEX: 'dex',
+  INT: 'int',
+  STR: 'str',
+  WIS: 'wis',
+} as const;
+
 export function CharacterSheet() {
   const store = useCharacterStore();
+  const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
+    useState<CharacterSheetTemplateId | null>(null);
+  const [pdfNotice, setPdfNotice] = useState('');
   const {
     age,
     alignment,
@@ -46,6 +64,7 @@ export function CharacterSheet() {
     className,
     copy,
     feature,
+    isFa,
     phrase,
     raceName,
     skill,
@@ -65,6 +84,55 @@ export function CharacterSheet() {
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
   const spellcastingSummary = getSpellcastingSummary(store);
+  const selectedCantrips =
+    spellcastingSummary?.selectedCantrips.length
+      ? spellcastingSummary.selectedCantrips
+      : dndClass?.spellcasting?.cantrips ?? [];
+  const selectedPreparedSpells =
+    spellcastingSummary?.selectedPreparedSpells.length
+      ? spellcastingSummary.selectedPreparedSpells
+      : dndClass?.spellcasting?.preparedSpells ?? [];
+
+  const handleDownloadPdf = async (
+    templateId: CharacterSheetTemplateId,
+  ): Promise<void> => {
+    setDownloadingPdfTemplate(templateId);
+    setPdfNotice('');
+
+    try {
+      const result = await downloadCharacterSheetPdf(
+        createSheetLibraryEntry(
+          store,
+          {
+            cantrips: selectedCantrips,
+            equipment,
+            proficientSkills: skills
+              .filter((item) => item.proficient)
+              .map((item) => item.skill),
+            spells: selectedPreparedSpells,
+            tools: otherProficiencies.tools,
+            languages: otherProficiencies.languages,
+          },
+          templateId,
+        ),
+        { templateId },
+      );
+
+      setPdfNotice(
+        result.fallbackReason
+          ? `PDF جایگزین دانلود شد: ${result.fallbackReason}`
+          : `${result.template.label} دانلود شد.`,
+      );
+    } catch (error) {
+      setPdfNotice(
+        error instanceof Error
+          ? `دانلود PDF ناموفق بود: ${error.message}`
+          : 'دانلود PDF ناموفق بود.',
+      );
+    } finally {
+      setDownloadingPdfTemplate(null);
+    }
+  };
 
   return (
     <div>
@@ -105,7 +173,7 @@ export function CharacterSheet() {
             >
               {portraitDataUrl ? (
                 <img
-                  alt="Character portrait"
+                  alt="پرتره کاراکتر"
                   className="h-full w-full object-cover object-top"
                   src={portraitDataUrl}
                 />
@@ -199,7 +267,7 @@ export function CharacterSheet() {
               label={phrase('Initiative')}
               value={fmtMod(initiative)}
             />
-            <CombatStat label={phrase('Speed')} value={`${speed} ft`} />
+            <CombatStat label={phrase('Speed')} value={`${speed} فوت`} />
             <CombatStat label="HP" value={hp} />
             <CombatStat
               label={phrase('Hit Dice')}
@@ -301,7 +369,11 @@ export function CharacterSheet() {
             {otherProficiencies.skillGroups.map((group) => (
               <SkillSummaryGroup
                 key={group.source}
-                label={`${source(group.source)} ${phrase('Skills')}`}
+                label={
+                  isFa
+                    ? `مهارت‌های ${source(group.source)}`
+                    : `${source(group.source)} ${phrase('Skills')}`
+                }
                 phrase={phrase}
                 skill={skill}
                 skills={group.skills}
@@ -407,9 +479,120 @@ export function CharacterSheet() {
             </p>
           </SheetSection>
         ) : null}
+
+        <div
+          className="no-print rounded-2xl border p-4"
+          style={{
+            background: 'var(--color-surface)',
+            borderColor: 'var(--color-border)',
+          }}
+        >
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              className="rounded-xl border px-4 py-3 text-sm font-bold transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={downloadingPdfTemplate !== null}
+              onClick={() => void handleDownloadPdf('dnd-2024-template')}
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text)',
+              }}
+              type="button"
+            >
+              {downloadingPdfTemplate === 'dnd-2024-template'
+                ? 'در حال آماده‌سازی...'
+                : 'PDF شیت ۲۰۲۴'}
+            </button>
+            <button
+              className="rounded-xl border px-4 py-3 text-sm font-bold transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={downloadingPdfTemplate !== null}
+              onClick={() => void handleDownloadPdf('dnd-2014-template')}
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text)',
+              }}
+              type="button"
+            >
+              {downloadingPdfTemplate === 'dnd-2014-template'
+                ? 'در حال آماده‌سازی...'
+                : 'PDF شیت ۲۰۱۴'}
+            </button>
+          </div>
+          {pdfNotice ? (
+            <p
+              className="mt-3 text-xs font-medium"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              {pdfNotice}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   );
+}
+
+function createSheetLibraryEntry(
+  state: CharacterState,
+  selections: {
+    cantrips: string[];
+    equipment: string[];
+    languages: string[];
+    proficientSkills: string[];
+    spells: string[];
+    tools: string[];
+  },
+  templateId: CharacterSheetTemplateId,
+): CharacterLibraryEntry {
+  const now = new Date().toISOString();
+  const abilities = Object.fromEntries(
+    (Object.keys(state.abilityScores) as AbilityName[]).map((ability) => [
+      abilityNameToKey[ability],
+      state.abilityScores[ability],
+    ]),
+  ) as CharacterLibraryEntry['abilities'];
+  const hitPoints = getHP(state);
+
+  return {
+    abilities,
+    abilityScoreMethod: 'point-buy',
+    armorClass: getAC(state),
+    background: state.background?.name ?? 'Soldier',
+    builderSelections: {
+      cantrips: selections.cantrips,
+      equipment: selections.equipment,
+      languages: selections.languages,
+      originFeatAbility: '',
+      originFeatCantrips: [],
+      originFeatSpell: '',
+      skills: selections.proficientSkills,
+      spells: selections.spells,
+      tools: selections.tools,
+    },
+    builderStep: 'review',
+    className: state.dndClass?.name ?? 'Fighter',
+    concept: state.backstory,
+    createdAt: now,
+    hp: {
+      current: hitPoints,
+      max: hitPoints,
+      temp: 0,
+    },
+    id: 'charlib_00000000-0000-4000-8000-000000000000',
+    level: 1,
+    name: state.name.trim() || 'Unnamed Hero',
+    notes: state.backstory,
+    ownerParticipantId: 'dev-player-001',
+    portrait: null,
+    pronouns: state.pronouns,
+    rulesProfileId:
+      templateId === 'dnd-2014-template'
+        ? 'dnd-2014-srd-5-1'
+        : 'dnd-2024-free-rules',
+    speciesOrRace: state.race?.name ?? 'Human',
+    speed: getSpeed(state),
+    status: 'draft',
+    updatedAt: now,
+  };
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {

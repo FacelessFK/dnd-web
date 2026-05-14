@@ -14,6 +14,7 @@ export const locales = ['en', 'fa'] as const;
 export type Locale = (typeof locales)[number];
 
 const localeStorageKey = 'dnd-web.locale';
+const defaultLocale: Locale = 'fa';
 
 const messages = {
   en: {
@@ -124,14 +125,14 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 function getInitialLocale(): Locale {
   if (typeof window === 'undefined') {
-    return 'en';
+    return defaultLocale;
   }
 
   const storedLocale = window.localStorage.getItem(localeStorageKey);
 
   return locales.includes(storedLocale as Locale)
     ? (storedLocale as Locale)
-    : 'en';
+    : defaultLocale;
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {

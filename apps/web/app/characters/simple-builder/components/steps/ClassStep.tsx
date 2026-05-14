@@ -339,7 +339,7 @@ export function ClassStep() {
               >
                 <div className="mb-2 flex justify-end">
                   <InfoButton
-                    label="What are cantrips?"
+                    label={phrase('What are cantrips?')}
                     onClick={() => setHelpTopic('cantrips')}
                   />
                 </div>
@@ -365,7 +365,7 @@ export function ClassStep() {
               >
                 <div className="mb-2 flex justify-end">
                   <InfoButton
-                    label="What are spells?"
+                    label={phrase('What are spells?')}
                     onClick={() => setHelpTopic('spells')}
                   />
                 </div>
@@ -452,16 +452,18 @@ export function ClassStep() {
         open={helpTopic === 'cantrips'}
         title={phrase('Cantrips')}
       >
-        Cantrips are simple spells your character can cast at will. They do not
-        use spell slots and are always available once chosen.
+        {phrase(
+          'Cantrips are simple spells your character can cast at will. They do not use spell slots and are always available once chosen.',
+        )}
       </InfoModal>
       <InfoModal
         onClose={() => setHelpTopic(null)}
         open={helpTopic === 'spells'}
         title={phrase('Spells')}
       >
-        Spells are magical effects powered by your class. Prepared or known
-        spells are the options your character can cast during play.
+        {phrase(
+          'Spells are magical effects powered by your class. Prepared or known spells are the options your character can cast during play.',
+        )}
       </InfoModal>
     </div>
   );

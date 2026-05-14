@@ -24,7 +24,10 @@ import {
   characterLibraryEntryToCard,
   getPortraitImageSource,
 } from '../../lib/character-library-mappers';
-import { downloadCharacterSheetPdf } from '../../lib/character-sheet-pdf';
+import {
+  downloadCharacterSheetPdf,
+  type CharacterSheetTemplateId,
+} from '../../lib/character-sheet-pdf';
 import { LanguageSwitcher, useI18n } from '../../lib/i18n';
 import SimpleCharacterBuilder from './simple-builder/App';
 
@@ -236,7 +239,7 @@ function PlaceholderArt({
 
   return (
     <div
-      aria-label={`${label} ${shouldShowImage ? 'art' : 'placeholder art'}`}
+      aria-label={`${label} ${shouldShowImage ? 'تصویر' : 'تصویر جایگزین'}`}
       className={[
         'relative grid overflow-hidden rounded-2xl border border-amber-400/35 bg-[radial-gradient(circle_at_28%_18%,rgba(168,85,247,0.55),transparent_24%),radial-gradient(circle_at_72%_80%,rgba(217,119,6,0.38),transparent_30%),linear-gradient(135deg,#1b1225,#101827_55%,#21140c)] shadow-inner shadow-black/45',
         size === 'avatar'
@@ -278,7 +281,7 @@ function PlaceholderArt({
             {initials || 'CB'}
           </span>
           <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-black/45 px-2 py-1 text-center text-[0.65rem] uppercase tracking-[0.18em] text-amber-100/70">
-            Placeholder
+            تصویر جایگزین
           </span>
         </>
       )}
@@ -370,26 +373,26 @@ export function CharacterLibraryPage() {
               {t('page.characterLibrary.title')}
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-400">
-              Browse persisted characters for the selected dev owner, open a
-              draft, or export a sheet without leaving the workspace.
+              کاراکترهای ذخیره‌شده برای مالک توسعه را ببینید، پیش‌نویس را باز
+              کنید یا بدون خروج از محیط کار، شیت خروجی بگیرید.
             </p>
           </div>
           <Link
             className="inline-flex w-fit rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
             href="/characters/new"
           >
-            Create New Character
+            ساخت کاراکتر جدید
           </Link>
         </div>
 
         <ParchmentPanel className="mt-8">
           <div className="grid gap-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
             <label className="block">
-              <span className="sr-only">Search characters</span>
+              <span className="sr-only">جست‌وجوی کاراکترها</span>
               <input
                 className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search characters..."
+                placeholder="جست‌وجوی کاراکترها..."
                 type="search"
                 value={query}
               />
@@ -397,7 +400,7 @@ export function CharacterLibraryPage() {
 
             <label className="block">
               <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-amber-200/75">
-                Dev Owner
+                مالک توسعه
               </span>
               <input
                 className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 xl:w-56"
@@ -410,10 +413,10 @@ export function CharacterLibraryPage() {
 
             <div className="flex flex-wrap gap-2">
               {[
-                ['all', 'All'],
-                ['draft', 'Drafts'],
-                ['ready', 'Ready'],
-                ['in_session', 'In Session'],
+                ['all', 'همه'],
+                ['draft', 'پیش‌نویس‌ها'],
+                ['ready', 'آماده‌ها'],
+                ['in_session', 'داخل جلسه'],
               ].map(([value, label]) => (
                 <button
                   className={[
@@ -435,13 +438,13 @@ export function CharacterLibraryPage() {
 
             <div className="flex gap-2 text-sm">
               <select
-                aria-label="Sort characters"
+                aria-label="مرتب‌سازی کاراکترها"
                 className="rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-2 text-slate-200 outline-none"
                 defaultValue="recent"
               >
-                <option value="recent">Sort by: Recently Updated</option>
-                <option value="name">Sort by: Name</option>
-                <option value="level">Sort by: Level</option>
+                <option value="recent">مرتب‌سازی: تازه‌ترین بروزرسانی</option>
+                <option value="name">مرتب‌سازی: نام</option>
+                <option value="level">مرتب‌سازی: سطح</option>
               </select>
               <button
                 className="rounded-xl border border-slate-600 bg-slate-950/40 px-3 py-2 text-slate-200"
@@ -462,7 +465,7 @@ export function CharacterLibraryPage() {
         {loadError ? (
           <ParchmentPanel className="mt-6">
             <p className="text-lg font-black text-red-100">
-              Character Library could not load.
+              کتابخانه کاراکترها بارگذاری نشد.
             </p>
             <p className="mt-2 text-sm text-amber-100/70">{loadError}</p>
           </ParchmentPanel>
@@ -477,7 +480,7 @@ export function CharacterLibraryPage() {
         {loading ? (
           <ParchmentPanel className="mt-6 text-center">
             <p className="text-lg font-bold text-amber-50">
-              Loading persisted characters...
+              در حال بارگذاری کاراکترهای ذخیره‌شده...
             </p>
           </ParchmentPanel>
         ) : null}
@@ -496,10 +499,10 @@ export function CharacterLibraryPage() {
         {!loading && !loadError && entries.length === 0 ? (
           <ParchmentPanel className="mt-6 text-center">
             <p className="text-lg font-bold text-amber-50">
-              No persisted characters match that search.
+              هیچ کاراکتر ذخیره‌شده‌ای با این جست‌وجو پیدا نشد.
             </p>
             <p className="mt-2 text-sm text-amber-100/65">
-              Clear the filters or create a new character for this dev owner.
+              فیلترها را پاک کنید یا برای این مالک توسعه کاراکتر تازه بسازید.
             </p>
           </ParchmentPanel>
         ) : null}
@@ -517,30 +520,35 @@ function CharacterCard({
   libraryEntry?: CharacterLibraryEntry;
   onPdfNotice: (notice: string) => void;
 }) {
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
+    useState<CharacterSheetTemplateId | null>(null);
 
-  const downloadPdf = async (): Promise<void> => {
+  const downloadPdf = async (
+    templateId: CharacterSheetTemplateId,
+  ): Promise<void> => {
     if (!libraryEntry) {
       return;
     }
 
-    setDownloadingPdf(true);
+    setDownloadingPdfTemplate(templateId);
 
     try {
-      const result = await downloadCharacterSheetPdf(libraryEntry);
+      const result = await downloadCharacterSheetPdf(libraryEntry, {
+        templateId,
+      });
       const templateMessage = result.fallbackReason
-        ? `Downloaded fallback character sheet PDF: ${result.fallbackReason}`
-        : `Downloaded ${result.template.label} from persisted character data.`;
+        ? `PDF جایگزین شیت کاراکتر دانلود شد: ${result.fallbackReason}`
+        : `${result.template.label} از داده‌های ذخیره‌شده کاراکتر دانلود شد.`;
 
       onPdfNotice(templateMessage);
     } catch (error) {
       onPdfNotice(
         error instanceof Error
-          ? `Character sheet PDF download failed: ${error.message}`
-          : 'Character sheet PDF download failed.',
+          ? `دانلود PDF شیت کاراکتر ناموفق بود: ${error.message}`
+          : 'دانلود PDF شیت کاراکتر ناموفق بود.',
       );
     } finally {
-      setDownloadingPdf(false);
+      setDownloadingPdfTemplate(null);
     }
   };
 
@@ -563,7 +571,7 @@ function CharacterCard({
           <span className="rounded-xl border border-amber-300/35 bg-amber-400 px-3 py-2 text-center text-sm font-black text-slate-950">
             {entry.level}
             <span className="block text-[0.55rem] uppercase tracking-[0.18em]">
-              Level
+              سطح
             </span>
           </span>
         </div>
@@ -573,7 +581,7 @@ function CharacterCard({
         <div className="mt-4 flex items-center justify-between border-t border-slate-700 pt-4">
           <StatusBadge status={entry.status} />
           <span className="text-sm font-bold text-slate-300">
-            AC {entry.armorClass}
+            درجه زره {entry.armorClass}
           </span>
         </div>
         <div className="mt-4 grid gap-2">
@@ -581,39 +589,51 @@ function CharacterCard({
             className="rounded-xl bg-amber-400 px-4 py-2 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-300"
             href={`/characters/${entry.id}/edit`}
           >
-            Edit
+            ویرایش
           </Link>
-          <button
-            className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={!libraryEntry || downloadingPdf}
-            onClick={() => void downloadPdf()}
-            type="button"
-          >
-            {downloadingPdf
-              ? 'Preparing PDF...'
-              : 'Download Character Sheet PDF'}
-          </button>
           <button
             className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-slate-500"
             disabled
             type="button"
           >
-            Duplicate - Pending
+            تکثیر - در انتظار
           </button>
           <button
             className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-red-200/55"
             disabled
             type="button"
           >
-            Delete - Pending
+            حذف - در انتظار
           </button>
           <button
             className="rounded-xl border border-slate-700 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-500"
             disabled
             type="button"
           >
-            Use in Session - Pending
+            استفاده در جلسه - در انتظار
           </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!libraryEntry || downloadingPdfTemplate !== null}
+              onClick={() => void downloadPdf('dnd-2024-template')}
+              type="button"
+            >
+              {downloadingPdfTemplate === 'dnd-2024-template'
+                ? 'در حال آماده‌سازی...'
+                : 'شیت ۲۰۲۴'}
+            </button>
+            <button
+              className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={!libraryEntry || downloadingPdfTemplate !== null}
+              onClick={() => void downloadPdf('dnd-2014-template')}
+              type="button"
+            >
+              {downloadingPdfTemplate === 'dnd-2014-template'
+                ? 'در حال آماده‌سازی...'
+                : 'شیت ۲۰۱۴'}
+            </button>
+          </div>
         </div>
       </div>
     </article>

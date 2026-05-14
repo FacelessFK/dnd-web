@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getLanguageDescription } from '../../data/languages';
 import { RACES } from '../../data/races';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
@@ -21,7 +22,6 @@ import {
   StatPill,
   TraitCard,
 } from '../shared/EntityDetailPanel';
-import { InfoButton, InfoModal } from '../shared/InfoModal';
 import { SelectableOption } from '../shared/SelectableOption';
 
 function fmtAsi(
@@ -80,7 +80,6 @@ export function RaceStep() {
   const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
   const [localSkills, setLocalSkills] = useState<SkillName[]>([]);
-  const [helpTopic, setHelpTopic] = useState<'languages' | null>(null);
 
   const openPanel = (id: string) => {
     const nextRace = RACES.find((candidate) => candidate.id === id) ?? null;
@@ -182,7 +181,9 @@ export function RaceStep() {
         onSelect={handleSelect}
         open={Boolean(panelRace)}
         selectDisabled={selectDisabled}
-        selectLabel={`${phrase('Select')} ${panelRace ? raceName(panelRace) : ''}`}
+        selectLabel={`${phrase('Select')} ${
+          panelRace ? raceName(panelRace, localSubrace) : ''
+        }`}
         title={panelRace ? raceName(panelRace) : ''}
       >
         {panelRace ? (
@@ -198,77 +199,6 @@ export function RaceStep() {
               imageUrl={panelRace.imageUrl}
               title={raceName(panelRace)}
             />
-
-            <PanelSection title={phrase('Core Stats')}>
-              <StatPill
-                label={phrase('Speed')}
-                value={`${panelRace.speed} ft`}
-              />
-              <StatPill label={phrase('Size')} value={phrase(panelRace.size)} />
-            </PanelSection>
-
-            <PanelSection title={phrase('Ability Score Increase')}>
-              <div
-                className="text-sm font-medium"
-                style={{ color: 'var(--color-text)' }}
-              >
-                {fmtAsi(panelRace.asi, ability, copy.noValue)}
-              </div>
-            </PanelSection>
-
-            <PanelSection title={phrase('Languages')}>
-              <div className="text-sm" style={{ color: 'var(--color-text)' }}>
-                {list(panelRace.languages)}
-              </div>
-            </PanelSection>
-
-            {raceLanguageLimit > 0 ? (
-              <PanelSection
-                title={`${phrase('Languages')}: ${raceLanguageLimit} ${phrase('choice')}`}
-              >
-                <div className="mb-2 flex justify-end">
-                  <InfoButton
-                    label="What are languages?"
-                    onClick={() => setHelpTopic('languages')}
-                  />
-                </div>
-                <ChoiceGrid
-                  options={getAvailableLanguageChoices(previewState, 'race')}
-                  selected={localLanguages}
-                  onToggle={toggleLanguage}
-                  phrase={phrase}
-                />
-                <ChoiceCount
-                  current={localLanguages.length}
-                  target={raceLanguageLimit}
-                  suffix={copy.selectedCount}
-                />
-              </PanelSection>
-            ) : null}
-
-            {raceSkillLimit > 0 ? (
-              <PanelSection
-                title={`${phrase('Skill Versatility')}: ${raceSkillLimit} ${phrase('Skill Proficiencies')}`}
-              >
-                <ChoiceGrid
-                  options={getAvailableRaceSkillChoices(previewState)}
-                  selected={localSkills}
-                  onToggle={toggleSkill}
-                  phrase={skill}
-                />
-                <ChoiceCount
-                  current={localSkills.length}
-                  target={raceSkillLimit}
-                  suffix={copy.selectedCount}
-                />
-              </PanelSection>
-            ) : null}
-
-            <PanelSection title={phrase('Features & Traits')}>
-              {panelRace.traits.map((trait) => (
-                <TraitCard key={trait.name} {...feature(trait)} />
-              ))}
-            </PanelSection>
 
             {panelRace.subraces ? (
               <PanelSection title={copy.subraceRequired}>
@@ -326,56 +256,100 @@ export function RaceStep() {
                         >
                           {phrase(candidate.description)}
                         </div>
-                        {active
-                          ? candidate.traits.map((trait) => {
-                              const localizedTrait = feature(trait);
-
-                              return (
-                                <div
-                                  className="mt-2 rounded-lg p-2 text-xs"
-                                  key={trait.name}
-                                  style={{
-                                    background: 'var(--color-surface)',
-                                    color: 'var(--color-text-muted)',
-                                  }}
-                                >
-                                  <strong
-                                    style={{ color: 'var(--color-gold)' }}
-                                  >
-                                    {localizedTrait.name}:
-                                  </strong>{' '}
-                                  {localizedTrait.description}
-                                </div>
-                              );
-                            })
-                          : null}
                       </button>
                     );
                   })}
                 </div>
               </PanelSection>
             ) : null}
+
+            <PanelSection title={phrase('Core Stats')}>
+              <StatPill
+                label={phrase('Speed')}
+                value={`${panelRace.speed} فوت`}
+              />
+              <StatPill label={phrase('Size')} value={phrase(panelRace.size)} />
+            </PanelSection>
+
+            <PanelSection title={phrase('Ability Score Increase')}>
+              <div
+                className="text-sm font-medium"
+                style={{ color: 'var(--color-text)' }}
+              >
+                {fmtAsi(panelRace.asi, ability, copy.noValue)}
+              </div>
+            </PanelSection>
+
+            <PanelSection title={phrase('Languages')}>
+              <div className="text-sm" style={{ color: 'var(--color-text)' }}>
+                {list(panelRace.languages)}
+              </div>
+            </PanelSection>
+
+            {raceLanguageLimit > 0 ? (
+              <PanelSection
+                title={`${phrase('Languages')}: ${raceLanguageLimit} ${phrase('choice')}`}
+              >
+                <ChoiceGrid
+                  options={getAvailableLanguageChoices(previewState, 'race')}
+                  selected={localLanguages}
+                  onToggle={toggleLanguage}
+                  phrase={phrase}
+                  getDescription={(language) =>
+                    phrase(getLanguageDescription(language))
+                  }
+                />
+                <ChoiceCount
+                  current={localLanguages.length}
+                  target={raceLanguageLimit}
+                  suffix={copy.selectedCount}
+                />
+              </PanelSection>
+            ) : null}
+
+            {raceSkillLimit > 0 ? (
+              <PanelSection
+                title={`${phrase('Skill Versatility')}: ${raceSkillLimit} ${phrase('Skill Proficiencies')}`}
+              >
+                <ChoiceGrid
+                  options={getAvailableRaceSkillChoices(previewState)}
+                  selected={localSkills}
+                  onToggle={toggleSkill}
+                  phrase={skill}
+                />
+                <ChoiceCount
+                  current={localSkills.length}
+                  target={raceSkillLimit}
+                  suffix={copy.selectedCount}
+                />
+              </PanelSection>
+            ) : null}
+
+            <PanelSection title={phrase('Features & Traits')}>
+              {panelRace.traits.map((trait) => (
+                <TraitCard key={trait.name} {...feature(trait)} />
+              ))}
+              {localSubrace
+                ? localSubrace.traits.map((trait) => (
+                    <TraitCard key={trait.name} {...feature(trait)} />
+                  ))
+                : null}
+            </PanelSection>
           </>
         ) : null}
       </EntityDetailPanel>
-      <InfoModal
-        onClose={() => setHelpTopic(null)}
-        open={helpTopic === 'languages'}
-        title={phrase('Languages')}
-      >
-        Languages decide which spoken and written tongues your character can
-        understand. They come from race, class, background, and your choices.
-      </InfoModal>
     </div>
   );
 }
 
 function ChoiceGrid<T extends string>({
+  getDescription,
   onToggle,
   options,
   phrase,
   selected,
 }: {
+  getDescription?: (value: T) => string;
   onToggle: (value: T) => void;
   options: T[];
   phrase: (value: T) => string;
@@ -388,6 +362,7 @@ function ChoiceGrid<T extends string>({
 
         return (
           <SelectableOption
+            description={getDescription?.(option)}
             key={option}
             onClick={() => onToggle(option)}
             selected={chosen}

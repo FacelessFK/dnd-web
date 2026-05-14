@@ -357,11 +357,11 @@ export function toggleBuilderSelection(
 export function getStatusLabel(status: CharacterBuilderStatus): string {
   switch (status) {
     case 'draft':
-      return 'Draft';
+      return 'پیش‌نویس';
     case 'ready':
-      return 'Ready';
+      return 'آماده';
     case 'in_session':
-      return 'In Session';
+      return 'داخل جلسه';
   }
 }
 

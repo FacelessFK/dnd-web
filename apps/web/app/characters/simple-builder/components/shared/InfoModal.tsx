@@ -49,7 +49,7 @@ export function InfoModal({ children, onClose, open, title }: InfoModalProps) {
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
       <button
-        aria-label="Dismiss information overlay"
+        aria-label="بستن لایه اطلاعات"
         className="absolute inset-0 cursor-default bg-black/60"
         onClick={onClose}
         type="button"
@@ -67,13 +67,13 @@ export function InfoModal({ children, onClose, open, title }: InfoModalProps) {
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold">{title}</h2>
           <button
-            aria-label="Close information"
+            aria-label="بستن اطلاعات"
             className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-gold)]"
             onClick={onClose}
             style={{ color: 'var(--color-text-muted)' }}
             type="button"
           >
-            x
+            ×
           </button>
         </div>
         <div

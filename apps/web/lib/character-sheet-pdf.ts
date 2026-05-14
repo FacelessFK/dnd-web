@@ -63,6 +63,8 @@ export type CharacterSheetPdfGenerationOptions = {
   loadTemplateBytes?: (
     template: CharacterSheetTemplateDescriptor,
   ) => Promise<Uint8Array>;
+  preserveFormFields?: boolean;
+  templateId?: CharacterSheetTemplateId;
 };
 
 export const characterSheetPdfTemplates: CharacterSheetTemplateDescriptor[] = [
@@ -154,6 +156,7 @@ const dnd2014AbilityFields: Record<
 
 export function getCharacterSheetPdfFileName(
   entry: Pick<CharacterLibraryEntry, 'name' | 'id'>,
+  template?: Pick<CharacterSheetTemplateDescriptor, 'era'>,
 ): string {
   const slug =
     entry.name
@@ -161,8 +164,10 @@ export function getCharacterSheetPdfFileName(
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || entry.id;
+  const editionPrefix =
+    template && template.era !== 'fallback' ? `${template.era}-` : '';
 
-  return `${slug}-character-sheet.pdf`;
+  return `${slug}-${editionPrefix}character-sheet.pdf`;
 }
 
 export function selectCharacterSheetPdfTemplate(
@@ -340,11 +345,18 @@ export async function generateCharacterSheetPdf(
   options: CharacterSheetPdfGenerationOptions = {},
 ): Promise<CharacterSheetPdfResult> {
   const mappedFields = mapCharacterSheetFields(entry);
-  const selectedTemplate = selectCharacterSheetPdfTemplate(
-    entry.rulesProfileId,
-    options.availableTemplateIds,
-  );
-  const fileName = getCharacterSheetPdfFileName(entry);
+  const availableTemplateIds =
+    options.availableTemplateIds ??
+    characterSheetPdfTemplates.map((template) => template.id);
+  const selectedTemplate = options.templateId
+    ? findAvailableTemplate(options.templateId, availableTemplateIds)
+    : selectCharacterSheetPdfTemplate(entry.rulesProfileId, availableTemplateIds);
+
+  if (!selectedTemplate) {
+    throw new Error(`The requested character sheet template is not available.`);
+  }
+
+  const fileName = getCharacterSheetPdfFileName(entry, selectedTemplate);
 
   if (options.forceFallback || selectedTemplate.id === 'simple-fallback') {
     return {
@@ -371,6 +383,10 @@ export async function generateCharacterSheetPdf(
     if (selectedTemplate.hasAcroForm && form.getFields().length > 0) {
       fillAcroForm(form, mappedFields.fieldValues);
       form.updateFieldAppearances(font);
+
+      if (!options.preserveFormFields) {
+        form.flatten();
+      }
     } else {
       overlayTemplateText(pdfDocument, font, entry, mappedFields);
     }
@@ -382,12 +398,18 @@ export async function generateCharacterSheetPdf(
       template: selectedTemplate,
     };
   } catch (error) {
+    const fallbackReason =
+      error instanceof Error
+        ? `Template PDF filling failed: ${error.message}`
+        : 'Template PDF filling failed for an unknown reason.';
+
+    if (options.templateId) {
+      throw new Error(fallbackReason);
+    }
+
     return {
       bytes: generateSimpleCharacterSheetPdf(entry),
-      fallbackReason:
-        error instanceof Error
-          ? `Template PDF filling failed: ${error.message}`
-          : 'Template PDF filling failed for an unknown reason.',
+      fallbackReason,
       fileName,
       mappedFields,
       template: fallbackTemplate(),
@@ -397,8 +419,9 @@ export async function generateCharacterSheetPdf(
 
 export async function downloadCharacterSheetPdf(
   entry: CharacterLibraryEntry,
+  options: CharacterSheetPdfGenerationOptions = {},
 ): Promise<CharacterSheetPdfResult> {
-  const result = await generateCharacterSheetPdf(entry);
+  const result = await generateCharacterSheetPdf(entry, options);
   const blob = new Blob([result.bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -450,7 +473,7 @@ function fillAcroForm(
 ): void {
   for (const [fieldName, value] of Object.entries(fieldValues)) {
     try {
-      form.getTextField(fieldName).setText(value);
+      form.getTextField(fieldName).setText(normalizePdfText(value));
     } catch {
       // The provided templates vary by edition; missing fields stay blank.
     }
@@ -589,7 +612,7 @@ function drawText(
   y: number,
   size: number,
 ): void {
-  page.drawText(text.slice(0, 120), {
+  page.drawText(normalizePdfText(text).slice(0, 120), {
     color: rgb(0.09, 0.07, 0.05),
     font,
     size,
@@ -834,7 +857,7 @@ function wrapTextByWidth(
   size: number,
   maxWidth: number,
 ): string[] {
-  return value.split(/\r?\n/).flatMap((line) => {
+  return normalizePdfText(value).split(/\r?\n/).flatMap((line) => {
     const words = line.trim().split(/\s+/);
     const lines: string[] = [];
     let current = '';
@@ -856,4 +879,15 @@ function wrapTextByWidth(
 
     return lines;
   });
+}
+
+function normalizePdfText(value: string): string {
+  return value
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[^\x20-\x7e\r\n]/g, ' ')
+    .replace(/[ \t]+/g, ' ');
 }
