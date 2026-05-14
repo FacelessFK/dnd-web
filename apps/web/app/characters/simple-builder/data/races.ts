@@ -1,21 +1,17 @@
 import { ALL_SKILLS } from './skills';
-import type { PortraitGender, Race } from '../types';
+import type { Race } from '../types';
 
-const racePortrait = (id: string, gender: PortraitGender) =>
-  `/assets/character-builder/race-portraits/${id}-${gender}.webp`;
-
-const racePortraits = (id: string) => ({
-  female: racePortrait(id, 'female'),
-  male: racePortrait(id, 'male'),
-});
+const raceImage = (id: string) => `/assets/character-builder/races/${id}.png`;
+const raceSymbol = (id: string) =>
+  `/assets/character-builder/races/symbols/${id}.png`;
 
 export const RACES: Race[] = [
   {
     id: 'human',
     name: 'Human',
     tagline: 'Ambitious and adaptable, humanity shapes the world',
-    imageUrl: racePortrait('human', 'male'),
-    portraitUrls: racePortraits('human'),
+    imageUrl: raceImage('human'),
+    symbolUrl: raceSymbol('human'),
     speed: 30,
     size: 'Medium',
     asi: { STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1 },
@@ -37,8 +33,8 @@ export const RACES: Race[] = [
     id: 'elf',
     name: 'Elf',
     tagline: 'Ancient and perceptive, elves walk between two worlds',
-    imageUrl: racePortrait('elf', 'male'),
-    portraitUrls: racePortraits('elf'),
+    imageUrl: raceImage('elf'),
+    symbolUrl: raceSymbol('elf'),
     speed: 30,
     size: 'Medium',
     asi: { DEX: 2 },
@@ -69,7 +65,7 @@ export const RACES: Race[] = [
         id: 'high-elf',
         name: 'High Elf',
         description: 'Keepers of ancient lore and arcane secrets.',
-        portraitUrls: racePortraits('high-elf'),
+        imageUrl: raceImage('elf'),
         asi: { INT: 1 },
         languageChoiceCount: 1,
         traits: [
@@ -94,7 +90,7 @@ export const RACES: Race[] = [
         id: 'wood-elf',
         name: 'Wood Elf',
         description: 'Swift hunters at home in the ancient forests.',
-        portraitUrls: racePortraits('wood-elf'),
+        imageUrl: raceImage('wood-elf'),
         asi: { WIS: 1 },
         traits: [
           {
@@ -117,7 +113,7 @@ export const RACES: Race[] = [
         id: 'dark-elf',
         name: 'Dark Elf (Drow)',
         description: 'Deadly and cunning denizens of the Underdark.',
-        portraitUrls: racePortraits('dark-elf'),
+        imageUrl: raceImage('dark-elf'),
         asi: { CHA: 1 },
         traits: [
           {
@@ -147,8 +143,8 @@ export const RACES: Race[] = [
     id: 'half-elf',
     name: 'Half-Elf',
     tagline: 'Gifted with elven grace and human drive',
-    imageUrl: racePortrait('half-elf', 'male'),
-    portraitUrls: racePortraits('half-elf'),
+    imageUrl: raceImage('half-elf'),
+    symbolUrl: raceSymbol('half-elf'),
     speed: 30,
     size: 'Medium',
     asi: { CHA: 2 },
@@ -182,8 +178,8 @@ export const RACES: Race[] = [
     id: 'dwarf',
     name: 'Dwarf',
     tagline: 'Stoic and resilient, dwarves are born to endure',
-    imageUrl: racePortrait('dwarf', 'male'),
-    portraitUrls: racePortraits('dwarf'),
+    imageUrl: raceImage('dwarf'),
+    symbolUrl: raceSymbol('dwarf'),
     speed: 25,
     size: 'Medium',
     asi: { CON: 2 },
@@ -220,7 +216,7 @@ export const RACES: Race[] = [
         id: 'hill-dwarf',
         name: 'Hill Dwarf',
         description: 'Wise and hardy, with a keen sense for danger.',
-        portraitUrls: racePortraits('hill-dwarf'),
+        imageUrl: raceImage('dwarf'),
         asi: { WIS: 1 },
         traits: [
           {
@@ -234,7 +230,7 @@ export const RACES: Race[] = [
         id: 'mountain-dwarf',
         name: 'Mountain Dwarf',
         description: 'Strong and armored, the warrior dwarves of the peaks.',
-        portraitUrls: racePortraits('mountain-dwarf'),
+        imageUrl: raceImage('mountain-dwarf'),
         asi: { STR: 2 },
         traits: [
           {
@@ -249,8 +245,8 @@ export const RACES: Race[] = [
     id: 'halfling',
     name: 'Halfling',
     tagline: 'Small in size, boundless in luck and courage',
-    imageUrl: racePortrait('halfling', 'male'),
-    portraitUrls: racePortraits('halfling'),
+    imageUrl: raceImage('halfling'),
+    symbolUrl: raceSymbol('halfling'),
     speed: 25,
     size: 'Small',
     asi: { DEX: 2 },
@@ -277,7 +273,7 @@ export const RACES: Race[] = [
         id: 'lightfoot',
         name: 'Lightfoot Halfling',
         description: 'Subtle wanderers who live among other folk.',
-        portraitUrls: racePortraits('lightfoot'),
+        imageUrl: raceImage('halfling'),
         asi: { CHA: 1 },
         traits: [
           {
@@ -291,7 +287,7 @@ export const RACES: Race[] = [
         id: 'stout',
         name: 'Stout Halfling',
         description: 'Hardier halflings with dwarven blood.',
-        portraitUrls: racePortraits('stout'),
+        imageUrl: raceImage('stout'),
         asi: { CON: 1 },
         traits: [
           {
@@ -307,8 +303,8 @@ export const RACES: Race[] = [
     id: 'gnome',
     name: 'Gnome',
     tagline: 'Inventive thinkers brimming with curiosity and magic',
-    imageUrl: racePortrait('gnome', 'male'),
-    portraitUrls: racePortraits('gnome'),
+    imageUrl: raceImage('forest-gnome'),
+    symbolUrl: raceSymbol('gnome'),
     speed: 25,
     size: 'Small',
     asi: { INT: 2 },
@@ -330,7 +326,7 @@ export const RACES: Race[] = [
         id: 'forest-gnome',
         name: 'Forest Gnome',
         description: 'Gentle illusionists at home in wild places.',
-        portraitUrls: racePortraits('forest-gnome'),
+        imageUrl: raceImage('forest-gnome'),
         asi: { DEX: 1 },
         traits: [
           {
@@ -349,7 +345,7 @@ export const RACES: Race[] = [
         id: 'rock-gnome',
         name: 'Rock Gnome',
         description: 'Tinkerers and clockwork inventors.',
-        portraitUrls: racePortraits('rock-gnome'),
+        imageUrl: raceImage('rock-gnome'),
         asi: { CON: 1 },
         traits: [
           {
@@ -370,8 +366,8 @@ export const RACES: Race[] = [
     id: 'half-orc',
     name: 'Half-Orc',
     tagline: 'Fierce and relentless, half-orcs are born survivors',
-    imageUrl: racePortrait('half-orc', 'male'),
-    portraitUrls: racePortraits('half-orc'),
+    imageUrl: raceImage('half-orc'),
+    symbolUrl: raceSymbol('half-orc'),
     speed: 30,
     size: 'Medium',
     asi: { STR: 2, CON: 1 },
@@ -402,8 +398,8 @@ export const RACES: Race[] = [
     id: 'tiefling',
     name: 'Tiefling',
     tagline: 'Touched by infernal power, defined by more than their heritage',
-    imageUrl: racePortrait('tiefling', 'male'),
-    portraitUrls: racePortraits('tiefling'),
+    imageUrl: raceImage('tiefling'),
+    symbolUrl: raceSymbol('tiefling'),
     speed: 30,
     size: 'Medium',
     asi: { INT: 1, CHA: 2 },
@@ -429,8 +425,8 @@ export const RACES: Race[] = [
     id: 'dragonborn',
     name: 'Dragonborn',
     tagline: 'Dragon-descended warriors with elemental breath',
-    imageUrl: racePortrait('dragonborn', 'male'),
-    portraitUrls: racePortraits('dragonborn'),
+    imageUrl: raceImage('dragonborn'),
+    symbolUrl: raceSymbol('dragonborn'),
     speed: 30,
     size: 'Medium',
     asi: { STR: 2, CHA: 1 },

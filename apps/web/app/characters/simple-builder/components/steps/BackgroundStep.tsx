@@ -17,6 +17,31 @@ import {
   TraitCard,
 } from '../shared/EntityDetailPanel';
 
+function BackgroundPreviewImage({
+  imageUrl,
+  title,
+}: {
+  imageUrl: string;
+  title: string;
+}) {
+  return (
+    <div
+      className="aspect-[4/3] overflow-hidden rounded-xl border"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <img
+        alt={title}
+        className="h-full w-full object-cover object-top"
+        loading="lazy"
+        src={imageUrl}
+      />
+    </div>
+  );
+}
+
 export function BackgroundStep() {
   const store = useCharacterStore();
   const {
@@ -166,7 +191,7 @@ export function BackgroundStep() {
       ) : null}
 
       <EntityDetailPanel
-        imageUrl={panelBg?.imageUrl ?? ''}
+        imageUrl={panelBg?.symbolUrl ?? ''}
         onClose={() => setPanelBg(null)}
         onSelect={handleSelect}
         open={Boolean(panelBg)}
@@ -183,6 +208,11 @@ export function BackgroundStep() {
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
               {tagline(panelBg)}
             </p>
+
+            <BackgroundPreviewImage
+              imageUrl={panelBg.imageUrl}
+              title={backgroundName(panelBg)}
+            />
 
             <PanelSection title={phrase('Skill Proficiencies')}>
               <div className="flex flex-wrap gap-1">

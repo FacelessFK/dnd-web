@@ -16,6 +16,31 @@ import {
   TraitCard,
 } from '../shared/EntityDetailPanel';
 
+function ClassPreviewImage({
+  imageUrl,
+  title,
+}: {
+  imageUrl: string;
+  title: string;
+}) {
+  return (
+    <div
+      className="aspect-[4/3] overflow-hidden rounded-xl border"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <img
+        alt={title}
+        className="h-full w-full object-cover object-top"
+        loading="lazy"
+        src={imageUrl}
+      />
+    </div>
+  );
+}
+
 export function ClassStep() {
   const store = useCharacterStore();
   const {
@@ -172,7 +197,7 @@ export function ClassStep() {
       ) : null}
 
       <EntityDetailPanel
-        imageUrl={panelClass?.imageUrl ?? ''}
+        imageUrl={panelClass?.symbolUrl ?? ''}
         onClose={() => setPanelClass(null)}
         onSelect={handleSelect}
         open={Boolean(panelClass)}
@@ -185,6 +210,11 @@ export function ClassStep() {
             <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
               {tagline(panelClass)}
             </p>
+
+            <ClassPreviewImage
+              imageUrl={panelClass.imageUrl}
+              title={className(panelClass)}
+            />
 
             <PanelSection title={phrase('Core Stats')}>
               <StatPill

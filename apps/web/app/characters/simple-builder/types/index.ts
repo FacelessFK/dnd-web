@@ -41,10 +41,6 @@ export type StepId =
 
 export type Size = 'Small' | 'Medium';
 
-export type PortraitGender = 'male' | 'female';
-
-export type GenderedImageUrls = Record<PortraitGender, string>;
-
 export interface Trait {
   name: string;
   description: string;
@@ -89,7 +85,7 @@ export interface Subrace {
   id: string;
   name: string;
   description: string;
-  portraitUrls: GenderedImageUrls;
+  imageUrl: string;
   asi: Partial<Record<AbilityName, number>>;
   languageChoiceCount?: number;
   languages?: string[];
@@ -101,7 +97,7 @@ export interface Race {
   name: string;
   tagline: string;
   imageUrl: string;
-  portraitUrls: GenderedImageUrls;
+  symbolUrl: string;
   speed: number;
   size: Size;
   asi: Partial<Record<AbilityName, number>>;
@@ -118,6 +114,7 @@ export interface DnDClass {
   name: string;
   tagline: string;
   imageUrl: string;
+  symbolUrl: string;
   hitDie: number;
   primaryAbility: string;
   savingThrows: AbilityName[];
@@ -137,6 +134,7 @@ export interface Background {
   name: string;
   tagline: string;
   imageUrl: string;
+  symbolUrl: string;
   skillProficiencies: SkillName[];
   toolProficiencies: string[];
   languages: number;

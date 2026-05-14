@@ -1,11 +1,8 @@
-import type { GenderedImageUrls } from '../../types';
-
 interface Props {
   id: string;
   name: string;
   tagline: string;
   imageUrl: string;
-  imageUrls?: GenderedImageUrls;
   selected: boolean;
   onSelect: (id: string) => void;
 }
@@ -15,17 +12,9 @@ export function EntityCard({
   name,
   tagline,
   imageUrl,
-  imageUrls,
   selected,
   onSelect,
 }: Props) {
-  const images = imageUrls
-    ? [
-        { alt: `${name} male`, src: imageUrls.male },
-        { alt: `${name} female`, src: imageUrls.female },
-      ]
-    : [{ alt: name, src: imageUrl }];
-
   return (
     <button
       onClick={() => onSelect(id)}
@@ -39,27 +28,21 @@ export function EntityCard({
       }}
     >
       <div
-        className={[
-          'w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border',
-          imageUrls ? 'grid grid-cols-2' : '',
-        ].join(' ')}
+        className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-xl border"
         style={{
           borderColor: selected ? 'var(--color-gold)' : 'var(--color-border)',
           background: 'var(--color-surface-elevated)',
         }}
       >
-        {images.map((image) => (
-          <img
-            src={image.src}
-            alt={image.alt}
-            className="w-full h-full object-cover object-top"
-            key={image.src}
-            loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        ))}
+        <img
+          alt={name}
+          className="h-full w-full object-cover object-top"
+          loading="lazy"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+          src={imageUrl}
+        />
       </div>
       <div className="flex-1 min-w-0 text-center">
         <div

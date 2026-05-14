@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react';
 
-import type { GenderedImageUrls } from '../../types';
-
 interface Props {
   open: boolean;
   onClose: () => void;
   title: string;
   imageUrl: string;
-  imageUrls?: GenderedImageUrls;
   children: ReactNode;
   onSelect: () => void;
   selectLabel?: string;
@@ -19,20 +16,12 @@ export function EntityDetailPanel({
   onClose,
   title,
   imageUrl,
-  imageUrls,
   children,
   onSelect,
   selectLabel = 'Select',
   selectDisabled = false,
 }: Props) {
   if (!open) return null;
-
-  const images = imageUrls
-    ? [
-        { alt: `${title} male`, src: imageUrls.male },
-        { alt: `${title} female`, src: imageUrls.female },
-      ]
-    : [{ alt: title, src: imageUrl }];
 
   return (
     <>
@@ -65,23 +54,17 @@ export function EntityDetailPanel({
           style={{ borderColor: 'var(--color-border)' }}
         >
           <div
-            className={[
-              'w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border',
-              imageUrls ? 'grid grid-cols-2' : '',
-            ].join(' ')}
+            className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border"
             style={{
               borderColor: 'var(--color-border)',
               background: 'var(--color-surface-elevated)',
             }}
           >
-            {images.map((image) => (
-              <img
-                src={image.src}
-                alt={image.alt}
-                className="w-full h-full object-cover object-top"
-                key={image.src}
-              />
-            ))}
+            <img
+              alt={title}
+              className="h-full w-full object-cover object-top"
+              src={imageUrl}
+            />
           </div>
           <div className="flex-1 min-w-0">
             <h2

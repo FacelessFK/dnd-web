@@ -10,7 +10,6 @@ import {
 } from '../../store/selectors';
 import type {
   AbilityName,
-  GenderedImageUrls,
   Race,
   SkillName,
   Subrace,
@@ -36,35 +35,27 @@ function fmtAsi(
   );
 }
 
-function PortraitPair({
-  imageUrls,
+function RacePreviewImage({
+  imageUrl,
   title,
 }: {
-  imageUrls: GenderedImageUrls;
+  imageUrl: string;
   title: string;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {[
-        { alt: `${title} male portrait`, src: imageUrls.male },
-        { alt: `${title} female portrait`, src: imageUrls.female },
-      ].map((image) => (
-        <div
-          className="aspect-square overflow-hidden rounded-xl border"
-          key={image.src}
-          style={{
-            background: 'var(--color-surface-elevated)',
-            borderColor: 'var(--color-border)',
-          }}
-        >
-          <img
-            alt={image.alt}
-            className="h-full w-full object-cover object-top"
-            loading="lazy"
-            src={image.src}
-          />
-        </div>
-      ))}
+    <div
+      className="aspect-[4/3] overflow-hidden rounded-xl border"
+      style={{
+        background: 'var(--color-surface-elevated)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
+      <img
+        alt={title}
+        className="h-full w-full object-cover object-top"
+        loading="lazy"
+        src={imageUrl}
+      />
     </div>
   );
 }
@@ -148,7 +139,6 @@ export function RaceStep() {
           <EntityCard
             id={candidate.id}
             imageUrl={candidate.imageUrl}
-            imageUrls={candidate.portraitUrls}
             key={candidate.id}
             name={raceName(candidate)}
             onSelect={openPanel}
@@ -184,8 +174,7 @@ export function RaceStep() {
       ) : null}
 
       <EntityDetailPanel
-        imageUrl={panelRace?.imageUrl ?? ''}
-        imageUrls={panelRace?.portraitUrls}
+        imageUrl={panelRace?.symbolUrl ?? ''}
         onClose={() => setPanelRace(null)}
         onSelect={handleSelect}
         open={Boolean(panelRace)}
@@ -202,8 +191,8 @@ export function RaceStep() {
               {tagline(panelRace)}
             </p>
 
-            <PortraitPair
-              imageUrls={panelRace.portraitUrls}
+            <RacePreviewImage
+              imageUrl={panelRace.imageUrl}
               title={raceName(panelRace)}
             />
 
@@ -296,35 +285,21 @@ export function RaceStep() {
                         }}
                         type="button"
                       >
-                        <div className="mb-3 grid grid-cols-2 gap-2">
-                          {[
-                            {
-                              alt: `${candidate.name} male portrait`,
-                              src: candidate.portraitUrls.male,
-                            },
-                            {
-                              alt: `${candidate.name} female portrait`,
-                              src: candidate.portraitUrls.female,
-                            },
-                          ].map((image) => (
-                            <span
-                              className="block aspect-square overflow-hidden rounded-lg border"
-                              key={image.src}
-                              style={{
-                                background: 'var(--color-surface)',
-                                borderColor: active
-                                  ? 'var(--color-gold-border)'
-                                  : 'var(--color-border)',
-                              }}
-                            >
-                              <img
-                                alt={image.alt}
-                                className="h-full w-full object-cover object-top"
-                                loading="lazy"
-                                src={image.src}
-                              />
-                            </span>
-                          ))}
+                        <div
+                          className="mb-3 aspect-[4/3] overflow-hidden rounded-lg border"
+                          style={{
+                            background: 'var(--color-surface)',
+                            borderColor: active
+                              ? 'var(--color-gold-border)'
+                              : 'var(--color-border)',
+                          }}
+                        >
+                          <img
+                            alt={phrase(candidate.name)}
+                            className="h-full w-full object-cover object-top"
+                            loading="lazy"
+                            src={candidate.imageUrl}
+                          />
                         </div>
                         <div
                           className="mb-0.5 text-sm font-semibold"
