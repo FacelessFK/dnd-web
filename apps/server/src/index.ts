@@ -1,7 +1,13 @@
 // Load repo-root .env values before reading process.env configuration.
-import 'dotenv/config';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { config } from 'dotenv';
 
 import { createBootstrappedSessionServer } from './server-bootstrap.js';
+
+loadRepoEnvironment();
 
 const port = Number(process.env.SERVER_PORT ?? 2567);
 const host = process.env.SERVER_HOST ?? '127.0.0.1';
@@ -31,3 +37,19 @@ server.listen(port, host, () => {
     '[server] Default startup is still in-memory; injected DB-backed character, session snapshot, scene, and active-encounter stores now support pre-execution durable idempotency claims plus transactional durable idempotency for covered session mutations, covered scene mutations, supported character mutations, covered movement mutations, encounter-only commands, attack, and movement-spending encounter-aware movement on the DB-backed path, plus covered session, movement, DM character update, encounter, and combat live-command post-commit outbox dispatch when DB mode is enabled, but cold-boot unpublished rows are not auto-redelivered because SSE subscribers are process-local, without replay, multi-process coordination, or full combat continuity guarantees.',
   );
 });
+
+function loadRepoEnvironment(): void {
+  const sourceDirectory = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(process.cwd(), '.env'),
+    resolve(process.cwd(), '..', '..', '.env'),
+    resolve(sourceDirectory, '..', '..', '..', '.env'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      config({ path: candidate });
+      return;
+    }
+  }
+}

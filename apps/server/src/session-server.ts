@@ -6,6 +6,10 @@ import {
 } from 'node:http';
 
 import {
+  authMeResponseSchema,
+  authMeSuccessSchema,
+  authResponseSchema,
+  authSuccessSchema,
   characterAssignmentSuccessSchema,
   characterCommandErrorSchema,
   characterCommandSchema,
@@ -20,10 +24,12 @@ import {
   encounterCommandErrorSchema,
   encounterCommandSchema,
   encounterCommandSuccessSchema,
+  loginAuthRequestSchema,
   movementCommandErrorSchema,
   movementCommandSchema,
   movementCommandSuccessSchema,
   participantIdSchema,
+  registerAuthRequestSchema,
   sceneActivationSuccessSchema,
   sceneCommandErrorSchema,
   sceneCommandSchema,
@@ -51,6 +57,7 @@ import {
   type SessionStreamEvent,
 } from '@dnd/protocol';
 
+import { AuthService, AuthStoreError } from './auth-store.js';
 import { CharacterStoreError } from './character-store.js';
 import {
   CharacterLibraryService,
@@ -88,11 +95,14 @@ import {
 
 const corsHeaders = {
   'access-control-allow-headers': 'content-type',
+  'access-control-allow-credentials': 'true',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
-  'access-control-allow-origin': '*',
+  'access-control-allow-origin':
+    process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
 } as const;
 
 type RuntimeStoreError =
+  | AuthStoreError
   | CharacterStoreError
   | CharacterLibraryStoreError
   | CommandIdempotencyError
@@ -108,6 +118,8 @@ type GameRuntime = InMemoryGameRuntime<
   RuntimeSessionStore
 >;
 
+type ErrorResponseSchema = { parse: (input: unknown) => unknown };
+
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
@@ -118,10 +130,12 @@ export function createSessionServer(
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
+  auth?: AuthService,
 ): {
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
   characterLibrary: CharacterLibraryService;
+  auth?: AuthService;
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
@@ -145,6 +159,7 @@ export function createSessionServer(
         combatCommandTransaction,
         sceneCommandTransaction,
         characterLibrary,
+        auth,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -155,6 +170,7 @@ export function createSessionServer(
     combatCommandTransaction,
     characterCommandTransaction,
     characterLibrary,
+    auth,
     commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
@@ -178,6 +194,7 @@ export async function handleRequest(
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
+  auth?: AuthService,
 ): Promise<void> {
   setCorsHeaders(response);
 
@@ -196,6 +213,26 @@ export async function handleRequest(
       status:
         'db-idempotency-claim-plus-scene-transaction-and-session-character-movement-encounter-combat-outbox-foundation',
     });
+    return;
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/auth/me') {
+    await handleAuthMeRequest(request, response, auth);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/register') {
+    await handleAuthRegisterRequest(request, response, auth);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+    await handleAuthLoginRequest(request, response, auth);
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/logout') {
+    await handleAuthLogoutRequest(request, response, auth);
     return;
   }
 
@@ -231,6 +268,7 @@ export async function handleRequest(
       response,
       characterLibrary,
       idempotency,
+      auth,
     );
     return;
   }
@@ -318,6 +356,163 @@ export async function handleRequest(
       message: 'Route not found.',
     },
   } satisfies SessionCommandError);
+}
+
+async function handleAuthMeRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth?: AuthService,
+): Promise<void> {
+  try {
+    const user = auth
+      ? await auth.getUserByToken(readAuthCookie(request))
+      : null;
+
+    sendJson(
+      response,
+      200,
+      {
+        data: {
+          user,
+        },
+        ok: true,
+      },
+      authMeSuccessSchema,
+    );
+  } catch (error) {
+    handleRuntimeError(response, error, authMeResponseSchema);
+  }
+}
+
+async function handleAuthRegisterRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth?: AuthService,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(
+      response,
+      400,
+      invalidAuthRequest('Request body must be valid JSON.'),
+    );
+    return;
+  }
+
+  const requestResult = registerAuthRequestSchema.safeParse(body);
+
+  if (!requestResult.success) {
+    sendJson(
+      response,
+      400,
+      invalidAuthRequest(
+        requestResult.error.issues[0]?.message ?? 'Invalid register payload.',
+      ),
+    );
+    return;
+  }
+
+  try {
+    const service = requireAuthService(auth);
+    const session = await service.register(requestResult.data);
+
+    setAuthCookie(response, session.token, session.expiresAt);
+    sendJson(
+      response,
+      200,
+      {
+        data: {
+          user: session.user,
+        },
+        ok: true,
+      },
+      authSuccessSchema,
+    );
+  } catch (error) {
+    handleRuntimeError(response, error, authResponseSchema);
+  }
+}
+
+async function handleAuthLoginRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth?: AuthService,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch {
+    sendJson(
+      response,
+      400,
+      invalidAuthRequest('Request body must be valid JSON.'),
+    );
+    return;
+  }
+
+  const requestResult = loginAuthRequestSchema.safeParse(body);
+
+  if (!requestResult.success) {
+    sendJson(
+      response,
+      400,
+      invalidAuthRequest(
+        requestResult.error.issues[0]?.message ?? 'Invalid login payload.',
+      ),
+    );
+    return;
+  }
+
+  try {
+    const service = requireAuthService(auth);
+    const session = await service.login(requestResult.data);
+
+    setAuthCookie(response, session.token, session.expiresAt);
+    sendJson(
+      response,
+      200,
+      {
+        data: {
+          user: session.user,
+        },
+        ok: true,
+      },
+      authSuccessSchema,
+    );
+  } catch (error) {
+    handleRuntimeError(response, error, authResponseSchema);
+  }
+}
+
+async function handleAuthLogoutRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  auth?: AuthService,
+): Promise<void> {
+  try {
+    if (auth) {
+      await auth.logout(readAuthCookie(request));
+    }
+
+    clearAuthCookie(response);
+    sendJson(
+      response,
+      200,
+      {
+        data: {
+          user: null,
+        },
+        ok: true,
+      },
+      authMeSuccessSchema,
+    );
+  } catch (error) {
+    handleRuntimeError(response, error, authMeResponseSchema);
+  }
 }
 
 async function handleSessionCommandRequest(
@@ -672,6 +867,7 @@ async function handleCharacterLibraryCommandRequest(
   response: ServerResponse,
   characterLibrary: CharacterLibraryService,
   idempotency: CommandIdempotencyStore,
+  auth?: AuthService,
 ): Promise<void> {
   let body: unknown;
 
@@ -715,6 +911,20 @@ async function handleCharacterLibraryCommandRequest(
 
   try {
     const command = commandResult.data;
+    if (auth) {
+      const user = await requireAuthenticatedUser(request, auth);
+
+      if (
+        command.actor.participantId !== user.ownerParticipantId ||
+        command.payload.ownerParticipantId !== user.ownerParticipantId
+      ) {
+        throw new CharacterLibraryStoreError(
+          'invalid_participant_session_association',
+          'Authenticated user cannot manage another owner character library.',
+        );
+      }
+    }
+
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_character_library_entry' ||
       command.type === 'list_character_library_entries'
@@ -1816,14 +2026,7 @@ function handleStreamRequest(
 function handleRuntimeError(
   response: ServerResponse,
   error: unknown,
-  errorSchema:
-    | typeof characterCommandErrorSchema
-    | typeof characterLibraryCommandErrorSchema
-    | typeof dmCommandErrorSchema
-    | typeof encounterCommandErrorSchema
-    | typeof movementCommandErrorSchema
-    | typeof sceneCommandErrorSchema
-    | typeof sessionCommandErrorSchema,
+  errorSchema: ErrorResponseSchema,
 ): void {
   if (response.headersSent || response.writableEnded) {
     response.end();
@@ -1852,14 +2055,7 @@ function handleRuntimeError(
 function handleUnexpectedError(
   response: ServerResponse,
   error: unknown,
-  errorSchema:
-    | typeof characterCommandErrorSchema
-    | typeof characterLibraryCommandErrorSchema
-    | typeof dmCommandErrorSchema
-    | typeof encounterCommandErrorSchema
-    | typeof movementCommandErrorSchema
-    | typeof sceneCommandErrorSchema
-    | typeof sessionCommandErrorSchema,
+  errorSchema: ErrorResponseSchema,
 ): void {
   if (response.headersSent || response.writableEnded) {
     response.end();
@@ -1969,6 +2165,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'character_not_placed':
     case 'command_id_conflict':
     case 'duplicate_join':
+    case 'email_already_registered':
     case 'encounter_already_active':
     case 'action_already_used':
     case 'attack_target_downed':
@@ -1998,6 +2195,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'internal_server_error':
       return 500;
     case 'invalid_command':
+    case 'invalid_credentials':
     case 'invalid_character_id':
     case 'invalid_character_hp':
     case 'invalid_character_library_entry':
@@ -2013,11 +2211,14 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
       return 400;
     case 'invalid_role_assumption':
       return 403;
+    case 'unauthenticated':
+      return 401;
   }
 }
 
 function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
   return (
+    error instanceof AuthStoreError ||
     error instanceof CharacterStoreError ||
     error instanceof CharacterLibraryStoreError ||
     error instanceof CommandIdempotencyError ||
@@ -2028,6 +2229,94 @@ function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
     error instanceof SceneStoreError ||
     error instanceof SessionStoreError
   );
+}
+
+function requireAuthService(auth?: AuthService): AuthService {
+  if (auth) {
+    return auth;
+  }
+
+  throw new AuthStoreError(
+    'internal_server_error',
+    'Authentication requires SERVER_PERSISTENCE_MODE=db.',
+  );
+}
+
+async function requireAuthenticatedUser(
+  request: IncomingMessage,
+  auth?: AuthService,
+) {
+  return requireAuthService(auth).requireUserByToken(readAuthCookie(request));
+}
+
+function invalidAuthRequest(message: string) {
+  return {
+    ok: false,
+    error: {
+      code: 'invalid_command',
+      message,
+    },
+  } as const;
+}
+
+const AUTH_COOKIE_NAME = 'dnd_auth';
+
+function readAuthCookie(request: IncomingMessage): string | null {
+  const cookieHeader = request.headers.cookie;
+
+  if (!cookieHeader) {
+    return null;
+  }
+
+  for (const cookie of cookieHeader.split(';')) {
+    const [rawName, ...rawValueParts] = cookie.trim().split('=');
+
+    if (rawName === AUTH_COOKIE_NAME) {
+      return decodeURIComponent(rawValueParts.join('='));
+    }
+  }
+
+  return null;
+}
+
+function setAuthCookie(
+  response: ServerResponse,
+  token: string,
+  expiresAt: Date,
+): void {
+  response.setHeader(
+    'set-cookie',
+    [
+      `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}`,
+      'HttpOnly',
+      'Path=/',
+      'SameSite=Lax',
+      `Expires=${expiresAt.toUTCString()}`,
+      isSecureCookieEnabled() ? 'Secure' : '',
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function clearAuthCookie(response: ServerResponse): void {
+  response.setHeader(
+    'set-cookie',
+    [
+      `${AUTH_COOKIE_NAME}=`,
+      'HttpOnly',
+      'Path=/',
+      'SameSite=Lax',
+      'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      isSecureCookieEnabled() ? 'Secure' : '',
+    ]
+      .filter(Boolean)
+      .join('; '),
+  );
+}
+
+function isSecureCookieEnabled(): boolean {
+  return process.env.AUTH_COOKIE_SECURE === 'true';
 }
 
 function serializeSseEvent(update: SessionStreamEvent): string {

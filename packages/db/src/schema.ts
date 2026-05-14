@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   pgTable,
@@ -60,6 +61,36 @@ export type StoredCommandEventOutboxPayloadDocument = {
   sessionId: SessionId;
   type: CommandEventOutboxEventType;
 } & Record<string, unknown>;
+
+export const authUsers = pgTable('auth_users', {
+  userId: text('user_id').primaryKey(),
+  email: text('email').notNull().unique(),
+  displayName: text('display_name').notNull(),
+  ownerParticipantId: text('owner_participant_id').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const authSessions = pgTable('auth_sessions', {
+  sessionId: text('session_id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.userId, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revoked: boolean('revoked').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
 
 export const characterRecords = pgTable('character_records', {
   characterId: text('character_id').primaryKey().$type<CharacterId>(),
@@ -182,6 +213,8 @@ export const commandEventOutboxRecords = pgTable(
 
 export const dbSchema = {
   activeEncounterRecords,
+  authSessions,
+  authUsers,
   characterLibraryEntries,
   characterRecords,
   commandIdempotencyClaimRecords,
@@ -194,6 +227,8 @@ export const dbSchema = {
 export type DbSchema = typeof dbSchema;
 export type ActiveEncounterRecordRow =
   typeof activeEncounterRecords.$inferSelect;
+export type AuthSessionRow = typeof authSessions.$inferSelect;
+export type AuthUserRow = typeof authUsers.$inferSelect;
 export type CharacterRecordRow = typeof characterRecords.$inferSelect;
 export type CharacterLibraryEntryRow =
   typeof characterLibraryEntries.$inferSelect;

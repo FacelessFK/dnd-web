@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CharacterLibraryEntry } from '@dnd/protocol';
 
+import { useAuth } from '../../lib/auth-context';
 import {
   getCharacterBuilderAssetFallbackLabel,
   getCharacterBuilderAssetPath,
@@ -15,7 +16,6 @@ import {
   type CharacterBuilderStatus,
 } from '../../lib/character-builder-data';
 import {
-  defaultCharacterLibraryOwnerParticipantId,
   filterCharacterLibraryEntries,
   getStatusLabel,
 } from '../../lib/character-builder-helpers';
@@ -57,6 +57,7 @@ function Shell({
   title: string;
 }) {
   const { t } = useI18n();
+  const { logout, user } = useAuth();
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
@@ -132,9 +133,27 @@ function Shell({
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
               <LanguageSwitcher />
-              <span className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2">
-                {t('shell.demoProfile')}
-              </span>
+              {user ? (
+                <>
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2">
+                    {user.displayName}
+                  </span>
+                  <button
+                    className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 font-bold text-slate-200 transition hover:border-amber-300 hover:text-amber-200"
+                    onClick={() => void logout()}
+                    type="button"
+                  >
+                    خروج
+                  </button>
+                </>
+              ) : (
+                <Link
+                  className="rounded-full border border-amber-300/45 bg-amber-400 px-4 py-2 font-black text-slate-950"
+                  href="/login"
+                >
+                  ورود
+                </Link>
+              )}
             </div>
           </header>
           {children}
@@ -307,10 +326,8 @@ function StatusBadge({ status }: { status: CharacterBuilderStatus }) {
 
 export function CharacterLibraryPage() {
   const { t } = useI18n();
+  const { error: authError, loading: authLoading, user } = useAuth();
   const [query, setQuery] = useState('');
-  const [ownerParticipantId, setOwnerParticipantId] = useState(
-    defaultCharacterLibraryOwnerParticipantId,
-  );
   const [rawEntries, setRawEntries] = useState<CharacterLibraryEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -321,8 +338,14 @@ export function CharacterLibraryPage() {
     let active = true;
 
     async function loadEntries() {
+      if (!user) {
+        setRawEntries([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
-      const result = await listCharacterLibraryEntries(ownerParticipantId);
+      const result = await listCharacterLibraryEntries(user.ownerParticipantId);
 
       if (!active) {
         return;
@@ -344,7 +367,7 @@ export function CharacterLibraryPage() {
     return () => {
       active = false;
     };
-  }, [ownerParticipantId]);
+  }, [user]);
 
   const cards = useMemo(
     () => rawEntries.map(characterLibraryEntryToCard),
@@ -367,144 +390,159 @@ export function CharacterLibraryPage() {
   return (
     <Shell active="library" title={t('page.characterLibrary.title')}>
       <div className="px-4 py-6 lg:px-6 lg:py-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <h2 className="text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
-              {t('page.characterLibrary.title')}
+        {!authLoading && !user ? (
+          <ParchmentPanel>
+            <h2 className="text-2xl font-black text-slate-50">
+              برای دیدن کاراکترها وارد شوید
             </h2>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-400">
-              کاراکترهای ذخیره‌شده برای مالک توسعه را ببینید، پیش‌نویس را باز
-              کنید یا بدون خروج از محیط کار، شیت خروجی بگیرید.
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+              کتابخانه کاراکترها به حساب کاربری وصل شده است؛ بعد از ورود، فقط
+              کاراکترهای خودتان نمایش داده می‌شود.
             </p>
-          </div>
-          <Link
-            className="inline-flex w-fit rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
-            href="/characters/new"
-          >
-            ساخت کاراکتر جدید
-          </Link>
-        </div>
+            {authError ? (
+              <p className="mt-3 text-sm text-red-100">{authError}</p>
+            ) : null}
+            <Link
+              className="mt-5 inline-flex rounded-xl bg-amber-400 px-5 py-3 text-sm font-black text-slate-950"
+              href="/login"
+            >
+              ورود یا ثبت‌نام
+            </Link>
+          </ParchmentPanel>
+        ) : null}
 
-        <ParchmentPanel className="mt-8">
-          <div className="grid gap-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
-            <label className="block">
-              <span className="sr-only">جست‌وجوی کاراکترها</span>
-              <input
-                className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="جست‌وجوی کاراکترها..."
-                type="search"
-                value={query}
-              />
-            </label>
+        {user ? (
+          <>
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <h2 className="text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
+                  {t('page.characterLibrary.title')}
+                </h2>
+                <p className="mt-3 max-w-2xl text-base leading-7 text-slate-400">
+                  کاراکترهای ذخیره‌شده برای مالک توسعه را ببینید، پیش‌نویس را
+                  باز کنید یا بدون خروج از محیط کار، شیت خروجی بگیرید.
+                </p>
+              </div>
+              <Link
+                className="inline-flex w-fit rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
+                href="/characters/new"
+              >
+                ساخت کاراکتر جدید
+              </Link>
+            </div>
 
-            <label className="block">
-              <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-amber-200/75">
-                مالک توسعه
-              </span>
-              <input
-                className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20 xl:w-56"
-                onChange={(event) =>
-                  setOwnerParticipantId(event.target.value.trim())
-                }
-                value={ownerParticipantId}
-              />
-            </label>
+            <ParchmentPanel className="mt-8">
+              <div className="grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
+                <label className="block">
+                  <span className="sr-only">جست‌وجوی کاراکترها</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="جست‌وجوی کاراکترها..."
+                    type="search"
+                    value={query}
+                  />
+                </label>
 
-            <div className="flex flex-wrap gap-2">
-              {[
-                ['all', 'همه'],
-                ['draft', 'پیش‌نویس‌ها'],
-                ['ready', 'آماده‌ها'],
-                ['in_session', 'داخل جلسه'],
-              ].map(([value, label]) => (
-                <button
-                  className={[
-                    'rounded-xl border px-4 py-2 text-sm font-bold transition',
-                    status === value
-                      ? 'border-amber-300/45 bg-amber-400 text-slate-950'
-                      : 'border-slate-600 bg-slate-950/35 text-slate-300 hover:border-slate-400',
-                  ].join(' ')}
-                  key={value}
-                  onClick={() =>
-                    setStatus(value as CharacterBuilderStatus | 'all')
-                  }
-                  type="button"
-                >
-                  {label}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ['all', 'همه'],
+                    ['draft', 'پیش‌نویس‌ها'],
+                    ['ready', 'آماده‌ها'],
+                    ['in_session', 'داخل جلسه'],
+                  ].map(([value, label]) => (
+                    <button
+                      className={[
+                        'rounded-xl border px-4 py-2 text-sm font-bold transition',
+                        status === value
+                          ? 'border-amber-300/45 bg-amber-400 text-slate-950'
+                          : 'border-slate-600 bg-slate-950/35 text-slate-300 hover:border-slate-400',
+                      ].join(' ')}
+                      key={value}
+                      onClick={() =>
+                        setStatus(value as CharacterBuilderStatus | 'all')
+                      }
+                      type="button"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 text-sm">
+                  <select
+                    aria-label="مرتب‌سازی کاراکترها"
+                    className="rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-2 text-slate-200 outline-none"
+                    defaultValue="recent"
+                  >
+                    <option value="recent">
+                      مرتب‌سازی: تازه‌ترین بروزرسانی
+                    </option>
+                    <option value="name">مرتب‌سازی: نام</option>
+                    <option value="level">مرتب‌سازی: سطح</option>
+                  </select>
+                  <button
+                    className="rounded-xl border border-slate-600 bg-slate-950/40 px-3 py-2 text-slate-200"
+                    type="button"
+                  >
+                    ▦
+                  </button>
+                  <button
+                    className="rounded-xl border border-slate-700 bg-slate-950/30 px-3 py-2 text-slate-500"
+                    type="button"
+                  >
+                    ☰
+                  </button>
+                </div>
+              </div>
+            </ParchmentPanel>
+
+            {loadError ? (
+              <ParchmentPanel className="mt-6">
+                <p className="text-lg font-black text-red-100">
+                  کتابخانه کاراکترها بارگذاری نشد.
+                </p>
+                <p className="mt-2 text-sm text-amber-100/70">{loadError}</p>
+              </ParchmentPanel>
+            ) : null}
+
+            {pdfNotice ? (
+              <ParchmentPanel className="mt-6">
+                <p className="text-sm font-bold text-amber-50">{pdfNotice}</p>
+              </ParchmentPanel>
+            ) : null}
+
+            {loading ? (
+              <ParchmentPanel className="mt-6 text-center">
+                <p className="text-lg font-bold text-amber-50">
+                  در حال بارگذاری کاراکترهای ذخیره‌شده...
+                </p>
+              </ParchmentPanel>
+            ) : null}
+
+            <div className="mt-6 grid gap-5 md:grid-cols-2 2xl:grid-cols-4">
+              {entries.map((entry) => (
+                <CharacterCard
+                  entry={entry}
+                  key={entry.id}
+                  libraryEntry={entriesById.get(entry.id)}
+                  onPdfNotice={setPdfNotice}
+                />
               ))}
             </div>
 
-            <div className="flex gap-2 text-sm">
-              <select
-                aria-label="مرتب‌سازی کاراکترها"
-                className="rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-2 text-slate-200 outline-none"
-                defaultValue="recent"
-              >
-                <option value="recent">مرتب‌سازی: تازه‌ترین بروزرسانی</option>
-                <option value="name">مرتب‌سازی: نام</option>
-                <option value="level">مرتب‌سازی: سطح</option>
-              </select>
-              <button
-                className="rounded-xl border border-slate-600 bg-slate-950/40 px-3 py-2 text-slate-200"
-                type="button"
-              >
-                ▦
-              </button>
-              <button
-                className="rounded-xl border border-slate-700 bg-slate-950/30 px-3 py-2 text-slate-500"
-                type="button"
-              >
-                ☰
-              </button>
-            </div>
-          </div>
-        </ParchmentPanel>
-
-        {loadError ? (
-          <ParchmentPanel className="mt-6">
-            <p className="text-lg font-black text-red-100">
-              کتابخانه کاراکترها بارگذاری نشد.
-            </p>
-            <p className="mt-2 text-sm text-amber-100/70">{loadError}</p>
-          </ParchmentPanel>
-        ) : null}
-
-        {pdfNotice ? (
-          <ParchmentPanel className="mt-6">
-            <p className="text-sm font-bold text-amber-50">{pdfNotice}</p>
-          </ParchmentPanel>
-        ) : null}
-
-        {loading ? (
-          <ParchmentPanel className="mt-6 text-center">
-            <p className="text-lg font-bold text-amber-50">
-              در حال بارگذاری کاراکترهای ذخیره‌شده...
-            </p>
-          </ParchmentPanel>
-        ) : null}
-
-        <div className="mt-6 grid gap-5 md:grid-cols-2 2xl:grid-cols-4">
-          {entries.map((entry) => (
-            <CharacterCard
-              entry={entry}
-              key={entry.id}
-              libraryEntry={entriesById.get(entry.id)}
-              onPdfNotice={setPdfNotice}
-            />
-          ))}
-        </div>
-
-        {!loading && !loadError && entries.length === 0 ? (
-          <ParchmentPanel className="mt-6 text-center">
-            <p className="text-lg font-bold text-amber-50">
-              هیچ کاراکتر ذخیره‌شده‌ای با این جست‌وجو پیدا نشد.
-            </p>
-            <p className="mt-2 text-sm text-amber-100/65">
-              فیلترها را پاک کنید یا برای این مالک توسعه کاراکتر تازه بسازید.
-            </p>
-          </ParchmentPanel>
+            {!loading && !loadError && entries.length === 0 ? (
+              <ParchmentPanel className="mt-6 text-center">
+                <p className="text-lg font-bold text-amber-50">
+                  هیچ کاراکتر ذخیره‌شده‌ای با این جست‌وجو پیدا نشد.
+                </p>
+                <p className="mt-2 text-sm text-amber-100/65">
+                  فیلترها را پاک کنید یا برای این مالک توسعه کاراکتر تازه
+                  بسازید.
+                </p>
+              </ParchmentPanel>
+            ) : null}
+          </>
         ) : null}
       </div>
     </Shell>

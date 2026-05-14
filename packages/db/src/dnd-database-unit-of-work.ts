@@ -1,4 +1,8 @@
 import {
+  DrizzleAuthUserDatabase,
+  type AuthUserDatabase,
+} from './auth-user-database.js';
+import {
   DrizzleCharacterRecordDatabase,
   type CharacterRecordDatabase,
   type DndDatabase,
@@ -33,6 +37,7 @@ import {
 } from './session-snapshot-database.js';
 
 export type DndDatabaseUnitOfWorkContext = {
+  auth?: AuthUserDatabase;
   characterLibrary: CharacterLibraryEntryDatabase;
   characters: CharacterRecordDatabase;
   commandIdempotencyClaims: CommandIdempotencyClaimRecordDatabase;
@@ -57,6 +62,7 @@ export class DrizzleDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   ): Promise<T> {
     return this.db.transaction((tx) =>
       run({
+        auth: new DrizzleAuthUserDatabase(tx),
         characterLibrary: new DrizzleCharacterLibraryEntryDatabase(tx),
         characters: new DrizzleCharacterRecordDatabase(tx),
         commandIdempotencyClaims:

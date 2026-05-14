@@ -10,8 +10,10 @@ export const runtimeErrorCodeSchema = z.enum([
   'character_not_placed',
   'command_id_conflict',
   'duplicate_join',
+  'email_already_registered',
   'encounter_already_active',
   'internal_server_error',
+  'invalid_credentials',
   'invalid_attack_target',
   'invalid_character_id',
   'invalid_character_hp',
@@ -48,6 +50,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'self_target_not_allowed',
   'session_not_found',
   'turn_actor_downed',
+  'unauthenticated',
 ]);
 
 export const sessionErrorCodeSchema = runtimeErrorCodeSchema;

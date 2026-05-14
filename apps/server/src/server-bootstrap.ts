@@ -1,5 +1,6 @@
 import {
   createNodePostgresDndDatabaseConnection,
+  DrizzleAuthUserDatabase,
   DrizzleActiveEncounterRecordDatabase,
   DrizzleCharacterLibraryEntryDatabase,
   DrizzleCharacterRecordDatabase,
@@ -8,6 +9,7 @@ import {
   DrizzleDndDatabaseUnitOfWork,
   DrizzleSceneRecordDatabase,
   DrizzleSessionSnapshotDatabase,
+  type AuthUserDatabase,
   type ActiveEncounterRecordDatabase,
   type CharacterLibraryEntryDatabase,
   type CharacterRecordDatabase,
@@ -19,6 +21,7 @@ import {
   type SessionSnapshotDatabase,
 } from '@dnd/db';
 
+import { AuthService } from './auth-store.js';
 import {
   CommandEventOutboxDispatcher,
   type CommandEventOutboxDispatcherLike,
@@ -54,6 +57,7 @@ export type SessionServerBootstrap = ReturnType<typeof createSessionServer> & {
 };
 
 export type ServerBootstrapDependencies = {
+  createAuthUserDatabase: (db: DndDatabase) => AuthUserDatabase;
   createActiveEncounterRecordDatabase: (
     db: DndDatabase,
   ) => ActiveEncounterRecordDatabase;
@@ -79,6 +83,7 @@ export type ServerBootstrapDependencies = {
 };
 
 const defaultDependencies: ServerBootstrapDependencies = {
+  createAuthUserDatabase: (db) => new DrizzleAuthUserDatabase(db),
   createActiveEncounterRecordDatabase: (db) =>
     new DrizzleActiveEncounterRecordDatabase(db),
   createCharacterLibraryEntryDatabase: (db) =>
@@ -150,6 +155,7 @@ export async function createBootstrappedSessionServer(
     const sessionSnapshots = dependencies.createSessionSnapshotDatabase(
       connection.db,
     );
+    const authUsers = dependencies.createAuthUserDatabase(connection.db);
     const characterRecords = dependencies.createCharacterRecordDatabase(
       connection.db,
     );
@@ -177,6 +183,7 @@ export async function createBootstrappedSessionServer(
     const characterLibrary = new CharacterLibraryService(
       new DbBackedCharacterLibraryRepository(characterLibraryEntries),
     );
+    const auth = new AuthService(authUsers);
     const commandEventOutboxDispatcher =
       dependencies.createCommandEventOutboxDispatcher(
         commandEventOutboxRecords,
@@ -217,6 +224,7 @@ export async function createBootstrappedSessionServer(
         commandEventOutboxDispatcher,
         sceneCommandTransaction,
         characterLibrary,
+        auth,
       ),
       closePersistence,
       persistenceMode,

@@ -197,6 +197,7 @@ async function postCommand<TResponse extends CommandResponse>(
   try {
     response = await fetch(new URL(path, runtimeServerUrl), {
       body: JSON.stringify(command),
+      credentials: 'include',
       headers: {
         'content-type': 'application/json',
       },

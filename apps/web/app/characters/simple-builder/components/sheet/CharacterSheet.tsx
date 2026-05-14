@@ -1,6 +1,11 @@
 import { useState } from 'react';
-import type { CharacterLibraryEntry } from '@dnd/protocol';
+import type {
+  CharacterLibraryEntry,
+  CharacterLibraryEntryInput,
+} from '@dnd/protocol';
 
+import { useAuth } from '../../../../../lib/auth-context';
+import { createCharacterLibraryEntry } from '../../../../../lib/character-library-api';
 import {
   downloadCharacterSheetPdf,
   type CharacterSheetTemplateId,
@@ -40,9 +45,12 @@ const abilityNameToKey = {
 
 export function CharacterSheet() {
   const store = useCharacterStore();
+  const { user } = useAuth();
   const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
     useState<CharacterSheetTemplateId | null>(null);
+  const [saving, setSaving] = useState(false);
   const [pdfNotice, setPdfNotice] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
   const {
     age,
     alignment,
@@ -84,14 +92,13 @@ export function CharacterSheet() {
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
   const spellcastingSummary = getSpellcastingSummary(store);
-  const selectedCantrips =
-    spellcastingSummary?.selectedCantrips.length
-      ? spellcastingSummary.selectedCantrips
-      : dndClass?.spellcasting?.cantrips ?? [];
-  const selectedPreparedSpells =
-    spellcastingSummary?.selectedPreparedSpells.length
-      ? spellcastingSummary.selectedPreparedSpells
-      : dndClass?.spellcasting?.preparedSpells ?? [];
+  const selectedCantrips = spellcastingSummary?.selectedCantrips.length
+    ? spellcastingSummary.selectedCantrips
+    : (dndClass?.spellcasting?.cantrips ?? []);
+  const selectedPreparedSpells = spellcastingSummary?.selectedPreparedSpells
+    .length
+    ? spellcastingSummary.selectedPreparedSpells
+    : (dndClass?.spellcasting?.preparedSpells ?? []);
 
   const handleDownloadPdf = async (
     templateId: CharacterSheetTemplateId,
@@ -114,6 +121,7 @@ export function CharacterSheet() {
             languages: otherProficiencies.languages,
           },
           templateId,
+          user?.ownerParticipantId ?? 'dev-player-001',
         ),
         { templateId },
       );
@@ -132,6 +140,45 @@ export function CharacterSheet() {
     } finally {
       setDownloadingPdfTemplate(null);
     }
+  };
+
+  const handleSaveCharacter = async (): Promise<void> => {
+    if (!user) {
+      setSaveNotice('برای ذخیره کاراکتر باید وارد حساب کاربری شوید.');
+      return;
+    }
+
+    setSaving(true);
+    setSaveNotice('');
+
+    const entry = createSheetLibraryEntry(
+      store,
+      {
+        cantrips: selectedCantrips,
+        equipment,
+        proficientSkills: skills
+          .filter((item) => item.proficient)
+          .map((item) => item.skill),
+        spells: selectedPreparedSpells,
+        tools: otherProficiencies.tools,
+        languages: otherProficiencies.languages,
+      },
+      'dnd-2024-template',
+      user.ownerParticipantId,
+    );
+    const input = toCharacterLibraryEntryInput(entry);
+    const result = await createCharacterLibraryEntry(
+      user.ownerParticipantId,
+      input,
+    );
+
+    if (result.ok) {
+      setSaveNotice('کاراکتر در کتابخانه حساب شما ذخیره شد.');
+    } else {
+      setSaveNotice(`ذخیره ناموفق بود: ${result.error.message}`);
+    }
+
+    setSaving(false);
   };
 
   return (
@@ -451,18 +498,16 @@ export function CharacterSheet() {
               </div>
               <ProfList
                 label={phrase('Cantrips')}
-                items={(
-                  spellcastingSummary.selectedCantrips.length
-                    ? spellcastingSummary.selectedCantrips
-                    : dndClass.spellcasting.cantrips ?? []
+                items={(spellcastingSummary.selectedCantrips.length
+                  ? spellcastingSummary.selectedCantrips
+                  : (dndClass.spellcasting.cantrips ?? [])
                 ).map(phrase)}
               />
               <ProfList
                 label={phrase('Prepared Spells')}
-                items={(
-                  spellcastingSummary.selectedPreparedSpells.length
-                    ? spellcastingSummary.selectedPreparedSpells
-                    : dndClass.spellcasting.preparedSpells ?? []
+                items={(spellcastingSummary.selectedPreparedSpells.length
+                  ? spellcastingSummary.selectedPreparedSpells
+                  : (dndClass.spellcasting.preparedSpells ?? [])
                 ).map(phrase)}
               />
             </div>
@@ -488,6 +533,18 @@ export function CharacterSheet() {
           }}
         >
           <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              className="rounded-xl border px-4 py-3 text-sm font-bold transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-2"
+              disabled={saving}
+              onClick={() => void handleSaveCharacter()}
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text)',
+              }}
+              type="button"
+            >
+              {saving ? 'در حال ذخیره...' : 'ذخیره در کتابخانه'}
+            </button>
             <button
               className="rounded-xl border px-4 py-3 text-sm font-bold transition-all hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={downloadingPdfTemplate !== null}
@@ -525,6 +582,14 @@ export function CharacterSheet() {
               {pdfNotice}
             </p>
           ) : null}
+          {saveNotice ? (
+            <p
+              className="mt-3 text-xs font-medium"
+              style={{ color: 'var(--color-text-muted)' }}
+            >
+              {saveNotice}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>
@@ -542,6 +607,7 @@ function createSheetLibraryEntry(
     tools: string[];
   },
   templateId: CharacterSheetTemplateId,
+  ownerParticipantId: string,
 ): CharacterLibraryEntry {
   const now = new Date().toISOString();
   const abilities = Object.fromEntries(
@@ -581,7 +647,7 @@ function createSheetLibraryEntry(
     level: 1,
     name: state.name.trim() || 'Unnamed Hero',
     notes: state.backstory,
-    ownerParticipantId: 'dev-player-001',
+    ownerParticipantId,
     portrait: null,
     pronouns: state.pronouns,
     rulesProfileId:
@@ -592,6 +658,30 @@ function createSheetLibraryEntry(
     speed: getSpeed(state),
     status: 'draft',
     updatedAt: now,
+  };
+}
+
+function toCharacterLibraryEntryInput(
+  entry: CharacterLibraryEntry,
+): CharacterLibraryEntryInput {
+  return {
+    abilities: entry.abilities,
+    abilityScoreMethod: entry.abilityScoreMethod,
+    armorClass: entry.armorClass,
+    background: entry.background,
+    builderSelections: entry.builderSelections,
+    builderStep: entry.builderStep,
+    className: entry.className,
+    concept: entry.concept,
+    hp: entry.hp,
+    level: entry.level,
+    name: entry.name,
+    notes: entry.notes,
+    portrait: entry.portrait,
+    pronouns: entry.pronouns,
+    rulesProfileId: entry.rulesProfileId,
+    speciesOrRace: entry.speciesOrRace,
+    speed: entry.speed,
   };
 }
 
@@ -694,7 +784,10 @@ function SkillSummaryGroup({
       <div className="space-y-1">
         {skills.map((item) => (
           <div className="text-sm" key={item.name}>
-            <span className="font-semibold" style={{ color: 'var(--color-text)' }}>
+            <span
+              className="font-semibold"
+              style={{ color: 'var(--color-text)' }}
+            >
               {skill(item.name)}:
             </span>{' '}
             <span style={{ color: 'var(--color-text-muted)' }}>
