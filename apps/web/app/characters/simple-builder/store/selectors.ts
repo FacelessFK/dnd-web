@@ -1,6 +1,25 @@
 import type { AbilityName, CharacterState, SkillName } from '../types'
 import { SKILL_MAP, ALL_SKILLS } from '../data/skills'
 
+export const LANGUAGE_OPTIONS = [
+  'Common',
+  'Dwarvish',
+  'Elvish',
+  'Giant',
+  'Gnomish',
+  'Goblin',
+  'Halfling',
+  'Orc',
+  'Abyssal',
+  'Celestial',
+  'Draconic',
+  'Deep Speech',
+  'Infernal',
+  'Primordial',
+  'Sylvan',
+  'Undercommon',
+]
+
 export function getFinalAbilityScores(state: CharacterState): Record<AbilityName, number> {
   const base = state.abilityScores
   const raceAsi = state.race?.asi ?? {}
@@ -38,6 +57,7 @@ export function getSavingThrows(state: CharacterState): { ability: AbilityName; 
 
 export function getProficientSkills(state: CharacterState): SkillName[] {
   const classSkills = state.classSkillChoices
+  const raceSkills = state.raceSkillChoices
   const bgSkills = state.background?.skillProficiencies ?? []
   const conflict = getConflictingSkill(state)
   const override = state.backgroundSkillOverride
@@ -47,7 +67,8 @@ export function getProficientSkills(state: CharacterState): SkillName[] {
     bgEffective = bgSkills.filter((s) => s !== conflict).concat(override)
   }
 
-  const all = new Set([...classSkills, ...bgEffective])
+  const fixedRaceSkills = getFixedRaceSkills(state)
+  const all = new Set([...classSkills, ...raceSkills, ...fixedRaceSkills, ...bgEffective])
   return Array.from(all)
 }
 
@@ -95,7 +116,17 @@ export function getSpeed(state: CharacterState): number {
 
 export function getAllLanguages(state: CharacterState): string[] {
   const raceLanguages = state.race?.languages ?? []
-  return Array.from(new Set([...raceLanguages]))
+  const subraceLanguages = state.subrace?.languages ?? []
+  const classLanguages = getClassGrantedLanguages(state)
+  return Array.from(
+    new Set([
+      ...raceLanguages,
+      ...subraceLanguages,
+      ...state.raceLanguageChoices,
+      ...state.backgroundLanguageChoices,
+      ...classLanguages,
+    ]),
+  )
 }
 
 export function getAllProficiencies(state: CharacterState): {
@@ -161,6 +192,122 @@ export function getCostToIncrease(currentScore: number): number {
 
 export function getAllEquipment(state: CharacterState): string[] {
   const classEq = state.dndClass?.equipment ?? []
+  const classChoiceEq = Object.values(state.classEquipmentChoices).flat()
   const bgEq = state.background?.equipment ?? []
-  return [...classEq, ...bgEq]
+  return Array.from(new Set([...classEq, ...classChoiceEq, ...bgEq]))
+}
+
+export function getRaceLanguageChoiceLimit(state: CharacterState): number {
+  return (state.race?.languageChoiceCount ?? 0) + (state.subrace?.languageChoiceCount ?? 0)
+}
+
+export function getBackgroundLanguageChoiceLimit(state: CharacterState): number {
+  return state.background?.languages ?? 0
+}
+
+export function getAvailableLanguageChoices(
+  state: CharacterState,
+  source: 'background' | 'race',
+): string[] {
+  const fixed = new Set([
+    ...(state.race?.languages ?? []),
+    ...(state.subrace?.languages ?? []),
+    ...getClassGrantedLanguages(state),
+  ])
+  const otherChoices =
+    source === 'race' ? state.backgroundLanguageChoices : state.raceLanguageChoices
+
+  return LANGUAGE_OPTIONS.filter(
+    (language) => !fixed.has(language) && !otherChoices.includes(language),
+  )
+}
+
+export function getRaceSkillChoiceLimit(state: CharacterState): number {
+  return state.race?.skillChoiceCount ?? 0
+}
+
+export function getAvailableRaceSkillChoices(state: CharacterState): SkillName[] {
+  const fixedSkills = new Set([
+    ...getFixedRaceSkills(state),
+    ...(state.background?.skillProficiencies ?? []),
+    ...state.classSkillChoices,
+  ])
+  return (state.race?.skillChoiceOptions ?? ALL_SKILLS).filter(
+    (value) => !fixedSkills.has(value),
+  )
+}
+
+export function getRequiredEquipmentChoiceGroups(state: CharacterState) {
+  return state.dndClass?.equipmentChoices?.filter((group) => group.required) ?? []
+}
+
+export function hasValidClassEquipmentChoices(state: CharacterState): boolean {
+  return getRequiredEquipmentChoiceGroups(state).every((group) => {
+    const selected = state.classEquipmentChoices[group.id] ?? []
+    return group.options.some((option) => arraysEqual(option.items, selected))
+  })
+}
+
+export function getPreparedSpellLimit(state: CharacterState): number {
+  const spellcasting = state.dndClass?.spellcasting
+  if (!spellcasting || spellcasting.spellSlots.length === 0) return 0
+  if (state.dndClass?.id === 'druid' || state.dndClass?.id === 'cleric') {
+    return Math.max(1, 1 + getAbilityModifiers(state)[spellcasting.ability])
+  }
+  return spellcasting.spellsKnown ?? spellcasting.preparedSpells?.length ?? 0
+}
+
+export function hasValidSpellChoices(state: CharacterState): boolean {
+  const spellcasting = state.dndClass?.spellcasting
+  if (!spellcasting || spellcasting.spellSlots.length === 0) return true
+
+  const cantripTarget = spellcasting.cantripOptions ? spellcasting.cantripsKnown : 0
+  const preparedTarget = spellcasting.preparedSpellOptions ? getPreparedSpellLimit(state) : 0
+
+  return (
+    state.classSpellChoices.cantrips.length === cantripTarget &&
+    state.classSpellChoices.preparedSpells.length === preparedTarget
+  )
+}
+
+export function getSpellcastingSummary(state: CharacterState) {
+  const spellcasting = state.dndClass?.spellcasting
+  if (!spellcasting || spellcasting.spellSlots.length === 0) return null
+
+  const abilityMod = getAbilityModifiers(state)[spellcasting.ability]
+  const proficiencyBonus = 2
+  const cantripOptions = spellcasting.cantripOptions ?? spellcasting.cantrips ?? []
+  const preparedSpellOptions =
+    spellcasting.preparedSpellOptions ?? spellcasting.preparedSpells ?? []
+  const preparedLimit = getPreparedSpellLimit(state)
+
+  return {
+    ability: spellcasting.ability,
+    abilityModifier: abilityMod,
+    cantripsKnown: spellcasting.cantripsKnown,
+    cantripOptions,
+    preparedLimit,
+    preparedSpellOptions,
+    selectedCantrips: state.classSpellChoices.cantrips,
+    selectedPreparedSpells: state.classSpellChoices.preparedSpells,
+    spellAttackBonus: proficiencyBonus + abilityMod,
+    spellSaveDc: 8 + proficiencyBonus + abilityMod,
+    spellSlots: spellcasting.spellSlots,
+  }
+}
+
+function getClassGrantedLanguages(state: CharacterState): string[] {
+  if (state.dndClass?.id === 'druid') return ['Druidic']
+  if (state.dndClass?.id === 'rogue') return ["Thieves' Cant"]
+  return []
+}
+
+function getFixedRaceSkills(state: CharacterState): SkillName[] {
+  if (state.race?.id === 'elf') return ['Perception']
+  if (state.race?.id === 'half-orc') return ['Intimidation']
+  return []
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
 }

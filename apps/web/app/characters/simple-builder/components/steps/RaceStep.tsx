@@ -2,10 +2,17 @@ import { useState } from 'react';
 import { RACES } from '../../data/races';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
+import {
+  getAvailableLanguageChoices,
+  getAvailableRaceSkillChoices,
+  getRaceLanguageChoiceLimit,
+  getRaceSkillChoiceLimit,
+} from '../../store/selectors';
 import type {
   AbilityName,
   GenderedImageUrls,
   Race,
+  SkillName,
   Subrace,
 } from '../../types';
 import { EntityCard } from '../shared/EntityCard';
@@ -63,25 +70,64 @@ function PortraitPair({
 }
 
 export function RaceStep() {
-  const { race, setRace, setSubrace, subrace } = useCharacterStore();
-  const { ability, copy, dirClass, feature, list, phrase, raceName, tagline } =
+  const store = useCharacterStore();
+  const {
+    race,
+    raceLanguageChoices,
+    raceSkillChoices,
+    setRace,
+    setRaceLanguageChoices,
+    setRaceSkillChoices,
+    setSubrace,
+    subrace,
+  } = store;
+  const { ability, copy, dirClass, feature, list, phrase, raceName, skill, tagline } =
     useBuilderI18n();
   const [panelRace, setPanelRace] = useState<Race | null>(null);
   const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
+  const [localLanguages, setLocalLanguages] = useState<string[]>([]);
+  const [localSkills, setLocalSkills] = useState<SkillName[]>([]);
 
   const openPanel = (id: string) => {
     const nextRace = RACES.find((candidate) => candidate.id === id) ?? null;
     setPanelRace(nextRace);
     setLocalSubrace(nextRace?.id === race?.id ? subrace : null);
+    setLocalLanguages(nextRace?.id === race?.id ? raceLanguageChoices : []);
+    setLocalSkills(nextRace?.id === race?.id ? raceSkillChoices : []);
   };
 
   const handleSelect = () => {
     if (!panelRace) return;
     setRace(panelRace);
     setSubrace(panelRace.subraces ? localSubrace : null);
+    setRaceLanguageChoices(localLanguages);
+    setRaceSkillChoices(localSkills);
   };
 
-  const selectDisabled = Boolean(panelRace?.subraces && !localSubrace);
+  const previewState = {
+    ...store,
+    race: panelRace,
+    raceLanguageChoices: localLanguages,
+    raceSkillChoices: localSkills,
+    subrace: localSubrace,
+  };
+  const raceLanguageLimit = getRaceLanguageChoiceLimit(previewState);
+  const raceSkillLimit = getRaceSkillChoiceLimit(previewState);
+  const selectDisabled = Boolean(
+    (panelRace?.subraces && !localSubrace) ||
+      localLanguages.length < raceLanguageLimit ||
+      localSkills.length < raceSkillLimit,
+  );
+
+  const toggleLanguage = (language: string) => {
+    setLocalLanguages((current) =>
+      toggleChoice(current, language, raceLanguageLimit),
+    );
+  };
+
+  const toggleSkill = (nextSkill: SkillName) => {
+    setLocalSkills((current) => toggleChoice(current, nextSkill, raceSkillLimit));
+  };
 
   return (
     <div>
@@ -184,6 +230,42 @@ export function RaceStep() {
               </div>
             </PanelSection>
 
+            {raceLanguageLimit > 0 ? (
+              <PanelSection
+                title={`${phrase('Languages')}: ${raceLanguageLimit} ${phrase('choice')}`}
+              >
+                <ChoiceGrid
+                  options={getAvailableLanguageChoices(previewState, 'race')}
+                  selected={localLanguages}
+                  onToggle={toggleLanguage}
+                  phrase={phrase}
+                />
+                <ChoiceCount
+                  current={localLanguages.length}
+                  target={raceLanguageLimit}
+                  suffix={copy.selectedCount}
+                />
+              </PanelSection>
+            ) : null}
+
+            {raceSkillLimit > 0 ? (
+              <PanelSection
+                title={`${phrase('Skill Versatility')}: ${raceSkillLimit} ${phrase('Skill Proficiencies')}`}
+              >
+                <ChoiceGrid
+                  options={getAvailableRaceSkillChoices(previewState)}
+                  selected={localSkills}
+                  onToggle={toggleSkill}
+                  phrase={skill}
+                />
+                <ChoiceCount
+                  current={localSkills.length}
+                  target={raceSkillLimit}
+                  suffix={copy.selectedCount}
+                />
+              </PanelSection>
+            ) : null}
+
             <PanelSection title={phrase('Features & Traits')}>
               {panelRace.traits.map((trait) => (
                 <TraitCard key={trait.name} {...feature(trait)} />
@@ -200,7 +282,10 @@ export function RaceStep() {
                       <button
                         className={`w-full rounded-xl border p-3 transition-all duration-150 ${dirClass}`}
                         key={candidate.id}
-                        onClick={() => setLocalSubrace(candidate)}
+                        onClick={() => {
+                          setLocalSubrace(candidate);
+                          setLocalLanguages([]);
+                        }}
                         style={{
                           background: active
                             ? 'var(--color-gold-dim)'
@@ -291,4 +376,73 @@ export function RaceStep() {
       </EntityDetailPanel>
     </div>
   );
+}
+
+function ChoiceGrid<T extends string>({
+  onToggle,
+  options,
+  phrase,
+  selected,
+}: {
+  onToggle: (value: T) => void;
+  options: T[];
+  phrase: (value: T) => string;
+  selected: T[];
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5">
+      {options.map((option) => {
+        const chosen = selected.includes(option);
+
+        return (
+          <button
+            className="rounded-lg px-3 py-2 text-left text-xs transition-all duration-100"
+            key={option}
+            onClick={() => onToggle(option)}
+            style={{
+              background: chosen
+                ? 'var(--color-gold-dim)'
+                : 'var(--color-surface-elevated)',
+              border: `1px solid ${
+                chosen ? 'var(--color-gold)' : 'var(--color-border)'
+              }`,
+              color: chosen ? 'var(--color-gold)' : 'var(--color-text)',
+            }}
+            type="button"
+          >
+            {phrase(option)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChoiceCount({
+  current,
+  suffix,
+  target,
+}: {
+  current: number;
+  suffix: string;
+  target: number;
+}) {
+  return (
+    <div
+      className="mt-2 text-center text-xs"
+      style={{ color: 'var(--color-text-muted)' }}
+    >
+      {current} / {target} {suffix}
+    </div>
+  );
+}
+
+function toggleChoice<T>(values: T[], value: T, maxSelected: number): T[] {
+  if (values.includes(value)) {
+    return values.filter((candidate) => candidate !== value);
+  }
+  if (values.length >= maxSelected) {
+    return values;
+  }
+  return [...values, value];
 }

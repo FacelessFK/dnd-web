@@ -66,7 +66,23 @@ export interface SpellcastingInfo {
   spellsKnown?: number;
   spellSlots: { level: number; slots: number }[];
   cantrips?: string[];
+  cantripOptions?: string[];
+  preparedSpellOptions?: string[];
+  preparedSpells?: string[];
   note?: string;
+}
+
+export interface EquipmentChoiceOption {
+  id: string;
+  label: string;
+  items: string[];
+}
+
+export interface EquipmentChoiceGroup {
+  id: string;
+  label: string;
+  options: EquipmentChoiceOption[];
+  required: boolean;
 }
 
 export interface Subrace {
@@ -75,6 +91,8 @@ export interface Subrace {
   description: string;
   portraitUrls: GenderedImageUrls;
   asi: Partial<Record<AbilityName, number>>;
+  languageChoiceCount?: number;
+  languages?: string[];
   traits: Trait[];
 }
 
@@ -87,7 +105,10 @@ export interface Race {
   speed: number;
   size: Size;
   asi: Partial<Record<AbilityName, number>>;
+  languageChoiceCount?: number;
   languages: string[];
+  skillChoiceCount?: number;
+  skillChoiceOptions?: SkillName[];
   traits: Trait[];
   subraces?: Subrace[];
 }
@@ -107,6 +128,7 @@ export interface DnDClass {
   numSkillChoices: number;
   features: ClassFeature[];
   equipment: string[];
+  equipmentChoices?: EquipmentChoiceGroup[];
   spellcasting?: SpellcastingInfo;
 }
 
@@ -129,10 +151,18 @@ export interface Background {
 export interface CharacterState {
   race: Race | null;
   subrace: Subrace | null;
+  raceLanguageChoices: string[];
+  raceSkillChoices: SkillName[];
   dndClass: DnDClass | null;
   classSkillChoices: SkillName[];
+  classEquipmentChoices: Record<string, string[]>;
+  classSpellChoices: {
+    cantrips: string[];
+    preparedSpells: string[];
+  };
   background: Background | null;
   backgroundSkillOverride: SkillName | null;
+  backgroundLanguageChoices: string[];
   abilityScores: Record<AbilityName, number>;
   name: string;
   alignment: Alignment | null;
@@ -140,6 +170,7 @@ export interface CharacterState {
   height: string;
   weight: string;
   pronouns: string;
+  portraitDataUrl: string;
   backstory: string;
   currentStep: StepId;
 }

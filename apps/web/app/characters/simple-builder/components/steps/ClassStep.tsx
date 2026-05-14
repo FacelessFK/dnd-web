@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { CLASSES } from '../../data/classes';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
+import {
+  getPreparedSpellLimit,
+  hasValidClassEquipmentChoices,
+  hasValidSpellChoices,
+} from '../../store/selectors';
 import type { DnDClass, SkillName } from '../../types';
 import { EntityCard } from '../shared/EntityCard';
 import {
@@ -12,17 +17,41 @@ import {
 } from '../shared/EntityDetailPanel';
 
 export function ClassStep() {
-  const { classSkillChoices, dndClass, setClass, setClassSkillChoices } =
-    useCharacterStore();
+  const store = useCharacterStore();
+  const {
+    classEquipmentChoices,
+    classSkillChoices,
+    classSpellChoices,
+    dndClass,
+    setClass,
+    setClassEquipmentChoices,
+    setClassSkillChoices,
+    setClassSpellChoices,
+  } = store;
   const { ability, className, copy, feature, list, phrase, skill, tagline } =
     useBuilderI18n();
   const [panelClass, setPanelClass] = useState<DnDClass | null>(null);
   const [localSkills, setLocalSkills] = useState<SkillName[]>([]);
+  const [localEquipmentChoices, setLocalEquipmentChoices] = useState<
+    Record<string, string[]>
+  >({});
+  const [localSpellChoices, setLocalSpellChoices] = useState({
+    cantrips: [] as string[],
+    preparedSpells: [] as string[],
+  });
 
   const openPanel = (id: string) => {
     const nextClass = CLASSES.find((candidate) => candidate.id === id) ?? null;
     setPanelClass(nextClass);
     setLocalSkills(nextClass?.id === dndClass?.id ? classSkillChoices : []);
+    setLocalEquipmentChoices(
+      nextClass?.id === dndClass?.id ? classEquipmentChoices : {},
+    );
+    setLocalSpellChoices(
+      nextClass?.id === dndClass?.id
+        ? classSpellChoices
+        : { cantrips: [], preparedSpells: [] },
+    );
   };
 
   const toggleSkill = (nextSkill: SkillName) => {
@@ -41,14 +70,53 @@ export function ClassStep() {
   const neededSkills = panelClass
     ? panelClass.numSkillChoices - localSkills.length
     : 0;
+  const previewState = {
+    ...store,
+    classEquipmentChoices: localEquipmentChoices,
+    classSpellChoices: localSpellChoices,
+    dndClass: panelClass,
+  };
   const selectDisabled = Boolean(
-    panelClass && localSkills.length < panelClass.numSkillChoices,
+    panelClass &&
+      (localSkills.length < panelClass.numSkillChoices ||
+        !hasValidClassEquipmentChoices(previewState) ||
+        !hasValidSpellChoices(previewState)),
   );
+  const selectLabel = (() => {
+    if (!panelClass) return phrase('Select');
+    if (neededSkills > 0) {
+      return `${neededSkills} ${phrase('Skill Proficiencies')}`;
+    }
+    if (!hasValidClassEquipmentChoices(previewState)) {
+      return phrase('Choose starting equipment');
+    }
+    if (!hasValidSpellChoices(previewState)) {
+      return phrase('Choose spells');
+    }
+    return `${phrase('Select')} ${className(panelClass)}`;
+  })();
 
   const handleSelect = () => {
     if (!panelClass) return;
     setClass(panelClass);
     setClassSkillChoices(localSkills);
+    setClassEquipmentChoices(localEquipmentChoices);
+    setClassSpellChoices(localSpellChoices);
+  };
+
+  const chooseEquipmentOption = (groupId: string, items: string[]) => {
+    setLocalEquipmentChoices((current) => ({ ...current, [groupId]: items }));
+  };
+
+  const toggleSpell = (
+    type: 'cantrips' | 'preparedSpells',
+    spell: string,
+    limit: number,
+  ) => {
+    setLocalSpellChoices((current) => ({
+      ...current,
+      [type]: toggleChoice(current[type], spell, limit),
+    }));
   };
 
   return (
@@ -109,11 +177,7 @@ export function ClassStep() {
         onSelect={handleSelect}
         open={Boolean(panelClass)}
         selectDisabled={selectDisabled}
-        selectLabel={
-          selectDisabled
-            ? `${neededSkills} ${phrase('Skill Proficiencies')}`
-            : `${phrase('Select')} ${panelClass ? className(panelClass) : ''}`
-        }
+        selectLabel={selectLabel}
         title={panelClass ? className(panelClass) : ''}
       >
         {panelClass ? (
@@ -196,6 +260,105 @@ export function ClassStep() {
               </PanelSection>
             ) : null}
 
+            {panelClass.equipmentChoices?.length ? (
+              <PanelSection title={phrase('Starting Equipment')}>
+                <div className="space-y-3">
+                  {panelClass.equipmentChoices.map((group) => (
+                    <div key={group.id}>
+                      <div
+                        className="mb-1.5 text-xs font-semibold"
+                        style={{ color: 'var(--color-text-muted)' }}
+                      >
+                        {phrase(group.label)}
+                      </div>
+                      <div className="space-y-1.5">
+                        {group.options.map((option) => {
+                          const chosen = arraysEqual(
+                            localEquipmentChoices[group.id] ?? [],
+                            option.items,
+                          );
+
+                          return (
+                            <button
+                              className="w-full rounded-lg px-3 py-2 text-left text-xs transition-all"
+                              key={option.id}
+                              onClick={() =>
+                                chooseEquipmentOption(group.id, option.items)
+                              }
+                              style={{
+                                background: chosen
+                                  ? 'var(--color-gold-dim)'
+                                  : 'var(--color-surface-elevated)',
+                                border: `1px solid ${
+                                  chosen
+                                    ? 'var(--color-gold)'
+                                    : 'var(--color-border)'
+                                }`,
+                                color: chosen
+                                  ? 'var(--color-gold)'
+                                  : 'var(--color-text)',
+                              }}
+                              type="button"
+                            >
+                              <span className="font-semibold">
+                                {phrase(option.label)}
+                              </span>
+                              <span
+                                className="mt-0.5 block"
+                                style={{ color: 'var(--color-text-muted)' }}
+                              >
+                                {list(option.items)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </PanelSection>
+            ) : null}
+
+            {panelClass.spellcasting?.cantripOptions ? (
+              <PanelSection
+                title={`${phrase('Cantrips')}: ${panelClass.spellcasting.cantripsKnown}`}
+              >
+                <SpellChoiceGrid
+                  limit={panelClass.spellcasting.cantripsKnown}
+                  onToggle={(spell) =>
+                    toggleSpell(
+                      'cantrips',
+                      spell,
+                      panelClass.spellcasting?.cantripsKnown ?? 0,
+                    )
+                  }
+                  options={panelClass.spellcasting.cantripOptions}
+                  phrase={phrase}
+                  selected={localSpellChoices.cantrips}
+                />
+              </PanelSection>
+            ) : null}
+
+            {panelClass.spellcasting?.preparedSpellOptions ? (
+              <PanelSection
+                title={`${phrase('Prepared Spells')}: ${getPreparedSpellLimit(previewState)}`}
+              >
+                <SpellChoiceGrid
+                  limit={getPreparedSpellLimit(previewState)}
+                  onToggle={(spell) =>
+                    toggleSpell(
+                      'preparedSpells',
+                      spell,
+                      getPreparedSpellLimit(previewState),
+                    )
+                  }
+                  options={panelClass.spellcasting.preparedSpellOptions}
+                  phrase={phrase}
+                  selected={localSpellChoices.preparedSpells}
+                />
+              </PanelSection>
+            ) : null}
+
             <PanelSection title={phrase('Level 1 Features')}>
               {panelClass.features.map((classFeature) => (
                 <TraitCard key={classFeature.name} {...feature(classFeature)} />
@@ -259,5 +422,74 @@ export function ClassStep() {
         ) : null}
       </EntityDetailPanel>
     </div>
+  );
+}
+
+function SpellChoiceGrid({
+  limit,
+  onToggle,
+  options,
+  phrase,
+  selected,
+}: {
+  limit: number;
+  onToggle: (spell: string) => void;
+  options: string[];
+  phrase: (value: string) => string;
+  selected: string[];
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-1.5">
+        {options.map((option) => {
+          const chosen = selected.includes(option);
+          const disabled = !chosen && selected.length >= limit;
+
+          return (
+            <button
+              className="rounded-lg px-3 py-2 text-left text-xs transition-all duration-100 disabled:opacity-40"
+              disabled={disabled}
+              key={option}
+              onClick={() => onToggle(option)}
+              style={{
+                background: chosen
+                  ? 'var(--color-gold-dim)'
+                  : 'var(--color-surface-elevated)',
+                border: `1px solid ${
+                  chosen ? 'var(--color-gold)' : 'var(--color-border)'
+                }`,
+                color: chosen ? 'var(--color-gold)' : 'var(--color-text)',
+              }}
+              type="button"
+            >
+              {phrase(option)}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className="mt-2 text-center text-xs"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        {selected.length} / {limit}
+      </div>
+    </>
+  );
+}
+
+function toggleChoice<T>(values: T[], value: T, maxSelected: number): T[] {
+  if (values.includes(value)) {
+    return values.filter((candidate) => candidate !== value);
+  }
+  if (values.length >= maxSelected) {
+    return values;
+  }
+  return [...values, value];
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
   );
 }

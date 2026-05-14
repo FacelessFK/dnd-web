@@ -3,7 +3,11 @@ import { BACKGROUNDS } from '../../data/backgrounds';
 import { ALL_SKILLS } from '../../data/skills';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
-import { getConflictingSkill } from '../../store/selectors';
+import {
+  getAvailableLanguageChoices,
+  getBackgroundLanguageChoiceLimit,
+  getConflictingSkill,
+} from '../../store/selectors';
 import type { Background, SkillName } from '../../types';
 import { EntityCard } from '../shared/EntityCard';
 import {
@@ -17,24 +21,55 @@ export function BackgroundStep() {
   const store = useCharacterStore();
   const {
     background,
+    backgroundLanguageChoices,
     backgroundSkillOverride,
     setBackground,
+    setBackgroundLanguageChoices,
     setBackgroundSkillOverride,
   } = store;
   const { backgroundName, copy, feature, list, phrase, skill, tagline } =
     useBuilderI18n();
   const [panelBg, setPanelBg] = useState<Background | null>(null);
+  const [localLanguages, setLocalLanguages] = useState<string[]>([]);
 
   const conflict = getConflictingSkill(store);
 
   const openPanel = (id: string) => {
-    setPanelBg(BACKGROUNDS.find((candidate) => candidate.id === id) ?? null);
+    const nextBackground =
+      BACKGROUNDS.find((candidate) => candidate.id === id) ?? null;
+    setPanelBg(nextBackground);
+    setLocalLanguages(
+      nextBackground?.id === background?.id ? backgroundLanguageChoices : [],
+    );
   };
 
   const handleSelect = () => {
     if (!panelBg) return;
     setBackground(panelBg);
+    setBackgroundLanguageChoices(localLanguages);
     setBackgroundSkillOverride(null);
+  };
+
+  const previewState = {
+    ...store,
+    background: panelBg,
+    backgroundLanguageChoices: localLanguages,
+  };
+  const languageLimit = getBackgroundLanguageChoiceLimit(previewState);
+  const selectDisabled = Boolean(
+    panelBg && localLanguages.length < languageLimit,
+  );
+
+  const toggleLanguage = (language: string) => {
+    setLocalLanguages((current) => {
+      if (current.includes(language)) {
+        return current.filter((candidate) => candidate !== language);
+      }
+      if (current.length >= languageLimit) {
+        return current;
+      }
+      return [...current, language];
+    });
   };
 
   const usedSkills = new Set([
@@ -135,7 +170,12 @@ export function BackgroundStep() {
         onClose={() => setPanelBg(null)}
         onSelect={handleSelect}
         open={Boolean(panelBg)}
-        selectLabel={`${phrase('Select')} ${panelBg ? backgroundName(panelBg) : ''}`}
+        selectDisabled={selectDisabled}
+        selectLabel={
+          selectDisabled
+            ? `${languageLimit - localLanguages.length} ${phrase('Languages')}`
+            : `${phrase('Select')} ${panelBg ? backgroundName(panelBg) : ''}`
+        }
         title={panelBg ? backgroundName(panelBg) : ''}
       >
         {panelBg ? (
@@ -162,8 +202,50 @@ export function BackgroundStep() {
 
             {panelBg.languages > 0 ? (
               <PanelSection title={phrase('Languages')}>
-                <div className="text-sm" style={{ color: 'var(--color-text)' }}>
+                <div
+                  className="mb-2 text-sm"
+                  style={{ color: 'var(--color-text)' }}
+                >
                   {copy.languageChoice(panelBg.languages)}
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {getAvailableLanguageChoices(
+                    previewState,
+                    'background',
+                  ).map((language) => {
+                    const chosen = localLanguages.includes(language);
+
+                    return (
+                      <button
+                        className="rounded-lg px-3 py-2 text-left text-xs transition-all"
+                        key={language}
+                        onClick={() => toggleLanguage(language)}
+                        style={{
+                          background: chosen
+                            ? 'var(--color-gold-dim)'
+                            : 'var(--color-surface-elevated)',
+                          border: `1px solid ${
+                            chosen
+                              ? 'var(--color-gold)'
+                              : 'var(--color-border)'
+                          }`,
+                          color: chosen
+                            ? 'var(--color-gold)'
+                            : 'var(--color-text)',
+                        }}
+                        type="button"
+                      >
+                        {phrase(language)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  className="mt-2 text-center text-xs"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  {localLanguages.length} / {languageLimit}{' '}
+                  {copy.selectedCount}
                 </div>
               </PanelSection>
             ) : null}

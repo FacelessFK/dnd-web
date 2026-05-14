@@ -14,10 +14,15 @@ const DEFAULT_ABILITY_SCORES: Record<AbilityName, number> = {
 interface CharacterStore extends CharacterState {
   setRace: (race: Race | null) => void
   setSubrace: (subrace: Subrace | null) => void
+  setRaceLanguageChoices: (languages: string[]) => void
+  setRaceSkillChoices: (skills: SkillName[]) => void
   setClass: (dndClass: DnDClass | null) => void
   setClassSkillChoices: (skills: SkillName[]) => void
+  setClassEquipmentChoices: (choices: Record<string, string[]>) => void
+  setClassSpellChoices: (choices: CharacterState['classSpellChoices']) => void
   setBackground: (background: Background | null) => void
   setBackgroundSkillOverride: (skill: SkillName | null) => void
+  setBackgroundLanguageChoices: (languages: string[]) => void
   setAbilityScore: (ability: AbilityName, value: number) => void
   resetAbilityScores: () => void
   setName: (name: string) => void
@@ -26,6 +31,7 @@ interface CharacterStore extends CharacterState {
   setHeight: (height: string) => void
   setWeight: (weight: string) => void
   setPronouns: (pronouns: string) => void
+  setPortraitDataUrl: (portraitDataUrl: string) => void
   setBackstory: (backstory: string) => void
   setStep: (step: StepId) => void
 }
@@ -33,10 +39,18 @@ interface CharacterStore extends CharacterState {
 const DEFAULT_CHARACTER_STATE: CharacterState = {
   race: null,
   subrace: null,
+  raceLanguageChoices: [],
+  raceSkillChoices: [],
   dndClass: null,
   classSkillChoices: [],
+  classEquipmentChoices: {},
+  classSpellChoices: {
+    cantrips: [],
+    preparedSpells: [],
+  },
   background: null,
   backgroundSkillOverride: null,
+  backgroundLanguageChoices: [],
   abilityScores: { ...DEFAULT_ABILITY_SCORES },
   name: '',
   alignment: null,
@@ -44,6 +58,7 @@ const DEFAULT_CHARACTER_STATE: CharacterState = {
   height: '',
   weight: '',
   pronouns: '',
+  portraitDataUrl: '',
   backstory: '',
   currentStep: 'race',
 }
@@ -56,20 +71,49 @@ export function CharacterStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<CharacterStore>(
     () => ({
       ...state,
-      setRace: (race) => setState((current) => ({ ...current, race, subrace: null })),
-      setSubrace: (subrace) => setState((current) => ({ ...current, subrace })),
+      setRace: (race) =>
+        setState((current) => ({
+          ...current,
+          race,
+          raceLanguageChoices: [],
+          raceSkillChoices: [],
+          subrace: null,
+        })),
+      setSubrace: (subrace) =>
+        setState((current) => ({
+          ...current,
+          raceLanguageChoices: [],
+          subrace,
+        })),
+      setRaceLanguageChoices: (raceLanguageChoices) =>
+        setState((current) => ({ ...current, raceLanguageChoices })),
+      setRaceSkillChoices: (raceSkillChoices) =>
+        setState((current) => ({ ...current, raceSkillChoices })),
       setClass: (dndClass) =>
-        setState((current) => ({ ...current, dndClass, classSkillChoices: [] })),
+        setState((current) => ({
+          ...current,
+          classEquipmentChoices: {},
+          classSkillChoices: [],
+          classSpellChoices: { cantrips: [], preparedSpells: [] },
+          dndClass,
+        })),
       setClassSkillChoices: (classSkillChoices) =>
         setState((current) => ({ ...current, classSkillChoices })),
+      setClassEquipmentChoices: (classEquipmentChoices) =>
+        setState((current) => ({ ...current, classEquipmentChoices })),
+      setClassSpellChoices: (classSpellChoices) =>
+        setState((current) => ({ ...current, classSpellChoices })),
       setBackground: (background) =>
         setState((current) => ({
           ...current,
           background,
+          backgroundLanguageChoices: [],
           backgroundSkillOverride: null,
         })),
       setBackgroundSkillOverride: (backgroundSkillOverride) =>
         setState((current) => ({ ...current, backgroundSkillOverride })),
+      setBackgroundLanguageChoices: (backgroundLanguageChoices) =>
+        setState((current) => ({ ...current, backgroundLanguageChoices })),
       setAbilityScore: (ability, value) =>
         setState((current) => ({
           ...current,
@@ -86,6 +130,8 @@ export function CharacterStoreProvider({ children }: { children: ReactNode }) {
       setHeight: (height) => setState((current) => ({ ...current, height })),
       setWeight: (weight) => setState((current) => ({ ...current, weight })),
       setPronouns: (pronouns) => setState((current) => ({ ...current, pronouns })),
+      setPortraitDataUrl: (portraitDataUrl) =>
+        setState((current) => ({ ...current, portraitDataUrl })),
       setBackstory: (backstory) => setState((current) => ({ ...current, backstory })),
       setStep: (currentStep) => setState((current) => ({ ...current, currentStep })),
     }),

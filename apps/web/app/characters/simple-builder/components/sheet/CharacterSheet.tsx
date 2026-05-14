@@ -14,6 +14,7 @@ import {
   getPassivePerception,
   getSavingThrows,
   getSkills,
+  getSpellcastingSummary,
   getSpeed,
 } from '../../store/selectors';
 import type { AbilityName } from '../../types';
@@ -33,6 +34,7 @@ export function CharacterSheet() {
     dndClass,
     height,
     name,
+    portraitDataUrl,
     pronouns,
     race,
     subrace,
@@ -64,9 +66,7 @@ export function CharacterSheet() {
   const proficiencies = getAllProficiencies(store);
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
-  const isCaster = Boolean(
-    dndClass?.spellcasting && dndClass.spellcasting.spellSlots.length > 0,
-  );
+  const spellcastingSummary = getSpellcastingSummary(store);
 
   return (
     <div>
@@ -97,36 +97,60 @@ export function CharacterSheet() {
 
       <div className="space-y-4">
         <SheetSection title={phrase('Character')}>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
-            <InfoRow label={phrase('Name')} value={name || copy.noValue} />
-            <InfoRow
-              label={copy.stepLabels.race ?? 'Race'}
-              value={raceName(race, subrace)}
-            />
-            <InfoRow
-              label={copy.stepLabels.class ?? 'Class'}
-              value={className(dndClass)}
-            />
-            <InfoRow
-              label={copy.stepLabels.background ?? 'Background'}
-              value={backgroundName(background)}
-            />
-            <InfoRow
-              label={copy.fieldAlignment}
-              value={alignmentLabel(alignment)}
-            />
-            <InfoRow label={phrase('Level')} value="1" />
-            <InfoRow label="XP" value="0" />
-            {age ? <InfoRow label={copy.fieldAge} value={age} /> : null}
-            {height ? (
-              <InfoRow label={copy.fieldHeight} value={height} />
-            ) : null}
-            {weight ? (
-              <InfoRow label={copy.fieldWeight} value={weight} />
-            ) : null}
-            {pronouns ? (
-              <InfoRow label={copy.fieldPronouns} value={pronouns} />
-            ) : null}
+          <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
+            <div
+              className="flex aspect-[4/5] items-center justify-center overflow-hidden rounded-xl border"
+              style={{
+                background: 'var(--color-surface-elevated)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              {portraitDataUrl ? (
+                <img
+                  alt="Character portrait"
+                  className="h-full w-full object-cover object-top"
+                  src={portraitDataUrl}
+                />
+              ) : (
+                <span
+                  className="text-3xl font-bold"
+                  style={{ color: 'var(--color-gold)' }}
+                >
+                  D20
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+              <InfoRow label={phrase('Name')} value={name || copy.noValue} />
+              <InfoRow
+                label={copy.stepLabels.race ?? 'Race'}
+                value={raceName(race, subrace)}
+              />
+              <InfoRow
+                label={copy.stepLabels.class ?? 'Class'}
+                value={className(dndClass)}
+              />
+              <InfoRow
+                label={copy.stepLabels.background ?? 'Background'}
+                value={backgroundName(background)}
+              />
+              <InfoRow
+                label={copy.fieldAlignment}
+                value={alignmentLabel(alignment)}
+              />
+              <InfoRow label={phrase('Level')} value="1" />
+              <InfoRow label="XP" value="0" />
+              {age ? <InfoRow label={copy.fieldAge} value={age} /> : null}
+              {height ? (
+                <InfoRow label={copy.fieldHeight} value={height} />
+              ) : null}
+              {weight ? (
+                <InfoRow label={copy.fieldWeight} value={weight} />
+              ) : null}
+              {pronouns ? (
+                <InfoRow label={copy.fieldPronouns} value={pronouns} />
+              ) : null}
+            </div>
           </div>
         </SheetSection>
 
@@ -322,27 +346,33 @@ export function CharacterSheet() {
           </ul>
         </SheetSection>
 
-        {isCaster && dndClass?.spellcasting ? (
+        {spellcastingSummary && dndClass?.spellcasting ? (
           <SheetSection title={phrase('Spellcasting')}>
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <InfoBadge
                   label={phrase('Ability')}
-                  value={ability(dndClass.spellcasting.ability)}
+                  value={ability(spellcastingSummary.ability)}
+                />
+                <InfoBadge
+                  label={phrase('Spell Save DC')}
+                  value={spellcastingSummary.spellSaveDc}
+                />
+                <InfoBadge
+                  label={phrase('Spell Attack')}
+                  value={fmtMod(spellcastingSummary.spellAttackBonus)}
                 />
                 {dndClass.spellcasting.cantripsKnown > 0 ? (
                   <InfoBadge
                     label={phrase('Cantrips')}
-                    value={dndClass.spellcasting.cantripsKnown}
+                    value={spellcastingSummary.cantripsKnown}
                   />
                 ) : null}
-                {dndClass.spellcasting.spellsKnown !== undefined ? (
-                  <InfoBadge
-                    label={phrase('Spellcasting')}
-                    value={dndClass.spellcasting.spellsKnown}
-                  />
-                ) : null}
-                {dndClass.spellcasting.spellSlots.map((slot) => (
+                <InfoBadge
+                  label={phrase('Prepared Spells')}
+                  value={spellcastingSummary.preparedLimit}
+                />
+                {spellcastingSummary.spellSlots.map((slot) => (
                   <InfoBadge
                     key={slot.level}
                     label={`${phrase('Level')} ${slot.level}`}
@@ -350,12 +380,22 @@ export function CharacterSheet() {
                   />
                 ))}
               </div>
-              {dndClass.spellcasting.cantrips?.length ? (
-                <ProfList
-                  label={phrase('Starting Cantrips')}
-                  items={dndClass.spellcasting.cantrips.map(phrase)}
-                />
-              ) : null}
+              <ProfList
+                label={phrase('Cantrips')}
+                items={(
+                  spellcastingSummary.selectedCantrips.length
+                    ? spellcastingSummary.selectedCantrips
+                    : dndClass.spellcasting.cantrips ?? []
+                ).map(phrase)}
+              />
+              <ProfList
+                label={phrase('Prepared Spells')}
+                items={(
+                  spellcastingSummary.selectedPreparedSpells.length
+                    ? spellcastingSummary.selectedPreparedSpells
+                    : dndClass.spellcasting.preparedSpells ?? []
+                ).map(phrase)}
+              />
             </div>
           </SheetSection>
         ) : null}

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import type { Alignment } from '../../types';
@@ -52,17 +53,31 @@ export function CharacterDetailsStep() {
     backstory,
     height,
     name,
+    portraitDataUrl,
     pronouns,
     setAge,
     setAlignment,
     setBackstory,
     setHeight,
     setName,
+    setPortraitDataUrl,
     setPronouns,
     setWeight,
     weight,
   } = useCharacterStore();
   const { alignment: alignmentLabel, copy, isFa } = useBuilderI18n();
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const readPortraitFile = (file: File | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      setPortraitDataUrl(typeof reader.result === 'string' ? reader.result : '');
+    });
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div>
@@ -79,6 +94,88 @@ export function CharacterDetailsStep() {
       </div>
 
       <div className="max-w-xl space-y-5">
+        <Field label={isFa ? 'تصویر کاراکتر' : 'Character Portrait'}>
+          <div
+            className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[8rem_1fr]"
+            onDragLeave={() => setDragging(false)}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              readPortraitFile(event.dataTransfer.files[0]);
+            }}
+            style={{
+              background: dragging
+                ? 'var(--color-gold-dim)'
+                : 'var(--color-surface)',
+              borderColor: dragging
+                ? 'var(--color-gold)'
+                : 'var(--color-border)',
+            }}
+          >
+            <div
+              className="flex aspect-square items-center justify-center overflow-hidden rounded-xl border"
+              style={{
+                background: 'var(--color-surface-elevated)',
+                borderColor: 'var(--color-border)',
+              }}
+            >
+              {portraitDataUrl ? (
+                <img
+                  alt="Character portrait preview"
+                  className="h-full w-full object-cover object-top"
+                  src={portraitDataUrl}
+                />
+              ) : (
+                <span
+                  className="text-3xl font-bold"
+                  style={{ color: 'var(--color-gold)' }}
+                >
+                  D20
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col justify-center gap-2">
+              <input
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => readPortraitFile(event.target.files?.[0])}
+                ref={fileInputRef}
+                type="file"
+              />
+              <button
+                className="w-fit rounded-lg border px-4 py-2 text-sm font-medium transition-colors hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text)',
+                }}
+                type="button"
+              >
+                {isFa ? 'انتخاب تصویر' : 'Upload Image'}
+              </button>
+              {portraitDataUrl ? (
+                <button
+                  className="w-fit text-xs"
+                  onClick={() => setPortraitDataUrl('')}
+                  style={{ color: 'var(--color-text-muted)' }}
+                  type="button"
+                >
+                  {isFa ? 'حذف تصویر' : 'Remove image'}
+                </button>
+              ) : null}
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                {isFa
+                  ? 'فایل تصویر را بکش و رها کن یا از دستگاه انتخاب کن.'
+                  : 'Drop an image here or choose one from your device.'}
+              </p>
+            </div>
+          </div>
+        </Field>
+
         <Field label={copy.fieldCharacterName} required>
           <input
             className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-gold)]"

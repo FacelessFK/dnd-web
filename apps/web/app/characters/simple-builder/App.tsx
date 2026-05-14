@@ -13,7 +13,14 @@ import {
   CharacterStoreProvider,
   useCharacterStore,
 } from './store/characterStore';
-import { getConflictingSkill } from './store/selectors';
+import {
+  getBackgroundLanguageChoiceLimit,
+  getConflictingSkill,
+  getRaceLanguageChoiceLimit,
+  getRaceSkillChoiceLimit,
+  hasValidClassEquipmentChoices,
+  hasValidSpellChoices,
+} from './store/selectors';
 import type { StepId } from './types';
 
 const STEP_ORDER: StepId[] = [
@@ -29,12 +36,15 @@ function useStepValidity(): boolean {
   const store = useCharacterStore();
   const {
     background,
+    backgroundLanguageChoices,
     backgroundSkillOverride,
     classSkillChoices,
     currentStep,
     dndClass,
     name,
     race,
+    raceLanguageChoices,
+    raceSkillChoices,
     subrace,
   } = store;
 
@@ -42,19 +52,33 @@ function useStepValidity(): boolean {
     case 'race':
       if (!race) return false;
       if (race.subraces && !subrace) return false;
+      if (raceLanguageChoices.length < getRaceLanguageChoiceLimit(store)) {
+        return false;
+      }
+      if (raceSkillChoices.length < getRaceSkillChoiceLimit(store)) {
+        return false;
+      }
       return true;
     case 'class':
       if (!dndClass) return false;
       if (classSkillChoices.length < dndClass.numSkillChoices) return false;
+      if (!hasValidClassEquipmentChoices(store)) return false;
+      if (!hasValidSpellChoices(store)) return false;
       return true;
     case 'background': {
       if (!background) return false;
       const conflict = getConflictingSkill(store);
       if (conflict && !backgroundSkillOverride) return false;
+      if (
+        backgroundLanguageChoices.length <
+        getBackgroundLanguageChoiceLimit(store)
+      ) {
+        return false;
+      }
       return true;
     }
     case 'abilityScores':
-      return true;
+      return hasValidSpellChoices(store);
     case 'details':
       return name.trim().length > 0;
     case 'sheet':

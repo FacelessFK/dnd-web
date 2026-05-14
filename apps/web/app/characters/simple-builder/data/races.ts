@@ -1,3 +1,4 @@
+import { ALL_SKILLS } from './skills';
 import type { PortraitGender, Race } from '../types';
 
 const racePortrait = (id: string, gender: PortraitGender) =>
@@ -18,7 +19,8 @@ export const RACES: Race[] = [
     speed: 30,
     size: 'Medium',
     asi: { STR: 1, DEX: 1, CON: 1, INT: 1, WIS: 1, CHA: 1 },
-    languages: ['Common', 'One extra language of your choice'],
+    languages: ['Common'],
+    languageChoiceCount: 1,
     traits: [
       {
         name: 'Ability Score Increase',
@@ -69,6 +71,7 @@ export const RACES: Race[] = [
         description: 'Keepers of ancient lore and arcane secrets.',
         portraitUrls: racePortraits('high-elf'),
         asi: { INT: 1 },
+        languageChoiceCount: 1,
         traits: [
           {
             name: 'Elf Weapon Training',
@@ -149,7 +152,10 @@ export const RACES: Race[] = [
     speed: 30,
     size: 'Medium',
     asi: { CHA: 2 },
-    languages: ['Common', 'Elvish', 'One extra language of your choice'],
+    languages: ['Common', 'Elvish'],
+    languageChoiceCount: 1,
+    skillChoiceCount: 2,
+    skillChoiceOptions: ALL_SKILLS,
     traits: [
       {
         name: 'Ability Score Increase',
