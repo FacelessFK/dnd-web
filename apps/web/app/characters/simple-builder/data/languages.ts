@@ -18,11 +18,11 @@ export const LANGUAGE_DESCRIPTIONS: Record<string, string> = {
   Sylvan: 'Musical speech of fey creatures, old forests, and enchantment.',
   "Thieves' Cant": 'Coded slang and signs used by rogues and criminal circles.',
   Undercommon: 'Trade language of the Underdark and its shadowed cities.',
-}
+};
 
 export function getLanguageDescription(language: string): string {
   return (
     LANGUAGE_DESCRIPTIONS[language] ??
     'A spoken and written language your character can understand.'
-  )
+  );
 }

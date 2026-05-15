@@ -1,8 +1,9 @@
-import type { DnDClass } from '../types'
+import type { DnDClass } from '../types';
 
-const classImage = (id: string) => `/assets/character-builder/classes/${id}.png`
+const classImage = (id: string) =>
+  `/assets/character-builder/classes/${id}.png`;
 const classSymbol = (id: string) =>
-  `/assets/character-builder/classes/symbols/${id}.png`
+  `/assets/character-builder/classes/symbols/${id}.png`;
 
 export const CLASSES: DnDClass[] = [
   {
@@ -17,19 +18,28 @@ export const CLASSES: DnDClass[] = [
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields'],
     weaponProficiencies: ['Simple weapons', 'Martial weapons'],
     toolProficiencies: [],
-    skillChoices: ['Animal Handling', 'Athletics', 'Intimidation', 'Nature', 'Perception', 'Survival'],
+    skillChoices: [
+      'Animal Handling',
+      'Athletics',
+      'Intimidation',
+      'Nature',
+      'Perception',
+      'Survival',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Rage',
-        description: 'In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you have advantage on Strength checks and saving throws, deal +2 bonus damage with melee weapons, and have resistance to bludgeoning, piercing, and slashing damage. Rage lasts 1 minute. You can rage 2 times per long rest at level 1.',
+        description:
+          'In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you have advantage on Strength checks and saving throws, deal +2 bonus damage with melee weapons, and have resistance to bludgeoning, piercing, and slashing damage. Rage lasts 1 minute. You can rage 2 times per long rest at level 1.',
       },
       {
         name: 'Unarmored Defense',
-        description: 'While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.',
+        description:
+          'While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.',
       },
     ],
-    equipment: ['Greataxe', 'Two handaxes', 'Explorer\'s pack', '4 javelins'],
+    equipment: ['Greataxe', 'Two handaxes', "Explorer's pack", '4 javelins'],
   },
   {
     id: 'bard',
@@ -41,21 +51,48 @@ export const CLASSES: DnDClass[] = [
     primaryAbility: 'Charisma',
     savingThrows: ['DEX', 'CHA'],
     armorProficiencies: ['Light armor'],
-    weaponProficiencies: ['Simple weapons', 'Hand crossbows', 'Longswords', 'Rapiers', 'Shortswords'],
+    weaponProficiencies: [
+      'Simple weapons',
+      'Hand crossbows',
+      'Longswords',
+      'Rapiers',
+      'Shortswords',
+    ],
     toolProficiencies: ['Three musical instruments of your choice'],
-    skillChoices: ['Acrobatics', 'Animal Handling', 'Arcana', 'Athletics', 'Deception', 'History', 'Insight', 'Intimidation', 'Investigation', 'Medicine', 'Nature', 'Perception', 'Performance', 'Persuasion', 'Religion', 'Sleight of Hand', 'Stealth', 'Survival'],
+    skillChoices: [
+      'Acrobatics',
+      'Animal Handling',
+      'Arcana',
+      'Athletics',
+      'Deception',
+      'History',
+      'Insight',
+      'Intimidation',
+      'Investigation',
+      'Medicine',
+      'Nature',
+      'Perception',
+      'Performance',
+      'Persuasion',
+      'Religion',
+      'Sleight of Hand',
+      'Stealth',
+      'Survival',
+    ],
     numSkillChoices: 3,
     features: [
       {
         name: 'Spellcasting',
-        description: 'You have learned to untangle and reshape the fabric of reality in harmony with your wishes and music. Your spells are part of your vast repertoire, magic that you can tune to different situations.',
+        description:
+          'You have learned to untangle and reshape the fabric of reality in harmony with your wishes and music. Your spells are part of your vast repertoire, magic that you can tune to different situations.',
       },
       {
         name: 'Bardic Inspiration',
-        description: 'You can inspire others through stirring words or music. As a bonus action, you can give one creature other than yourself a Bardic Inspiration die (d6). The creature can add it to one ability check, attack roll, or saving throw within 10 minutes. You have CHA modifier uses per long rest.',
+        description:
+          'You can inspire others through stirring words or music. As a bonus action, you can give one creature other than yourself a Bardic Inspiration die (d6). The creature can add it to one ability check, attack roll, or saving throw within 10 minutes. You have CHA modifier uses per long rest.',
       },
     ],
-    equipment: ['Rapier', 'Diplomat\'s pack', 'Lute', 'Leather armor', 'Dagger'],
+    equipment: ['Rapier', "Diplomat's pack", 'Lute', 'Leather armor', 'Dagger'],
     spellcasting: {
       ability: 'CHA',
       cantripsKnown: 2,
@@ -81,14 +118,23 @@ export const CLASSES: DnDClass[] = [
     features: [
       {
         name: 'Spellcasting',
-        description: 'As a conduit for divine power, you can cast cleric spells. Wisdom is your spellcasting ability.',
+        description:
+          'As a conduit for divine power, you can cast cleric spells. Wisdom is your spellcasting ability.',
       },
       {
         name: 'Divine Domain',
-        description: 'Choose a domain related to your deity: Life, Light, Trickery, War, Knowledge, Nature, or Tempest. Your choice grants you domain spells and other features.',
+        description:
+          'Choose a domain related to your deity: Life, Light, Trickery, War, Knowledge, Nature, or Tempest. Your choice grants you domain spells and other features.',
       },
     ],
-    equipment: ['Mace', 'Scale mail', 'Light crossbow and 20 bolts', 'Priest\'s pack', 'Shield', 'Holy symbol'],
+    equipment: [
+      'Mace',
+      'Scale mail',
+      'Light crossbow and 20 bolts',
+      "Priest's pack",
+      'Shield',
+      'Holy symbol',
+    ],
     spellcasting: {
       ability: 'WIS',
       cantripsKnown: 3,
@@ -99,28 +145,50 @@ export const CLASSES: DnDClass[] = [
   {
     id: 'druid',
     name: 'Druid',
-    tagline: 'Nature\'s guardian who shapeshifts and commands the wild',
+    tagline: "Nature's guardian who shapeshifts and commands the wild",
     imageUrl: classImage('druid'),
     symbolUrl: classSymbol('druid'),
     hitDie: 8,
     primaryAbility: 'Wisdom',
     savingThrows: ['INT', 'WIS'],
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields (non-metal)'],
-    weaponProficiencies: ['Clubs', 'Daggers', 'Darts', 'Javelins', 'Maces', 'Quarterstaffs', 'Scimitars', 'Sickles', 'Slings', 'Spears'],
+    weaponProficiencies: [
+      'Clubs',
+      'Daggers',
+      'Darts',
+      'Javelins',
+      'Maces',
+      'Quarterstaffs',
+      'Scimitars',
+      'Sickles',
+      'Slings',
+      'Spears',
+    ],
     toolProficiencies: ['Herbalism kit'],
-    skillChoices: ['Arcana', 'Animal Handling', 'Insight', 'Medicine', 'Nature', 'Perception', 'Religion', 'Survival'],
+    skillChoices: [
+      'Arcana',
+      'Animal Handling',
+      'Insight',
+      'Medicine',
+      'Nature',
+      'Perception',
+      'Religion',
+      'Survival',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Spellcasting',
-        description: 'Drawing on the divine essence of nature itself, you can cast druid spells. Wisdom is your spellcasting ability.',
+        description:
+          'Drawing on the divine essence of nature itself, you can cast druid spells. Wisdom is your spellcasting ability.',
       },
       {
         name: 'Druidic',
-        description: 'You know Druidic, the secret language of druids. You can speak the language and use it to leave hidden messages.',
+        description:
+          'You know Druidic, the secret language of druids. You can speak the language and use it to leave hidden messages.',
       },
     ],
-    equipment: ['Leather armor', 'Explorer\'s pack', 'Druidic focus'],
+    equipment: ['Leather armor', "Explorer's pack", 'Druidic focus'],
     equipmentChoices: [
       {
         id: 'druid-weapons',
@@ -150,8 +218,16 @@ export const CLASSES: DnDClass[] = [
         label: 'Shield or extra simple weapon',
         required: true,
         options: [
-          { id: 'wooden-shield', label: 'Wooden shield', items: ['Wooden shield'] },
-          { id: 'javelin', label: 'Simple weapon: javelin', items: ['Javelin'] },
+          {
+            id: 'wooden-shield',
+            label: 'Wooden shield',
+            items: ['Wooden shield'],
+          },
+          {
+            id: 'javelin',
+            label: 'Simple weapon: javelin',
+            items: ['Javelin'],
+          },
           { id: 'dagger', label: 'Simple weapon: dagger', items: ['Dagger'] },
         ],
       },
@@ -202,19 +278,36 @@ export const CLASSES: DnDClass[] = [
     armorProficiencies: ['All armor', 'Shields'],
     weaponProficiencies: ['Simple weapons', 'Martial weapons'],
     toolProficiencies: [],
-    skillChoices: ['Acrobatics', 'Animal Handling', 'Athletics', 'History', 'Insight', 'Intimidation', 'Perception', 'Survival'],
+    skillChoices: [
+      'Acrobatics',
+      'Animal Handling',
+      'Athletics',
+      'History',
+      'Insight',
+      'Intimidation',
+      'Perception',
+      'Survival',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Fighting Style',
-        description: 'You adopt a particular style of fighting as your specialty. Choose one: Archery (+2 to ranged attacks), Defense (+1 AC), Dueling (+2 damage with one-handed weapon), Great Weapon Fighting (reroll 1s and 2s on damage), Protection (impose disadvantage on attack against ally), or Two-Weapon Fighting (add ability mod to off-hand attack).',
+        description:
+          'You adopt a particular style of fighting as your specialty. Choose one: Archery (+2 to ranged attacks), Defense (+1 AC), Dueling (+2 damage with one-handed weapon), Great Weapon Fighting (reroll 1s and 2s on damage), Protection (impose disadvantage on attack against ally), or Two-Weapon Fighting (add ability mod to off-hand attack).',
       },
       {
         name: 'Second Wind',
-        description: 'You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.',
+        description:
+          'You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.',
       },
     ],
-    equipment: ['Chain mail', 'Longsword', 'Shield', 'Light crossbow and 20 bolts', 'Dungeoneer\'s pack'],
+    equipment: [
+      'Chain mail',
+      'Longsword',
+      'Shield',
+      'Light crossbow and 20 bolts',
+      "Dungeoneer's pack",
+    ],
   },
   {
     id: 'monk',
@@ -227,20 +320,31 @@ export const CLASSES: DnDClass[] = [
     savingThrows: ['STR', 'DEX'],
     armorProficiencies: [],
     weaponProficiencies: ['Simple weapons', 'Shortswords'],
-    toolProficiencies: ['One artisan\'s tool or musical instrument of your choice'],
-    skillChoices: ['Acrobatics', 'Athletics', 'History', 'Insight', 'Religion', 'Stealth'],
+    toolProficiencies: [
+      "One artisan's tool or musical instrument of your choice",
+    ],
+    skillChoices: [
+      'Acrobatics',
+      'Athletics',
+      'History',
+      'Insight',
+      'Religion',
+      'Stealth',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Unarmored Defense',
-        description: 'While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.',
+        description:
+          'While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.',
       },
       {
         name: 'Martial Arts',
-        description: 'Your practice of martial arts gives you mastery of combat styles. You can use DEX instead of STR for monk weapons, your unarmed strikes deal 1d4 damage, and when you use the Attack action you can make one unarmed strike as a bonus action.',
+        description:
+          'Your practice of martial arts gives you mastery of combat styles. You can use DEX instead of STR for monk weapons, your unarmed strikes deal 1d4 damage, and when you use the Attack action you can make one unarmed strike as a bonus action.',
       },
     ],
-    equipment: ['Shortsword', 'Dungeoneer\'s pack', '10 darts'],
+    equipment: ['Shortsword', "Dungeoneer's pack", '10 darts'],
   },
   {
     id: 'paladin',
@@ -254,19 +358,35 @@ export const CLASSES: DnDClass[] = [
     armorProficiencies: ['All armor', 'Shields'],
     weaponProficiencies: ['Simple weapons', 'Martial weapons'],
     toolProficiencies: [],
-    skillChoices: ['Athletics', 'Insight', 'Intimidation', 'Medicine', 'Persuasion', 'Religion'],
+    skillChoices: [
+      'Athletics',
+      'Insight',
+      'Intimidation',
+      'Medicine',
+      'Persuasion',
+      'Religion',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Divine Sense',
-        description: 'The presence of strong evil registers on your senses like a noxious odor. As an action, you can open your awareness to detect such forces. Until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet that is not behind total cover. You can use this feature CHA modifier + 1 times per long rest.',
+        description:
+          'The presence of strong evil registers on your senses like a noxious odor. As an action, you can open your awareness to detect such forces. Until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet that is not behind total cover. You can use this feature CHA modifier + 1 times per long rest.',
       },
       {
         name: 'Lay on Hands',
-        description: 'Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5 (5 HP at level 1). As an action, you can touch a creature and draw power from the pool to restore a number of hit points.',
+        description:
+          'Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5 (5 HP at level 1). As an action, you can touch a creature and draw power from the pool to restore a number of hit points.',
       },
     ],
-    equipment: ['Longsword', 'Shield', 'Chain mail', 'Holy symbol', 'Priest\'s pack', '5 javelins'],
+    equipment: [
+      'Longsword',
+      'Shield',
+      'Chain mail',
+      'Holy symbol',
+      "Priest's pack",
+      '5 javelins',
+    ],
     spellcasting: {
       ability: 'CHA',
       cantripsKnown: 0,
@@ -286,19 +406,35 @@ export const CLASSES: DnDClass[] = [
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields'],
     weaponProficiencies: ['Simple weapons', 'Martial weapons'],
     toolProficiencies: [],
-    skillChoices: ['Animal Handling', 'Athletics', 'Insight', 'Investigation', 'Nature', 'Perception', 'Stealth', 'Survival'],
+    skillChoices: [
+      'Animal Handling',
+      'Athletics',
+      'Insight',
+      'Investigation',
+      'Nature',
+      'Perception',
+      'Stealth',
+      'Survival',
+    ],
     numSkillChoices: 3,
     features: [
       {
         name: 'Favored Enemy',
-        description: 'You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy. Choose a type of favored enemy: aberrations, beasts, celestials, constructs, dragons, elementals, fey, fiends, giants, monstrosities, oozes, plants, or undead. You have advantage on Survival checks to track them and on Intelligence checks to recall information about them.',
+        description:
+          'You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy. Choose a type of favored enemy: aberrations, beasts, celestials, constructs, dragons, elementals, fey, fiends, giants, monstrosities, oozes, plants, or undead. You have advantage on Survival checks to track them and on Intelligence checks to recall information about them.',
       },
       {
         name: 'Natural Explorer',
-        description: 'You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions. Choose one favored terrain: arctic, coast, desert, forest, grassland, mountain, swamp, or the Underdark.',
+        description:
+          'You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions. Choose one favored terrain: arctic, coast, desert, forest, grassland, mountain, swamp, or the Underdark.',
       },
     ],
-    equipment: ['Scale mail', 'Two shortswords', 'Dungeoneer\'s pack', 'Longbow and quiver of 20 arrows'],
+    equipment: [
+      'Scale mail',
+      'Two shortswords',
+      "Dungeoneer's pack",
+      'Longbow and quiver of 20 arrows',
+    ],
     spellcasting: {
       ability: 'WIS',
       cantripsKnown: 0,
@@ -316,25 +452,52 @@ export const CLASSES: DnDClass[] = [
     primaryAbility: 'Dexterity',
     savingThrows: ['DEX', 'INT'],
     armorProficiencies: ['Light armor'],
-    weaponProficiencies: ['Simple weapons', 'Hand crossbows', 'Longswords', 'Rapiers', 'Shortswords'],
+    weaponProficiencies: [
+      'Simple weapons',
+      'Hand crossbows',
+      'Longswords',
+      'Rapiers',
+      'Shortswords',
+    ],
     toolProficiencies: ["Thieves' tools"],
-    skillChoices: ['Acrobatics', 'Athletics', 'Deception', 'Insight', 'Intimidation', 'Investigation', 'Perception', 'Performance', 'Persuasion', 'Sleight of Hand', 'Stealth'],
+    skillChoices: [
+      'Acrobatics',
+      'Athletics',
+      'Deception',
+      'Insight',
+      'Intimidation',
+      'Investigation',
+      'Perception',
+      'Performance',
+      'Persuasion',
+      'Sleight of Hand',
+      'Stealth',
+    ],
     numSkillChoices: 4,
     features: [
       {
         name: 'Expertise',
-        description: 'Choose two of your skill proficiencies, or one skill and thieves\' tools. Your proficiency bonus is doubled for any ability check you make with the chosen proficiencies.',
+        description:
+          "Choose two of your skill proficiencies, or one skill and thieves' tools. Your proficiency bonus is doubled for any ability check you make with the chosen proficiencies.",
       },
       {
         name: 'Sneak Attack',
-        description: 'You know how to strike subtly and exploit a foe\'s distraction. Once per turn, you can deal extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll, or if an ally is within 5 ft of the target.',
+        description:
+          "You know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll, or if an ally is within 5 ft of the target.",
       },
       {
         name: "Thieves' Cant",
-        description: 'During your rogue training you learned thieves\' cant, a secret mix of dialect, jargon, and code that allows you to hide messages in seemingly normal conversation.',
+        description:
+          "During your rogue training you learned thieves' cant, a secret mix of dialect, jargon, and code that allows you to hide messages in seemingly normal conversation.",
       },
     ],
-    equipment: ['Rapier', "Thieves' tools", 'Burglar\'s pack', 'Leather armor', 'Two daggers'],
+    equipment: [
+      'Rapier',
+      "Thieves' tools",
+      "Burglar's pack",
+      'Leather armor',
+      'Two daggers',
+    ],
   },
   {
     id: 'sorcerer',
@@ -346,27 +509,52 @@ export const CLASSES: DnDClass[] = [
     primaryAbility: 'Charisma',
     savingThrows: ['CON', 'CHA'],
     armorProficiencies: [],
-    weaponProficiencies: ['Daggers', 'Darts', 'Slings', 'Quarterstaffs', 'Light crossbows'],
+    weaponProficiencies: [
+      'Daggers',
+      'Darts',
+      'Slings',
+      'Quarterstaffs',
+      'Light crossbows',
+    ],
     toolProficiencies: [],
-    skillChoices: ['Arcana', 'Deception', 'Insight', 'Intimidation', 'Persuasion', 'Religion'],
+    skillChoices: [
+      'Arcana',
+      'Deception',
+      'Insight',
+      'Intimidation',
+      'Persuasion',
+      'Religion',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Spellcasting',
-        description: 'An event in your past, or in the life of a parent or ancestor, left an indelible mark on you, infusing you with arcane magic. Charisma is your spellcasting ability.',
+        description:
+          'An event in your past, or in the life of a parent or ancestor, left an indelible mark on you, infusing you with arcane magic. Charisma is your spellcasting ability.',
       },
       {
         name: 'Sorcerous Origin',
-        description: 'Choose a sorcerous origin, which describes the source of your innate magical power: Draconic Bloodline or Wild Magic. Your choice grants you features at 1st level and again at 6th, 14th, and 18th level.',
+        description:
+          'Choose a sorcerous origin, which describes the source of your innate magical power: Draconic Bloodline or Wild Magic. Your choice grants you features at 1st level and again at 6th, 14th, and 18th level.',
       },
     ],
-    equipment: ['Light crossbow and 20 bolts', 'Arcane focus', 'Dungeoneer\'s pack', 'Two daggers'],
+    equipment: [
+      'Light crossbow and 20 bolts',
+      'Arcane focus',
+      "Dungeoneer's pack",
+      'Two daggers',
+    ],
     spellcasting: {
       ability: 'CHA',
       cantripsKnown: 4,
       spellsKnown: 2,
       spellSlots: [{ level: 1, slots: 2 }],
-      cantrips: ['Fire Bolt', 'Prestidigitation', 'Minor Illusion', 'Mage Hand'],
+      cantrips: [
+        'Fire Bolt',
+        'Prestidigitation',
+        'Minor Illusion',
+        'Mage Hand',
+      ],
     },
   },
   {
@@ -381,19 +569,35 @@ export const CLASSES: DnDClass[] = [
     armorProficiencies: ['Light armor'],
     weaponProficiencies: ['Simple weapons'],
     toolProficiencies: [],
-    skillChoices: ['Arcana', 'Deception', 'History', 'Intimidation', 'Investigation', 'Nature', 'Religion'],
+    skillChoices: [
+      'Arcana',
+      'Deception',
+      'History',
+      'Intimidation',
+      'Investigation',
+      'Nature',
+      'Religion',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Otherworldly Patron',
-        description: 'You have struck a bargain with an otherworldly being of your choice: the Archfey, the Fiend, or the Great Old One. Your choice grants you features at 1st level and again at 6th, 10th, and 14th level.',
+        description:
+          'You have struck a bargain with an otherworldly being of your choice: the Archfey, the Fiend, or the Great Old One. Your choice grants you features at 1st level and again at 6th, 10th, and 14th level.',
       },
       {
         name: 'Pact Magic',
-        description: 'Your arcane research and the magic bestowed on you by your patron have given you facility with spells. You have 1 spell slot at level 1 (regained on short or long rest). Charisma is your spellcasting ability.',
+        description:
+          'Your arcane research and the magic bestowed on you by your patron have given you facility with spells. You have 1 spell slot at level 1 (regained on short or long rest). Charisma is your spellcasting ability.',
       },
     ],
-    equipment: ['Light crossbow and 20 bolts', 'Arcane focus', 'Scholar\'s pack', 'Leather armor', 'Two daggers'],
+    equipment: [
+      'Light crossbow and 20 bolts',
+      'Arcane focus',
+      "Scholar's pack",
+      'Leather armor',
+      'Two daggers',
+    ],
     spellcasting: {
       ability: 'CHA',
       cantripsKnown: 2,
@@ -412,21 +616,36 @@ export const CLASSES: DnDClass[] = [
     primaryAbility: 'Intelligence',
     savingThrows: ['INT', 'WIS'],
     armorProficiencies: [],
-    weaponProficiencies: ['Daggers', 'Darts', 'Slings', 'Quarterstaffs', 'Light crossbows'],
+    weaponProficiencies: [
+      'Daggers',
+      'Darts',
+      'Slings',
+      'Quarterstaffs',
+      'Light crossbows',
+    ],
     toolProficiencies: [],
-    skillChoices: ['Arcana', 'History', 'Insight', 'Investigation', 'Medicine', 'Religion'],
+    skillChoices: [
+      'Arcana',
+      'History',
+      'Insight',
+      'Investigation',
+      'Medicine',
+      'Religion',
+    ],
     numSkillChoices: 2,
     features: [
       {
         name: 'Spellcasting',
-        description: 'As a student of arcane magic, you have a spellbook containing 6 first-level wizard spells. Intelligence is your spellcasting ability.',
+        description:
+          'As a student of arcane magic, you have a spellbook containing 6 first-level wizard spells. Intelligence is your spellcasting ability.',
       },
       {
         name: 'Arcane Recovery',
-        description: 'You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The slots can have a combined level up to half your wizard level (rounded up), and none can be 6th level or higher.',
+        description:
+          'You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The slots can have a combined level up to half your wizard level (rounded up), and none can be 6th level or higher.',
       },
     ],
-    equipment: ['Quarterstaff', 'Arcane focus', 'Scholar\'s pack', 'Spellbook'],
+    equipment: ['Quarterstaff', 'Arcane focus', "Scholar's pack", 'Spellbook'],
     spellcasting: {
       ability: 'INT',
       cantripsKnown: 3,
@@ -434,4 +653,4 @@ export const CLASSES: DnDClass[] = [
       cantrips: ['Fire Bolt', 'Mage Hand', 'Prestidigitation'],
     },
   },
-]
+];

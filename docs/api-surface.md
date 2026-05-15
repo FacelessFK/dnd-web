@@ -45,6 +45,19 @@ or:
 { "ok": false, "error": { "code": "runtime_error_code", "message": "..." } }
 ```
 
+## Development Auth Endpoints
+
+- `GET /api/auth/me`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+
+Auth is currently a development feature for the Character Library UI. Register
+and login require DB mode because `AuthService` is injected only when
+`SERVER_PERSISTENCE_MODE=db`. `GET /api/auth/me` returns `user: null` when no
+auth service or valid cookie is present. This is not production account
+security.
+
 ### `POST /api/session/command`
 
 Mutating commands:
@@ -106,8 +119,10 @@ Notes:
 
 - This endpoint owns reusable Character Library entries, not live
   runtime/session character overlays.
-- Entries are scoped to a provisional `ownerParticipantId`. This is a pre-auth
-  development ownership field, not production account security.
+- Entries are scoped to `ownerParticipantId`. When DB-mode auth is injected,
+  the authenticated user's owner ID must match the command actor and payload.
+  Without auth injection, command validation still uses the actor/payload owner
+  fields but does not provide production identity security.
 - In DB persistence mode, entries are stored in
   `character_library_entries`. The table stores a JSONB builder/library document
   plus durable owner and timestamp columns.
@@ -368,7 +383,8 @@ delete backend sessions or runtime state.
 
 ## Known Limitations
 
-- No authentication or authorization beyond command actor/role validation.
+- Development auth exists for the Character Library UI in DB mode, but there is
+  no production authentication or account-security posture.
 - No event replay, cursor, or durable catch-up API.
 - No multi-process subscriber persistence or distributed coordination.
 - No full adventure/campaign builder, automatic player-triggered transitions,

@@ -39,7 +39,10 @@ function createChunk(type, data = Buffer.alloc(0)) {
   output.writeUInt32BE(data.length, 0);
   typeBuffer.copy(output, 4);
   data.copy(output, 8);
-  output.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 8 + data.length);
+  output.writeUInt32BE(
+    crc32(Buffer.concat([typeBuffer, data])),
+    8 + data.length,
+  );
 
   return output;
 }
@@ -140,9 +143,11 @@ function parsePng(inputPath) {
       } else if (filter === 2) {
         currentRow[index] = (currentRow[index] + up) & 255;
       } else if (filter === 3) {
-        currentRow[index] = (currentRow[index] + Math.floor((left + up) / 2)) & 255;
+        currentRow[index] =
+          (currentRow[index] + Math.floor((left + up) / 2)) & 255;
       } else if (filter === 4) {
-        currentRow[index] = (currentRow[index] + paethPredictor(left, up, upperLeft)) & 255;
+        currentRow[index] =
+          (currentRow[index] + paethPredictor(left, up, upperLeft)) & 255;
       } else if (filter !== 0) {
         throw new Error(`Unsupported PNG filter: ${filter}`);
       }
@@ -155,7 +160,8 @@ function parsePng(inputPath) {
       rgba[targetIndex] = currentRow[sourceIndex];
       rgba[targetIndex + 1] = currentRow[sourceIndex + 1];
       rgba[targetIndex + 2] = currentRow[sourceIndex + 2];
-      rgba[targetIndex + 3] = channels === 4 ? currentRow[sourceIndex + 3] : 255;
+      rgba[targetIndex + 3] =
+        channels === 4 ? currentRow[sourceIndex + 3] : 255;
     }
 
     currentRow.copy(previousRow);
@@ -302,9 +308,13 @@ function parseKey(value) {
 
   if (
     channels.length !== 3 ||
-    channels.some((channel) => !Number.isInteger(channel) || channel < 0 || channel > 255)
+    channels.some(
+      (channel) => !Number.isInteger(channel) || channel < 0 || channel > 255,
+    )
   ) {
-    throw new Error('--key must be three comma-separated integers, for example 0,255,0');
+    throw new Error(
+      '--key must be three comma-separated integers, for example 0,255,0',
+    );
   }
 
   return channels;
@@ -349,7 +359,9 @@ function readArgs(argv) {
   }
 
   if (!options.input || !options.output) {
-    throw new Error('Usage: node scripts/chroma-key-to-alpha.mjs --input <png> --output <png> [--key 0,255,0]');
+    throw new Error(
+      'Usage: node scripts/chroma-key-to-alpha.mjs --input <png> --output <png> [--key 0,255,0]',
+    );
   }
 
   return options;

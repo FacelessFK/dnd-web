@@ -44,7 +44,7 @@ Implemented profile metadata:
 
 ## Implemented Data
 
-This slice adds a frontend-only structured rules layer for the Character Builder:
+The Character Builder has a local structured rules layer:
 
 - Species: Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc, and
   Tiefling.
@@ -97,15 +97,13 @@ This slice adds a frontend-only structured rules layer for the Character Builder
 
 ## Intentionally Not Automated
 
-- Backend persistence or APIs for the Character Library.
-- Runtime character commands or submit-to-session integration.
-- Database schema, migrations, repositories, transactions, or protocol changes.
+- Submit-to-session integration from reusable Character Library entries.
+- Production authentication/account ownership or cloud asset storage.
 - Drag-and-drop or dropdown Standard Array assignment UI, full point-buy
   education text, or level-up flow.
 - Inventory, currency, encumbrance, weapon attacks, damage, spell execution, or
   condition automation.
-- Account ownership, authentication, marketplace/content ownership, uploads, or
-  production asset storage.
+- Marketplace/content ownership.
 
 ## Future Tasks
 

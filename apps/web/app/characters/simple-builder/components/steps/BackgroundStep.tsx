@@ -244,30 +244,28 @@ export function BackgroundStep() {
                   {copy.languageChoice(panelBg.languages)}
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {getAvailableLanguageChoices(
-                    previewState,
-                    'background',
-                  ).map((language) => {
-                    const chosen = localLanguages.includes(language);
+                  {getAvailableLanguageChoices(previewState, 'background').map(
+                    (language) => {
+                      const chosen = localLanguages.includes(language);
 
-                    return (
-                      <SelectableOption
-                        description={phrase(getLanguageDescription(language))}
-                        key={language}
-                        onClick={() => toggleLanguage(language)}
-                        selected={chosen}
-                      >
-                        {phrase(language)}
-                      </SelectableOption>
-                    );
-                  })}
+                      return (
+                        <SelectableOption
+                          description={phrase(getLanguageDescription(language))}
+                          key={language}
+                          onClick={() => toggleLanguage(language)}
+                          selected={chosen}
+                        >
+                          {phrase(language)}
+                        </SelectableOption>
+                      );
+                    },
+                  )}
                 </div>
                 <div
                   className="mt-2 text-center text-xs"
                   style={{ color: 'var(--color-text-muted)' }}
                 >
-                  {localLanguages.length} / {languageLimit}{' '}
-                  {copy.selectedCount}
+                  {localLanguages.length} / {languageLimit} {copy.selectedCount}
                 </div>
               </PanelSection>
             ) : null}

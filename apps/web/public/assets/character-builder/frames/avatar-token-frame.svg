@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Avatar token frame">
+  <defs>
+    <radialGradient id="inner" cx="50%" cy="45%" r="55%">
+      <stop offset="0" stop-color="#362047"/>
+      <stop offset="0.7" stop-color="#110c14"/>
+      <stop offset="1" stop-color="#050302"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f5d885"/>
+      <stop offset="0.5" stop-color="#a06c2a"/>
+      <stop offset="1" stop-color="#f1ca69"/>
+    </linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="118" fill="url(#inner)" stroke="url(#rim)" stroke-width="8"/>
+  <circle cx="128" cy="128" r="101" fill="none" stroke="#4e2d75" stroke-width="3"/>
+  <path d="M128 12 L139 35 L128 47 L117 35 Z M128 209 L139 221 L128 244 L117 221 Z M12 128 L35 117 L47 128 L35 139 Z M209 128 L221 117 L244 128 L221 139 Z" fill="url(#rim)" stroke="#2b1909" stroke-width="2"/>
+  <path d="M76 46 C94 34 110 28 128 28 C146 28 162 34 180 46 M76 210 C94 222 110 228 128 228 C146 228 162 222 180 210" fill="none" stroke="#e3b657" stroke-width="4" stroke-linecap="round"/>
+</svg>

@@ -162,6 +162,9 @@ export function characterLibraryEntryToCard(
     portraitAssetKey: getPortraitAssetKey(portrait),
     speciesOrRace: entry.speciesOrRace,
     status: entry.status === 'finalized' ? 'ready' : 'draft',
-    summary: entry.concept || entry.notes || 'هنوز خلاصه‌ای برای کاراکتر ثبت نشده است.',
+    summary:
+      entry.concept ||
+      entry.notes ||
+      'هنوز خلاصه‌ای برای کاراکتر ثبت نشده است.',
   };
 }

@@ -48,6 +48,7 @@ async function main() {
   const webPort = await getFreePort();
   const debugPort = await getFreePort();
   const serverUrl = `http://127.0.0.1:${serverPort}`;
+  const webOrigin = `http://127.0.0.1:${webPort}`;
   const runtimeUrl = `http://127.0.0.1:${webPort}/runtime`;
 
   console.log('[runtime-smoke] starting authoritative server');
@@ -56,6 +57,7 @@ async function main() {
     corepackCommand,
     ['pnpm', '--filter', '@dnd/server', 'dev'],
     {
+      NEXT_PUBLIC_APP_URL: webOrigin,
       SERVER_PORT: String(serverPort),
     },
   );
@@ -104,7 +106,11 @@ async function main() {
     await page.send('Runtime.enable');
     await page.send('Page.enable');
 
-    await waitForText(page, 'Runtime War Table', 'runtime shell');
+    await waitForAnyText(
+      page,
+      ['Runtime War Table', 'میز نبرد زنده'],
+      'runtime shell',
+    );
     await waitForCockpitHydrated(page);
     await clickButtonIfEnabled(page, 'Local Reset');
     await waitForNoStoredSession(page);
@@ -136,7 +142,11 @@ async function main() {
 
     console.log('[runtime-smoke] validating recovery after reload');
     await page.send('Page.reload', { ignoreCache: true });
-    await waitForText(page, 'Runtime War Table', 'runtime shell after reload');
+    await waitForAnyText(
+      page,
+      ['Runtime War Table', 'میز نبرد زنده'],
+      'runtime shell after reload',
+    );
     await waitForCockpitHydrated(page);
     await clickButton(page, 'Recover');
     await waitForText(page, 'Training Room', 'recovered scene');
@@ -489,6 +499,16 @@ async function waitForText(page, text, label = text) {
     predicate: `(() => (document.body?.innerText ?? '').includes(${JSON.stringify(
       text,
     )}))()`,
+  });
+}
+
+async function waitForAnyText(page, texts, label) {
+  await waitFor(page, {
+    label,
+    predicate: `(() => {
+      const bodyText = document.body?.innerText ?? '';
+      return ${JSON.stringify(texts)}.some((text) => bodyText.includes(text));
+    })()`,
   });
 }
 

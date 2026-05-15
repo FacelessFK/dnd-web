@@ -591,276 +591,414 @@ const descriptionFa: Record<string, string> = {
 };
 
 const extraPhraseFa: Record<string, string> = {
-  "10 gp": "۱۰ سکه طلا",
-  "Animal Handling": "حیوان‌داری",
-  "Aspiration": "بلندپروازی",
-  "Bardic Inspiration": "الهام باردی",
-  "Beauty": "زیبایی",
-  "Bottle of black ink": "بطری جوهر سیاه",
-  "CHA": "کاریزما",
-  "CON": "بنیه",
-  "Change": "تغییر",
-  "Charity": "نیکوکاری",
-  "Community": "جامعه",
-  "Con tools": "ابزارهای شیادی",
-  "Creativity": "خلاقیت",
-  "Criminal Contact": "رابط تبهکاری",
-  "DEX": "چابکی",
-  "Dagger": "خنجر",
-  "Deck of cards": "دسته کارت",
-  "Fairness": "انصاف",
-  "Fighting Style": "سبک مبارزه",
-  "Freedom": "آزادی",
-  "Generosity": "بخشندگی",
-  "Glory": "افتخار",
-  "Greater Good": "خیر بزرگ‌تر",
-  "Greed": "طمع",
-  "Hill Dwarf": "دورف تپه‌نشین",
-  "Honor among thieves": "شرافت میان دزدان",
-  "Hunting trap": "تله شکار",
-  "INT": "هوش",
-  "Independence": "استقلال",
-  "Insignia of rank": "نشان درجه",
-  "Iron pot": "دیگ آهنی",
-  "Javelins": "زوبین‌ها",
-  "Knowledge": "دانش",
-  "Letter from a dead colleague": "نامه‌ای از همکاری درگذشته",
-  "Letter of introduction from guild": "معرفی‌نامه از صنف",
-  "Light crossbows": "کمان‌زنبورک‌های سبک",
-  "Lightfoot Halfling": "هفلینگ سبک‌پا",
-  "Logic": "منطق",
-  "Lucky charm": "طلسم خوش‌شانسی",
-  "Mask of the Wild": "نقاب طبیعت وحشی",
-  "Mastery": "استادی",
-  "Medium": "متوسط",
-  "Nation": "ملت",
-  "Noble Obligation": "وظیفه اشرافی",
-  "People": "مردم",
-  "Power": "قدرت",
-  "Power of Knowledge": "قدرت دانش",
-  "Prayer book": "کتاب دعا",
-  "Reflection": "درون‌نگری",
-  "Relentless Endurance": "پایداری بی‌امان",
-  "Respect": "احترام",
-  "Responsibility": "مسئولیت",
-  "STR": "قدرت",
-  "Scroll case with notes": "محفظه طومار با یادداشت‌ها",
-  "Scroll of pedigree": "طومار شجره‌نامه",
-  "Shelter of the Faithful": "پناه مؤمنان",
-  "Shovel": "بیل",
-  "Sickles": "داس‌ها",
-  "Small": "کوچک",
-  "Small knife": "چاقوی کوچک",
-  "Sneak Attack": "حمله غافلگیرانه",
-  "Sorcerous Origin": "خاستگاه سورسرری",
-  "Spears": "نیزه‌ها",
-  "Stout Halfling": "هفلینگ استوت",
-  "Sunlight Sensitivity": "حساسیت به نور خورشید",
-  "Tradition": "سنت",
-  "Traveler's clothes": "لباس مسافرتی",
-  "Trophy from an animal you killed": "یادگاری از جانوری که شکار کرده‌ای",
-  "Trophy from fallen enemy": "یادگاری از دشمنی شکست‌خورده",
-  "Vehicles (land)": "وسایل نقلیه زمینی",
-  "Vehicles (water)": "وسایل نقلیه آبی",
-  "Vestments": "جامه‌های آیینی",
-  "WIS": "خرد",
-  "Wanderer": "خانه‌به‌دوش",
-  "A spoken and written language your character can understand.": "زبانی گفتاری و نوشتاری که کاراکترت می‌تواند بفهمد.",
-  "Abyssal": "ابیسال",
-  "Alien tongue of aberrations and deep underground horrors.": "زبان بیگانه‌ی موجودات نابهنجار و وحشت‌های ژرفای زیرزمین.",
-  "Ancient language of dragons, dragonborn, and arcane lore.": "زبان کهن اژدهایان، اژدهازادان و دانش آرکین.",
-  "Animal Friendship": "دوستی با حیوانات",
-  "Balance, tumbling, and agile movement": "تعادل، پشتک‌وارو و حرکت چابکانه",
-  "Booming tongue of giants, ogres, trolls, and giant-kin.": "زبان پرطنین غول‌ها، اوگرها، ترول‌ها و غول‌تباران.",
-  "Calming, guiding, and reading animals": "آرام‌کردن، هدایت‌کردن و فهمیدن حیوانات",
-  "Celestial": "آسمانی",
-  "Charm Person": "افسون شخص",
-  "Choose spells": "طلسم‌ها را انتخاب کن",
-  "Choose starting equipment": "تجهیزات آغازین را انتخاب کن",
-  "Club": "چماق",
-  "Climbing, jumping, swimming, and feats of strength": "بالارفتن، پریدن، شنا و کارهای قدرتی",
-  "Coded slang and signs used by rogues and criminal circles.": "اصطلاحات و نشانه‌های رمزی که روگ‌ها و حلقه‌های تبهکاری به کار می‌برند.",
-  "Create or Destroy Water": "خلق یا نابود کردن آب",
-  "Cure Wounds": "درمان زخم‌ها",
-  "Deep Speech": "زبان ژرف",
-  "Detect Magic": "تشخیص جادو",
-  "Detect Poison and Disease": "تشخیص سم و بیماری",
-  "Diplomacy, etiquette, and winning people over": "دیپلماسی، آداب‌دانی و همراه‌کردن دیگران",
-  "Direct, forceful language of orcs, raiders, and warrior clans.": "زبان مستقیم و پرصلابت اورک‌ها، مهاجمان و خاندان‌های جنگجو.",
-  "Elemental root language of air, earth, fire, and water beings.": "زبان ریشه‌ای عنصرزادگان هوا، خاک، آتش و آب.",
-  "Entangle": "گرفتارسازی",
-  "Entertaining through music, acting, or speech": "سرگرم‌کردن با موسیقی، بازیگری یا سخن",
-  "Finding clues and making deductions": "پیدا کردن سرنخ‌ها و نتیجه‌گیری",
-  "Flowing language of elves, old songs, fey courts, and poetry.": "زبان روان الف‌ها، ترانه‌های کهن، دربارهای فی و شعر.",
-  "Fog Cloud": "ابر مه",
-  "Giant": "غولی",
-  "Gnoll": "نولی",
-  "Goblin": "گابلینی",
-  "Goodberry": "گودبری",
-  "Harsh language used by gnolls and their raiding packs.": "زبان خشن نول‌ها و دسته‌های یورش‌گرشان.",
-  "Healing Word": "کلام شفابخش",
-  "Javelin": "زوبین",
-  "Knowledge of deities, rites, and sacred lore": "دانش درباره خدایان، آیین‌ها و دانسته‌های مقدس",
-  "Knowledge of magic, spells, and arcane lore": "دانش جادو، طلسم‌ها و رازهای آرکین",
-  "Knowledge of past events, cultures, and people": "دانش رویدادهای گذشته، فرهنگ‌ها و مردم",
-  "Knowledge of terrain, plants, animals, and weather": "شناخت زمین، گیاهان، حیوانات و آب‌وهوا",
-  "Language of angels, divine servants, and upper planes.": "زبان فرشتگان، خدمتگزاران الهی و صفحه‌های برین.",
-  "Language of demons and chaotic fiends from the Abyss.": "زبان دیوها و فیندهای آشوب‌زده‌ی برآمده از ابیس.",
-  "Lying, disguise, and misleading others": "دروغ‌گویی، تغییر چهره و گمراه‌کردن دیگران",
-  "Longstrider": "گام بلند",
-  "Manual trickery, palming, and pickpocketing": "نیرنگ دستی، کف‌زنی و جیب‌بری",
-  "Mending": "ترمیم",
-  "Moving quietly and staying unseen": "بی‌صدا حرکت‌کردن و دیده‌نشدن",
-  "Musical speech of fey creatures, old forests, and enchantment.": "گفتار آهنگین موجودات فی، جنگل‌های کهن و افسون.",
-  "Noticing details, danger, and hidden things": "دیدن جزئیات، خطر و چیزهای پنهان",
-  "Poison Spray": "افشانه سم",
-  "Precise contract language of devils and the Nine Hells.": "زبان دقیق قراردادهای شیاطین و نه دوزخ.",
-  "Primordial": "نخستین",
-  "Produce Flame": "شعله‌آفرینی",
-  "Race": "نژاد",
-  "Quick, technical language of gnomes, inventors, and tinkerers.": "زبان سریع و فنی گنوم‌ها، مخترعان و خرده‌سازان.",
-  "Reading intentions, moods, and body language": "خواندن نیت‌ها، حال‌وهوا و زبان بدن",
-  "Resistance": "مقاومت",
-  "Subrace": "زیرنژاد",
-  "Rough tongue of goblins, bugbears, hobgoblins, and warbands.": "زبان زمخت گابلین‌ها، باگ‌برها، هاب‌گابلین‌ها و گروه‌های جنگی.",
-  "Secret language used by druids for speech and hidden messages.": "زبان پنهانی درویدها برای گفت‌وگو و پیام‌های مخفی.",
-  "Shield or extra simple weapon": "سپر یا یک سلاح ساده اضافه",
-  "Simple weapon: dagger": "سلاح ساده: خنجر",
-  "Simple weapon: javelin": "سلاح ساده: زوبین",
-  "Sickle": "داس",
-  "Skills": "مهارت‌ها",
-  "Sling": "فلاخن",
-  "Speak with Animals": "سخن با حیوانات",
-  "Spear": "نیزه",
-  "Spell Attack": "حمله طلسم",
-  "Spell Save DC": "درجه سختی نجات طلسم",
-  "Spells": "طلسم‌ها",
-  "Stabilizing creatures and diagnosing illness": "پایدار کردن موجودات و تشخیص بیماری",
-  "Starting weapon choice": "انتخاب سلاح آغازین",
-  "Sturdy speech of dwarves, stone halls, mines, and clans.": "زبان استوار دورف‌ها، تالارهای سنگی، معدن‌ها و خاندان‌ها.",
-  "Sylvan": "سیلوان",
-  "The everyday trade tongue shared across many cultures.": "زبان روزمره دادوستد که میان فرهنگ‌های بسیاری مشترک است.",
-  "Thorn Whip": "تازیانه خار",
-  "Threats, pressure, and forceful presence": "تهدید، فشار و حضور قاطع",
-  "Thunderwave": "موج رعد",
-  "Tracking, foraging, navigation, and wilderness signs": "ردیابی، خوراک‌یابی، جهت‌یابی و نشانه‌های طبیعت وحشی",
-  "Trade language of the Underdark and its shadowed cities.": "زبان دادوستد تاریک‌ژرفا و شهرهای سایه‌پوش آن.",
-  "Two simple weapons: club and quarterstaff": "دو سلاح ساده: چماق و چوب‌دستی بلند",
-  "Two simple weapons: mace and sling": "دو سلاح ساده: گرز و فلاخن",
-  "Two simple weapons: sickle and spear": "دو سلاح ساده: داس و نیزه",
-  "Undercommon": "زیرمشترک",
-  "Warm, practical language of halfling families and travelers.": "زبان گرم و کاربردی خانواده‌های هفلینگ و مسافران.",
-  "What are cantrips?": "کانتریپ چیست؟",
-  "What are spells?": "طلسم‌ها چیستند؟",
-  "Cantrips are simple spells your character can cast at will. They do not use spell slots and are always available once chosen.": "کانتریپ‌ها طلسم‌های ساده‌ای هستند که کاراکترت هر وقت بخواهد می‌تواند اجرا کند. جایگاه طلسم مصرف نمی‌کنند و بعد از انتخاب همیشه در دسترس‌اند.",
-  "Spells are magical effects powered by your class. Prepared or known spells are the options your character can cast during play.": "طلسم‌ها اثرهای جادویی‌اند که از کلاس کاراکتر نیرو می‌گیرند. طلسم‌های آماده یا شناخته‌شده همان گزینه‌هایی هستند که کاراکترت در بازی می‌تواند اجرا کند.",
-  "choice": "انتخاب",
-  "Winter blanket": "پتوی زمستانی",
-  "Add twice your proficiency bonus to History checks related to magic items, alchemical objects, or technological devices.": "برای آزمون‌های تاریخ مرتبط با آیتم‌های جادویی، اشیای کیمیاگری یا ابزارهای فناورانه، دو برابر پاداش مهارتت را اضافه می‌کنی.",
-  "An event in your past, or in the life of a parent or ancestor, left an indelible mark on you, infusing you with arcane magic. Charisma is your spellcasting ability.": "رویدادی در گذشته تو، یا در زندگی یکی از والدین یا نیاکانت، نشانی پاک‌نشدنی بر تو گذاشته و جادوی آرکین را در وجودت جاری کرده است. توانایی طلسم‌اندازی تو کاریزماست.",
-  "As an acolyte, you command the respect of those who share your faith. You and your adventuring companions can expect to receive free healing and care at a temple, shrine, or other established presence of your faith.": "به‌عنوان خادم معبد، پیروان هم‌کیشت برایت احترام قائل‌اند. تو و همراهان ماجراجویت می‌توانید در معبد، زیارتگاه یا هر پایگاه رسمی آیینت انتظار درمان و مراقبت رایگان داشته باشید.",
-  "As an established member of a guild, you can rely on certain benefits that membership provides. Fellow guild members will provide you with lodging and food if necessary, and pay for your funeral if needed.": "به‌عنوان عضوی پذیرفته‌شده در یک صنف، می‌توانی روی مزایای عضویت حساب کنی. هم‌صنفی‌هایت در صورت نیاز برایت غذا و سرپناه فراهم می‌کنند و حتی اگر لازم شود هزینه خاکسپاری‌ات را می‌پردازند.",
-  "Choose a sorcerous origin, which describes the source of your innate magical power: Draconic Bloodline or Wild Magic. Your choice grants you features at 1st level and again at 6th, 14th, and 18th level.": "یک خاستگاه سورسرری انتخاب کن که سرچشمه نیروی جادویی ذاتی تو را توضیح می‌دهد؛ مثل تبار اژدهایی یا جادوی وحشی. انتخابت در سطح ۱ و دوباره در سطح‌های ۶، ۱۴ و ۱۸ ویژگی‌هایی به تو می‌دهد.",
-  "Choose two of your skill proficiencies, or one skill and thieves' tools. Your proficiency bonus is doubled for any ability check you make with the chosen proficiencies.": "دو مورد از مهارت‌هایی را که در آن‌ها مهارت‌مند هستی انتخاب کن، یا یک مهارت و ابزار دزدان را. در آزمون‌های توانایی مربوط به انتخاب‌هایت، پاداش مهارتت دو برابر حساب می‌شود.",
-  "During your rogue training you learned thieves' cant, a secret mix of dialect, jargon, and code that allows you to hide messages in seemingly normal conversation.": "در آموزش‌های روگ، زبان مخفی دزدان را یاد گرفته‌ای؛ ترکیبی پنهانی از لهجه، اصطلاح و رمز که اجازه می‌دهد پیام‌ها را در دل گفت‌وگویی عادی پنهان کنی.",
-  "I always have a plan for what to do when things go wrong.": "همیشه برای وقتی اوضاع خراب می‌شود نقشه‌ای آماده دارم.",
-  "I am always calm, no matter what the situation.": "هر وضعیتی پیش بیاید آرامش خودم را حفظ می‌کنم.",
-  "I am easily distracted by the promise of information.": "وعده دسترسی به اطلاعات خیلی راحت حواسم را پرت می‌کند.",
-  "I am utterly serene, even in the face of disaster.": "حتی روبه‌روی فاجعه هم کاملا آرام می‌مانم.",
-  "I believe that anything worth doing is worth doing right.": "باور دارم هر کاری که ارزش انجام دادن دارد، باید درست انجام شود.",
-  "I can find common ground between the fiercest enemies.": "می‌توانم میان سرسخت‌ترین دشمنان هم نقطه مشترک پیدا کنم.",
-  "I can't resist a pretty face.": "در برابر چهره‌ای دلربا تاب مقاومت ندارم.",
-  "I entered seclusion to hide from the ones who might still be hunting me.": "به انزوا پناه بردم تا از کسانی پنهان شوم که شاید هنوز دنبالم باشند.",
-  "I fall in and out of love easily and am always pursuing someone.": "زود دل می‌بازم و زود هم دل می‌کنم؛ همیشه هم در پی کسی هستم.",
-  "I fleeced the wrong person and must work to ensure they never find me.": "آدم اشتباهی را سرکیسه کردم و حالا باید مطمئن شوم هیچ‌وقت پیدایم نمی‌کند.",
-  "I follow orders, even if I think they're wrong.": "دستورها را اجرا می‌کنم، حتی اگر فکر کنم اشتباه‌اند.",
-  "I have a family, but I have no idea where they are.": "خانواده‌ای دارم، اما نمی‌دانم کجا هستند.",
-  "I have a joke for every occasion, especially occasions where humor is inappropriate.": "برای هر موقعیتی شوخی دارم، به‌خصوص موقعیت‌هایی که شوخی در آن‌ها بی‌جا است.",
-  "I have an ancient text that holds terrible secrets that must not fall into the wrong hands.": "متنی کهن دارم که رازهایی هولناک در خود دارد و نباید دست آدم‌های نادرست بیفتد.",
-  "I have trouble trusting in my allies.": "اعتماد کردن به هم‌پیمانانم برایم سخت است.",
-  "I idolize a particular hero of my faith and constantly reference that person's deeds.": "یکی از قهرمانان آیینم را می‌پرستم و مدام به کارهای او اشاره می‌کنم.",
-  "I judge others harshly and myself even more severely.": "دیگران را سخت قضاوت می‌کنم و خودم را حتی سخت‌تر.",
-  "I judge people by their actions, not their words.": "آدم‌ها را با کارهایشان می‌سنجم، نه با حرف‌هایشان.",
-  "I know a story relevant to almost every situation.": "تقریبا برای هر موقعیتی داستانی مرتبط سراغ دارم.",
-  "I made a terrible mistake in battle that cost many lives, and I would do anything to keep that mistake secret.": "در نبرد اشتباهی وحشتناک کردم که جان‌های زیادی گرفت و برای پنهان ماندنش هر کاری می‌کنم.",
-  "I owe my life to the priest who took me in when my parents died.": "زندگی‌ام را مدیون کشیشی هستم که پس از مرگ والدینم پناهم داد.",
-  "I remember every insult I've received and nurse a silent resentment toward anyone who's ever wronged me.": "هر توهینی را که شنیده‌ام به یاد دارم و نسبت به هر کس که بدی کرده، کینه‌ای خاموش در دل نگه می‌دارم.",
-  "I secretly believe that everyone is beneath me.": "پنهانی باور دارم همه از من پایین‌ترند.",
-  "I use polysyllabic words that convey the impression of great erudition.": "از واژه‌های پرطمطراق استفاده می‌کنم تا بسیار فرهیخته به نظر برسم.",
-  "I watch over my friends as if they were a litter of newborn pups.": "از دوستانم مثل توله‌هایی تازه‌به‌دنیا‌آمده مراقبت می‌کنم.",
-  "I will face any challenge to win the approval of my family.": "برای به دست آوردن تأیید خانواده‌ام با هر چالشی روبه‌رو می‌شوم.",
-  "I work hard so that I can play hard when the work is done.": "سخت کار می‌کنم تا وقتی کار تمام شد حسابی خوش بگذرانم.",
-  "I would still lay down my life for the people I served with.": "هنوز هم جانم را برای کسانی که کنارشان خدمت کرده‌ام می‌دهم.",
-  "I'll do anything to get my hands on something rare or priceless.": "برای به دست آوردن چیزی کمیاب یا بی‌قیمت هر کاری می‌کنم.",
-  "I'm a sucker for a pretty face.": "چهره زیبا نقطه ضعف من است.",
-  "I'm always polite and respectful.": "همیشه مؤدب و محترمانه رفتار می‌کنم.",
-  "I'm driven by a wanderlust that led me away from home.": "میل سیری‌ناپذیر به سفر مرا از خانه دور کرده است.",
-  "I'm haunted by memories of war. I wake up every night screaming.": "خاطرات جنگ رهایم نمی‌کنند؛ هر شب با فریاد از خواب می‌پرم.",
-  "I'm loyal to my captain first, everything else second.": "اول به ناخدایم وفادارم؛ بقیه چیزها بعد از آن می‌آیند.",
-  "I'm rude to people who lack my commitment to hard work.": "با کسانی که مثل من به سخت‌کوشی پایبند نیستند تند برخورد می‌کنم.",
-  "I'm trying to pay off an old debt I owe to a generous benefactor.": "تلاش می‌کنم بدهی قدیمی‌ام را به نیکوکاری بخشنده پس بدهم.",
-  "I've been isolated for so long that I rarely speak, preferring gestures and expressions.": "آن‌قدر در انزوا بوده‌ام که کمتر حرف می‌زنم و بیشتر با اشاره و حالت چهره ارتباط می‌گیرم.",
-  "I've read every book in the world's greatest libraries — or I like to boast that I have.": "همه کتاب‌های بزرگ‌ترین کتابخانه‌های جهان را خوانده‌ام؛ یا دست‌کم دوست دارم چنین ادعایی کنم.",
-  "If someone is in trouble, I'm always ready to lend help.": "اگر کسی گرفتار باشد، همیشه آماده کمکم.",
-  "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you have advantage on Strength checks and saving throws, deal +2 bonus damage with melee weapons, and have resistance to bludgeoning, piercing, and slashing damage. Rage lasts 1 minute. You can rage 2 times per long rest at level 1.": "در نبرد با خشونتی غریزی می‌جنگی. در نوبت خودت می‌توانی با یک کنش اضافه وارد خشم شوی. هنگام خشم، در آزمون‌ها و نجات‌های قدرت برتری داری، با سلاح‌های نزدیک‌زن ۲ آسیب اضافه می‌زنی و در برابر آسیب کوبشی، سوراخ‌کننده و برشی مقاوم هستی. خشم ۱ دقیقه دوام دارد و در سطح ۱، بین هر استراحت بلند ۲ بار می‌توانی خشمگین شوی.",
-  "My eloquent flattery makes everyone I talk to feel like the most wonderful and important person in the world.": "چاپلوسی خوش‌بیانم باعث می‌شود هر کسی با من حرف می‌زند حس کند شگفت‌انگیزترین و مهم‌ترین آدم دنیاست.",
-  "My family, clan, or tribe is the most important thing in my life.": "خانواده، خاندان یا قبیله‌ام مهم‌ترین چیز زندگی من است.",
-  "My friends know they can rely on me, no matter what.": "دوستانم می‌دانند هر اتفاقی بیفتد می‌توانند روی من حساب کنند.",
-  "My instrument is my most treasured possession and it reminds me of someone I love.": "سازم عزیزترین دارایی من است و مرا به یاد کسی می‌اندازد که دوستش دارم.",
-  "Now that I've returned to the world, I enjoy its delights perhaps too much.": "حالا که به جهان برگشته‌ام، شاید بیش از حد از لذت‌هایش کام می‌گیرم.",
-  "Since you come from the ranks of the common folk, you fit in among them with ease. You can find a place to hide, rest, or recuperate among commoners, unless you have shown yourself to be a danger to them.": "چون از میان مردم عادی آمده‌ای، به‌راحتی میانشان جا می‌افتی. تا وقتی خودت را برایشان خطرناک نشان نداده باشی، می‌توانی بین آن‌ها جایی برای پنهان شدن، استراحت یا بهبود پیدا کنی.",
-  "Thanks to your noble birth, people are inclined to think the best of you. You are welcome in high society, and people assume you have the right to be wherever you are. Common folk make every effort to accommodate you, and other people of high birth treat you as a member of the same social sphere.": "به‌خاطر تبار اشرافی‌ات، مردم معمولا بهترین برداشت را از تو دارند. در محافل اعیان پذیرفته می‌شوی و دیگران فرض می‌کنند حق داری هر جا هستی حضور داشته باشی. مردم عادی برای آسایش تو تلاش می‌کنند و اشراف دیگر تو را عضوی از همان طبقه اجتماعی می‌دانند.",
-  "The common folk love me for my kindness and generosity.": "مردم عادی به‌خاطر مهربانی و بخشندگی‌ام دوستم دارند.",
-  "The presence of strong evil registers on your senses like a noxious odor. As an action, you can open your awareness to detect such forces. Until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet that is not behind total cover. You can use this feature CHA modifier + 1 times per long rest.": "حضور شرارت نیرومند برای حواس تو مثل بویی آزاردهنده آشکار می‌شود. با یک کنش می‌توانی آگاهی‌ات را بگشایی و چنین نیروهایی را تشخیص دهی. تا پایان نوبت بعدی‌ات، جای هر موجود آسمانی، فیند یا مرده‌متحرک را در ۶۰ فوتی خودت می‌دانی، مگر اینکه پشت پوشش کامل باشد. در هر استراحت بلند می‌توانی به تعداد تعدیل‌گر کاریزما + ۱ از این ویژگی استفاده کنی.",
-  "The quiet seclusion of your extended hermitage gave you access to a unique and powerful discovery. The exact nature of this revelation is up to you and the DM. It might be a great truth about the cosmos or the gods, or it could be a site that no one else has ever seen.": "انزوای طولانی و آرام خلوت‌نشینی‌ات تو را به کشفی یگانه و نیرومند رسانده است. ماهیت دقیق این مکاشفه به تو و DM بستگی دارد؛ شاید حقیقتی بزرگ درباره کیهان یا خدایان باشد، یا مکانی که هیچ‌کس جز تو ندیده است.",
-  "The workshop where I learned my trade is the most important place in the world to me.": "کارگاهی که حرفه‌ام را آنجا آموختم مهم‌ترین جای جهان برای من است.",
-  "Through sounds and gestures, you can communicate simple ideas to Small or smaller beasts.": "با صداها و اشاره‌ها می‌توانی مفهوم‌های ساده را به جانوران کوچک یا کوچک‌تر منتقل کنی.",
-  "Wanderer from the wild places beyond civilization": "آواره‌ای از سرزمین‌های وحشی فراتر از تمدن",
-  "When I see something valuable, I can't think of anything but how to steal it.": "وقتی چیز ارزشمندی می‌بینم، جز دزدیدنش به هیچ چیز دیگری فکر نمی‌کنم.",
-  "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. Once you use this trait, you can't do so again until you finish a long rest.": "وقتی به ۰ جان می‌رسی اما همان‌جا کشته نمی‌شوی، می‌توانی به‌جای آن با ۱ جان سرپا بمانی. پس از استفاده از این ویژگی، تا پایان یک استراحت بلند نمی‌توانی دوباره از آن استفاده کنی.",
-  "When you attempt to learn or recall a piece of lore, if you do not know that information, you often know where and from whom you can obtain it. Usually this information comes from a library, scriptorium, university, or a sage or other learned person or creature.": "وقتی می‌خواهی دانشی را یاد بگیری یا به یاد بیاوری، اگر خودت پاسخ را ندانی معمولا می‌دانی کجا و از چه کسی می‌توانی پیدایش کنی. این اطلاعات معمولا از کتابخانه، نسخه‌خانه، دانشگاه، یک دانا یا موجودی فرهیخته به دست می‌آید.",
-  "When you need to, you can secure free passage on a sailing ship for yourself and your adventuring companions. You might sail on the ship you served on, or another ship you have good relations with. Because you're calling in a favor, you can't be certain of a schedule or route that will meet your every need.": "هر وقت لازم باشد می‌توانی برای خودت و همراهان ماجراجویت عبور رایگان با یک کشتی فراهم کنی. شاید همان کشتی‌ای باشد که در آن خدمت کرده‌ای، یا کشتی دیگری که با آن رابطه خوبی داری. چون داری از لطفی قدیمی استفاده می‌کنی، نمی‌توانی مطمئن باشی زمان‌بندی یا مسیرش دقیقا با نیازهایت جور باشد.",
-  "When you roll a 1 on a d20 for an attack roll, ability check, or saving throw, you can reroll and must use the new roll.": "وقتی در تاس d20 برای حمله، آزمون توانایی یا نجات عدد ۱ می‌آوری، می‌توانی دوباره تاس بریزی و باید نتیجه تازه را بپذیری.",
-  "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage.": "وقتی با حمله سلاح نزدیک‌زن ضربه بحرانی می‌زنی، می‌توانی یکی از تاس‌های آسیب سلاح را یک بار دیگر بریزی و آن را به آسیب اضافه کنی.",
-  "Whenever I come to a new place, I collect local rumors and spread gossip.": "هر جا تازه وارد می‌شوم، شایعه‌های محلی را جمع می‌کنم و حرف‌ها را پخش می‌کنم.",
-  "While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.": "وقتی هیچ زرهی نپوشیده‌ای، کلاس زرهی تو برابر است با ۱۰ + تعدیل‌گر چابکی + تعدیل‌گر بنیه. می‌توانی سپر داشته باشی و همچنان از این مزیت بهره ببری.",
-  "While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.": "وقتی زره نپوشیده‌ای و سپر به دست نداری، AC تو برابر است با ۱۰ + تعدیل‌گر چابکی + تعدیل‌گر خرد.",
-  "You adopt a particular style of fighting as your specialty. Choose one: Archery (+2 to ranged attacks), Defense (+1 AC), Dueling (+2 damage with one-handed weapon), Great Weapon Fighting (reroll 1s and 2s on damage), Protection (impose disadvantage on attack against ally), or Two-Weapon Fighting (add ability mod to off-hand attack).": "یک سبک مبارزه را به‌عنوان تخصص خودت برمی‌گزینی. یکی را انتخاب کن: تیراندازی (+۲ به حمله‌های دوربرد)، دفاع (+۱ AC)، دوئل (+۲ آسیب با سلاح یک‌دستی)، نبرد با سلاح سنگین (تاس‌های ۱ و ۲ آسیب را دوباره می‌ریزی)، محافظت (به حمله علیه هم‌پیمان برتری منفی می‌دهی)، یا نبرد با دو سلاح (تعدیل‌گر توانایی را به حمله دست فرعی اضافه می‌کنی).",
-  "You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions. Choose one favored terrain: arctic, coast, desert, forest, grassland, mountain, swamp, or the Underdark.": "با یک نوع محیط طبیعی به‌خوبی آشنایی و در سفر و بقا در آن منطقه مهارت داری. یک زمین محبوب انتخاب کن: قطبی، ساحلی، بیابان، جنگل، علفزار، کوهستان، باتلاق یا تاریک‌ژرفا.",
-  "You can always find a place to perform, usually in an inn or tavern but possibly with a circus, at a theatre, or even in a noble's court. Your performance makes you the equivalent of a local celebrity.": "تقریبا همیشه می‌توانی جایی برای اجرا پیدا کنی؛ معمولا در مهمان‌خانه یا میخانه، اما شاید در سیرک، تماشاخانه یا حتی دربار یک اشراف‌زاده. اجرای تو عملا تو را به چهره‌ای مشهور در آن محل تبدیل می‌کند.",
-  "You can attempt to hide even when obscured only by a creature that is at least one size larger than you.": "حتی وقتی فقط پشت موجودی پنهان شده‌ای که دست‌کم یک اندازه از تو بزرگ‌تر است، می‌توانی برای پنهان شدن تلاش کنی.",
-  "You can attempt to hide even when only lightly obscured by foliage, rain, snow, or mist.": "حتی وقتی فقط کمی با برگ‌وبار، باران، برف یا مه پوشیده شده‌ای، می‌توانی برای پنهان شدن تلاش کنی.",
-  "You can inspire others through stirring words or music. As a bonus action, you can give one creature other than yourself a Bardic Inspiration die (d6). The creature can add it to one ability check, attack roll, or saving throw within 10 minutes. You have CHA modifier uses per long rest.": "می‌توانی با واژه‌های برانگیزاننده یا موسیقی به دیگران الهام بدهی. با یک کنش اضافه، به موجودی غیر از خودت یک تاس الهام باردی (d6) می‌دهی. آن موجود می‌تواند طی ۱۰ دقیقه آن را به یک آزمون توانایی، حمله یا نجات اضافه کند. در هر استراحت بلند به تعداد تعدیل‌گر کاریزما از این ویژگی استفاده داری.",
-  "You can move through the space of any creature that is of a size larger than yours.": "می‌توانی از فضای هر موجودی که از تو بزرگ‌تر است عبور کنی.",
-  "You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation. Recharges on short or long rest.": "می‌توانی با کنش خود انرژی ویرانگر از دهان بیرون بدهی. تبار اژدهایی‌ات اندازه، شکل و نوع آسیب این دم را تعیین می‌کند. پس از استراحت کوتاه یا بلند دوباره آماده می‌شود.",
-  "You gain proficiency with the artisan's tools of your choice: smith's, brewer's, or mason's tools.": "در یکی از ابزارهای صنعتگری به انتخاب خودت مهارت پیدا می‌کنی: ابزار آهنگری، آبجوسازی یا بنایی.",
-  "You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.": "ذخیره‌ای محدود از توان بدنی داری که می‌توانی برای محافظت از خودت به آن تکیه کنی. در نوبت خودت می‌توانی با یک کنش اضافه به اندازه 1d10 + سطح فایترت جان بازیابی کنی. پس از استفاده، باید یک استراحت کوتاه یا بلند تمام کنی تا دوباره بتوانی از آن بهره ببری.",
-  "You have a military rank from your career as a soldier. Soldiers loyal to your former military organization still recognize your authority and influence, and they defer to you if they are of a lower rank.": "از دوران سربازی‌ات درجه نظامی داری. سربازانی که هنوز به سازمان نظامی پیشین تو وفادارند، اقتدار و نفوذت را می‌شناسند و اگر درجه پایین‌تری داشته باشند به تو احترام می‌گذارند.",
-  "You have a reliable and trustworthy contact who acts as your liaison to a network of criminals. You know how to get messages to and from your contact, even over great distances.": "رابطی قابل اعتماد داری که میان تو و شبکه‌ای از تبهکاران پیوند برقرار می‌کند. می‌دانی حتی از فاصله‌های دور چطور پیام را به او برسانی یا از او بگیری.",
-  "You have advantage on History checks related to the origin of stonework.": "در آزمون‌های تاریخ مربوط به خاستگاه سنگ‌کاری‌ها برتری داری.",
-  "You have an excellent memory for maps and geography, and you can always recall the general layout of terrain, settlements, and other features around you. In addition, you can find food and fresh water for yourself and up to five other people each day.": "حافظه‌ای عالی برای نقشه‌ها و جغرافیا داری و همیشه می‌توانی چیدمان کلی زمین، آبادی‌ها و نشانه‌های اطرافت را به یاد بیاوری. علاوه بر این، هر روز می‌توانی برای خودت و تا پنج نفر دیگر غذا و آب تازه پیدا کنی.",
-  "You have created a second identity that includes documentation, established acquaintances, and disguises that allow you to assume that persona. You can also forge documents including official papers and personal letters.": "هویتی دوم ساخته‌ای که مدرک، آشنایان جاافتاده و مبدل‌هایی دارد که اجازه می‌دهد آن شخصیت را باورپذیر بازی کنی. همچنین می‌توانی اسناد، از جمله مدارک رسمی و نامه‌های شخصی، جعل کنی.",
-  "You have disadvantage on attack rolls and Perception checks in direct sunlight.": "در نور مستقیم خورشید، در حمله‌ها و آزمون‌های ادراک برتری منفی داری.",
-  "You have draconic ancestry of a chosen dragon type, which determines your breath weapon and damage resistance. Common choices: Black (acid), Blue (lightning), Red (fire), White (cold), Green (poison).": "تباری اژدهایی از یک نوع اژدهای انتخابی داری که سلاح دم و مقاومت آسیبت را تعیین می‌کند. گزینه‌های رایج: سیاه (اسید)، آبی (آذرخش)، سرخ (آتش)، سفید (سرما)، سبز (سم).",
-  "You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The slots can have a combined level up to half your wizard level (rounded up), and none can be 6th level or higher.": "یاد گرفته‌ای با مطالعه کتاب طلسمت بخشی از انرژی جادویی‌ات را بازیابی کنی. روزی یک بار، پس از پایان استراحت کوتاه، می‌توانی جایگاه‌های طلسم مصرف‌شده‌ای را برای بازیابی انتخاب کنی. مجموع سطح آن‌ها تا نصف سطح ویزاردت، رو به بالا گرد شده، می‌تواند باشد و هیچ‌کدام نباید سطح ۶ یا بالاتر باشند.",
-  "You have learned to untangle and reshape the fabric of reality in harmony with your wishes and music. Your spells are part of your vast repertoire, magic that you can tune to different situations.": "یاد گرفته‌ای تار و پود واقعیت را با خواست و موسیقی‌ات باز کنی و دوباره شکل بدهی. طلسم‌هایت بخشی از گنجینه بزرگ اجرای تو هستند؛ جادویی که می‌توانی با موقعیت‌های گوناگون کوکش کنی.",
-  "You have proficiency with rapiers, shortswords, and hand crossbows.": "در راپیر، شمشیر کوتاه و کمان‌زنبورک دستی مهارت داری.",
-  "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer.": "در تبر جنگی، تبر دستی، چکش سبک و چکش جنگی مهارت داری.",
-  "You have proficiency with the longsword, shortsword, shortbow, and longbow.": "در شمشیر بلند، شمشیر کوتاه، کمان کوتاه و کمان بلند مهارت داری.",
-  "You have resistance to the damage type associated with your draconic ancestry.": "در برابر نوع آسیبی که با تبار اژدهایی‌ات پیوند دارد مقاوم هستی.",
-  "You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy. Choose a type of favored enemy: aberrations, beasts, celestials, constructs, dragons, elementals, fey, fiends, giants, monstrosities, oozes, plants, or undead. You have advantage on Survival checks to track them and on Intelligence checks to recall information about them.": "در مطالعه، ردیابی، شکار و حتی گفت‌وگو با نوع خاصی از دشمن تجربه زیادی داری. یک دشمن محبوب انتخاب کن: نابهنجاری‌ها، جانوران، آسمانی‌ها، سازه‌ها، اژدهایان، عنصرزادگان، فی‌ها، فیندها، غول‌ها، هیولاها، لجن‌ها، گیاهان یا مردگان متحرک. برای ردیابی آن‌ها در آزمون بقا و برای به یاد آوردن اطلاعات درباره‌شان در آزمون‌های هوش برتری داری.",
-  "You have struck a bargain with an otherworldly being of your choice: the Archfey, the Fiend, or the Great Old One. Your choice grants you features at 1st level and again at 6th, 10th, and 14th level.": "با موجودی فراجهانی به انتخاب خودت پیمان بسته‌ای: آرچ‌فی، فیند یا کهن‌زاد بزرگ. انتخابت در سطح ۱ و دوباره در سطح‌های ۶، ۱۰ و ۱۴ ویژگی‌هایی به تو می‌دهد.",
-  "You know Druidic, the secret language of druids. You can speak the language and use it to leave hidden messages.": "زبان درویدیک، زبان پنهانی درویدها، را می‌دانی. می‌توانی به آن زبان حرف بزنی و با آن پیام‌های مخفی بگذاری.",
-  "You know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll, or if an ally is within 5 ft of the target.": "بلدی چطور زیرکانه ضربه بزنی و از حواس‌پرتی دشمن استفاده کنی. هر نوبت یک بار، اگر در حمله برتری داشته باشی یا یک هم‌پیمان در فاصله ۵ فوتی هدف باشد، می‌توانی به موجودی که با حمله زده‌ای 1d6 آسیب اضافه وارد کنی.",
-  "You know one cantrip of your choice from the wizard spell list (INT is your spellcasting ability).": "یک کانتریپ به انتخاب خودت از فهرست طلسم‌های ویزارد می‌دانی. توانایی طلسم‌اندازی تو برای آن هوش است.",
-  "You know the Dancing Lights cantrip. At 3rd level, you can cast Faerie Fire once per day.": "کانتریپ Dancing Lights را می‌دانی. از سطح ۳ می‌توانی روزی یک بار Faerie Fire اجرا کنی.",
-  "You know the Minor Illusion cantrip. Intelligence is your spellcasting ability for it.": "کانتریپ Minor Illusion را می‌دانی و توانایی طلسم‌اندازی تو برای آن هوش است.",
-  "You know the Thaumaturgy cantrip. At 3rd level, you can cast Hellish Rebuke once per day. At 5th level, you can cast Darkness once per day.": "کانتریپ Thaumaturgy را می‌دانی. از سطح ۳ می‌توانی روزی یک بار Hellish Rebuke و از سطح ۵ روزی یک بار Darkness اجرا کنی.",
-  "Your Charisma score increases by 2, and two other ability scores of your choice increase by 1.": "امتیاز کاریزمای تو ۲ واحد افزایش پیدا می‌کند و دو امتیاز توانایی دیگر به انتخاب خودت هر کدام ۱ واحد افزایش می‌یابند.",
-  "Your arcane research and the magic bestowed on you by your patron have given you facility with spells. You have 1 spell slot at level 1 (regained on short or long rest). Charisma is your spellcasting ability.": "پژوهش آرکین و جادویی که حامی‌ات به تو بخشیده، تو را در اجرای طلسم‌ها توانمند کرده است. در سطح ۱ یک جایگاه طلسم داری که با استراحت کوتاه یا بلند بازیابی می‌شود. توانایی طلسم‌اندازی تو کاریزماست.",
-  "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5 (5 HP at level 1). As an action, you can touch a creature and draw power from the pool to restore a number of hit points.": "لمس متبرک تو می‌تواند زخم‌ها را درمان کند. مخزنی از نیروی درمانی داری که با استراحت بلند پر می‌شود. با آن مخزن می‌توانی در مجموع به اندازه سطح پالادینت × ۵ جان بازیابی کنی؛ یعنی در سطح ۱، پنج جان. با یک کنش، موجودی را لمس می‌کنی و هر مقدار خواستی از این نیرو را برای بازگرداندن جان او خرج می‌کنی.",
-  "Your hit point maximum increases by 1, and it increases by 1 every time you gain a level.": "حداکثر جان تو ۱ واحد افزایش می‌یابد و هر بار که سطح می‌گیری، دوباره ۱ واحد بیشتر می‌شود.",
-  "Your practice of martial arts gives you mastery of combat styles. You can use DEX instead of STR for monk weapons, your unarmed strikes deal 1d4 damage, and when you use the Attack action you can make one unarmed strike as a bonus action.": "تمرین هنرهای رزمی به تو در سبک‌های نبرد چیرگی می‌دهد. برای سلاح‌های مانک می‌توانی به‌جای قدرت از چابکی استفاده کنی، ضربه‌های بی‌سلاح تو 1d4 آسیب می‌زنند و وقتی کنش حمله را انجام می‌دهی، می‌توانی با کنش اضافه یک ضربه بی‌سلاح هم بزنی."
+  '10 gp': '۱۰ سکه طلا',
+  'Animal Handling': 'حیوان‌داری',
+  Aspiration: 'بلندپروازی',
+  'Bardic Inspiration': 'الهام باردی',
+  Beauty: 'زیبایی',
+  'Bottle of black ink': 'بطری جوهر سیاه',
+  CHA: 'کاریزما',
+  CON: 'بنیه',
+  Change: 'تغییر',
+  Charity: 'نیکوکاری',
+  Community: 'جامعه',
+  'Con tools': 'ابزارهای شیادی',
+  Creativity: 'خلاقیت',
+  'Criminal Contact': 'رابط تبهکاری',
+  DEX: 'چابکی',
+  Dagger: 'خنجر',
+  'Deck of cards': 'دسته کارت',
+  Fairness: 'انصاف',
+  'Fighting Style': 'سبک مبارزه',
+  Freedom: 'آزادی',
+  Generosity: 'بخشندگی',
+  Glory: 'افتخار',
+  'Greater Good': 'خیر بزرگ‌تر',
+  Greed: 'طمع',
+  'Hill Dwarf': 'دورف تپه‌نشین',
+  'Honor among thieves': 'شرافت میان دزدان',
+  'Hunting trap': 'تله شکار',
+  INT: 'هوش',
+  Independence: 'استقلال',
+  'Insignia of rank': 'نشان درجه',
+  'Iron pot': 'دیگ آهنی',
+  Javelins: 'زوبین‌ها',
+  Knowledge: 'دانش',
+  'Letter from a dead colleague': 'نامه‌ای از همکاری درگذشته',
+  'Letter of introduction from guild': 'معرفی‌نامه از صنف',
+  'Light crossbows': 'کمان‌زنبورک‌های سبک',
+  'Lightfoot Halfling': 'هفلینگ سبک‌پا',
+  Logic: 'منطق',
+  'Lucky charm': 'طلسم خوش‌شانسی',
+  'Mask of the Wild': 'نقاب طبیعت وحشی',
+  Mastery: 'استادی',
+  Medium: 'متوسط',
+  Nation: 'ملت',
+  'Noble Obligation': 'وظیفه اشرافی',
+  People: 'مردم',
+  Power: 'قدرت',
+  'Power of Knowledge': 'قدرت دانش',
+  'Prayer book': 'کتاب دعا',
+  Reflection: 'درون‌نگری',
+  'Relentless Endurance': 'پایداری بی‌امان',
+  Respect: 'احترام',
+  Responsibility: 'مسئولیت',
+  STR: 'قدرت',
+  'Scroll case with notes': 'محفظه طومار با یادداشت‌ها',
+  'Scroll of pedigree': 'طومار شجره‌نامه',
+  'Shelter of the Faithful': 'پناه مؤمنان',
+  Shovel: 'بیل',
+  Sickles: 'داس‌ها',
+  Small: 'کوچک',
+  'Small knife': 'چاقوی کوچک',
+  'Sneak Attack': 'حمله غافلگیرانه',
+  'Sorcerous Origin': 'خاستگاه سورسرری',
+  Spears: 'نیزه‌ها',
+  'Stout Halfling': 'هفلینگ استوت',
+  'Sunlight Sensitivity': 'حساسیت به نور خورشید',
+  Tradition: 'سنت',
+  "Traveler's clothes": 'لباس مسافرتی',
+  'Trophy from an animal you killed': 'یادگاری از جانوری که شکار کرده‌ای',
+  'Trophy from fallen enemy': 'یادگاری از دشمنی شکست‌خورده',
+  'Vehicles (land)': 'وسایل نقلیه زمینی',
+  'Vehicles (water)': 'وسایل نقلیه آبی',
+  Vestments: 'جامه‌های آیینی',
+  WIS: 'خرد',
+  Wanderer: 'خانه‌به‌دوش',
+  'A spoken and written language your character can understand.':
+    'زبانی گفتاری و نوشتاری که کاراکترت می‌تواند بفهمد.',
+  Abyssal: 'ابیسال',
+  'Alien tongue of aberrations and deep underground horrors.':
+    'زبان بیگانه‌ی موجودات نابهنجار و وحشت‌های ژرفای زیرزمین.',
+  'Ancient language of dragons, dragonborn, and arcane lore.':
+    'زبان کهن اژدهایان، اژدهازادان و دانش آرکین.',
+  'Animal Friendship': 'دوستی با حیوانات',
+  'Balance, tumbling, and agile movement': 'تعادل، پشتک‌وارو و حرکت چابکانه',
+  'Booming tongue of giants, ogres, trolls, and giant-kin.':
+    'زبان پرطنین غول‌ها، اوگرها، ترول‌ها و غول‌تباران.',
+  'Calming, guiding, and reading animals':
+    'آرام‌کردن، هدایت‌کردن و فهمیدن حیوانات',
+  Celestial: 'آسمانی',
+  'Charm Person': 'افسون شخص',
+  'Choose spells': 'طلسم‌ها را انتخاب کن',
+  'Choose starting equipment': 'تجهیزات آغازین را انتخاب کن',
+  Club: 'چماق',
+  'Climbing, jumping, swimming, and feats of strength':
+    'بالارفتن، پریدن، شنا و کارهای قدرتی',
+  'Coded slang and signs used by rogues and criminal circles.':
+    'اصطلاحات و نشانه‌های رمزی که روگ‌ها و حلقه‌های تبهکاری به کار می‌برند.',
+  'Create or Destroy Water': 'خلق یا نابود کردن آب',
+  'Cure Wounds': 'درمان زخم‌ها',
+  'Deep Speech': 'زبان ژرف',
+  'Detect Magic': 'تشخیص جادو',
+  'Detect Poison and Disease': 'تشخیص سم و بیماری',
+  'Diplomacy, etiquette, and winning people over':
+    'دیپلماسی، آداب‌دانی و همراه‌کردن دیگران',
+  'Direct, forceful language of orcs, raiders, and warrior clans.':
+    'زبان مستقیم و پرصلابت اورک‌ها، مهاجمان و خاندان‌های جنگجو.',
+  'Elemental root language of air, earth, fire, and water beings.':
+    'زبان ریشه‌ای عنصرزادگان هوا، خاک، آتش و آب.',
+  Entangle: 'گرفتارسازی',
+  'Entertaining through music, acting, or speech':
+    'سرگرم‌کردن با موسیقی، بازیگری یا سخن',
+  'Finding clues and making deductions': 'پیدا کردن سرنخ‌ها و نتیجه‌گیری',
+  'Flowing language of elves, old songs, fey courts, and poetry.':
+    'زبان روان الف‌ها، ترانه‌های کهن، دربارهای فی و شعر.',
+  'Fog Cloud': 'ابر مه',
+  Giant: 'غولی',
+  Gnoll: 'نولی',
+  Goblin: 'گابلینی',
+  Goodberry: 'گودبری',
+  'Harsh language used by gnolls and their raiding packs.':
+    'زبان خشن نول‌ها و دسته‌های یورش‌گرشان.',
+  'Healing Word': 'کلام شفابخش',
+  Javelin: 'زوبین',
+  'Knowledge of deities, rites, and sacred lore':
+    'دانش درباره خدایان، آیین‌ها و دانسته‌های مقدس',
+  'Knowledge of magic, spells, and arcane lore':
+    'دانش جادو، طلسم‌ها و رازهای آرکین',
+  'Knowledge of past events, cultures, and people':
+    'دانش رویدادهای گذشته، فرهنگ‌ها و مردم',
+  'Knowledge of terrain, plants, animals, and weather':
+    'شناخت زمین، گیاهان، حیوانات و آب‌وهوا',
+  'Language of angels, divine servants, and upper planes.':
+    'زبان فرشتگان، خدمتگزاران الهی و صفحه‌های برین.',
+  'Language of demons and chaotic fiends from the Abyss.':
+    'زبان دیوها و فیندهای آشوب‌زده‌ی برآمده از ابیس.',
+  'Lying, disguise, and misleading others':
+    'دروغ‌گویی، تغییر چهره و گمراه‌کردن دیگران',
+  Longstrider: 'گام بلند',
+  'Manual trickery, palming, and pickpocketing': 'نیرنگ دستی، کف‌زنی و جیب‌بری',
+  Mending: 'ترمیم',
+  'Moving quietly and staying unseen': 'بی‌صدا حرکت‌کردن و دیده‌نشدن',
+  'Musical speech of fey creatures, old forests, and enchantment.':
+    'گفتار آهنگین موجودات فی، جنگل‌های کهن و افسون.',
+  'Noticing details, danger, and hidden things':
+    'دیدن جزئیات، خطر و چیزهای پنهان',
+  'Poison Spray': 'افشانه سم',
+  'Precise contract language of devils and the Nine Hells.':
+    'زبان دقیق قراردادهای شیاطین و نه دوزخ.',
+  Primordial: 'نخستین',
+  'Produce Flame': 'شعله‌آفرینی',
+  Race: 'نژاد',
+  'Quick, technical language of gnomes, inventors, and tinkerers.':
+    'زبان سریع و فنی گنوم‌ها، مخترعان و خرده‌سازان.',
+  'Reading intentions, moods, and body language':
+    'خواندن نیت‌ها، حال‌وهوا و زبان بدن',
+  Resistance: 'مقاومت',
+  Subrace: 'زیرنژاد',
+  'Rough tongue of goblins, bugbears, hobgoblins, and warbands.':
+    'زبان زمخت گابلین‌ها، باگ‌برها، هاب‌گابلین‌ها و گروه‌های جنگی.',
+  'Secret language used by druids for speech and hidden messages.':
+    'زبان پنهانی درویدها برای گفت‌وگو و پیام‌های مخفی.',
+  'Shield or extra simple weapon': 'سپر یا یک سلاح ساده اضافه',
+  'Simple weapon: dagger': 'سلاح ساده: خنجر',
+  'Simple weapon: javelin': 'سلاح ساده: زوبین',
+  Sickle: 'داس',
+  Skills: 'مهارت‌ها',
+  Sling: 'فلاخن',
+  'Speak with Animals': 'سخن با حیوانات',
+  Spear: 'نیزه',
+  'Spell Attack': 'حمله طلسم',
+  'Spell Save DC': 'درجه سختی نجات طلسم',
+  Spells: 'طلسم‌ها',
+  'Stabilizing creatures and diagnosing illness':
+    'پایدار کردن موجودات و تشخیص بیماری',
+  'Starting weapon choice': 'انتخاب سلاح آغازین',
+  'Sturdy speech of dwarves, stone halls, mines, and clans.':
+    'زبان استوار دورف‌ها، تالارهای سنگی، معدن‌ها و خاندان‌ها.',
+  Sylvan: 'سیلوان',
+  'The everyday trade tongue shared across many cultures.':
+    'زبان روزمره دادوستد که میان فرهنگ‌های بسیاری مشترک است.',
+  'Thorn Whip': 'تازیانه خار',
+  'Threats, pressure, and forceful presence': 'تهدید، فشار و حضور قاطع',
+  Thunderwave: 'موج رعد',
+  'Tracking, foraging, navigation, and wilderness signs':
+    'ردیابی، خوراک‌یابی، جهت‌یابی و نشانه‌های طبیعت وحشی',
+  'Trade language of the Underdark and its shadowed cities.':
+    'زبان دادوستد تاریک‌ژرفا و شهرهای سایه‌پوش آن.',
+  'Two simple weapons: club and quarterstaff':
+    'دو سلاح ساده: چماق و چوب‌دستی بلند',
+  'Two simple weapons: mace and sling': 'دو سلاح ساده: گرز و فلاخن',
+  'Two simple weapons: sickle and spear': 'دو سلاح ساده: داس و نیزه',
+  Undercommon: 'زیرمشترک',
+  'Warm, practical language of halfling families and travelers.':
+    'زبان گرم و کاربردی خانواده‌های هفلینگ و مسافران.',
+  'What are cantrips?': 'کانتریپ چیست؟',
+  'What are spells?': 'طلسم‌ها چیستند؟',
+  'Cantrips are simple spells your character can cast at will. They do not use spell slots and are always available once chosen.':
+    'کانتریپ‌ها طلسم‌های ساده‌ای هستند که کاراکترت هر وقت بخواهد می‌تواند اجرا کند. جایگاه طلسم مصرف نمی‌کنند و بعد از انتخاب همیشه در دسترس‌اند.',
+  'Spells are magical effects powered by your class. Prepared or known spells are the options your character can cast during play.':
+    'طلسم‌ها اثرهای جادویی‌اند که از کلاس کاراکتر نیرو می‌گیرند. طلسم‌های آماده یا شناخته‌شده همان گزینه‌هایی هستند که کاراکترت در بازی می‌تواند اجرا کند.',
+  choice: 'انتخاب',
+  'Winter blanket': 'پتوی زمستانی',
+  'Add twice your proficiency bonus to History checks related to magic items, alchemical objects, or technological devices.':
+    'برای آزمون‌های تاریخ مرتبط با آیتم‌های جادویی، اشیای کیمیاگری یا ابزارهای فناورانه، دو برابر پاداش مهارتت را اضافه می‌کنی.',
+  'An event in your past, or in the life of a parent or ancestor, left an indelible mark on you, infusing you with arcane magic. Charisma is your spellcasting ability.':
+    'رویدادی در گذشته تو، یا در زندگی یکی از والدین یا نیاکانت، نشانی پاک‌نشدنی بر تو گذاشته و جادوی آرکین را در وجودت جاری کرده است. توانایی طلسم‌اندازی تو کاریزماست.',
+  'As an acolyte, you command the respect of those who share your faith. You and your adventuring companions can expect to receive free healing and care at a temple, shrine, or other established presence of your faith.':
+    'به‌عنوان خادم معبد، پیروان هم‌کیشت برایت احترام قائل‌اند. تو و همراهان ماجراجویت می‌توانید در معبد، زیارتگاه یا هر پایگاه رسمی آیینت انتظار درمان و مراقبت رایگان داشته باشید.',
+  'As an established member of a guild, you can rely on certain benefits that membership provides. Fellow guild members will provide you with lodging and food if necessary, and pay for your funeral if needed.':
+    'به‌عنوان عضوی پذیرفته‌شده در یک صنف، می‌توانی روی مزایای عضویت حساب کنی. هم‌صنفی‌هایت در صورت نیاز برایت غذا و سرپناه فراهم می‌کنند و حتی اگر لازم شود هزینه خاکسپاری‌ات را می‌پردازند.',
+  'Choose a sorcerous origin, which describes the source of your innate magical power: Draconic Bloodline or Wild Magic. Your choice grants you features at 1st level and again at 6th, 14th, and 18th level.':
+    'یک خاستگاه سورسرری انتخاب کن که سرچشمه نیروی جادویی ذاتی تو را توضیح می‌دهد؛ مثل تبار اژدهایی یا جادوی وحشی. انتخابت در سطح ۱ و دوباره در سطح‌های ۶، ۱۴ و ۱۸ ویژگی‌هایی به تو می‌دهد.',
+  "Choose two of your skill proficiencies, or one skill and thieves' tools. Your proficiency bonus is doubled for any ability check you make with the chosen proficiencies.":
+    'دو مورد از مهارت‌هایی را که در آن‌ها مهارت‌مند هستی انتخاب کن، یا یک مهارت و ابزار دزدان را. در آزمون‌های توانایی مربوط به انتخاب‌هایت، پاداش مهارتت دو برابر حساب می‌شود.',
+  "During your rogue training you learned thieves' cant, a secret mix of dialect, jargon, and code that allows you to hide messages in seemingly normal conversation.":
+    'در آموزش‌های روگ، زبان مخفی دزدان را یاد گرفته‌ای؛ ترکیبی پنهانی از لهجه، اصطلاح و رمز که اجازه می‌دهد پیام‌ها را در دل گفت‌وگویی عادی پنهان کنی.',
+  'I always have a plan for what to do when things go wrong.':
+    'همیشه برای وقتی اوضاع خراب می‌شود نقشه‌ای آماده دارم.',
+  'I am always calm, no matter what the situation.':
+    'هر وضعیتی پیش بیاید آرامش خودم را حفظ می‌کنم.',
+  'I am easily distracted by the promise of information.':
+    'وعده دسترسی به اطلاعات خیلی راحت حواسم را پرت می‌کند.',
+  'I am utterly serene, even in the face of disaster.':
+    'حتی روبه‌روی فاجعه هم کاملا آرام می‌مانم.',
+  'I believe that anything worth doing is worth doing right.':
+    'باور دارم هر کاری که ارزش انجام دادن دارد، باید درست انجام شود.',
+  'I can find common ground between the fiercest enemies.':
+    'می‌توانم میان سرسخت‌ترین دشمنان هم نقطه مشترک پیدا کنم.',
+  "I can't resist a pretty face.": 'در برابر چهره‌ای دلربا تاب مقاومت ندارم.',
+  'I entered seclusion to hide from the ones who might still be hunting me.':
+    'به انزوا پناه بردم تا از کسانی پنهان شوم که شاید هنوز دنبالم باشند.',
+  'I fall in and out of love easily and am always pursuing someone.':
+    'زود دل می‌بازم و زود هم دل می‌کنم؛ همیشه هم در پی کسی هستم.',
+  'I fleeced the wrong person and must work to ensure they never find me.':
+    'آدم اشتباهی را سرکیسه کردم و حالا باید مطمئن شوم هیچ‌وقت پیدایم نمی‌کند.',
+  "I follow orders, even if I think they're wrong.":
+    'دستورها را اجرا می‌کنم، حتی اگر فکر کنم اشتباه‌اند.',
+  'I have a family, but I have no idea where they are.':
+    'خانواده‌ای دارم، اما نمی‌دانم کجا هستند.',
+  'I have a joke for every occasion, especially occasions where humor is inappropriate.':
+    'برای هر موقعیتی شوخی دارم، به‌خصوص موقعیت‌هایی که شوخی در آن‌ها بی‌جا است.',
+  'I have an ancient text that holds terrible secrets that must not fall into the wrong hands.':
+    'متنی کهن دارم که رازهایی هولناک در خود دارد و نباید دست آدم‌های نادرست بیفتد.',
+  'I have trouble trusting in my allies.':
+    'اعتماد کردن به هم‌پیمانانم برایم سخت است.',
+  "I idolize a particular hero of my faith and constantly reference that person's deeds.":
+    'یکی از قهرمانان آیینم را می‌پرستم و مدام به کارهای او اشاره می‌کنم.',
+  'I judge others harshly and myself even more severely.':
+    'دیگران را سخت قضاوت می‌کنم و خودم را حتی سخت‌تر.',
+  'I judge people by their actions, not their words.':
+    'آدم‌ها را با کارهایشان می‌سنجم، نه با حرف‌هایشان.',
+  'I know a story relevant to almost every situation.':
+    'تقریبا برای هر موقعیتی داستانی مرتبط سراغ دارم.',
+  'I made a terrible mistake in battle that cost many lives, and I would do anything to keep that mistake secret.':
+    'در نبرد اشتباهی وحشتناک کردم که جان‌های زیادی گرفت و برای پنهان ماندنش هر کاری می‌کنم.',
+  'I owe my life to the priest who took me in when my parents died.':
+    'زندگی‌ام را مدیون کشیشی هستم که پس از مرگ والدینم پناهم داد.',
+  "I remember every insult I've received and nurse a silent resentment toward anyone who's ever wronged me.":
+    'هر توهینی را که شنیده‌ام به یاد دارم و نسبت به هر کس که بدی کرده، کینه‌ای خاموش در دل نگه می‌دارم.',
+  'I secretly believe that everyone is beneath me.':
+    'پنهانی باور دارم همه از من پایین‌ترند.',
+  'I use polysyllabic words that convey the impression of great erudition.':
+    'از واژه‌های پرطمطراق استفاده می‌کنم تا بسیار فرهیخته به نظر برسم.',
+  'I watch over my friends as if they were a litter of newborn pups.':
+    'از دوستانم مثل توله‌هایی تازه‌به‌دنیا‌آمده مراقبت می‌کنم.',
+  'I will face any challenge to win the approval of my family.':
+    'برای به دست آوردن تأیید خانواده‌ام با هر چالشی روبه‌رو می‌شوم.',
+  'I work hard so that I can play hard when the work is done.':
+    'سخت کار می‌کنم تا وقتی کار تمام شد حسابی خوش بگذرانم.',
+  'I would still lay down my life for the people I served with.':
+    'هنوز هم جانم را برای کسانی که کنارشان خدمت کرده‌ام می‌دهم.',
+  "I'll do anything to get my hands on something rare or priceless.":
+    'برای به دست آوردن چیزی کمیاب یا بی‌قیمت هر کاری می‌کنم.',
+  "I'm a sucker for a pretty face.": 'چهره زیبا نقطه ضعف من است.',
+  "I'm always polite and respectful.": 'همیشه مؤدب و محترمانه رفتار می‌کنم.',
+  "I'm driven by a wanderlust that led me away from home.":
+    'میل سیری‌ناپذیر به سفر مرا از خانه دور کرده است.',
+  "I'm haunted by memories of war. I wake up every night screaming.":
+    'خاطرات جنگ رهایم نمی‌کنند؛ هر شب با فریاد از خواب می‌پرم.',
+  "I'm loyal to my captain first, everything else second.":
+    'اول به ناخدایم وفادارم؛ بقیه چیزها بعد از آن می‌آیند.',
+  "I'm rude to people who lack my commitment to hard work.":
+    'با کسانی که مثل من به سخت‌کوشی پایبند نیستند تند برخورد می‌کنم.',
+  "I'm trying to pay off an old debt I owe to a generous benefactor.":
+    'تلاش می‌کنم بدهی قدیمی‌ام را به نیکوکاری بخشنده پس بدهم.',
+  "I've been isolated for so long that I rarely speak, preferring gestures and expressions.":
+    'آن‌قدر در انزوا بوده‌ام که کمتر حرف می‌زنم و بیشتر با اشاره و حالت چهره ارتباط می‌گیرم.',
+  "I've read every book in the world's greatest libraries — or I like to boast that I have.":
+    'همه کتاب‌های بزرگ‌ترین کتابخانه‌های جهان را خوانده‌ام؛ یا دست‌کم دوست دارم چنین ادعایی کنم.',
+  "If someone is in trouble, I'm always ready to lend help.":
+    'اگر کسی گرفتار باشد، همیشه آماده کمکم.',
+  'In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you have advantage on Strength checks and saving throws, deal +2 bonus damage with melee weapons, and have resistance to bludgeoning, piercing, and slashing damage. Rage lasts 1 minute. You can rage 2 times per long rest at level 1.':
+    'در نبرد با خشونتی غریزی می‌جنگی. در نوبت خودت می‌توانی با یک کنش اضافه وارد خشم شوی. هنگام خشم، در آزمون‌ها و نجات‌های قدرت برتری داری، با سلاح‌های نزدیک‌زن ۲ آسیب اضافه می‌زنی و در برابر آسیب کوبشی، سوراخ‌کننده و برشی مقاوم هستی. خشم ۱ دقیقه دوام دارد و در سطح ۱، بین هر استراحت بلند ۲ بار می‌توانی خشمگین شوی.',
+  'My eloquent flattery makes everyone I talk to feel like the most wonderful and important person in the world.':
+    'چاپلوسی خوش‌بیانم باعث می‌شود هر کسی با من حرف می‌زند حس کند شگفت‌انگیزترین و مهم‌ترین آدم دنیاست.',
+  'My family, clan, or tribe is the most important thing in my life.':
+    'خانواده، خاندان یا قبیله‌ام مهم‌ترین چیز زندگی من است.',
+  'My friends know they can rely on me, no matter what.':
+    'دوستانم می‌دانند هر اتفاقی بیفتد می‌توانند روی من حساب کنند.',
+  'My instrument is my most treasured possession and it reminds me of someone I love.':
+    'سازم عزیزترین دارایی من است و مرا به یاد کسی می‌اندازد که دوستش دارم.',
+  "Now that I've returned to the world, I enjoy its delights perhaps too much.":
+    'حالا که به جهان برگشته‌ام، شاید بیش از حد از لذت‌هایش کام می‌گیرم.',
+  'Since you come from the ranks of the common folk, you fit in among them with ease. You can find a place to hide, rest, or recuperate among commoners, unless you have shown yourself to be a danger to them.':
+    'چون از میان مردم عادی آمده‌ای، به‌راحتی میانشان جا می‌افتی. تا وقتی خودت را برایشان خطرناک نشان نداده باشی، می‌توانی بین آن‌ها جایی برای پنهان شدن، استراحت یا بهبود پیدا کنی.',
+  'Thanks to your noble birth, people are inclined to think the best of you. You are welcome in high society, and people assume you have the right to be wherever you are. Common folk make every effort to accommodate you, and other people of high birth treat you as a member of the same social sphere.':
+    'به‌خاطر تبار اشرافی‌ات، مردم معمولا بهترین برداشت را از تو دارند. در محافل اعیان پذیرفته می‌شوی و دیگران فرض می‌کنند حق داری هر جا هستی حضور داشته باشی. مردم عادی برای آسایش تو تلاش می‌کنند و اشراف دیگر تو را عضوی از همان طبقه اجتماعی می‌دانند.',
+  'The common folk love me for my kindness and generosity.':
+    'مردم عادی به‌خاطر مهربانی و بخشندگی‌ام دوستم دارند.',
+  'The presence of strong evil registers on your senses like a noxious odor. As an action, you can open your awareness to detect such forces. Until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet that is not behind total cover. You can use this feature CHA modifier + 1 times per long rest.':
+    'حضور شرارت نیرومند برای حواس تو مثل بویی آزاردهنده آشکار می‌شود. با یک کنش می‌توانی آگاهی‌ات را بگشایی و چنین نیروهایی را تشخیص دهی. تا پایان نوبت بعدی‌ات، جای هر موجود آسمانی، فیند یا مرده‌متحرک را در ۶۰ فوتی خودت می‌دانی، مگر اینکه پشت پوشش کامل باشد. در هر استراحت بلند می‌توانی به تعداد تعدیل‌گر کاریزما + ۱ از این ویژگی استفاده کنی.',
+  'The quiet seclusion of your extended hermitage gave you access to a unique and powerful discovery. The exact nature of this revelation is up to you and the DM. It might be a great truth about the cosmos or the gods, or it could be a site that no one else has ever seen.':
+    'انزوای طولانی و آرام خلوت‌نشینی‌ات تو را به کشفی یگانه و نیرومند رسانده است. ماهیت دقیق این مکاشفه به تو و DM بستگی دارد؛ شاید حقیقتی بزرگ درباره کیهان یا خدایان باشد، یا مکانی که هیچ‌کس جز تو ندیده است.',
+  'The workshop where I learned my trade is the most important place in the world to me.':
+    'کارگاهی که حرفه‌ام را آنجا آموختم مهم‌ترین جای جهان برای من است.',
+  'Through sounds and gestures, you can communicate simple ideas to Small or smaller beasts.':
+    'با صداها و اشاره‌ها می‌توانی مفهوم‌های ساده را به جانوران کوچک یا کوچک‌تر منتقل کنی.',
+  'Wanderer from the wild places beyond civilization':
+    'آواره‌ای از سرزمین‌های وحشی فراتر از تمدن',
+  "When I see something valuable, I can't think of anything but how to steal it.":
+    'وقتی چیز ارزشمندی می‌بینم، جز دزدیدنش به هیچ چیز دیگری فکر نمی‌کنم.',
+  "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. Once you use this trait, you can't do so again until you finish a long rest.":
+    'وقتی به ۰ جان می‌رسی اما همان‌جا کشته نمی‌شوی، می‌توانی به‌جای آن با ۱ جان سرپا بمانی. پس از استفاده از این ویژگی، تا پایان یک استراحت بلند نمی‌توانی دوباره از آن استفاده کنی.',
+  'When you attempt to learn or recall a piece of lore, if you do not know that information, you often know where and from whom you can obtain it. Usually this information comes from a library, scriptorium, university, or a sage or other learned person or creature.':
+    'وقتی می‌خواهی دانشی را یاد بگیری یا به یاد بیاوری، اگر خودت پاسخ را ندانی معمولا می‌دانی کجا و از چه کسی می‌توانی پیدایش کنی. این اطلاعات معمولا از کتابخانه، نسخه‌خانه، دانشگاه، یک دانا یا موجودی فرهیخته به دست می‌آید.',
+  "When you need to, you can secure free passage on a sailing ship for yourself and your adventuring companions. You might sail on the ship you served on, or another ship you have good relations with. Because you're calling in a favor, you can't be certain of a schedule or route that will meet your every need.":
+    'هر وقت لازم باشد می‌توانی برای خودت و همراهان ماجراجویت عبور رایگان با یک کشتی فراهم کنی. شاید همان کشتی‌ای باشد که در آن خدمت کرده‌ای، یا کشتی دیگری که با آن رابطه خوبی داری. چون داری از لطفی قدیمی استفاده می‌کنی، نمی‌توانی مطمئن باشی زمان‌بندی یا مسیرش دقیقا با نیازهایت جور باشد.',
+  'When you roll a 1 on a d20 for an attack roll, ability check, or saving throw, you can reroll and must use the new roll.':
+    'وقتی در تاس d20 برای حمله، آزمون توانایی یا نجات عدد ۱ می‌آوری، می‌توانی دوباره تاس بریزی و باید نتیجه تازه را بپذیری.',
+  "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage.":
+    'وقتی با حمله سلاح نزدیک‌زن ضربه بحرانی می‌زنی، می‌توانی یکی از تاس‌های آسیب سلاح را یک بار دیگر بریزی و آن را به آسیب اضافه کنی.',
+  'Whenever I come to a new place, I collect local rumors and spread gossip.':
+    'هر جا تازه وارد می‌شوم، شایعه‌های محلی را جمع می‌کنم و حرف‌ها را پخش می‌کنم.',
+  'While you are not wearing any armor, your Armor Class equals 10 + your Dexterity modifier + your Constitution modifier. You can use a shield and still gain this benefit.':
+    'وقتی هیچ زرهی نپوشیده‌ای، کلاس زرهی تو برابر است با ۱۰ + تعدیل‌گر چابکی + تعدیل‌گر بنیه. می‌توانی سپر داشته باشی و همچنان از این مزیت بهره ببری.',
+  'While you are wearing no armor and not wielding a shield, your AC equals 10 + your Dexterity modifier + your Wisdom modifier.':
+    'وقتی زره نپوشیده‌ای و سپر به دست نداری، AC تو برابر است با ۱۰ + تعدیل‌گر چابکی + تعدیل‌گر خرد.',
+  'You adopt a particular style of fighting as your specialty. Choose one: Archery (+2 to ranged attacks), Defense (+1 AC), Dueling (+2 damage with one-handed weapon), Great Weapon Fighting (reroll 1s and 2s on damage), Protection (impose disadvantage on attack against ally), or Two-Weapon Fighting (add ability mod to off-hand attack).':
+    'یک سبک مبارزه را به‌عنوان تخصص خودت برمی‌گزینی. یکی را انتخاب کن: تیراندازی (+۲ به حمله‌های دوربرد)، دفاع (+۱ AC)، دوئل (+۲ آسیب با سلاح یک‌دستی)، نبرد با سلاح سنگین (تاس‌های ۱ و ۲ آسیب را دوباره می‌ریزی)، محافظت (به حمله علیه هم‌پیمان برتری منفی می‌دهی)، یا نبرد با دو سلاح (تعدیل‌گر توانایی را به حمله دست فرعی اضافه می‌کنی).',
+  'You are particularly familiar with one type of natural environment and are adept at traveling and surviving in such regions. Choose one favored terrain: arctic, coast, desert, forest, grassland, mountain, swamp, or the Underdark.':
+    'با یک نوع محیط طبیعی به‌خوبی آشنایی و در سفر و بقا در آن منطقه مهارت داری. یک زمین محبوب انتخاب کن: قطبی، ساحلی، بیابان، جنگل، علفزار، کوهستان، باتلاق یا تاریک‌ژرفا.',
+  "You can always find a place to perform, usually in an inn or tavern but possibly with a circus, at a theatre, or even in a noble's court. Your performance makes you the equivalent of a local celebrity.":
+    'تقریبا همیشه می‌توانی جایی برای اجرا پیدا کنی؛ معمولا در مهمان‌خانه یا میخانه، اما شاید در سیرک، تماشاخانه یا حتی دربار یک اشراف‌زاده. اجرای تو عملا تو را به چهره‌ای مشهور در آن محل تبدیل می‌کند.',
+  'You can attempt to hide even when obscured only by a creature that is at least one size larger than you.':
+    'حتی وقتی فقط پشت موجودی پنهان شده‌ای که دست‌کم یک اندازه از تو بزرگ‌تر است، می‌توانی برای پنهان شدن تلاش کنی.',
+  'You can attempt to hide even when only lightly obscured by foliage, rain, snow, or mist.':
+    'حتی وقتی فقط کمی با برگ‌وبار، باران، برف یا مه پوشیده شده‌ای، می‌توانی برای پنهان شدن تلاش کنی.',
+  'You can inspire others through stirring words or music. As a bonus action, you can give one creature other than yourself a Bardic Inspiration die (d6). The creature can add it to one ability check, attack roll, or saving throw within 10 minutes. You have CHA modifier uses per long rest.':
+    'می‌توانی با واژه‌های برانگیزاننده یا موسیقی به دیگران الهام بدهی. با یک کنش اضافه، به موجودی غیر از خودت یک تاس الهام باردی (d6) می‌دهی. آن موجود می‌تواند طی ۱۰ دقیقه آن را به یک آزمون توانایی، حمله یا نجات اضافه کند. در هر استراحت بلند به تعداد تعدیل‌گر کاریزما از این ویژگی استفاده داری.',
+  'You can move through the space of any creature that is of a size larger than yours.':
+    'می‌توانی از فضای هر موجودی که از تو بزرگ‌تر است عبور کنی.',
+  'You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation. Recharges on short or long rest.':
+    'می‌توانی با کنش خود انرژی ویرانگر از دهان بیرون بدهی. تبار اژدهایی‌ات اندازه، شکل و نوع آسیب این دم را تعیین می‌کند. پس از استراحت کوتاه یا بلند دوباره آماده می‌شود.',
+  "You gain proficiency with the artisan's tools of your choice: smith's, brewer's, or mason's tools.":
+    'در یکی از ابزارهای صنعتگری به انتخاب خودت مهارت پیدا می‌کنی: ابزار آهنگری، آبجوسازی یا بنایی.',
+  'You have a limited well of stamina that you can draw on to protect yourself from harm. On your turn, you can use a bonus action to regain hit points equal to 1d10 + your fighter level. Once you use this feature, you must finish a short or long rest before you can use it again.':
+    'ذخیره‌ای محدود از توان بدنی داری که می‌توانی برای محافظت از خودت به آن تکیه کنی. در نوبت خودت می‌توانی با یک کنش اضافه به اندازه 1d10 + سطح فایترت جان بازیابی کنی. پس از استفاده، باید یک استراحت کوتاه یا بلند تمام کنی تا دوباره بتوانی از آن بهره ببری.',
+  'You have a military rank from your career as a soldier. Soldiers loyal to your former military organization still recognize your authority and influence, and they defer to you if they are of a lower rank.':
+    'از دوران سربازی‌ات درجه نظامی داری. سربازانی که هنوز به سازمان نظامی پیشین تو وفادارند، اقتدار و نفوذت را می‌شناسند و اگر درجه پایین‌تری داشته باشند به تو احترام می‌گذارند.',
+  'You have a reliable and trustworthy contact who acts as your liaison to a network of criminals. You know how to get messages to and from your contact, even over great distances.':
+    'رابطی قابل اعتماد داری که میان تو و شبکه‌ای از تبهکاران پیوند برقرار می‌کند. می‌دانی حتی از فاصله‌های دور چطور پیام را به او برسانی یا از او بگیری.',
+  'You have advantage on History checks related to the origin of stonework.':
+    'در آزمون‌های تاریخ مربوط به خاستگاه سنگ‌کاری‌ها برتری داری.',
+  'You have an excellent memory for maps and geography, and you can always recall the general layout of terrain, settlements, and other features around you. In addition, you can find food and fresh water for yourself and up to five other people each day.':
+    'حافظه‌ای عالی برای نقشه‌ها و جغرافیا داری و همیشه می‌توانی چیدمان کلی زمین، آبادی‌ها و نشانه‌های اطرافت را به یاد بیاوری. علاوه بر این، هر روز می‌توانی برای خودت و تا پنج نفر دیگر غذا و آب تازه پیدا کنی.',
+  'You have created a second identity that includes documentation, established acquaintances, and disguises that allow you to assume that persona. You can also forge documents including official papers and personal letters.':
+    'هویتی دوم ساخته‌ای که مدرک، آشنایان جاافتاده و مبدل‌هایی دارد که اجازه می‌دهد آن شخصیت را باورپذیر بازی کنی. همچنین می‌توانی اسناد، از جمله مدارک رسمی و نامه‌های شخصی، جعل کنی.',
+  'You have disadvantage on attack rolls and Perception checks in direct sunlight.':
+    'در نور مستقیم خورشید، در حمله‌ها و آزمون‌های ادراک برتری منفی داری.',
+  'You have draconic ancestry of a chosen dragon type, which determines your breath weapon and damage resistance. Common choices: Black (acid), Blue (lightning), Red (fire), White (cold), Green (poison).':
+    'تباری اژدهایی از یک نوع اژدهای انتخابی داری که سلاح دم و مقاومت آسیبت را تعیین می‌کند. گزینه‌های رایج: سیاه (اسید)، آبی (آذرخش)، سرخ (آتش)، سفید (سرما)، سبز (سم).',
+  'You have learned to regain some of your magical energy by studying your spellbook. Once per day when you finish a short rest, you can choose expended spell slots to recover. The slots can have a combined level up to half your wizard level (rounded up), and none can be 6th level or higher.':
+    'یاد گرفته‌ای با مطالعه کتاب طلسمت بخشی از انرژی جادویی‌ات را بازیابی کنی. روزی یک بار، پس از پایان استراحت کوتاه، می‌توانی جایگاه‌های طلسم مصرف‌شده‌ای را برای بازیابی انتخاب کنی. مجموع سطح آن‌ها تا نصف سطح ویزاردت، رو به بالا گرد شده، می‌تواند باشد و هیچ‌کدام نباید سطح ۶ یا بالاتر باشند.',
+  'You have learned to untangle and reshape the fabric of reality in harmony with your wishes and music. Your spells are part of your vast repertoire, magic that you can tune to different situations.':
+    'یاد گرفته‌ای تار و پود واقعیت را با خواست و موسیقی‌ات باز کنی و دوباره شکل بدهی. طلسم‌هایت بخشی از گنجینه بزرگ اجرای تو هستند؛ جادویی که می‌توانی با موقعیت‌های گوناگون کوکش کنی.',
+  'You have proficiency with rapiers, shortswords, and hand crossbows.':
+    'در راپیر، شمشیر کوتاه و کمان‌زنبورک دستی مهارت داری.',
+  'You have proficiency with the battleaxe, handaxe, light hammer, and warhammer.':
+    'در تبر جنگی، تبر دستی، چکش سبک و چکش جنگی مهارت داری.',
+  'You have proficiency with the longsword, shortsword, shortbow, and longbow.':
+    'در شمشیر بلند، شمشیر کوتاه، کمان کوتاه و کمان بلند مهارت داری.',
+  'You have resistance to the damage type associated with your draconic ancestry.':
+    'در برابر نوع آسیبی که با تبار اژدهایی‌ات پیوند دارد مقاوم هستی.',
+  'You have significant experience studying, tracking, hunting, and even talking to a certain type of enemy. Choose a type of favored enemy: aberrations, beasts, celestials, constructs, dragons, elementals, fey, fiends, giants, monstrosities, oozes, plants, or undead. You have advantage on Survival checks to track them and on Intelligence checks to recall information about them.':
+    'در مطالعه، ردیابی، شکار و حتی گفت‌وگو با نوع خاصی از دشمن تجربه زیادی داری. یک دشمن محبوب انتخاب کن: نابهنجاری‌ها، جانوران، آسمانی‌ها، سازه‌ها، اژدهایان، عنصرزادگان، فی‌ها، فیندها، غول‌ها، هیولاها، لجن‌ها، گیاهان یا مردگان متحرک. برای ردیابی آن‌ها در آزمون بقا و برای به یاد آوردن اطلاعات درباره‌شان در آزمون‌های هوش برتری داری.',
+  'You have struck a bargain with an otherworldly being of your choice: the Archfey, the Fiend, or the Great Old One. Your choice grants you features at 1st level and again at 6th, 10th, and 14th level.':
+    'با موجودی فراجهانی به انتخاب خودت پیمان بسته‌ای: آرچ‌فی، فیند یا کهن‌زاد بزرگ. انتخابت در سطح ۱ و دوباره در سطح‌های ۶، ۱۰ و ۱۴ ویژگی‌هایی به تو می‌دهد.',
+  'You know Druidic, the secret language of druids. You can speak the language and use it to leave hidden messages.':
+    'زبان درویدیک، زبان پنهانی درویدها، را می‌دانی. می‌توانی به آن زبان حرف بزنی و با آن پیام‌های مخفی بگذاری.',
+  "You know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll, or if an ally is within 5 ft of the target.":
+    'بلدی چطور زیرکانه ضربه بزنی و از حواس‌پرتی دشمن استفاده کنی. هر نوبت یک بار، اگر در حمله برتری داشته باشی یا یک هم‌پیمان در فاصله ۵ فوتی هدف باشد، می‌توانی به موجودی که با حمله زده‌ای 1d6 آسیب اضافه وارد کنی.',
+  'You know one cantrip of your choice from the wizard spell list (INT is your spellcasting ability).':
+    'یک کانتریپ به انتخاب خودت از فهرست طلسم‌های ویزارد می‌دانی. توانایی طلسم‌اندازی تو برای آن هوش است.',
+  'You know the Dancing Lights cantrip. At 3rd level, you can cast Faerie Fire once per day.':
+    'کانتریپ Dancing Lights را می‌دانی. از سطح ۳ می‌توانی روزی یک بار Faerie Fire اجرا کنی.',
+  'You know the Minor Illusion cantrip. Intelligence is your spellcasting ability for it.':
+    'کانتریپ Minor Illusion را می‌دانی و توانایی طلسم‌اندازی تو برای آن هوش است.',
+  'You know the Thaumaturgy cantrip. At 3rd level, you can cast Hellish Rebuke once per day. At 5th level, you can cast Darkness once per day.':
+    'کانتریپ Thaumaturgy را می‌دانی. از سطح ۳ می‌توانی روزی یک بار Hellish Rebuke و از سطح ۵ روزی یک بار Darkness اجرا کنی.',
+  'Your Charisma score increases by 2, and two other ability scores of your choice increase by 1.':
+    'امتیاز کاریزمای تو ۲ واحد افزایش پیدا می‌کند و دو امتیاز توانایی دیگر به انتخاب خودت هر کدام ۱ واحد افزایش می‌یابند.',
+  'Your arcane research and the magic bestowed on you by your patron have given you facility with spells. You have 1 spell slot at level 1 (regained on short or long rest). Charisma is your spellcasting ability.':
+    'پژوهش آرکین و جادویی که حامی‌ات به تو بخشیده، تو را در اجرای طلسم‌ها توانمند کرده است. در سطح ۱ یک جایگاه طلسم داری که با استراحت کوتاه یا بلند بازیابی می‌شود. توانایی طلسم‌اندازی تو کاریزماست.',
+  'Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5 (5 HP at level 1). As an action, you can touch a creature and draw power from the pool to restore a number of hit points.':
+    'لمس متبرک تو می‌تواند زخم‌ها را درمان کند. مخزنی از نیروی درمانی داری که با استراحت بلند پر می‌شود. با آن مخزن می‌توانی در مجموع به اندازه سطح پالادینت × ۵ جان بازیابی کنی؛ یعنی در سطح ۱، پنج جان. با یک کنش، موجودی را لمس می‌کنی و هر مقدار خواستی از این نیرو را برای بازگرداندن جان او خرج می‌کنی.',
+  'Your hit point maximum increases by 1, and it increases by 1 every time you gain a level.':
+    'حداکثر جان تو ۱ واحد افزایش می‌یابد و هر بار که سطح می‌گیری، دوباره ۱ واحد بیشتر می‌شود.',
+  'Your practice of martial arts gives you mastery of combat styles. You can use DEX instead of STR for monk weapons, your unarmed strikes deal 1d4 damage, and when you use the Attack action you can make one unarmed strike as a bonus action.':
+    'تمرین هنرهای رزمی به تو در سبک‌های نبرد چیرگی می‌دهد. برای سلاح‌های مانک می‌توانی به‌جای قدرت از چابکی استفاده کنی، ضربه‌های بی‌سلاح تو 1d4 آسیب می‌زنند و وقتی کنش حمله را انجام می‌دهی، می‌توانی با کنش اضافه یک ضربه بی‌سلاح هم بزنی.',
 };
 
 export function useBuilderI18n() {
@@ -870,7 +1008,11 @@ export function useBuilderI18n() {
 
   const phrase = (value: string): string =>
     isFa
-      ? (phraseFa[value] ?? descriptionFa[value] ?? extraPhraseFa[value] ?? namesFa[value] ?? value)
+      ? (phraseFa[value] ??
+        descriptionFa[value] ??
+        extraPhraseFa[value] ??
+        namesFa[value] ??
+        value)
       : value;
 
   const list = (values: string[]): string =>

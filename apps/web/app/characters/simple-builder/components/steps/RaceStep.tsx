@@ -9,12 +9,7 @@ import {
   getRaceLanguageChoiceLimit,
   getRaceSkillChoiceLimit,
 } from '../../store/selectors';
-import type {
-  AbilityName,
-  Race,
-  SkillName,
-  Subrace,
-} from '../../types';
+import type { AbilityName, Race, SkillName, Subrace } from '../../types';
 import { EntityCard } from '../shared/EntityCard';
 import {
   EntityDetailPanel,
@@ -74,8 +69,17 @@ export function RaceStep() {
     setSubrace,
     subrace,
   } = store;
-  const { ability, copy, dirClass, feature, list, phrase, raceName, skill, tagline } =
-    useBuilderI18n();
+  const {
+    ability,
+    copy,
+    dirClass,
+    feature,
+    list,
+    phrase,
+    raceName,
+    skill,
+    tagline,
+  } = useBuilderI18n();
   const [panelRace, setPanelRace] = useState<Race | null>(null);
   const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
@@ -108,8 +112,8 @@ export function RaceStep() {
   const raceSkillLimit = getRaceSkillChoiceLimit(previewState);
   const selectDisabled = Boolean(
     (panelRace?.subraces && !localSubrace) ||
-      localLanguages.length < raceLanguageLimit ||
-      localSkills.length < raceSkillLimit,
+    localLanguages.length < raceLanguageLimit ||
+    localSkills.length < raceSkillLimit,
   );
 
   const toggleLanguage = (language: string) => {
@@ -119,7 +123,9 @@ export function RaceStep() {
   };
 
   const toggleSkill = (nextSkill: SkillName) => {
-    setLocalSkills((current) => toggleChoice(current, nextSkill, raceSkillLimit));
+    setLocalSkills((current) =>
+      toggleChoice(current, nextSkill, raceSkillLimit),
+    );
   };
 
   return (

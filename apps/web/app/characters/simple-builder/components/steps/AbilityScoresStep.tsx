@@ -16,11 +16,7 @@ function fmtMod(mod: number): string {
 
 export function AbilityScoresStep() {
   const store = useCharacterStore();
-  const {
-    abilityScores,
-    resetAbilityScores,
-    setAbilityScore,
-  } = store;
+  const { abilityScores, resetAbilityScores, setAbilityScore } = store;
   const { ability, abilityDescription, copy, phrase } = useBuilderI18n();
   const finals = getFinalAbilityScores(store);
   const pointsLeft = getPointsRemaining(abilityScores);
@@ -231,7 +227,6 @@ export function AbilityScoresStep() {
           {copy.pointBuyRules}
         </strong>
       </div>
-
     </div>
   );
 }

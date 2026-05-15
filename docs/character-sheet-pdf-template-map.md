@@ -1,7 +1,6 @@
 # Character Sheet PDF Template Map
 
-The Character Library PDF export now uses local project-provided PDF templates
-from `docs/concept/character-builder/` and copies them into
+The Character Library PDF export uses local project-provided PDF templates in
 `apps/web/public/assets/character-sheets/` for browser downloads.
 
 Production distribution of these sheet assets should receive legal and asset

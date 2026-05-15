@@ -350,7 +350,10 @@ export async function generateCharacterSheetPdf(
     characterSheetPdfTemplates.map((template) => template.id);
   const selectedTemplate = options.templateId
     ? findAvailableTemplate(options.templateId, availableTemplateIds)
-    : selectCharacterSheetPdfTemplate(entry.rulesProfileId, availableTemplateIds);
+    : selectCharacterSheetPdfTemplate(
+        entry.rulesProfileId,
+        availableTemplateIds,
+      );
 
   if (!selectedTemplate) {
     throw new Error(`The requested character sheet template is not available.`);
@@ -857,28 +860,30 @@ function wrapTextByWidth(
   size: number,
   maxWidth: number,
 ): string[] {
-  return normalizePdfText(value).split(/\r?\n/).flatMap((line) => {
-    const words = line.trim().split(/\s+/);
-    const lines: string[] = [];
-    let current = '';
+  return normalizePdfText(value)
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const words = line.trim().split(/\s+/);
+      const lines: string[] = [];
+      let current = '';
 
-    for (const word of words) {
-      const next = current ? `${current} ${word}` : word;
+      for (const word of words) {
+        const next = current ? `${current} ${word}` : word;
 
-      if (font.widthOfTextAtSize(next, size) > maxWidth && current) {
-        lines.push(current);
-        current = word;
-      } else {
-        current = next;
+        if (font.widthOfTextAtSize(next, size) > maxWidth && current) {
+          lines.push(current);
+          current = word;
+        } else {
+          current = next;
+        }
       }
-    }
 
-    if (current) {
-      lines.push(current);
-    }
+      if (current) {
+        lines.push(current);
+      }
 
-    return lines;
-  });
+      return lines;
+    });
 }
 
 function normalizePdfText(value: string): string {

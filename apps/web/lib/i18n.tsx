@@ -58,7 +58,7 @@ const messages = {
       'A role-aware browser surface for the existing backend. The server still owns truth; SSE is live-only, and recovery rebuilds state from read models.',
     'runtime.title': 'Runtime War Table',
     'shell.builderMvp.body':
-      'Persisted character library entries with pre-auth dev ownership. Production auth and account ownership are intentionally pending.',
+      'Persisted character library entries with DB-mode development ownership. Production account security is intentionally pending.',
     'shell.builderMvp.title': 'Builder MVP',
     'shell.characterTools': 'Character tools',
     'shell.demoProfile': 'Demo Profile',
@@ -104,7 +104,7 @@ const messages = {
       'یک سطح مرورگری متناسب با نقش کاربر برای بک‌اند فعلی. وضعیت نهایی همچنان دست سرور است؛ SSE فقط رویدادهای زنده را می‌رساند و بازیابی، وضعیت را از مدل‌های خواندنی بازسازی می‌کند.',
     'runtime.title': 'میز نبرد زنده',
     'shell.builderMvp.body':
-      'ورودی‌های کتابخانه کاراکتر فعلا با مالکیت توسعه‌ای و پیش از احراز هویت ذخیره می‌شوند. احراز هویت نهایی و مالکیت حساب عمدا برای مراحل بعدی مانده است.',
+      'ورودی‌های کتابخانه کاراکتر با مالکیت توسعه‌ای در حالت DB ذخیره می‌شوند. امنیت حساب تولیدی عمدا برای مراحل بعدی مانده است.',
     'shell.builderMvp.title': 'نسخه اولیه سازنده',
     'shell.characterTools': 'ابزارهای کاراکتر',
     'shell.demoProfile': 'پروفایل دمو',

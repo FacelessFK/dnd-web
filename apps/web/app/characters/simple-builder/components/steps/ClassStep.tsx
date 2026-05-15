@@ -108,9 +108,9 @@ export function ClassStep() {
   };
   const selectDisabled = Boolean(
     panelClass &&
-      (localSkills.length < panelClass.numSkillChoices ||
-        !hasValidClassEquipmentChoices(previewState) ||
-        !hasValidSpellChoices(previewState)),
+    (localSkills.length < panelClass.numSkillChoices ||
+      !hasValidClassEquipmentChoices(previewState) ||
+      !hasValidSpellChoices(previewState)),
   );
   const selectLabel = (() => {
     if (!panelClass) return phrase('Select');

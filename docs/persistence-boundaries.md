@@ -21,8 +21,9 @@ Persistence implications:
   character overlays in the `character_library_entries` table.
 - Stores the whole builder/library document as JSONB plus durable owner,
   created, and updated columns.
-- Uses provisional `ownerParticipantId` ownership because production auth does
-  not exist yet.
+- Uses `ownerParticipantId` ownership. DB-mode auth now validates that the
+  authenticated user's owner ID matches the command actor and payload, but this
+  remains development auth rather than production account security.
 - Uploaded portraits are validated by MIME type and size, then stored as data
   URL references in the library document for the MVP. There is no cloud object
   storage or full asset pipeline in this slice.

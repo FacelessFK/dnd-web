@@ -74,7 +74,9 @@ export function CharacterDetailsStep() {
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      setPortraitDataUrl(typeof reader.result === 'string' ? reader.result : '');
+      setPortraitDataUrl(
+        typeof reader.result === 'string' ? reader.result : '',
+      );
     });
     reader.readAsDataURL(file);
   };
@@ -167,7 +169,10 @@ export function CharacterDetailsStep() {
                   {isFa ? 'حذف تصویر' : 'Remove image'}
                 </button>
               ) : null}
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              <p
+                className="text-xs"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
                 {isFa
                   ? 'فایل تصویر را بکش و رها کن یا از دستگاه انتخاب کن.'
                   : 'Drop an image here or choose one from your device.'}

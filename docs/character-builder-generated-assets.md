@@ -2,8 +2,8 @@
 
 ## Scope
 
-This frontend-only slice generated and wired local visual assets for the
-Character Library and Character Builder scaffold. Assets live under:
+This slice generated and wired local visual assets for the Character Library
+and Character Builder. Product assets live under:
 
 ```text
 apps/web/public/assets/character-builder/
@@ -18,28 +18,11 @@ apps/web/public/assets/character-builder/asset-manifest.json
 
 ## Generator / Capability
 
-Assets were generated with the local Codex image generation capability through
-the `$imagegen` workflow. The generated contact sheets were cropped into
-optimized WebP files with the repo-local Sharp package already present in
-`node_modules/.pnpm`; no remote image URLs or external downloaded assets were
-added.
-
-Reference screenshots inspected for style direction:
-
-- `docs/design/character-builder-reference/01-character-library.png`
-- `docs/design/character-builder-reference/02-builder-identity.png`
-- `docs/design/character-builder-reference/03-builder-species.png`
-- `docs/design/character-builder-reference/04-builder-class.png`
-- `docs/design/character-builder-reference/05-builder-background.png`
-- `docs/design/character-builder-reference/06-builder-ability-scores.png`
-- `docs/design/character-builder-reference/07-builder-proficiencies.png`
-- `docs/design/character-builder-reference/08-builder-equipment.png`
-- `docs/design/character-builder-reference/09-builder-spells.png`
-- `docs/design/character-builder-reference/10-builder-review.png`
-
-The screenshots were used only for mood, palette, framing, and UI-art direction.
-The generated files avoid embedded text, logos, remote references, and copied
-external artwork.
+Assets were generated with local image-generation workflow output and cropped
+into optimized WebP/SVG product files. Raw contact sheets, duplicate PNG
+exports, old reference screenshots, and zip files are intentionally not kept in
+the day-to-day repo. The generated files avoid embedded text, logos, remote
+references, and copied external artwork.
 
 ## Style Notes
 
@@ -52,11 +35,16 @@ image text.
 
 - `portraits/`: four sample library portraits for Elara Nightbloom, Thorn
   Blackoak, Mirelle Dawnsong, and Kael Emberstep.
+- `races/`: active simple-builder race and subrace PNG card art plus symbol
+  PNGs used by `/characters/new`.
 - `species/`: Human, Elf, Dwarf, Halfling, Dragonborn, Tiefling, Gnome,
   Goliath, and Orc card art.
-- `classes/`: Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin, Ranger,
-  Rogue, Sorcerer, Warlock, and Wizard emblems.
-- `backgrounds/`: Acolyte, Criminal, Sage, and Soldier icons.
+- `classes/`: active simple-builder class PNG card art plus symbol PNGs, and
+  generated WebP emblems for Barbarian, Bard, Cleric, Druid, Fighter, Monk,
+  Paladin, Ranger, Rogue, Sorcerer, Warlock, and Wizard.
+- `backgrounds/`: active simple-builder background PNG card art plus symbol
+  PNGs, and generated WebP registry icons for Acolyte, Criminal, Sage, and
+  Soldier.
 - `equipment/`: common equipment icons plus generic aliases for armor, weapons,
   and basic gear fallback behavior.
 - `spells/`: requested spell icons plus all eight spell-school fallback icons.
@@ -67,9 +55,9 @@ image text.
 
 ## Remaining Gaps
 
-- Entertainer, Noble, and Hermit background assets are reserved as missing
-  registry slots because those backgrounds are not in the current SRD-backed
-  local builder set.
+- Entertainer, Noble, and Hermit remain placeholder-only in the generated WebP
+  registry, but the active simple-builder has local PNG card and symbol assets
+  for those backgrounds.
 - Many SRD cantrips and level 1 spells use school fallback art rather than
   unique spell illustrations.
 - Many equipment labels use class-based or category fallback icons rather than

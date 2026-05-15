@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220" role="img" aria-label="Gold ornamental corner frame">
+  <defs>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8df94"/>
+      <stop offset="0.48" stop-color="#b68132"/>
+      <stop offset="1" stop-color="#f3d77b"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#050302" flood-opacity="0.75"/>
+    </filter>
+  </defs>
+  <rect x="10" y="10" width="300" height="200" rx="22" fill="none" stroke="url(#gold)" stroke-width="4" filter="url(#shadow)"/>
+  <rect x="22" y="22" width="276" height="176" rx="16" fill="none" stroke="#5c3714" stroke-width="2"/>
+  <path d="M30 78 C55 68 68 55 78 30 M30 54 C43 49 49 43 54 30 M64 30 C64 48 48 64 30 64" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M290 78 C265 68 252 55 242 30 M290 54 C277 49 271 43 266 30 M256 30 C256 48 272 64 290 64" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M30 142 C55 152 68 165 78 190 M30 166 C43 171 49 177 54 190 M64 190 C64 172 48 156 30 156" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M290 142 C265 152 252 165 242 190 M290 166 C277 171 271 177 266 190 M256 190 C256 172 272 156 290 156" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+  <path d="M160 18 L168 30 L160 42 L152 30 Z M160 178 L168 190 L160 202 L152 190 Z" fill="url(#gold)" stroke="#3c220d" stroke-width="2"/>
+</svg>

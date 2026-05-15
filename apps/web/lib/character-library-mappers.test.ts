@@ -72,7 +72,7 @@ async function loadProvidedTemplate(
     await readFile(
       fileURLToPath(
         new URL(
-          `../../../docs/concept/character-builder/${fileName}`,
+          `../public/assets/character-sheets/${fileName}`,
           import.meta.url,
         ),
       ),

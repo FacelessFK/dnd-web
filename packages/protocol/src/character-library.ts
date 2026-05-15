@@ -55,12 +55,7 @@ export const characterLibrarySelectionsSchema = z.object({
     .max(100)
     .optional()
     .default([]),
-  originFeatSpell: z
-    .string()
-    .trim()
-    .max(128)
-    .optional()
-    .default(''),
+  originFeatSpell: z.string().trim().max(128).optional().default(''),
   skills: z.array(z.string().trim().min(1).max(128)).max(100),
   spells: z.array(z.string().trim().min(1).max(128)).max(100),
   tools: z.array(z.string().trim().min(1).max(128)).max(100),

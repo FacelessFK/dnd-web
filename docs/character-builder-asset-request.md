@@ -1,9 +1,8 @@
 # Character Builder Asset Request
 
-The `/characters` Character Library and Character Builder are currently
-frontend-only and now use a mix of local generated assets and CSS/Tailwind
-fallbacks. This document tracks the local assets used to replace the most
-visible placeholders without adding remote dependencies.
+The `/characters` Character Library and Character Builder use local generated
+assets plus CSS/Tailwind fallbacks. This document tracks the product assets
+used by the current browser UI without adding remote runtime dependencies.
 
 Generated asset metadata is also available at:
 
@@ -18,9 +17,12 @@ Satisfied in this asset slice:
 - sample character portraits for Elara, Thorn, Mirelle, and Kael,
 - SRD species card art for Human, Elf, Dwarf, Halfling, Dragonborn, Tiefling,
   Gnome, Goliath, and Orc,
+- simple-builder race, class, and background card PNGs plus symbol PNGs for
+  the current `/characters/new` flow,
 - class emblems for Barbarian, Bard, Cleric, Druid, Fighter, Monk, Paladin,
   Ranger, Rogue, Sorcerer, Warlock, and Wizard,
-- background icons for Acolyte, Criminal, Sage, and Soldier,
+- background icons for Acolyte, Criminal, Sage, and Soldier in the generated
+  registry,
 - common equipment icons for quarterstaff, dagger, shield, leather armor,
   chain mail, holy symbol, arcane focus, component pouch, scholar pack,
   explorer pack, spellbook, and traveler clothes,
@@ -34,8 +36,8 @@ Satisfied in this asset slice:
 Still missing or intentionally placeholder-only:
 
 - expanded background art for Entertainer, Noble, and Hermit, which are
-  reserved in the asset registry but not currently used by the SRD-backed
-  builder data,
+  reserved as WebP registry slots; the active simple-builder uses local PNG
+  cards for those backgrounds,
 - one illustration per SRD spell beyond the generated spell-school fallbacks,
 - exact icons for every weapon, tool, pack, and adventuring-gear label in the
   rules data,
@@ -47,9 +49,13 @@ Still missing or intentionally placeholder-only:
 ```text
 apps/web/public/assets/character-builder/
   portraits/
+  races/
+    symbols/
   species/
   classes/
+    symbols/
   backgrounds/
+    symbols/
   equipment/
   spells/
   icons/
@@ -183,3 +189,7 @@ The app renders local assets when a mapped file exists. Missing files still use
 CSS gradients, initials, parchment colors, and local labels, and must not break
 the build. The helper in `apps/web/lib/character-builder-assets.ts` maps
 logical asset keys to local paths, explicit missing slots, and fallback labels.
+
+Do not add old generated contact sheets, duplicate PNG exports, zip files, or
+raw design screenshots unless a current UI path or doc explicitly references
+them.

@@ -27,6 +27,6 @@ yarn-error.log*
 .vscode
 .codex
 
+# Keep raw design/concept drops local unless a file is promoted into docs.
 docs/concept
 docs/design
-apps/web/public/assets
