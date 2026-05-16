@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { commandErrorSchema } from './errors.js';
 
 export const authUserSchema = z.object({
+  createdAt: z.string().datetime(),
   displayName: z.string().trim().min(1).max(80),
   email: z.string().trim().email().max(320),
-  ownerParticipantId: z.string().trim().min(2).max(64),
-  userId: z.string().trim().min(1).max(80),
+  id: z.string().trim().min(1).max(80),
+  updatedAt: z.string().datetime(),
 });
 
 export const registerAuthRequestSchema = z.object({
@@ -29,6 +30,7 @@ export const authSuccessSchema = z.object({
 
 export const authMeSuccessSchema = z.object({
   data: z.object({
+    authenticated: z.boolean(),
     user: authUserSchema.nullable(),
   }),
   ok: z.literal(true),

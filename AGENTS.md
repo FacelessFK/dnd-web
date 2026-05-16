@@ -32,7 +32,7 @@ production auth/deployment project unless explicitly asked.
 
 - `/runtime`: live tactical tabletop cockpit with DM and Player modes.
 - `/characters`: Character Library / Builder surface.
-- `/login`: development auth surface for DB-mode character ownership.
+- `/login`: auth surface for the DB-backed Character Library session MVP.
 
 Character Library entries are reusable build/identity records. Runtime HP,
 position, conditions, active encounters, and scene overlays are live-session
@@ -43,8 +43,9 @@ state and must stay separate from reusable library entries.
 - Default local startup may be in-memory.
 - DB mode uses `SERVER_PERSISTENCE_MODE=db` and `DATABASE_URL`.
 - Apply `packages/db/migrations/` before DB-mode verification.
-- Development auth currently requires DB mode; do not describe it as production
-  account security.
+- Character Library auth currently requires DB mode. It uses opaque HttpOnly
+  cookie sessions and user-owned library rows, but do not describe it as full
+  production account security.
 - Do not add fake durability or overclaim replay, cursor, catch-up,
   exactly-once delivery, or multi-process coordination.
 - Never copy or print `.env` secrets.

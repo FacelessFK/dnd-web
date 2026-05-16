@@ -12,8 +12,11 @@ Current interface:
 
 - `insertCharacterLibraryEntry(write)`
 - `getCharacterLibraryEntry({ entryId, ownerParticipantId })`
+- `getCharacterLibraryEntryByUser({ entryId, ownerUserId })`
 - `listCharacterLibraryEntries(ownerParticipantId)`
+- `listCharacterLibraryEntriesByUser(ownerUserId)`
 - `updateCharacterLibraryEntry(write)`
+- `updateCharacterLibraryEntryByUser(write)`
 
 Persistence implications:
 
@@ -21,9 +24,11 @@ Persistence implications:
   character overlays in the `character_library_entries` table.
 - Stores the whole builder/library document as JSONB plus durable owner,
   created, and updated columns.
-- Uses `ownerParticipantId` ownership. DB-mode auth now validates that the
-  authenticated user's owner ID matches the command actor and payload, but this
-  remains development auth rather than production account security.
+- Uses `ownerUserId` for authenticated DB-mode ownership while retaining
+  `ownerParticipantId` for protocol/backward compatibility and explicit
+  no-auth in-memory/dev paths. The character library command route requires the
+  authenticated user ID to match the command actor and payload owner when auth
+  is injected.
 - Uploaded portraits are validated by MIME type and size, then stored as data
   URL references in the library document for the MVP. There is no cloud object
   storage or full asset pipeline in this slice.
@@ -40,6 +45,33 @@ Durability notes:
   the reusable library table is intentionally isolated from live runtime state.
 - Finalized library entries remain reusable records and are not submitted into
   sessions or runtime overlays.
+
+### `AuthUserDatabase`
+
+Current interface:
+
+- `createAuthUser(insert)`
+- `getAuthUserByEmail(email)`
+- `createAuthSession(insert)`
+- `getAuthUserBySessionTokenHash(tokenHash, now)`
+- `revokeAuthSession(tokenHash)`
+
+Persistence implications:
+
+- `auth_users` stores normalized email, display name, a password hash, and
+  timestamps. Password plaintext is never stored.
+- `auth_sessions` stores only a hash of the high-entropy opaque session token.
+  The raw token is sent only in the `dnd_web_session` HttpOnly cookie.
+- Logout revokes the current row with `revoked=true` and `revoked_at`.
+- Cookie protection is `HttpOnly`, `SameSite=Lax`, `Path=/`, bounded
+  expiry/max-age, and `Secure` in production or when explicitly configured.
+
+Durability notes:
+
+- Auth requires DB-mode injection for the browser Character Library. In-memory
+  test fakes exist, but they are not durable.
+- CSRF protection is limited to `SameSite=Lax` in this MVP; there is no
+  dedicated CSRF token yet.
 
 ### `CharacterRepository`
 

@@ -1,4 +1,4 @@
-import { and, eq, gt } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 
 import {
   authSessions,
@@ -92,6 +92,7 @@ export class DrizzleAuthUserDatabase implements AuthUserDatabase {
         and(
           eq(authSessions.tokenHash, tokenHash),
           eq(authSessions.revoked, false),
+          isNull(authSessions.revokedAt),
           gt(authSessions.expiresAt, now),
         ),
       )
@@ -105,6 +106,7 @@ export class DrizzleAuthUserDatabase implements AuthUserDatabase {
       .update(authSessions)
       .set({
         revoked: true,
+        revokedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(eq(authSessions.tokenHash, tokenHash));

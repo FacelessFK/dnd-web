@@ -44,6 +44,11 @@ Apply `packages/db/migrations/` before DB-mode startup. Do not silently fall
 back to in-memory when the task is about persisted Character Library, auth,
 transactions, idempotency, or database behavior.
 
+For the current Character Library auth MVP, make sure the applied migration set
+includes `0008_character_library_entries.sql`,
+`0009_auth_users_and_sessions.sql`, and
+`0010_auth_user_owned_character_library.sql`.
+
 ## Browser QA
 
 Use available browser automation when asked. Prefer DB mode for persisted

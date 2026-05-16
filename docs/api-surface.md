@@ -45,18 +45,28 @@ or:
 { "ok": false, "error": { "code": "runtime_error_code", "message": "..." } }
 ```
 
-## Development Auth Endpoints
+## Auth MVP Endpoints
 
 - `GET /api/auth/me`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 
-Auth is currently a development feature for the Character Library UI. Register
-and login require DB mode because `AuthService` is injected only when
-`SERVER_PERSISTENCE_MODE=db`. `GET /api/auth/me` returns `user: null` when no
-auth service or valid cookie is present. This is not production account
-security.
+Auth is the current Character Library session MVP. Register and login require
+DB mode because `AuthService` is injected when `SERVER_PERSISTENCE_MODE=db`.
+The server issues a high-entropy opaque session token as a `dnd_web_session`
+HttpOnly cookie. The database stores only a SHA-256 hash of that token in
+`auth_sessions`; `/api/auth/logout` revokes the current session and clears the
+cookie. Cookie attributes are `HttpOnly`, `Path=/`, `SameSite=Lax`, a bounded
+`Max-Age`/`Expires`, and `Secure` in production or when
+`AUTH_COOKIE_SECURE=true`. `GET /api/auth/me` returns
+`authenticated: false, user: null` when no valid session is present.
+
+Passwords are hashed before storage. The current implementation uses Node
+`scrypt` with per-password salt because no Argon2id/bcrypt dependency is
+currently installed in the workspace. This remains an MVP, not full production
+auth: there is no password reset, email verification, MFA, OAuth, account
+settings UI, or dedicated CSRF token beyond `SameSite=Lax`.
 
 ### `POST /api/session/command`
 
@@ -119,10 +129,11 @@ Notes:
 
 - This endpoint owns reusable Character Library entries, not live
   runtime/session character overlays.
-- Entries are scoped to `ownerParticipantId`. When DB-mode auth is injected,
-  the authenticated user's owner ID must match the command actor and payload.
-  Without auth injection, command validation still uses the actor/payload owner
-  fields but does not provide production identity security.
+- In authenticated DB mode, entries are scoped by `ownerUserId`; the server
+  requires the command actor and payload owner field to match the authenticated
+  user ID and rejects cross-user reads or writes. The legacy
+  `ownerParticipantId` field remains in command payloads and persisted rows for
+  protocol/backward compatibility and explicit no-auth in-memory/dev paths.
 - In DB persistence mode, entries are stored in
   `character_library_entries`. The table stores a JSONB builder/library document
   plus durable owner and timestamp columns.
@@ -383,8 +394,9 @@ delete backend sessions or runtime state.
 
 ## Known Limitations
 
-- Development auth exists for the Character Library UI in DB mode, but there is
-  no production authentication or account-security posture.
+- Auth exists for the Character Library UI in DB mode, but it is still an MVP:
+  no password reset, email verification, MFA, OAuth, account management UI, or
+  dedicated CSRF token.
 - No event replay, cursor, or durable catch-up API.
 - No multi-process subscriber persistence or distributed coordination.
 - No full adventure/campaign builder, automatic player-triggered transitions,

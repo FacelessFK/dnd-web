@@ -286,7 +286,7 @@ export function mapCharacterSheetFields(
     ),
     PersonalityTraits: entry.concept,
     'PersonalityTraits ': entry.concept,
-    PlayerName: entry.ownerParticipantId,
+    PlayerName: entry.ownerParticipantId ?? entry.ownerUserId ?? '',
     ProfBonus: formatSigned(review.proficiencyBonus),
     ProficienciesLang: [
       `Languages: ${summarizeList(review.languages)}`,

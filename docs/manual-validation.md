@@ -41,11 +41,12 @@ recovery after reload, checks Player mode guardrails, and confirms Local Reset
 clears only browser state. It is intentionally not a full production E2E suite.
 
 For the persisted character product MVP, run the server in DB mode with
-`0008_character_library_entries.sql` and `0009_auth_users_and_sessions.sql`
-applied, then start the web app and open `http://localhost:3000/characters`.
-The browser Character Library expects a logged-in development user; use
-`/login` to register or log in. Select **Create New Character**, upload a JPEG,
-PNG, or WebP portrait under 1 MB in Step 1, choose a rules profile, select
+`0008_character_library_entries.sql`, `0009_auth_users_and_sessions.sql`, and
+`0010_auth_user_owned_character_library.sql` applied, then start the web app and
+open `http://localhost:3000/characters`. The browser Character Library expects
+a logged-in user backed by an HttpOnly session cookie; use `/login` to register
+or log in. Select **Create New Character**, upload a JPEG, PNG, or WebP portrait
+under 1 MB in Step 1, choose a rules profile, select
 species/race, class, and background, adjust ability scores, and confirm derived
 HP, AC, speed, initiative, proficiency, proficiencies, equipment, and spell
 setup update. Click **Save Draft**, return to `/characters`, and confirm the new

@@ -105,7 +105,8 @@ export const characterLibraryEntrySchema =
   characterLibraryEntryInputSchema.extend({
     createdAt: z.string().datetime(),
     id: characterLibraryEntryIdSchema,
-    ownerParticipantId: participantIdSchema,
+    ownerParticipantId: participantIdSchema.optional(),
+    ownerUserId: z.string().trim().min(1).max(80).optional(),
     status: characterLibraryStatusSchema,
     updatedAt: z.string().datetime(),
   });

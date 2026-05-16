@@ -36,8 +36,9 @@ Current implementation:
   and `/characters/:characterId/edit`,
 - backend command endpoint at `POST /api/character-library/command`,
 - DB-mode table `character_library_entries`,
-- development auth endpoints and `/login` surface backed by
-  `auth_users`/`auth_sessions` in DB mode,
+- auth MVP endpoints and `/login` surface backed by
+  `auth_users`/`auth_sessions` in DB mode, using opaque HttpOnly-cookie
+  sessions and user-owned library entries,
 - local SRD-style rules data and derived previews,
 - English/Persian UI direction through `I18nProvider`,
 - portrait upload validation and MVP data URL storage,
@@ -47,8 +48,11 @@ Current implementation:
 
 Default in-memory server startup still creates a process-local Character Library
 service, but the current browser character UI expects a logged-in user.
-Register/login require DB mode. This is development auth only, not production
-account security.
+Register/login require DB mode. The auth MVP hashes passwords with Node
+`scrypt`, stores only hashed opaque session tokens, and clears/revokes sessions
+on logout. It is not full production account security: no password reset, email
+verification, MFA, OAuth, account management UI, or dedicated CSRF token exists
+yet.
 
 The Character Library does not submit reusable entries into live sessions yet.
 Runtime character commands still own session character assignment and live
@@ -75,8 +79,8 @@ Current limits remain:
 - default startup can be in-memory,
 - SSE subscribers are process-local,
 - unpublished outbox rows are not auto-redelivered on cold boot,
-- no replay, cursor, catch-up API, exactly-once delivery, production auth, or
-  multi-process coordination.
+- no replay, cursor, catch-up API, exactly-once delivery, full production auth,
+  or multi-process coordination.
 
 ## Useful Docs
 

@@ -345,7 +345,7 @@ export function CharacterLibraryPage() {
       }
 
       setLoading(true);
-      const result = await listCharacterLibraryEntries(user.ownerParticipantId);
+      const result = await listCharacterLibraryEntries(user.id);
 
       if (!active) {
         return;

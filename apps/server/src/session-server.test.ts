@@ -814,6 +814,18 @@ class InMemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryData
     return this.clone(row);
   }
 
+  async getCharacterLibraryEntryByUser(
+    params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerUserId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const row = this.rows.get(params.entryId);
+
+    if (!row || row.ownerUserId !== params.ownerUserId) {
+      return null;
+    }
+
+    return this.clone(row);
+  }
+
   async insertCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -838,12 +850,41 @@ class InMemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryData
       .map((row) => this.clone(row));
   }
 
+  async listCharacterLibraryEntriesByUser(
+    ownerUserId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.ownerUserId === ownerUserId)
+      .sort(
+        (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+      )
+      .map((row) => this.clone(row));
+  }
+
   async updateCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
     const existing = this.rows.get(write.entryId);
 
     if (!existing || existing.ownerParticipantId !== write.ownerParticipantId) {
+      return null;
+    }
+
+    const row = {
+      ...this.createRow(write),
+      createdAt: existing.createdAt,
+    };
+    this.rows.set(write.entryId, this.clone(row));
+
+    return this.clone(row);
+  }
+
+  async updateCharacterLibraryEntryByUser(
+    write: CharacterLibraryEntryWrite & { ownerUserId: string },
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const existing = this.rows.get(write.entryId);
+
+    if (!existing || existing.ownerUserId !== write.ownerUserId) {
       return null;
     }
 
@@ -876,6 +917,7 @@ class InMemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryData
       entry: structuredClone(write.entry),
       entryId: write.entryId,
       ownerParticipantId: write.ownerParticipantId,
+      ownerUserId: write.ownerUserId ?? null,
       updatedAt: new Date(),
     };
   }

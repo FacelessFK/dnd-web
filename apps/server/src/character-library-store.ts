@@ -37,11 +37,21 @@ export interface CharacterLibraryRepository {
     entryId: CharacterLibraryEntryId;
     ownerParticipantId: string;
   }): CharacterLibraryRepositoryResult<CharacterLibraryEntry>;
+  getEntryByUser(params: {
+    entryId: CharacterLibraryEntryId;
+    ownerUserId: string;
+  }): CharacterLibraryRepositoryResult<CharacterLibraryEntry>;
   listEntries(
     ownerParticipantId: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry[]>;
+  listEntriesByUser(
+    ownerUserId: string,
+  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry[]>;
   updateEntry(
     entry: CharacterLibraryEntry,
+  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry>;
+  updateEntryByUser(
+    entry: CharacterLibraryEntry & { ownerUserId: string },
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry>;
 }
 
@@ -77,6 +87,22 @@ export class InMemoryCharacterLibraryRepository implements CharacterLibraryRepos
     return this.clone(entry);
   }
 
+  getEntryByUser(params: {
+    entryId: CharacterLibraryEntryId;
+    ownerUserId: string;
+  }): CharacterLibraryEntry {
+    const entry = this.entries.get(params.entryId);
+
+    if (!entry || entry.ownerUserId !== params.ownerUserId) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        `Character library entry "${params.entryId}" does not exist for authenticated user.`,
+      );
+    }
+
+    return this.clone(entry);
+  }
+
   listEntries(ownerParticipantId: string): CharacterLibraryEntry[] {
     return [...this.entries.values()]
       .filter((entry) => entry.ownerParticipantId === ownerParticipantId)
@@ -84,10 +110,36 @@ export class InMemoryCharacterLibraryRepository implements CharacterLibraryRepos
       .map((entry) => this.clone(entry));
   }
 
+  listEntriesByUser(ownerUserId: string): CharacterLibraryEntry[] {
+    return [...this.entries.values()]
+      .filter((entry) => entry.ownerUserId === ownerUserId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map((entry) => this.clone(entry));
+  }
+
   updateEntry(entry: CharacterLibraryEntry): CharacterLibraryEntry {
+    if (!entry.ownerParticipantId) {
+      throw new CharacterLibraryStoreError(
+        'invalid_character_library_entry',
+        `Character library entry "${entry.id}" is missing legacy ownerParticipantId.`,
+      );
+    }
+
     this.getEntry({
       entryId: entry.id,
       ownerParticipantId: entry.ownerParticipantId,
+    });
+    this.entries.set(entry.id, this.clone(entry));
+
+    return this.clone(entry);
+  }
+
+  updateEntryByUser(
+    entry: CharacterLibraryEntry & { ownerUserId: string },
+  ): CharacterLibraryEntry {
+    this.getEntryByUser({
+      entryId: entry.id,
+      ownerUserId: entry.ownerUserId,
     });
     this.entries.set(entry.id, this.clone(entry));
 
@@ -108,7 +160,8 @@ export class DbBackedCharacterLibraryRepository implements CharacterLibraryRepos
     const row = await this.database.insertCharacterLibraryEntry({
       entry: this.clone(entry) as Record<string, unknown>,
       entryId: entry.id,
-      ownerParticipantId: entry.ownerParticipantId,
+      ownerParticipantId: entry.ownerParticipantId ?? entry.ownerUserId ?? '',
+      ownerUserId: entry.ownerUserId ?? null,
     });
 
     if (!row) {
@@ -137,6 +190,22 @@ export class DbBackedCharacterLibraryRepository implements CharacterLibraryRepos
     return this.fromDocument(row.entry);
   }
 
+  async getEntryByUser(params: {
+    entryId: CharacterLibraryEntryId;
+    ownerUserId: string;
+  }): Promise<CharacterLibraryEntry> {
+    const row = await this.database.getCharacterLibraryEntryByUser(params);
+
+    if (!row) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        `Character library entry "${params.entryId}" does not exist for authenticated user.`,
+      );
+    }
+
+    return this.fromDocument(row.entry);
+  }
+
   async listEntries(
     ownerParticipantId: string,
   ): Promise<CharacterLibraryEntry[]> {
@@ -146,9 +215,25 @@ export class DbBackedCharacterLibraryRepository implements CharacterLibraryRepos
     return rows.map((row) => this.fromDocument(row.entry));
   }
 
+  async listEntriesByUser(
+    ownerUserId: string,
+  ): Promise<CharacterLibraryEntry[]> {
+    const rows =
+      await this.database.listCharacterLibraryEntriesByUser(ownerUserId);
+
+    return rows.map((row) => this.fromDocument(row.entry));
+  }
+
   async updateEntry(
     entry: CharacterLibraryEntry,
   ): Promise<CharacterLibraryEntry> {
+    if (!entry.ownerParticipantId) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        `Character library entry "${entry.id}" is missing legacy ownerParticipantId.`,
+      );
+    }
+
     const row = await this.database.updateCharacterLibraryEntry({
       entry: this.clone(entry) as Record<string, unknown>,
       entryId: entry.id,
@@ -159,6 +244,26 @@ export class DbBackedCharacterLibraryRepository implements CharacterLibraryRepos
       throw new CharacterLibraryStoreError(
         'character_library_entry_not_found',
         `Character library entry "${entry.id}" does not exist for owner "${entry.ownerParticipantId}".`,
+      );
+    }
+
+    return this.fromDocument(row.entry);
+  }
+
+  async updateEntryByUser(
+    entry: CharacterLibraryEntry & { ownerUserId: string },
+  ): Promise<CharacterLibraryEntry> {
+    const row = await this.database.updateCharacterLibraryEntryByUser({
+      entry: this.clone(entry) as Record<string, unknown>,
+      entryId: entry.id,
+      ownerParticipantId: entry.ownerParticipantId ?? entry.ownerUserId,
+      ownerUserId: entry.ownerUserId,
+    });
+
+    if (!row) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        `Character library entry "${entry.id}" does not exist for authenticated user.`,
       );
     }
 
@@ -186,6 +291,7 @@ export class CharacterLibraryService {
       CharacterLibraryCommand,
       { type: 'create_character_library_entry' }
     >,
+    ownerUserId?: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
     this.validateEntryInput(command.payload.entry);
@@ -196,6 +302,7 @@ export class CharacterLibraryService {
       createdAt: now,
       id: this.createEntryId(),
       ownerParticipantId: command.payload.ownerParticipantId,
+      ownerUserId,
       status: 'draft',
       updatedAt: now,
     };
@@ -208,23 +315,35 @@ export class CharacterLibraryService {
       CharacterLibraryCommand,
       { type: 'update_character_library_entry' }
     >,
+    ownerUserId?: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
     this.validateEntryInput(command.payload.entry);
+    const existingResult = ownerUserId
+      ? this.repository.getEntryByUser({
+          entryId: command.payload.entryId,
+          ownerUserId,
+        })
+      : this.repository.getEntry(command.payload);
 
-    return this.resolveRepositoryResult(
-      this.repository.getEntry(command.payload),
-      (existing) => {
-        return this.repository.updateEntry({
-          ...this.clone(command.payload.entry),
-          createdAt: existing.createdAt,
-          id: existing.id,
-          ownerParticipantId: existing.ownerParticipantId,
-          status: existing.status,
-          updatedAt: this.now(),
-        });
-      },
-    );
+    return this.resolveRepositoryResult(existingResult, (existing) => {
+      const updatedEntry: CharacterLibraryEntry = {
+        ...this.clone(command.payload.entry),
+        createdAt: existing.createdAt,
+        id: existing.id,
+        ownerParticipantId: existing.ownerParticipantId ?? ownerUserId,
+        ownerUserId: existing.ownerUserId,
+        status: existing.status,
+        updatedAt: this.now(),
+      };
+
+      return ownerUserId
+        ? this.repository.updateEntryByUser({
+            ...updatedEntry,
+            ownerUserId,
+          })
+        : this.repository.updateEntry(updatedEntry);
+    });
   }
 
   finalizeEntry(
@@ -232,29 +351,40 @@ export class CharacterLibraryService {
       CharacterLibraryCommand,
       { type: 'finalize_character_library_entry' }
     >,
+    ownerUserId?: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
+    const existingResult = ownerUserId
+      ? this.repository.getEntryByUser({
+          entryId: command.payload.entryId,
+          ownerUserId,
+        })
+      : this.repository.getEntry(command.payload);
 
-    return this.resolveRepositoryResult(
-      this.repository.getEntry(command.payload),
-      (existing) => {
-        if (existing.status === 'finalized') {
-          throw new CharacterLibraryStoreError(
-            'invalid_character_library_entry',
-            `Character library entry "${existing.id}" is already finalized.`,
-          );
-        }
+    return this.resolveRepositoryResult(existingResult, (existing) => {
+      if (existing.status === 'finalized') {
+        throw new CharacterLibraryStoreError(
+          'invalid_character_library_entry',
+          `Character library entry "${existing.id}" is already finalized.`,
+        );
+      }
 
-        this.validateEntryInput(existing);
+      this.validateEntryInput(existing);
 
-        return this.repository.updateEntry({
-          ...existing,
-          builderStep: 'review',
-          status: 'finalized',
-          updatedAt: this.now(),
-        });
-      },
-    );
+      const finalizedEntry: CharacterLibraryEntry = {
+        ...existing,
+        builderStep: 'review',
+        status: 'finalized',
+        updatedAt: this.now(),
+      };
+
+      return ownerUserId
+        ? this.repository.updateEntryByUser({
+            ...finalizedEntry,
+            ownerUserId,
+          })
+        : this.repository.updateEntry(finalizedEntry);
+    });
   }
 
   getEntry(
@@ -262,10 +392,16 @@ export class CharacterLibraryService {
       CharacterLibraryCommand,
       { type: 'get_character_library_entry' }
     >,
+    ownerUserId?: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
 
-    return this.repository.getEntry(command.payload);
+    return ownerUserId
+      ? this.repository.getEntryByUser({
+          entryId: command.payload.entryId,
+          ownerUserId,
+        })
+      : this.repository.getEntry(command.payload);
   }
 
   listEntries(
@@ -273,10 +409,13 @@ export class CharacterLibraryService {
       CharacterLibraryCommand,
       { type: 'list_character_library_entries' }
     >,
+    ownerUserId?: string,
   ): CharacterLibraryRepositoryResult<CharacterLibraryEntry[]> {
     this.assertOwnerActor(command);
 
-    return this.repository.listEntries(command.payload.ownerParticipantId);
+    return ownerUserId
+      ? this.repository.listEntriesByUser(ownerUserId)
+      : this.repository.listEntries(command.payload.ownerParticipantId);
   }
 
   withRepository(

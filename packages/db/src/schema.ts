@@ -84,6 +84,7 @@ export const authSessions = pgTable('auth_sessions', {
   tokenHash: text('token_hash').notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   revoked: boolean('revoked').default(false).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -106,6 +107,9 @@ export const characterRecords = pgTable('character_records', {
 export const characterLibraryEntries = pgTable('character_library_entries', {
   entryId: text('entry_id').primaryKey(),
   ownerParticipantId: text('owner_participant_id').notNull(),
+  ownerUserId: text('owner_user_id').references(() => authUsers.userId, {
+    onDelete: 'cascade',
+  }),
   entry: jsonb('entry').$type<StoredCharacterLibraryEntryDocument>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()

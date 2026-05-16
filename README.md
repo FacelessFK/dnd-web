@@ -11,8 +11,7 @@ runtime with rules-assisted workflows.
 
 - `/runtime`: live tactical tabletop cockpit with DM and Player modes.
 - `/characters`: Character Library and Character Builder surface.
-- `/login`: development auth screen used by the character product when the
-  server is running in DB mode.
+- `/login`: auth screen for the DB-backed Character Library session MVP.
 
 ## Current State
 
@@ -25,9 +24,12 @@ recovery after refresh.
 The Character Library has a backend command surface at
 `POST /api/character-library/command`. In DB mode it persists entries in
 `character_library_entries`; in default in-memory startup it is process-local.
-The browser `/characters` UI currently expects a logged-in development user, and
-login/register require DB mode. This is development auth only, not production
-account security.
+The browser `/characters` UI expects a logged-in user. Register/login use
+DB-backed opaque sessions with an HttpOnly cookie; the raw session token is not
+stored in browser localStorage/sessionStorage and only a token hash is stored in
+the database. Passwords are hashed with Node `scrypt` for this MVP. This is
+still not full production account security: there is no password reset, email
+verification, MFA, OAuth, dedicated CSRF token, or account management UI.
 
 The Character Builder is separate from `/runtime`. It stores reusable
 library/build records, supports English/Persian direction, local portrait upload
@@ -85,6 +87,7 @@ including:
 
 - `0008_character_library_entries.sql`
 - `0009_auth_users_and_sessions.sql`
+- `0010_auth_user_owned_character_library.sql`
 
 Default startup is in-memory when `SERVER_PERSISTENCE_MODE` is unset or set to
 `in-memory`.

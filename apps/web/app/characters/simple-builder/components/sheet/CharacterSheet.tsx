@@ -121,7 +121,7 @@ export function CharacterSheet() {
             languages: otherProficiencies.languages,
           },
           templateId,
-          user?.ownerParticipantId ?? 'dev-player-001',
+          user?.id ?? 'dev-player-001',
         ),
         { templateId },
       );
@@ -164,13 +164,10 @@ export function CharacterSheet() {
         languages: otherProficiencies.languages,
       },
       'dnd-2024-template',
-      user.ownerParticipantId,
+      user.id,
     );
     const input = toCharacterLibraryEntryInput(entry);
-    const result = await createCharacterLibraryEntry(
-      user.ownerParticipantId,
-      input,
-    );
+    const result = await createCharacterLibraryEntry(user.id, input);
 
     if (result.ok) {
       setSaveNotice('کاراکتر در کتابخانه حساب شما ذخیره شد.');

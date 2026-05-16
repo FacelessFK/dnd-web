@@ -16,11 +16,15 @@ export type CharacterLibraryEntryWrite = {
   entry: StoredCharacterLibraryEntryDocument;
   entryId: string;
   ownerParticipantId: string;
+  ownerUserId?: string | null;
 };
 
 export interface CharacterLibraryEntryDatabase {
   getCharacterLibraryEntry(
     params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerParticipantId'>,
+  ): Promise<CharacterLibraryEntryRow | null>;
+  getCharacterLibraryEntryByUser(
+    params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerUserId'>,
   ): Promise<CharacterLibraryEntryRow | null>;
   insertCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
@@ -28,8 +32,14 @@ export interface CharacterLibraryEntryDatabase {
   listCharacterLibraryEntries(
     ownerParticipantId: string,
   ): Promise<CharacterLibraryEntryRow[]>;
+  listCharacterLibraryEntriesByUser(
+    ownerUserId: string,
+  ): Promise<CharacterLibraryEntryRow[]>;
   updateCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
+  ): Promise<CharacterLibraryEntryRow | null>;
+  updateCharacterLibraryEntryByUser(
+    write: CharacterLibraryEntryWrite & { ownerUserId: string },
   ): Promise<CharacterLibraryEntryRow | null>;
 }
 
@@ -56,6 +66,27 @@ export class DrizzleCharacterLibraryEntryDatabase implements CharacterLibraryEnt
     return row ?? null;
   }
 
+  async getCharacterLibraryEntryByUser(
+    params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerUserId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    if (!params.ownerUserId) {
+      return null;
+    }
+
+    const [row] = await this.db
+      .select()
+      .from(characterLibraryEntries)
+      .where(
+        and(
+          eq(characterLibraryEntries.entryId, params.entryId),
+          eq(characterLibraryEntries.ownerUserId, params.ownerUserId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
   async insertCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -65,6 +96,7 @@ export class DrizzleCharacterLibraryEntryDatabase implements CharacterLibraryEnt
         entry: write.entry,
         entryId: write.entryId,
         ownerParticipantId: write.ownerParticipantId,
+        ownerUserId: write.ownerUserId ?? null,
       })
       .onConflictDoNothing()
       .returning();
@@ -79,6 +111,16 @@ export class DrizzleCharacterLibraryEntryDatabase implements CharacterLibraryEnt
       .select()
       .from(characterLibraryEntries)
       .where(eq(characterLibraryEntries.ownerParticipantId, ownerParticipantId))
+      .orderBy(desc(characterLibraryEntries.updatedAt));
+  }
+
+  async listCharacterLibraryEntriesByUser(
+    ownerUserId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    return this.db
+      .select()
+      .from(characterLibraryEntries)
+      .where(eq(characterLibraryEntries.ownerUserId, ownerUserId))
       .orderBy(desc(characterLibraryEntries.updatedAt));
   }
 
@@ -98,6 +140,26 @@ export class DrizzleCharacterLibraryEntryDatabase implements CharacterLibraryEnt
             characterLibraryEntries.ownerParticipantId,
             write.ownerParticipantId,
           ),
+        ),
+      )
+      .returning();
+
+    return row ?? null;
+  }
+
+  async updateCharacterLibraryEntryByUser(
+    write: CharacterLibraryEntryWrite & { ownerUserId: string },
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const [row] = await this.db
+      .update(characterLibraryEntries)
+      .set({
+        entry: write.entry,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(characterLibraryEntries.entryId, write.entryId),
+          eq(characterLibraryEntries.ownerUserId, write.ownerUserId),
         ),
       )
       .returning();

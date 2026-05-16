@@ -259,6 +259,13 @@ class EmptyCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabas
     return null;
   }
 
+  async getCharacterLibraryEntryByUser(
+    _params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerUserId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    void _params;
+    return null;
+  }
+
   async insertCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -267,6 +274,7 @@ class EmptyCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabas
       entry: structuredClone(write.entry),
       entryId: write.entryId,
       ownerParticipantId: write.ownerParticipantId,
+      ownerUserId: write.ownerUserId ?? null,
       updatedAt: new Date(0),
     };
   }
@@ -278,6 +286,13 @@ class EmptyCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabas
     return [];
   }
 
+  async listCharacterLibraryEntriesByUser(
+    _ownerUserId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    void _ownerUserId;
+    return [];
+  }
+
   async updateCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -286,6 +301,20 @@ class EmptyCharacterLibraryEntryDatabase implements CharacterLibraryEntryDatabas
       entry: structuredClone(write.entry),
       entryId: write.entryId,
       ownerParticipantId: write.ownerParticipantId,
+      ownerUserId: write.ownerUserId ?? null,
+      updatedAt: new Date(0),
+    };
+  }
+
+  async updateCharacterLibraryEntryByUser(
+    write: CharacterLibraryEntryWrite & { ownerUserId: string },
+  ): Promise<CharacterLibraryEntryRow | null> {
+    return {
+      createdAt: new Date(0),
+      entry: structuredClone(write.entry),
+      entryId: write.entryId,
+      ownerParticipantId: write.ownerParticipantId,
+      ownerUserId: write.ownerUserId,
       updatedAt: new Date(0),
     };
   }

@@ -2,16 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type {
+  AuthSessionInsert,
+  AuthSessionRow,
+  AuthSessionWithUser,
+  AuthUserDatabase,
+  AuthUserInsert,
+  AuthUserRow,
   CharacterLibraryEntryDatabase,
   CharacterLibraryEntryRow,
   CharacterLibraryEntryWrite,
 } from '@dnd/db';
 import type {
+  AuthMeResponse,
+  AuthResponse,
   CharacterLibraryCommand,
   CharacterLibraryCommandResponse,
   CharacterLibraryEntryInput,
 } from '@dnd/protocol';
 
+import { AuthService } from './auth-store.js';
 import {
   CharacterLibraryService,
   DbBackedCharacterLibraryRepository,
@@ -225,6 +234,151 @@ test('character library command route validates uploaded portrait metadata', asy
   }
 });
 
+test('authenticated character library entries are owned by auth user id and isolated between users', async () => {
+  const authDatabase = new MemoryAuthUserDatabase();
+  const app = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new CharacterLibraryService(),
+    new AuthService(authDatabase),
+  );
+
+  await new Promise<void>((resolve) => app.server.listen(0, resolve));
+
+  try {
+    const baseUrl = getServerBaseUrl(app.server);
+    const firstUser = await registerUser(baseUrl, {
+      displayName: 'First User',
+      email: 'first@example.test',
+      password: 'correct horse battery staple',
+    });
+    const secondUser = await registerUser(baseUrl, {
+      displayName: 'Second User',
+      email: 'second@example.test',
+      password: 'correct horse battery staple',
+    });
+    const createResponse = await postCharacterLibraryCommand(
+      baseUrl,
+      {
+        actor: { participantId: firstUser.user.id },
+        commandId: 'auth-character-library-create',
+        payload: {
+          entry: createEntryInput(),
+          ownerParticipantId: firstUser.user.id,
+        },
+        type: 'create_character_library_entry',
+      },
+      firstUser.cookie,
+    );
+
+    assert.equal(createResponse.status, 200);
+    assert.equal(createResponse.body.ok, true);
+    assert.equal('entry' in createResponse.body.data, true);
+
+    if (!createResponse.body.ok || !('entry' in createResponse.body.data)) {
+      throw new Error('Expected authenticated character library entry.');
+    }
+
+    assert.equal(createResponse.body.data.entry.ownerUserId, firstUser.user.id);
+    assert.equal(
+      createResponse.body.data.entry.ownerParticipantId,
+      firstUser.user.id,
+    );
+
+    const blockedRead = await postCharacterLibraryCommand(
+      baseUrl,
+      {
+        actor: { participantId: secondUser.user.id },
+        commandId: 'auth-character-library-cross-user-read',
+        payload: {
+          entryId: createResponse.body.data.entry.id,
+          ownerParticipantId: secondUser.user.id,
+        },
+        type: 'get_character_library_entry',
+      },
+      secondUser.cookie,
+    );
+
+    assert.equal(blockedRead.body.ok, false);
+    assert.notEqual(blockedRead.status, 200);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      app.server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+test('auth routes set validate and clear the HttpOnly session cookie', async () => {
+  const authDatabase = new MemoryAuthUserDatabase();
+  const app = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new CharacterLibraryService(),
+    new AuthService(authDatabase),
+  );
+
+  await new Promise<void>((resolve) => app.server.listen(0, resolve));
+
+  try {
+    const baseUrl = getServerBaseUrl(app.server);
+    const registered = await registerUser(baseUrl, {
+      displayName: 'Cookie User',
+      email: 'cookie@example.test',
+      password: 'correct horse battery staple',
+    });
+    const meResponse = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: {
+        cookie: registered.cookie,
+      },
+    });
+    const meBody = (await meResponse.json()) as AuthMeResponse;
+
+    assert.equal(meBody.ok, true);
+    assert.equal(meBody.ok && meBody.data.authenticated, true);
+    assert.equal(meBody.ok && meBody.data.user?.id, registered.user.id);
+
+    const logoutResponse = await fetch(`${baseUrl}/api/auth/logout`, {
+      headers: {
+        cookie: registered.cookie,
+      },
+      method: 'POST',
+    });
+    const logoutCookie = logoutResponse.headers.get('set-cookie') ?? '';
+    const logoutBody = (await logoutResponse.json()) as AuthMeResponse;
+    const afterLogoutResponse = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: {
+        cookie: registered.cookie,
+      },
+    });
+    const afterLogoutBody =
+      (await afterLogoutResponse.json()) as AuthMeResponse;
+
+    assert.match(logoutCookie, /dnd_web_session=/);
+    assert.match(logoutCookie, /Max-Age=0/);
+    assert.equal(logoutBody.ok && logoutBody.data.authenticated, false);
+    assert.equal(
+      afterLogoutBody.ok && afterLogoutBody.data.authenticated,
+      false,
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      app.server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
 test('DB-backed character library repository reads entries after service restart', async () => {
   const database = new MemoryCharacterLibraryEntryDatabase();
   const firstService = new CharacterLibraryService(
@@ -283,6 +437,18 @@ class MemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryDataba
     return structuredClone(row);
   }
 
+  async getCharacterLibraryEntryByUser(
+    params: Pick<CharacterLibraryEntryWrite, 'entryId' | 'ownerUserId'>,
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const row = this.rows.get(params.entryId);
+
+    if (!row || row.ownerUserId !== params.ownerUserId) {
+      return null;
+    }
+
+    return structuredClone(row);
+  }
+
   async insertCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -304,6 +470,14 @@ class MemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryDataba
       .map((row) => structuredClone(row));
   }
 
+  async listCharacterLibraryEntriesByUser(
+    ownerUserId: string,
+  ): Promise<CharacterLibraryEntryRow[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.ownerUserId === ownerUserId)
+      .map((row) => structuredClone(row));
+  }
+
   async updateCharacterLibraryEntry(
     write: CharacterLibraryEntryWrite,
   ): Promise<CharacterLibraryEntryRow | null> {
@@ -322,14 +496,119 @@ class MemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryDataba
     return structuredClone(row);
   }
 
+  async updateCharacterLibraryEntryByUser(
+    write: CharacterLibraryEntryWrite & { ownerUserId: string },
+  ): Promise<CharacterLibraryEntryRow | null> {
+    const existing = this.rows.get(write.entryId);
+
+    if (!existing || existing.ownerUserId !== write.ownerUserId) {
+      return null;
+    }
+
+    const row = {
+      ...this.toRow(write),
+      createdAt: existing.createdAt,
+    };
+    this.rows.set(write.entryId, structuredClone(row));
+
+    return structuredClone(row);
+  }
+
   private toRow(write: CharacterLibraryEntryWrite): CharacterLibraryEntryRow {
     return {
       createdAt: new Date(0),
       entry: structuredClone(write.entry),
       entryId: write.entryId,
       ownerParticipantId: write.ownerParticipantId,
+      ownerUserId: write.ownerUserId ?? null,
       updatedAt: new Date(),
     };
+  }
+}
+
+class MemoryAuthUserDatabase implements AuthUserDatabase {
+  readonly sessions = new Map<string, AuthSessionRow>();
+  readonly users = new Map<string, AuthUserRow>();
+
+  async createAuthUser(insert: AuthUserInsert): Promise<AuthUserRow | null> {
+    if (this.users.has(insert.email)) {
+      return null;
+    }
+
+    const row: AuthUserRow = {
+      createdAt: new Date(0),
+      displayName: insert.displayName,
+      email: insert.email,
+      ownerParticipantId: insert.ownerParticipantId,
+      passwordHash: insert.passwordHash,
+      updatedAt: new Date(0),
+      userId: insert.userId,
+    };
+    this.users.set(row.email, structuredClone(row));
+
+    return structuredClone(row);
+  }
+
+  async getAuthUserByEmail(email: string): Promise<AuthUserRow | null> {
+    return structuredClone(this.users.get(email) ?? null);
+  }
+
+  async createAuthSession(insert: AuthSessionInsert): Promise<AuthSessionRow> {
+    const row: AuthSessionRow = {
+      createdAt: new Date(0),
+      expiresAt: insert.expiresAt,
+      revoked: false,
+      revokedAt: null,
+      sessionId: insert.sessionId,
+      tokenHash: insert.tokenHash,
+      updatedAt: new Date(0),
+      userId: insert.userId,
+    };
+    this.sessions.set(row.tokenHash, structuredClone(row));
+
+    return structuredClone(row);
+  }
+
+  async getAuthUserBySessionTokenHash(
+    tokenHash: string,
+    now: Date,
+  ): Promise<AuthSessionWithUser | null> {
+    const session = this.sessions.get(tokenHash);
+
+    if (
+      !session ||
+      session.revoked ||
+      session.revokedAt ||
+      session.expiresAt <= now
+    ) {
+      return null;
+    }
+
+    const user = [...this.users.values()].find(
+      (candidate) => candidate.userId === session.userId,
+    );
+
+    return user
+      ? {
+          session: structuredClone(session),
+          user: structuredClone(user),
+        }
+      : null;
+  }
+
+  async revokeAuthSession(tokenHash: string): Promise<void> {
+    const session = this.sessions.get(tokenHash);
+
+    if (!session) {
+      return;
+    }
+
+    this.sessions.set(tokenHash, {
+      ...session,
+      revoked: true,
+      revokedAt: new Date(),
+      updatedAt: new Date(),
+    });
   }
 }
 
@@ -351,6 +630,67 @@ async function postCommand(
   return {
     body: (await response.json()) as CharacterLibraryCommandResponse,
     status: response.status,
+  };
+}
+
+async function postCharacterLibraryCommand(
+  baseUrl: string,
+  body: CharacterLibraryCommand,
+  cookie: string,
+): Promise<{
+  body: CharacterLibraryCommandResponse;
+  status: number;
+}> {
+  const response = await fetch(`${baseUrl}/api/character-library/command`, {
+    body: JSON.stringify(body),
+    headers: {
+      'content-type': 'application/json',
+      cookie,
+    },
+    method: 'POST',
+  });
+
+  return {
+    body: (await response.json()) as CharacterLibraryCommandResponse,
+    status: response.status,
+  };
+}
+
+async function registerUser(
+  baseUrl: string,
+  params: {
+    displayName: string;
+    email: string;
+    password: string;
+  },
+): Promise<{
+  cookie: string;
+  user: Extract<AuthResponse, { ok: true }>['data']['user'];
+}> {
+  const response = await fetch(`${baseUrl}/api/auth/register`, {
+    body: JSON.stringify(params),
+    headers: {
+      'content-type': 'application/json',
+    },
+    method: 'POST',
+  });
+  const body = (await response.json()) as AuthResponse;
+  const rawCookie = response.headers.get('set-cookie');
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert(rawCookie);
+  assert.match(rawCookie, /HttpOnly/);
+  assert.match(rawCookie, /SameSite=Lax/);
+  assert.match(rawCookie, /Max-Age=/);
+
+  if (!body.ok) {
+    throw new Error('Expected successful registration response.');
+  }
+
+  return {
+    cookie: rawCookie.split(';')[0] ?? '',
+    user: body.data.user,
   };
 }
 

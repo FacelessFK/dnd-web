@@ -373,6 +373,7 @@ async function handleAuthMeRequest(
       200,
       {
         data: {
+          authenticated: user !== null,
           user,
         },
         ok: true,
@@ -504,6 +505,7 @@ async function handleAuthLogoutRequest(
       200,
       {
         data: {
+          authenticated: false,
           user: null,
         },
         ok: true,
@@ -911,12 +913,15 @@ async function handleCharacterLibraryCommandRequest(
 
   try {
     const command = commandResult.data;
-    if (auth) {
-      const user = await requireAuthenticatedUser(request, auth);
+    const authenticatedUser = auth
+      ? await requireAuthenticatedUser(request, auth)
+      : null;
 
+    if (auth) {
       if (
-        command.actor.participantId !== user.ownerParticipantId ||
-        command.payload.ownerParticipantId !== user.ownerParticipantId
+        !authenticatedUser ||
+        command.actor.participantId !== authenticatedUser.id ||
+        command.payload.ownerParticipantId !== authenticatedUser.id
       ) {
         throw new CharacterLibraryStoreError(
           'invalid_participant_session_association',
@@ -949,16 +954,33 @@ async function handleCharacterLibraryCommandRequest(
 
     const data =
       command.type === 'list_character_library_entries'
-        ? { entries: await characterLibrary.listEntries(command) }
+        ? {
+            entries: await characterLibrary.listEntries(
+              command,
+              authenticatedUser?.id,
+            ),
+          }
         : {
             entry:
               command.type === 'create_character_library_entry'
-                ? await characterLibrary.createEntry(command)
+                ? await characterLibrary.createEntry(
+                    command,
+                    authenticatedUser?.id,
+                  )
                 : command.type === 'update_character_library_entry'
-                  ? await characterLibrary.updateEntry(command)
+                  ? await characterLibrary.updateEntry(
+                      command,
+                      authenticatedUser?.id,
+                    )
                   : command.type === 'finalize_character_library_entry'
-                    ? await characterLibrary.finalizeEntry(command)
-                    : await characterLibrary.getEntry(command),
+                    ? await characterLibrary.finalizeEntry(
+                        command,
+                        authenticatedUser?.id,
+                      )
+                    : await characterLibrary.getEntry(
+                        command,
+                        authenticatedUser?.id,
+                      ),
           };
     const success: CharacterLibraryCommandSuccess = {
       data,
@@ -2259,7 +2281,7 @@ function invalidAuthRequest(message: string) {
   } as const;
 }
 
-const AUTH_COOKIE_NAME = 'dnd_auth';
+const AUTH_COOKIE_NAME = 'dnd_web_session';
 
 function readAuthCookie(request: IncomingMessage): string | null {
   const cookieHeader = request.headers.cookie;
@@ -2292,6 +2314,7 @@ function setAuthCookie(
       'Path=/',
       'SameSite=Lax',
       `Expires=${expiresAt.toUTCString()}`,
+      `Max-Age=${Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))}`,
       isSecureCookieEnabled() ? 'Secure' : '',
     ]
       .filter(Boolean)
@@ -2308,6 +2331,7 @@ function clearAuthCookie(response: ServerResponse): void {
       'Path=/',
       'SameSite=Lax',
       'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      'Max-Age=0',
       isSecureCookieEnabled() ? 'Secure' : '',
     ]
       .filter(Boolean)
@@ -2316,7 +2340,11 @@ function clearAuthCookie(response: ServerResponse): void {
 }
 
 function isSecureCookieEnabled(): boolean {
-  return process.env.AUTH_COOKIE_SECURE === 'true';
+  if (process.env.AUTH_COOKIE_SECURE) {
+    return process.env.AUTH_COOKIE_SECURE === 'true';
+  }
+
+  return process.env.NODE_ENV === 'production';
 }
 
 function serializeSseEvent(update: SessionStreamEvent): string {

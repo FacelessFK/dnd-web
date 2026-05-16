@@ -182,10 +182,11 @@ export class AuthService {
 
   private toAuthUser(row: AuthUserRow): AuthUser {
     return {
+      createdAt: row.createdAt.toISOString(),
       displayName: row.displayName,
       email: row.email,
-      ownerParticipantId: row.ownerParticipantId,
-      userId: row.userId,
+      id: row.userId,
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }
