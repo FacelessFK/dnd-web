@@ -73,6 +73,44 @@ export function getPortraitImageSource(
   return assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
 }
 
+export function createUploadedPortraitReferenceFromDataUrl(
+  dataUrl: string,
+  options: {
+    fileName?: string;
+    uploadedAt?: string;
+  } = {},
+): CharacterLibraryPortraitReference | null {
+  const match =
+    /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+      dataUrl.trim(),
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const mimeType = match[1] as 'image/jpeg' | 'image/png' | 'image/webp';
+  const base64Payload = match[2] ?? '';
+  const padding = base64Payload.endsWith('==')
+    ? 2
+    : base64Payload.endsWith('=')
+      ? 1
+      : 0;
+  const sizeBytes = Math.max(
+    1,
+    Math.floor((base64Payload.length * 3) / 4) - padding,
+  );
+
+  return {
+    dataUrl,
+    fileName: options.fileName ?? null,
+    kind: 'uploaded',
+    mimeType,
+    sizeBytes,
+    uploadedAt: options.uploadedAt ?? new Date().toISOString(),
+  };
+}
+
 export function getPortraitAssetKey(
   portrait: CharacterLibraryPortraitReference | null | undefined,
 ): CharacterBuilderAssetKey | undefined {

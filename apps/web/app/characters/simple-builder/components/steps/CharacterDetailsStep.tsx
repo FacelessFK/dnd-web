@@ -70,7 +70,12 @@ export function CharacterDetailsStep() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const readPortraitFile = (file: File | undefined) => {
-    if (!file || !file.type.startsWith('image/')) return;
+    if (
+      !file ||
+      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+    ) {
+      return;
+    }
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
@@ -142,7 +147,7 @@ export function CharacterDetailsStep() {
             </div>
             <div className="flex flex-col justify-center gap-2">
               <input
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 className="hidden"
                 onChange={(event) => readPortraitFile(event.target.files?.[0])}
                 ref={fileInputRef}
@@ -174,8 +179,8 @@ export function CharacterDetailsStep() {
                 style={{ color: 'var(--color-text-muted)' }}
               >
                 {isFa
-                  ? 'فایل تصویر را بکش و رها کن یا از دستگاه انتخاب کن.'
-                  : 'Drop an image here or choose one from your device.'}
+                  ? 'فایل PNG، JPEG یا WebP را بکش و رها کن یا از دستگاه انتخاب کن.'
+                  : 'Drop a PNG, JPEG, or WebP image here or choose one from your device.'}
               </p>
             </div>
           </div>

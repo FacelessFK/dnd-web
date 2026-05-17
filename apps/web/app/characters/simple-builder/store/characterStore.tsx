@@ -80,8 +80,16 @@ const DEFAULT_CHARACTER_STATE: CharacterState = {
 
 const CharacterStoreContext = createContext<CharacterStore | null>(null);
 
-export function CharacterStoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<CharacterState>(DEFAULT_CHARACTER_STATE);
+export function CharacterStoreProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode;
+  initialState?: CharacterState;
+}) {
+  const [state, setState] = useState<CharacterState>(
+    () => initialState ?? DEFAULT_CHARACTER_STATE,
+  );
 
   const value = useMemo<CharacterStore>(
     () => ({

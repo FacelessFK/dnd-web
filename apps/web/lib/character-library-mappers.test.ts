@@ -14,6 +14,7 @@ import {
 import {
   characterLibraryEntryToCard,
   characterLibraryEntryToDraft,
+  createUploadedPortraitReferenceFromDataUrl,
   draftToCharacterLibraryEntryInput,
   getPortraitImageSource,
 } from './character-library-mappers';
@@ -115,6 +116,35 @@ describe('character library mappers', () => {
     assert.equal(
       getPortraitImageSource(card.portrait),
       '/assets/character-builder/species/human.webp',
+    );
+  });
+
+  it('normalizes uploaded portrait data URLs for persisted library entries', () => {
+    const portrait = createUploadedPortraitReferenceFromDataUrl(
+      'data:image/png;base64,aGVybw==',
+      {
+        fileName: 'hero.png',
+        uploadedAt: new Date(0).toISOString(),
+      },
+    );
+
+    assert.deepEqual(portrait, {
+      dataUrl: 'data:image/png;base64,aGVybw==',
+      fileName: 'hero.png',
+      kind: 'uploaded',
+      mimeType: 'image/png',
+      sizeBytes: 4,
+      uploadedAt: new Date(0).toISOString(),
+    });
+    assert.equal(getPortraitImageSource(portrait), portrait?.dataUrl);
+  });
+
+  it('rejects unsupported uploaded portrait data URLs before persistence', () => {
+    assert.equal(
+      createUploadedPortraitReferenceFromDataUrl(
+        'data:image/gif;base64,R0lGODlhAQABAIA=',
+      ),
+      null,
     );
   });
 

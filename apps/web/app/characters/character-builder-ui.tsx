@@ -60,86 +60,56 @@ function Shell({
   const { logout, user } = useAuth();
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(245,158,11,0.12),transparent_30%),linear-gradient(135deg,#0b1020_0%,#111827_52%,#0f172a_100%)]" />
-      <div className="relative grid min-h-screen lg:grid-cols-[16rem_1fr]">
-        <aside className="border-b border-slate-700/70 bg-slate-950/80 px-4 py-4 shadow-xl shadow-black/25 backdrop-blur lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
-          <Link
-            className="group flex items-center gap-3 text-slate-100"
-            href="/"
-          >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-amber-300/35 bg-amber-400 text-sm font-black text-slate-950 shadow-lg shadow-black/25">
-              D20
-            </span>
-            <span>
-              <span className="block text-base font-black uppercase tracking-[0.12em] text-slate-50 group-hover:text-amber-200">
-                DND Web
+    <main
+      className="min-h-screen overflow-x-hidden"
+      style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+    >
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(201,168,76,0.12),transparent_30%),radial-gradient(circle_at_82%_12%,rgba(168,85,247,0.14),transparent_28%),linear-gradient(180deg,#0f1117_0%,#111421_58%,#0b0d13_100%)]" />
+      <div className="relative min-h-screen">
+        <header
+          className="sticky top-0 z-30 border-b backdrop-blur-sm"
+          style={{
+            background: 'rgba(15,17,23,0.88)',
+            borderColor: 'var(--color-border)',
+          }}
+        >
+          <div className="mx-auto max-w-5xl px-4">
+            <div className="flex flex-wrap items-center gap-3 py-3">
+              <Link
+                className="group flex items-center gap-3"
+                href="/characters"
+              >
+                <span className="text-2xl">D20</span>
+                <span
+                  className="text-lg font-bold tracking-wide group-hover:text-[var(--color-gold)]"
+                  style={{
+                    color: 'var(--color-gold)',
+                    letterSpacing: '-0.2px',
+                  }}
+                >
+                  {title}
+                </span>
+              </Link>
+              <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]">
+                Library
               </span>
-              <span className="text-xs font-semibold text-slate-400">
-                {t('nav.characterWorkspace')}
-              </span>
-            </span>
-          </Link>
-
-          <nav className="mt-4 grid grid-cols-3 gap-2 text-xs sm:grid-cols-6 lg:mt-8 lg:block lg:space-y-2 lg:text-sm">
-            <ShellNavLink href="/" icon="Home" label={t('common.dashboard')} />
-            <ShellNavLink
-              active={active === 'library'}
-              href="/characters"
-              icon="Library"
-              label={t('nav.characterLibrary')}
-            />
-            <ShellNavLink
-              href="/runtime"
-              icon="Table"
-              label={t('nav.runtimeTable')}
-            />
-            <ShellNavLink
-              disabled
-              icon={t('nav.soon')}
-              label={t('nav.campaigns')}
-            />
-            <ShellNavLink
-              disabled
-              icon={t('nav.soon')}
-              label={t('nav.compendium')}
-            />
-            <ShellNavLink
-              disabled
-              icon={t('nav.soon')}
-              label={t('nav.journal')}
-            />
-          </nav>
-
-          <div className="mt-8 hidden rounded-2xl border border-slate-700 bg-slate-900/80 p-4 text-sm shadow-inner shadow-black/25 lg:block">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">
-              {t('shell.builderMvp.title')}
-            </p>
-            <p className="mt-3 leading-6 text-slate-400">
-              {t('shell.builderMvp.body')}
-            </p>
-          </div>
-        </aside>
-
-        <section className="min-w-0">
-          <header className="sticky top-0 z-20 flex flex-col gap-4 border-b border-slate-700/70 bg-slate-950/82 px-4 py-4 backdrop-blur md:flex-row md:items-center md:justify-between lg:px-6">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300/80">
-                {t('shell.characterTools')}
-              </p>
-              <h1 className="mt-1 text-xl font-black text-slate-50 sm:text-2xl">
-                {title}
-              </h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+              <nav className="ml-auto flex flex-wrap items-center gap-2 text-xs font-bold">
+                <ShellNavLink
+                  href="/characters"
+                  active={active === 'library'}
+                  label={t('nav.characterLibrary')}
+                />
+                <ShellNavLink href="/characters/new" label="Builder" />
+                <ShellNavLink href="/runtime" label={t('nav.runtimeTable')} />
+              </nav>
               <LanguageSwitcher />
               {user ? (
                 <>
-                  <span className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2">
+                  <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm text-[var(--color-text-muted)]">
                     {user.displayName}
                   </span>
                   <button
-                    className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 font-bold text-slate-200 transition hover:border-amber-300 hover:text-amber-200"
+                    className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-bold text-[var(--color-text)] transition hover:border-[var(--color-gold)] hover:text-[var(--color-gold)]"
                     onClick={() => void logout()}
                     type="button"
                   >
@@ -148,16 +118,16 @@ function Shell({
                 </>
               ) : (
                 <Link
-                  className="rounded-full border border-amber-300/45 bg-amber-400 px-4 py-2 font-black text-slate-950"
+                  className="rounded-full border border-[var(--color-gold-border)] bg-[var(--color-gold)] px-4 py-2 text-sm font-black text-[#0f1117]"
                   href="/login"
                 >
                   ورود
                 </Link>
               )}
             </div>
-          </header>
-          {children}
-        </section>
+          </div>
+        </header>
+        <section className="mx-auto max-w-5xl">{children}</section>
       </div>
     </main>
   );
@@ -167,41 +137,28 @@ function ShellNavLink({
   active = false,
   disabled = false,
   href,
-  icon,
   label,
 }: {
   active?: boolean;
   disabled?: boolean;
   href?: string;
-  icon: string;
   label: string;
 }) {
   const className = [
-    'flex min-w-0 items-center justify-center gap-2 rounded-xl border px-2 py-2 text-center font-bold transition lg:justify-start lg:gap-3 lg:px-3 lg:py-2.5 lg:text-left',
+    'inline-flex min-w-0 items-center justify-center rounded-xl border px-3 py-2 text-center font-bold transition',
     active
-      ? 'border-amber-300/45 bg-amber-400 text-slate-950 shadow-lg shadow-black/20'
-      : 'border-transparent text-slate-400 hover:border-slate-700 hover:bg-slate-900 hover:text-slate-50',
+      ? 'border-[var(--color-gold-border)] bg-[var(--color-gold)] text-[#0f1117] shadow-lg shadow-black/20'
+      : 'border-transparent text-[var(--color-text-muted)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface)] hover:text-[var(--color-text)]',
     disabled ? 'cursor-not-allowed opacity-55 hover:bg-transparent' : '',
   ].join(' ');
 
-  const content = (
-    <>
-      <span className="w-12 text-center text-[0.62rem] uppercase tracking-[0.12em] text-current lg:w-14">
-        {icon}
-      </span>
-      <span className="sr-only lg:not-sr-only lg:min-w-0 lg:truncate">
-        {label}
-      </span>
-    </>
-  );
-
   if (!href || disabled) {
-    return <span className={className}>{content}</span>;
+    return <span className={className}>{label}</span>;
   }
 
   return (
     <Link className={className} href={href}>
-      {content}
+      {label}
     </Link>
   );
 }
@@ -216,9 +173,13 @@ function ParchmentPanel({
   return (
     <section
       className={[
-        'rounded-2xl border border-slate-700 bg-slate-900/88 p-4 shadow-xl shadow-black/25 sm:p-5',
+        'rounded-2xl border p-4 shadow-xl shadow-black/25 sm:p-5',
         className,
       ].join(' ')}
+      style={{
+        background: 'rgba(30,33,48,0.88)',
+        borderColor: 'var(--color-border)',
+      }}
     >
       {children}
     </section>
@@ -389,7 +350,7 @@ export function CharacterLibraryPage() {
 
   return (
     <Shell active="library" title={t('page.characterLibrary.title')}>
-      <div className="px-4 py-6 lg:px-6 lg:py-8">
+      <div className="px-4 py-6 lg:py-8">
         {!authLoading && !user ? (
           <ParchmentPanel>
             <h2 className="text-2xl font-black text-slate-50">
@@ -418,9 +379,10 @@ export function CharacterLibraryPage() {
                 <h2 className="text-3xl font-black tracking-tight text-slate-50 sm:text-4xl">
                   {t('page.characterLibrary.title')}
                 </h2>
-                <p className="mt-3 max-w-2xl text-base leading-7 text-slate-400">
-                  کاراکترهای ذخیره‌شده برای مالک توسعه را ببینید، پیش‌نویس را
-                  باز کنید یا بدون خروج از محیط کار، شیت خروجی بگیرید.
+                <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--color-text-muted)]">
+                  کاراکترهای ذخیره‌شده حساب خودتان را ببینید، پیش‌نویس را باز
+                  کنید، تصویر پرتره را نگه دارید، یا بدون خروج از محیط کار شیت
+                  خروجی بگیرید.
                 </p>
               </div>
               <Link
@@ -436,7 +398,8 @@ export function CharacterLibraryPage() {
                 <label className="block">
                   <span className="sr-only">جست‌وجوی کاراکترها</span>
                   <input
-                    className="w-full rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-3 text-slate-50 outline-none transition placeholder:text-slate-500 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
+                    className="w-full rounded-xl border bg-[var(--color-surface)] px-4 py-3 text-[var(--color-text)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-gold)] focus:ring-2 focus:ring-[var(--color-gold-dim)]"
+                    style={{ borderColor: 'var(--color-border)' }}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="جست‌وجوی کاراکترها..."
                     type="search"
@@ -455,8 +418,8 @@ export function CharacterLibraryPage() {
                       className={[
                         'rounded-xl border px-4 py-2 text-sm font-bold transition',
                         status === value
-                          ? 'border-amber-300/45 bg-amber-400 text-slate-950'
-                          : 'border-slate-600 bg-slate-950/35 text-slate-300 hover:border-slate-400',
+                          ? 'border-[var(--color-gold-border)] bg-[var(--color-gold)] text-[#0f1117]'
+                          : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:border-[var(--color-gold)] hover:text-[var(--color-text)]',
                       ].join(' ')}
                       key={value}
                       onClick={() =>
@@ -472,7 +435,8 @@ export function CharacterLibraryPage() {
                 <div className="flex gap-2 text-sm">
                   <select
                     aria-label="مرتب‌سازی کاراکترها"
-                    className="rounded-xl border border-slate-600 bg-slate-950/40 px-4 py-2 text-slate-200 outline-none"
+                    className="rounded-xl border bg-[var(--color-surface)] px-4 py-2 text-[var(--color-text)] outline-none"
+                    style={{ borderColor: 'var(--color-border)' }}
                     defaultValue="recent"
                   >
                     <option value="recent">
@@ -482,13 +446,15 @@ export function CharacterLibraryPage() {
                     <option value="level">مرتب‌سازی: سطح</option>
                   </select>
                   <button
-                    className="rounded-xl border border-slate-600 bg-slate-950/40 px-3 py-2 text-slate-200"
+                    className="rounded-xl border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text)]"
+                    style={{ borderColor: 'var(--color-border)' }}
                     type="button"
                   >
                     ▦
                   </button>
                   <button
-                    className="rounded-xl border border-slate-700 bg-slate-950/30 px-3 py-2 text-slate-500"
+                    className="rounded-xl border bg-[var(--color-surface)] px-3 py-2 text-[var(--color-text-muted)] opacity-65"
+                    style={{ borderColor: 'var(--color-border)' }}
                     type="button"
                   >
                     ☰
@@ -537,8 +503,7 @@ export function CharacterLibraryPage() {
                   هیچ کاراکتر ذخیره‌شده‌ای با این جست‌وجو پیدا نشد.
                 </p>
                 <p className="mt-2 text-sm text-amber-100/65">
-                  فیلترها را پاک کنید یا برای این مالک توسعه کاراکتر تازه
-                  بسازید.
+                  فیلترها را پاک کنید یا برای حساب خودتان کاراکتر تازه بسازید.
                 </p>
               </ParchmentPanel>
             ) : null}
@@ -591,60 +556,70 @@ function CharacterCard({
   };
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-xl shadow-black/25">
+    <article
+      className="overflow-hidden rounded-2xl border shadow-xl shadow-black/25 transition hover:-translate-y-0.5 hover:border-[var(--color-gold-border)]"
+      style={{
+        background: 'rgba(30,33,48,0.9)',
+        borderColor: 'var(--color-border)',
+      }}
+    >
       <PlaceholderArt
         assetKey={entry.portraitAssetKey}
         imageSrc={getPortraitImageSource(entry.portrait)}
         label={entry.name}
         size="portrait"
       />
-      <div className="p-5 text-slate-100">
+      <div className="p-5 text-[var(--color-text)]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="text-2xl font-black">{entry.name}</h3>
-            <p className="mt-1 text-sm font-semibold text-slate-400">
+            <p className="mt-1 text-sm font-semibold text-[var(--color-text-muted)]">
               {entry.speciesOrRace} {entry.className}
             </p>
           </div>
-          <span className="rounded-xl border border-amber-300/35 bg-amber-400 px-3 py-2 text-center text-sm font-black text-slate-950">
+          <span className="rounded-xl border border-[var(--color-gold-border)] bg-[var(--color-gold)] px-3 py-2 text-center text-sm font-black text-[#0f1117]">
             {entry.level}
             <span className="block text-[0.55rem] uppercase tracking-[0.18em]">
               سطح
             </span>
           </span>
         </div>
-        <p className="mt-4 min-h-12 text-sm leading-6 text-slate-300">
+        <p className="mt-4 min-h-12 text-sm leading-6 text-[var(--color-text-muted)]">
           {entry.summary}
         </p>
-        <div className="mt-4 flex items-center justify-between border-t border-slate-700 pt-4">
+        <div
+          className="mt-4 flex items-center justify-between border-t pt-4"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
           <StatusBadge status={entry.status} />
-          <span className="text-sm font-bold text-slate-300">
+          <span className="text-sm font-bold text-[var(--color-text-muted)]">
             درجه زره {entry.armorClass}
           </span>
         </div>
         <div className="mt-4 grid gap-2">
           <Link
-            className="rounded-xl bg-amber-400 px-4 py-2 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-300"
+            className="rounded-xl bg-[var(--color-gold)] px-4 py-2 text-center text-sm font-bold text-[#0f1117] transition hover:brightness-110"
             href={`/characters/${entry.id}/edit`}
           >
             ویرایش
           </Link>
           <button
-            className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-slate-500"
+            className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-[var(--color-text-muted)] opacity-65"
             disabled
             type="button"
           >
             تکثیر - در انتظار
           </button>
           <button
-            className="rounded-xl bg-slate-950/35 px-4 py-2 text-sm font-bold text-red-200/55"
+            className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-red-200/55"
             disabled
             type="button"
           >
             حذف - در انتظار
           </button>
           <button
-            className="rounded-xl border border-slate-700 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-500"
+            className="rounded-xl border bg-black/25 px-4 py-2 text-sm font-black text-[var(--color-text-muted)] opacity-65"
+            style={{ borderColor: 'var(--color-border)' }}
             disabled
             type="button"
           >
@@ -652,7 +627,8 @@ function CharacterCard({
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button
-              className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ borderColor: 'var(--color-border)' }}
               disabled={!libraryEntry || downloadingPdfTemplate !== null}
               onClick={() => void downloadPdf('dnd-2024-template')}
               type="button"
@@ -662,7 +638,8 @@ function CharacterCard({
                 : 'شیت ۲۰۲۴'}
             </button>
             <button
-              className="rounded-xl border border-slate-600 bg-slate-950/35 px-4 py-2 text-sm font-black text-slate-100 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ borderColor: 'var(--color-border)' }}
               disabled={!libraryEntry || downloadingPdfTemplate !== null}
               onClick={() => void downloadPdf('dnd-2014-template')}
               type="button"
@@ -679,7 +656,7 @@ function CharacterCard({
 }
 
 export function CharacterBuilderPage(props: CharacterBuilderPageProps) {
-  void props;
-
-  return <SimpleCharacterBuilder />;
+  return (
+    <SimpleCharacterBuilder characterId={props.characterId} mode={props.mode} />
+  );
 }

@@ -1,6 +1,18 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import type {
+  CharacterLibraryEntry,
+  CharacterLibraryEntryId,
+} from '@dnd/protocol';
+
+import { useAuth } from '../../../lib/auth-context';
+import { getCharacterLibraryEntry } from '../../../lib/character-library-api';
+import { getPortraitImageSource } from '../../../lib/character-library-mappers';
 import { LanguageSwitcher } from '../../../lib/i18n';
+import { BACKGROUNDS } from './data/backgrounds';
+import { CLASSES } from './data/classes';
+import { RACES } from './data/races';
 import { CharacterSheet } from './components/sheet/CharacterSheet';
 import { AbilityScoresStep } from './components/steps/AbilityScoresStep';
 import { BackgroundStep } from './components/steps/BackgroundStep';
@@ -22,6 +34,7 @@ import {
   hasValidSpellChoices,
 } from './store/selectors';
 import type { StepId } from './types';
+import type { AbilityName, CharacterState, SkillName } from './types';
 
 const STEP_ORDER: StepId[] = [
   'race',
@@ -31,6 +44,74 @@ const STEP_ORDER: StepId[] = [
   'details',
   'sheet',
 ];
+
+const entryAbilityToName: Record<
+  keyof CharacterLibraryEntry['abilities'],
+  AbilityName
+> = {
+  cha: 'CHA',
+  con: 'CON',
+  dex: 'DEX',
+  int: 'INT',
+  str: 'STR',
+  wis: 'WIS',
+};
+
+function findByName<T extends { id: string; name: string }>(
+  candidates: T[],
+  value: string,
+): T | null {
+  const normalizedValue = value.trim().toLowerCase();
+
+  return (
+    candidates.find(
+      (candidate) =>
+        candidate.name.toLowerCase() === normalizedValue ||
+        candidate.id.toLowerCase() === normalizedValue,
+    ) ?? null
+  );
+}
+
+function characterLibraryEntryToSimpleState(
+  entry: CharacterLibraryEntry,
+): CharacterState {
+  const abilityScores = Object.fromEntries(
+    Object.entries(entry.abilities).map(([ability, score]) => [
+      entryAbilityToName[ability as keyof CharacterLibraryEntry['abilities']],
+      score,
+    ]),
+  ) as CharacterState['abilityScores'];
+
+  return {
+    abilityScores,
+    age: '',
+    alignment: null,
+    background: findByName(BACKGROUNDS, entry.background),
+    backgroundLanguageChoices: entry.builderSelections.languages,
+    backgroundSkillOverride: null,
+    backstory: entry.notes ?? entry.concept ?? '',
+    classEquipmentChoices: {},
+    classSkillChoices: entry.builderSelections.skills as SkillName[],
+    classSpellChoices: {
+      cantrips: entry.builderSelections.cantrips,
+      preparedSpells: entry.builderSelections.spells,
+    },
+    currentStep: 'details',
+    dndClass: findByName(CLASSES, entry.className),
+    height: '',
+    name: entry.name,
+    portraitDataUrl:
+      entry.portrait?.kind === 'uploaded'
+        ? (getPortraitImageSource(entry.portrait) ?? '')
+        : '',
+    pronouns: entry.pronouns ?? '',
+    race: findByName(RACES, entry.speciesOrRace),
+    raceLanguageChoices: [],
+    raceSkillChoices: [],
+    subrace: null,
+    weight: '',
+  };
+}
 
 function useStepValidity(): boolean {
   const store = useCharacterStore();
@@ -88,7 +169,13 @@ function useStepValidity(): boolean {
   }
 }
 
-function BuilderApp() {
+function BuilderApp({
+  characterId,
+  mode = 'new',
+}: {
+  characterId?: CharacterLibraryEntryId;
+  mode?: 'edit' | 'new';
+}) {
   const { currentStep, setStep } = useCharacterStore();
   const { copy } = useBuilderI18n();
   const isValid = useStepValidity();
@@ -132,7 +219,7 @@ function BuilderApp() {
       case 'details':
         return <CharacterDetailsStep />;
       case 'sheet':
-        return <CharacterSheet />;
+        return <CharacterSheet characterId={characterId} mode={mode} />;
       default:
         return null;
     }
@@ -191,10 +278,98 @@ function BuilderApp() {
   );
 }
 
-export default function App() {
+export default function App({
+  characterId,
+  mode = 'new',
+}: {
+  characterId?: string;
+  mode?: 'edit' | 'new';
+}) {
+  const { loading: authLoading, user } = useAuth();
+  const [initialState, setInitialState] = useState<CharacterState | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const editing = mode === 'edit' && characterId;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadEntry() {
+      if (!editing) {
+        setInitialState(null);
+        setLoadError(null);
+        return;
+      }
+
+      if (!user) {
+        return;
+      }
+
+      setLoadError(null);
+      const result = await getCharacterLibraryEntry(
+        user.id,
+        characterId as CharacterLibraryEntryId,
+      );
+
+      if (!active) {
+        return;
+      }
+
+      if (result.ok) {
+        setInitialState(characterLibraryEntryToSimpleState(result.data));
+      } else {
+        setLoadError(result.error.message);
+      }
+    }
+
+    void loadEntry();
+
+    return () => {
+      active = false;
+    };
+  }, [characterId, editing, user]);
+
+  if (authLoading || (editing && user && !initialState && !loadError)) {
+    return (
+      <div
+        className="grid min-h-screen place-items-center px-4 text-center"
+        style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+      >
+        در حال آماده‌سازی کاراکتر...
+      </div>
+    );
+  }
+
+  if (editing && !user) {
+    return (
+      <div
+        className="grid min-h-screen place-items-center px-4 text-center"
+        style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+      >
+        برای ویرایش کاراکتر باید وارد حساب کاربری شوید.
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div
+        className="grid min-h-screen place-items-center px-4 text-center"
+        style={{ background: 'var(--color-bg)', color: 'var(--color-text)' }}
+      >
+        ویرایش کاراکتر بارگذاری نشد: {loadError}
+      </div>
+    );
+  }
+
   return (
-    <CharacterStoreProvider>
-      <BuilderApp />
+    <CharacterStoreProvider
+      initialState={initialState ?? undefined}
+      key={editing ? characterId : 'new-character'}
+    >
+      <BuilderApp
+        characterId={characterId as CharacterLibraryEntryId | undefined}
+        mode={mode}
+      />
     </CharacterStoreProvider>
   );
 }

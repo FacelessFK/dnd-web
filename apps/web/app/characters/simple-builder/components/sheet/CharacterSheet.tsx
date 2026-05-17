@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import type {
   CharacterLibraryEntry,
+  CharacterLibraryEntryId,
   CharacterLibraryEntryInput,
 } from '@dnd/protocol';
 
 import { useAuth } from '../../../../../lib/auth-context';
-import { createCharacterLibraryEntry } from '../../../../../lib/character-library-api';
+import {
+  createCharacterLibraryEntry,
+  updateCharacterLibraryEntry,
+} from '../../../../../lib/character-library-api';
+import { createUploadedPortraitReferenceFromDataUrl } from '../../../../../lib/character-library-mappers';
 import {
   downloadCharacterSheetPdf,
   type CharacterSheetTemplateId,
@@ -43,7 +48,13 @@ const abilityNameToKey = {
   WIS: 'wis',
 } as const;
 
-export function CharacterSheet() {
+export function CharacterSheet({
+  characterId,
+  mode = 'new',
+}: {
+  characterId?: CharacterLibraryEntryId;
+  mode?: 'edit' | 'new';
+}) {
   const store = useCharacterStore();
   const { user } = useAuth();
   const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
@@ -167,10 +178,17 @@ export function CharacterSheet() {
       user.id,
     );
     const input = toCharacterLibraryEntryInput(entry);
-    const result = await createCharacterLibraryEntry(user.id, input);
+    const result =
+      mode === 'edit' && characterId
+        ? await updateCharacterLibraryEntry(user.id, characterId, input)
+        : await createCharacterLibraryEntry(user.id, input);
 
     if (result.ok) {
-      setSaveNotice('کاراکتر در کتابخانه حساب شما ذخیره شد.');
+      setSaveNotice(
+        mode === 'edit'
+          ? 'تغییرات کاراکتر در کتابخانه ذخیره شد.'
+          : 'کاراکتر در کتابخانه حساب شما ذخیره شد.',
+      );
     } else {
       setSaveNotice(`ذخیره ناموفق بود: ${result.error.message}`);
     }
@@ -645,7 +663,11 @@ function createSheetLibraryEntry(
     name: state.name.trim() || 'Unnamed Hero',
     notes: state.backstory,
     ownerParticipantId,
-    portrait: null,
+    portrait: state.portraitDataUrl
+      ? createUploadedPortraitReferenceFromDataUrl(state.portraitDataUrl, {
+          fileName: 'character-portrait.png',
+        })
+      : null,
     pronouns: state.pronouns,
     rulesProfileId:
       templateId === 'dnd-2014-template'
