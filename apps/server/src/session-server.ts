@@ -93,12 +93,13 @@ import {
   type RuntimeSessionStore,
 } from './session-store.js';
 
-const corsHeaders = {
+const defaultWebOrigin = 'http://localhost:3000';
+
+const baseCorsHeaders = {
   'access-control-allow-headers': 'content-type',
   'access-control-allow-credentials': 'true',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
-  'access-control-allow-origin':
-    process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+  vary: 'Origin',
 } as const;
 
 type RuntimeStoreError =
@@ -196,7 +197,7 @@ export async function handleRequest(
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
   auth?: AuthService,
 ): Promise<void> {
-  setCorsHeaders(response);
+  setCorsHeaders(response, request);
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
@@ -2010,7 +2011,7 @@ function handleStreamRequest(
   }
 
   response.writeHead(200, {
-    ...corsHeaders,
+    ...getCorsHeaders(request),
     'cache-control': 'no-cache, no-transform',
     connection: 'keep-alive',
     'content-type': 'text/event-stream',
@@ -2144,7 +2145,6 @@ function sendJson(
   }
 
   response.writeHead(statusCode, {
-    ...corsHeaders,
     'content-type': 'application/json; charset=utf-8',
   });
   response.end(JSON.stringify(payload));
@@ -2353,10 +2353,61 @@ function serializeSseEvent(update: SessionStreamEvent): string {
   return `event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
-function setCorsHeaders(response: ServerResponse): void {
-  for (const [key, value] of Object.entries(corsHeaders)) {
+function setCorsHeaders(
+  response: ServerResponse,
+  request: IncomingMessage,
+): void {
+  for (const [key, value] of Object.entries(getCorsHeaders(request))) {
     response.setHeader(key, value);
   }
+}
+
+function getCorsHeaders(request: IncomingMessage): Record<string, string> {
+  return {
+    ...baseCorsHeaders,
+    'access-control-allow-origin': getAllowedCorsOrigin(request),
+  };
+}
+
+function getAllowedCorsOrigin(request: IncomingMessage): string {
+  const requestOrigin = request.headers.origin;
+
+  if (requestOrigin && isAllowedCorsOrigin(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  return getConfiguredWebOrigins()[0] ?? defaultWebOrigin;
+}
+
+function isAllowedCorsOrigin(origin: string): boolean {
+  if (getConfiguredWebOrigins().includes(origin)) {
+    return true;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  try {
+    const parsedOrigin = new URL(origin);
+
+    return (
+      (parsedOrigin.protocol === 'http:' ||
+        parsedOrigin.protocol === 'https:') &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(parsedOrigin.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function getConfiguredWebOrigins(): string[] {
+  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL ?? defaultWebOrigin;
+
+  return configuredOrigin
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
 }
 
 function getBaseUrl(request: IncomingMessage): string {
