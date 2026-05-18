@@ -13,6 +13,10 @@ interface Props {
   isFirstStep: boolean;
   isLastStep: boolean;
   children: ReactNode;
+  onSaveDraft?: () => void;
+  saveDisabled?: boolean;
+  saveLabel?: string;
+  saveNotice?: string;
 }
 
 export function StepLayout({
@@ -23,6 +27,10 @@ export function StepLayout({
   isValid,
   isFirstStep,
   isLastStep,
+  onSaveDraft,
+  saveDisabled = false,
+  saveLabel,
+  saveNotice,
   children,
 }: Props) {
   const { copy } = useBuilderI18n();
@@ -64,7 +72,7 @@ export function StepLayout({
         className="no-print sticky bottom-0 border-t border-[var(--color-border)] backdrop-blur-sm"
         style={{ background: 'rgba(15,17,23,0.9)' }}
       >
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4">
           <button
             className="rounded-xl border border-[var(--color-border)] px-6 py-2.5 text-sm font-medium transition-all duration-150 hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-30"
             disabled={isFirstStep}
@@ -74,6 +82,27 @@ export function StepLayout({
           >
             {copy.back}
           </button>
+          <div className="flex flex-1 flex-col items-center gap-1">
+            {onSaveDraft ? (
+              <button
+                className="rounded-xl border border-[var(--color-border)] px-6 py-2.5 text-sm font-semibold transition-all duration-150 hover:border-[var(--color-gold)] hover:text-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-30"
+                disabled={saveDisabled}
+                onClick={onSaveDraft}
+                style={{ color: 'var(--color-text)' }}
+                type="button"
+              >
+                {saveLabel ?? 'Save Draft'}
+              </button>
+            ) : null}
+            {saveNotice ? (
+              <p
+                className="max-w-md text-center text-xs"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                {saveNotice}
+              </p>
+            ) : null}
+          </div>
           <button
             className="rounded-xl px-8 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
             disabled={!isValid}

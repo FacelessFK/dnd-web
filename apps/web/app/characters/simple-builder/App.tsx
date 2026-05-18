@@ -7,7 +7,10 @@ import type {
 } from '@dnd/protocol';
 
 import { useAuth } from '../../../lib/auth-context';
-import { getCharacterLibraryEntry } from '../../../lib/character-library-api';
+import {
+  getCharacterLibraryEntry,
+  updateCharacterLibraryEntry,
+} from '../../../lib/character-library-api';
 import { getPortraitImageSource } from '../../../lib/character-library-mappers';
 import { LanguageSwitcher } from '../../../lib/i18n';
 import { BACKGROUNDS } from './data/backgrounds';
@@ -20,6 +23,11 @@ import { CharacterDetailsStep } from './components/steps/CharacterDetailsStep';
 import { ClassStep } from './components/steps/ClassStep';
 import { RaceStep } from './components/steps/RaceStep';
 import { StepLayout } from './components/layout/StepLayout';
+import {
+  createSimpleBuilderLibraryEntry,
+  createSimpleBuilderSelections,
+  toCharacterLibraryEntryInput,
+} from './library-entry';
 import { useBuilderI18n } from './localization';
 import {
   CharacterStoreProvider,
@@ -176,8 +184,12 @@ function BuilderApp({
   characterId?: CharacterLibraryEntryId;
   mode?: 'edit' | 'new';
 }) {
-  const { currentStep, setStep } = useCharacterStore();
-  const { copy } = useBuilderI18n();
+  const store = useCharacterStore();
+  const { currentStep, setStep } = store;
+  const { copy, isFa } = useBuilderI18n();
+  const { user } = useAuth();
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [saveNotice, setSaveNotice] = useState('');
   const isValid = useStepValidity();
 
   const currentIndex = STEP_ORDER.indexOf(currentStep);
@@ -204,6 +216,43 @@ function BuilderApp({
     if (targetIndex < currentIndex) {
       setStep(step);
     }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!user || !characterId) {
+      setSaveNotice(
+        isFa
+          ? 'برای ذخیره تغییرات باید وارد حساب کاربری شوید.'
+          : 'Sign in before saving changes.',
+      );
+      return;
+    }
+
+    setSavingDraft(true);
+    setSaveNotice('');
+
+    const entry = createSimpleBuilderLibraryEntry(
+      store,
+      createSimpleBuilderSelections(store),
+      'dnd-2024-template',
+      user.id,
+    );
+    const result = await updateCharacterLibraryEntry(
+      user.id,
+      characterId,
+      toCharacterLibraryEntryInput(entry),
+    );
+
+    setSaveNotice(
+      result.ok
+        ? isFa
+          ? 'تغییرات ذخیره شد؛ کتابخانه همین پرتره را نمایش می‌دهد.'
+          : 'Changes saved; the library will show this portrait.'
+        : `${isFa ? 'ذخیره ناموفق بود' : 'Save failed'}: ${
+            result.error.message
+          }`,
+    );
+    setSavingDraft(false);
   };
 
   const renderStep = () => {
@@ -257,7 +306,7 @@ function BuilderApp({
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-4 py-6">
-          <CharacterSheet />
+          <CharacterSheet characterId={characterId} mode={mode} />
         </main>
       </div>
     );
@@ -272,6 +321,10 @@ function BuilderApp({
       onBack={handleBack}
       onNavigate={handleNavigate}
       onNext={handleNext}
+      onSaveDraft={mode === 'edit' ? () => void handleSaveDraft() : undefined}
+      saveDisabled={savingDraft}
+      saveLabel={isFa ? 'ذخیره تغییرات' : 'Save Changes'}
+      saveNotice={saveNotice}
     >
       {renderStep()}
     </StepLayout>

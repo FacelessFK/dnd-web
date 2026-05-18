@@ -1,20 +1,20 @@
 import { useState } from 'react';
-import type {
-  CharacterLibraryEntry,
-  CharacterLibraryEntryId,
-  CharacterLibraryEntryInput,
-} from '@dnd/protocol';
+import type { CharacterLibraryEntryId } from '@dnd/protocol';
 
 import { useAuth } from '../../../../../lib/auth-context';
 import {
   createCharacterLibraryEntry,
   updateCharacterLibraryEntry,
 } from '../../../../../lib/character-library-api';
-import { createUploadedPortraitReferenceFromDataUrl } from '../../../../../lib/character-library-mappers';
 import {
   downloadCharacterSheetPdf,
   type CharacterSheetTemplateId,
 } from '../../../../../lib/character-sheet-pdf';
+import {
+  createSimpleBuilderLibraryEntry,
+  createSimpleBuilderSelections,
+  toCharacterLibraryEntryInput,
+} from '../../library-entry';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import {
@@ -32,21 +32,12 @@ import {
   getSpellcastingSummary,
   getSpeed,
 } from '../../store/selectors';
-import type { AbilityName, CharacterState, SkillName } from '../../types';
+import type { AbilityName, SkillName } from '../../types';
 import { SheetSection } from './SheetSection';
 
 function fmtMod(mod: number): string {
   return mod >= 0 ? `+${mod}` : `${mod}`;
 }
-
-const abilityNameToKey = {
-  CHA: 'cha',
-  CON: 'con',
-  DEX: 'dex',
-  INT: 'int',
-  STR: 'str',
-  WIS: 'wis',
-} as const;
 
 export function CharacterSheet({
   characterId,
@@ -103,13 +94,6 @@ export function CharacterSheet({
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
   const spellcastingSummary = getSpellcastingSummary(store);
-  const selectedCantrips = spellcastingSummary?.selectedCantrips.length
-    ? spellcastingSummary.selectedCantrips
-    : (dndClass?.spellcasting?.cantrips ?? []);
-  const selectedPreparedSpells = spellcastingSummary?.selectedPreparedSpells
-    .length
-    ? spellcastingSummary.selectedPreparedSpells
-    : (dndClass?.spellcasting?.preparedSpells ?? []);
 
   const handleDownloadPdf = async (
     templateId: CharacterSheetTemplateId,
@@ -119,18 +103,9 @@ export function CharacterSheet({
 
     try {
       const result = await downloadCharacterSheetPdf(
-        createSheetLibraryEntry(
+        createSimpleBuilderLibraryEntry(
           store,
-          {
-            cantrips: selectedCantrips,
-            equipment,
-            proficientSkills: skills
-              .filter((item) => item.proficient)
-              .map((item) => item.skill),
-            spells: selectedPreparedSpells,
-            tools: otherProficiencies.tools,
-            languages: otherProficiencies.languages,
-          },
+          createSimpleBuilderSelections(store),
           templateId,
           user?.id ?? 'dev-player-001',
         ),
@@ -162,18 +137,9 @@ export function CharacterSheet({
     setSaving(true);
     setSaveNotice('');
 
-    const entry = createSheetLibraryEntry(
+    const entry = createSimpleBuilderLibraryEntry(
       store,
-      {
-        cantrips: selectedCantrips,
-        equipment,
-        proficientSkills: skills
-          .filter((item) => item.proficient)
-          .map((item) => item.skill),
-        spells: selectedPreparedSpells,
-        tools: otherProficiencies.tools,
-        languages: otherProficiencies.languages,
-      },
+      createSimpleBuilderSelections(store),
       'dnd-2024-template',
       user.id,
     );
@@ -609,99 +575,6 @@ export function CharacterSheet({
       </div>
     </div>
   );
-}
-
-function createSheetLibraryEntry(
-  state: CharacterState,
-  selections: {
-    cantrips: string[];
-    equipment: string[];
-    languages: string[];
-    proficientSkills: string[];
-    spells: string[];
-    tools: string[];
-  },
-  templateId: CharacterSheetTemplateId,
-  ownerParticipantId: string,
-): CharacterLibraryEntry {
-  const now = new Date().toISOString();
-  const abilities = Object.fromEntries(
-    (Object.keys(state.abilityScores) as AbilityName[]).map((ability) => [
-      abilityNameToKey[ability],
-      state.abilityScores[ability],
-    ]),
-  ) as CharacterLibraryEntry['abilities'];
-  const hitPoints = getHP(state);
-
-  return {
-    abilities,
-    abilityScoreMethod: 'point-buy',
-    armorClass: getAC(state),
-    background: state.background?.name ?? 'Soldier',
-    builderSelections: {
-      cantrips: selections.cantrips,
-      equipment: selections.equipment,
-      languages: selections.languages,
-      originFeatAbility: '',
-      originFeatCantrips: [],
-      originFeatSpell: '',
-      skills: selections.proficientSkills,
-      spells: selections.spells,
-      tools: selections.tools,
-    },
-    builderStep: 'review',
-    className: state.dndClass?.name ?? 'Fighter',
-    concept: state.backstory,
-    createdAt: now,
-    hp: {
-      current: hitPoints,
-      max: hitPoints,
-      temp: 0,
-    },
-    id: 'charlib_00000000-0000-4000-8000-000000000000',
-    level: 1,
-    name: state.name.trim() || 'Unnamed Hero',
-    notes: state.backstory,
-    ownerParticipantId,
-    portrait: state.portraitDataUrl
-      ? createUploadedPortraitReferenceFromDataUrl(state.portraitDataUrl, {
-          fileName: 'character-portrait.png',
-        })
-      : null,
-    pronouns: state.pronouns,
-    rulesProfileId:
-      templateId === 'dnd-2014-template'
-        ? 'dnd-2014-srd-5-1'
-        : 'dnd-2024-free-rules',
-    speciesOrRace: state.race?.name ?? 'Human',
-    speed: getSpeed(state),
-    status: 'draft',
-    updatedAt: now,
-  };
-}
-
-function toCharacterLibraryEntryInput(
-  entry: CharacterLibraryEntry,
-): CharacterLibraryEntryInput {
-  return {
-    abilities: entry.abilities,
-    abilityScoreMethod: entry.abilityScoreMethod,
-    armorClass: entry.armorClass,
-    background: entry.background,
-    builderSelections: entry.builderSelections,
-    builderStep: entry.builderStep,
-    className: entry.className,
-    concept: entry.concept,
-    hp: entry.hp,
-    level: entry.level,
-    name: entry.name,
-    notes: entry.notes,
-    portrait: entry.portrait,
-    pronouns: entry.pronouns,
-    rulesProfileId: entry.rulesProfileId,
-    speciesOrRace: entry.speciesOrRace,
-    speed: entry.speed,
-  };
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
