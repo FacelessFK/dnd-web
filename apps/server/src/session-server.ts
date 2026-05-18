@@ -17,6 +17,7 @@ import {
   characterLibraryCommandErrorSchema,
   characterLibraryCommandSchema,
   characterLibraryCommandSuccessSchema,
+  characterLibraryEntryIdSchema,
   clientCommandSchema,
   dmCommandErrorSchema,
   dmCommandSchema,
@@ -270,6 +271,21 @@ export async function handleRequest(
       characterLibrary,
       idempotency,
       auth,
+    );
+    return;
+  }
+
+  const portraitMatch = url.pathname.match(
+    /^\/api\/character-library\/portraits\/([^/]+)\/([^/]+)\/([^/]+)$/,
+  );
+
+  if (request.method === 'GET' && portraitMatch) {
+    await handleCharacterLibraryPortraitRequest(
+      request,
+      response,
+      characterLibrary,
+      auth,
+      portraitMatch,
     );
     return;
   }
@@ -997,6 +1013,46 @@ async function handleCharacterLibraryCommandRequest(
     }
 
     sendJson(response, 200, success, characterLibraryCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, characterLibraryCommandErrorSchema);
+  }
+}
+
+async function handleCharacterLibraryPortraitRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  characterLibrary: CharacterLibraryService,
+  auth: AuthService | undefined,
+  portraitMatch: RegExpMatchArray,
+): Promise<void> {
+  try {
+    const authenticatedUser = await requireAuthenticatedUser(request, auth);
+    const ownerUserId = decodeURIComponent(portraitMatch[1] ?? '');
+    const entryId = characterLibraryEntryIdSchema.parse(
+      decodeURIComponent(portraitMatch[2] ?? ''),
+    );
+    const fileName = decodeURIComponent(portraitMatch[3] ?? '');
+
+    if (ownerUserId !== authenticatedUser.id) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        'Character portrait does not exist for authenticated user.',
+      );
+    }
+
+    const portrait = await characterLibrary.readPortrait({
+      entryId,
+      fileName,
+      ownerUserId,
+    });
+
+    response.writeHead(200, {
+      ...getCorsHeaders(request),
+      'cache-control': 'private, max-age=31536000, immutable',
+      'content-length': portrait.data.byteLength,
+      'content-type': portrait.mimeType,
+    });
+    response.end(portrait.data);
   } catch (error) {
     handleRuntimeError(response, error, characterLibraryCommandErrorSchema);
   }

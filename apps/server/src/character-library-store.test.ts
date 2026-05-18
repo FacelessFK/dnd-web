@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import type {
@@ -21,6 +24,7 @@ import type {
 } from '@dnd/protocol';
 
 import { AuthService } from './auth-store.js';
+import { FileSystemCharacterPortraitStorage } from './character-portrait-storage.js';
 import {
   CharacterLibraryService,
   DbBackedCharacterLibraryRepository,
@@ -311,6 +315,115 @@ test('authenticated character library entries are owned by auth user id and isol
     await new Promise<void>((resolve, reject) =>
       app.server.close((error) => (error ? reject(error) : resolve())),
     );
+  }
+});
+
+test('authenticated character library uploads portraits to filesystem storage', async () => {
+  const authDatabase = new MemoryAuthUserDatabase();
+  const characterDatabase = new MemoryCharacterLibraryEntryDatabase();
+  const storageDirectory = await mkdtemp(
+    path.join(tmpdir(), 'dnd-character-portraits-'),
+  );
+  const app = createSessionServer(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new CharacterLibraryService(
+      new DbBackedCharacterLibraryRepository(characterDatabase),
+      new FileSystemCharacterPortraitStorage(storageDirectory),
+    ),
+    new AuthService(authDatabase),
+  );
+
+  await new Promise<void>((resolve) => app.server.listen(0, resolve));
+
+  try {
+    const baseUrl = getServerBaseUrl(app.server);
+    const firstUser = await registerUser(baseUrl, {
+      displayName: 'Portrait User',
+      email: 'portrait@example.test',
+      password: 'correct horse battery staple',
+    });
+    const secondUser = await registerUser(baseUrl, {
+      displayName: 'Portrait Snooper',
+      email: 'portrait-snooper@example.test',
+      password: 'correct horse battery staple',
+    });
+    const dataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+    const createResponse = await postCharacterLibraryCommand(
+      baseUrl,
+      {
+        actor: { participantId: firstUser.user.id },
+        commandId: 'auth-character-library-portrait-upload',
+        payload: {
+          entry: createEntryInput({
+            portrait: {
+              dataUrl,
+              fileName: 'uploaded.png',
+              kind: 'uploaded',
+              mimeType: 'image/png',
+              sizeBytes: 68,
+              uploadedAt: new Date(0).toISOString(),
+            },
+          }),
+          ownerParticipantId: firstUser.user.id,
+        },
+        type: 'create_character_library_entry',
+      },
+      firstUser.cookie,
+    );
+
+    assert.equal(createResponse.status, 200);
+    assert.equal(createResponse.body.ok, true);
+    assert.equal('entry' in createResponse.body.data, true);
+
+    if (!createResponse.body.ok || !('entry' in createResponse.body.data)) {
+      throw new Error('Expected stored portrait entry.');
+    }
+
+    const portrait = createResponse.body.data.entry.portrait;
+
+    assert.equal(portrait?.kind, 'uploaded');
+
+    if (!portrait || portrait.kind !== 'uploaded') {
+      throw new Error('Expected uploaded portrait reference.');
+    }
+
+    assert.equal(portrait.dataUrl, undefined);
+    assert.match(portrait.url ?? '', /^\/api\/character-library\/portraits\//);
+    assert.match(portrait.storageKey ?? '', /^usr_[^/]+\/charlib_[^/]+\//);
+
+    const storedFile = await readFile(
+      path.join(storageDirectory, portrait.storageKey ?? ''),
+    );
+
+    assert.equal(storedFile.byteLength, portrait.sizeBytes);
+
+    const imageResponse = await fetch(`${baseUrl}${portrait.url}`, {
+      headers: { cookie: firstUser.cookie },
+    });
+    const imageBytes = Buffer.from(await imageResponse.arrayBuffer());
+
+    assert.equal(imageResponse.status, 200);
+    assert.equal(imageResponse.headers.get('content-type'), 'image/png');
+    assert.equal(imageBytes.byteLength, portrait.sizeBytes);
+
+    const blockedImageResponse = await fetch(`${baseUrl}${portrait.url}`, {
+      headers: { cookie: secondUser.cookie },
+    });
+
+    assert.equal(blockedImageResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      app.server.close((error) => (error ? reject(error) : resolve())),
+    );
+    await rm(storageDirectory, { force: true, recursive: true });
   }
 });
 

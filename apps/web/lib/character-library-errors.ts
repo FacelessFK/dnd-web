@@ -3,12 +3,22 @@ import {
   uploadedPortraitSizeMaxBytes,
 } from '@dnd/protocol';
 
+import { portraitSourceImageMaxBytes } from './character-portrait-image';
+
 export function getPortraitLimitMessage(isFa: boolean): string {
   const limitMb = uploadedPortraitSizeMaxBytes / 1_000_000;
 
   return isFa
     ? `تصویر پرتره خیلی بزرگ است. لطفا تصویر را به حداکثر ${limitMb} مگابایت کاهش دهید یا تصویر کوچک‌تری انتخاب کنید.`
     : `The portrait image is too large. Please reduce it to ${limitMb} MB or choose a smaller image.`;
+}
+
+export function getPortraitSourceLimitMessage(isFa: boolean): string {
+  const limitMb = portraitSourceImageMaxBytes / 1_000_000;
+
+  return isFa
+    ? `تصویر انتخابی خیلی بزرگ است. لطفا فایل را به حداکثر ${limitMb} مگابایت کاهش دهید.`
+    : `The selected image is too large. Please choose an image up to ${limitMb} MB.`;
 }
 
 export function getUnsupportedPortraitTypeMessage(isFa: boolean): string {
@@ -21,7 +31,8 @@ export function getPortraitDataUrlValidationMessage(
   dataUrl: string,
   isFa: boolean,
 ): string | null {
-  return dataUrl.length > uploadedPortraitDataUrlMaxLength
+  return dataUrl.startsWith('data:') &&
+    dataUrl.length > uploadedPortraitDataUrlMaxLength
     ? getPortraitLimitMessage(isFa)
     : null;
 }
@@ -34,8 +45,8 @@ export function getPortraitFileValidationMessage(
     return getUnsupportedPortraitTypeMessage(isFa);
   }
 
-  return file.size > uploadedPortraitSizeMaxBytes
-    ? getPortraitLimitMessage(isFa)
+  return file.size > portraitSourceImageMaxBytes
+    ? getPortraitSourceLimitMessage(isFa)
     : null;
 }
 

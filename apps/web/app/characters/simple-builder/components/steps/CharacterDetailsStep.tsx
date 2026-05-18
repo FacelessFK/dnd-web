@@ -3,6 +3,7 @@ import {
   getPortraitDataUrlValidationMessage,
   getPortraitFileValidationMessage,
 } from '../../../../../lib/character-library-errors';
+import { compressPortraitFile } from '../../../../../lib/character-portrait-image';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import type { Alignment } from '../../types';
@@ -72,9 +73,10 @@ export function CharacterDetailsStep() {
   const { alignment: alignmentLabel, copy, isFa } = useBuilderI18n();
   const [dragging, setDragging] = useState(false);
   const [portraitError, setPortraitError] = useState('');
+  const [processingPortrait, setProcessingPortrait] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const readPortraitFile = (file: File | undefined) => {
+  const readPortraitFile = async (file: File | undefined) => {
     if (!file) {
       return;
     }
@@ -86,20 +88,33 @@ export function CharacterDetailsStep() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-      const dataUrlError = getPortraitDataUrlValidationMessage(dataUrl, isFa);
+    setProcessingPortrait(true);
+    setPortraitError('');
 
+    try {
+      const portrait = await compressPortraitFile(file);
+      const dataUrlError = getPortraitDataUrlValidationMessage(
+        portrait.dataUrl,
+        isFa,
+      );
+
+      setProcessingPortrait(false);
       if (dataUrlError) {
         setPortraitError(dataUrlError);
         return;
       }
 
-      setPortraitError('');
-      setPortraitDataUrl(dataUrl);
-    });
-    reader.readAsDataURL(file);
+      setPortraitDataUrl(portrait.dataUrl);
+    } catch (error) {
+      setProcessingPortrait(false);
+      setPortraitError(
+        error instanceof Error
+          ? error.message
+          : isFa
+            ? 'آماده‌سازی تصویر ناموفق بود.'
+            : 'Unable to prepare the image.',
+      );
+    }
   };
 
   return (
@@ -165,7 +180,10 @@ export function CharacterDetailsStep() {
               <input
                 accept="image/png,image/jpeg,image/webp"
                 className="hidden"
-                onChange={(event) => readPortraitFile(event.target.files?.[0])}
+                onChange={(event) => {
+                  void readPortraitFile(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }}
                 ref={fileInputRef}
                 type="file"
               />
@@ -178,7 +196,13 @@ export function CharacterDetailsStep() {
                 }}
                 type="button"
               >
-                {isFa ? 'انتخاب تصویر' : 'Upload Image'}
+                {processingPortrait
+                  ? isFa
+                    ? 'در حال کوچک‌سازی...'
+                    : 'Optimizing...'
+                  : isFa
+                    ? 'انتخاب تصویر'
+                    : 'Upload Image'}
               </button>
               {portraitDataUrl ? (
                 <button
@@ -203,8 +227,8 @@ export function CharacterDetailsStep() {
               >
                 {portraitError ||
                   (isFa
-                    ? 'فایل PNG، JPEG یا WebP تا حداکثر ۱ مگابایت را انتخاب کن.'
-                    : 'Choose a PNG, JPEG, or WebP image up to 1 MB.')}
+                    ? 'فایل PNG، JPEG یا WebP تا ۸ مگابایت را انتخاب کن؛ قبل از ذخیره کوچک می‌شود.'
+                    : 'Choose a PNG, JPEG, or WebP image up to 8 MB; it will be optimized before saving.')}
               </p>
             </div>
           </div>

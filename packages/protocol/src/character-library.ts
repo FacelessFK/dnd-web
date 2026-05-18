@@ -64,14 +64,25 @@ export const characterLibrarySelectionsSchema = z.object({
   tools: z.array(z.string().trim().min(1).max(128)).max(100),
 });
 
-export const uploadedPortraitReferenceSchema = z.object({
-  kind: z.literal('uploaded'),
-  dataUrl: z.string().trim().min(1).max(uploadedPortraitDataUrlMaxLength),
-  fileName: z.string().trim().min(1).max(180).nullable().optional(),
-  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  sizeBytes: z.number().int().min(1).max(uploadedPortraitSizeMaxBytes),
-  uploadedAt: z.string().datetime(),
-});
+export const uploadedPortraitReferenceSchema = z
+  .object({
+    kind: z.literal('uploaded'),
+    dataUrl: z
+      .string()
+      .trim()
+      .min(1)
+      .max(uploadedPortraitDataUrlMaxLength)
+      .optional(),
+    fileName: z.string().trim().min(1).max(180).nullable().optional(),
+    mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    sizeBytes: z.number().int().min(1).max(uploadedPortraitSizeMaxBytes),
+    storageKey: z.string().trim().min(1).max(320).optional(),
+    uploadedAt: z.string().datetime(),
+    url: z.string().trim().min(1).max(500).optional(),
+  })
+  .refine((portrait) => portrait.dataUrl || portrait.url, {
+    message: 'Uploaded portraits must include either a data URL or stored URL.',
+  });
 
 export const assetPortraitReferenceSchema = z.object({
   assetKey: z.string().trim().min(1).max(160),

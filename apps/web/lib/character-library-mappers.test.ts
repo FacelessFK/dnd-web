@@ -13,6 +13,7 @@ import {
 } from './character-library-api';
 import {
   formatCharacterLibrarySaveFailure,
+  getPortraitFileValidationMessage,
   getPortraitDataUrlValidationMessage,
 } from './character-library-errors';
 import {
@@ -180,6 +181,22 @@ describe('character library mappers', () => {
     assert.equal(getPortraitImageSource(portrait), portrait?.dataUrl);
   });
 
+  it('uses stored uploaded portrait URLs after server-side storage', () => {
+    assert.equal(
+      getPortraitImageSource({
+        fileName: 'stored.webp',
+        kind: 'uploaded',
+        mimeType: 'image/webp',
+        sizeBytes: 512,
+        storageKey:
+          'usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
+        uploadedAt: new Date(0).toISOString(),
+        url: '/api/character-library/portraits/usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
+      }),
+      '/api/character-library/portraits/usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
+    );
+  });
+
   it('rejects unsupported uploaded portrait data URLs before persistence', () => {
     assert.equal(
       createUploadedPortraitReferenceFromDataUrl(
@@ -203,6 +220,26 @@ describe('character library mappers', () => {
         false,
       ),
       /portrait image is too large/i,
+    );
+    assert.equal(
+      getPortraitFileValidationMessage(
+        {
+          size: 7_000_000,
+          type: 'image/png',
+        },
+        false,
+      ),
+      null,
+    );
+    assert.match(
+      getPortraitFileValidationMessage(
+        {
+          size: 8_000_001,
+          type: 'image/png',
+        },
+        false,
+      ) ?? '',
+      /selected image is too large/i,
     );
   });
 

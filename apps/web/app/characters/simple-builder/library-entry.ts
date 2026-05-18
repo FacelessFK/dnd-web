@@ -1,6 +1,7 @@
 import type {
   CharacterLibraryEntry,
   CharacterLibraryEntryInput,
+  CharacterLibraryPortraitReference,
 } from '@dnd/protocol';
 
 import { createUploadedPortraitReferenceFromDataUrl } from '../../../lib/character-library-mappers';
@@ -36,6 +37,51 @@ const abilityNameToKey = {
   STR: 'str',
   WIS: 'wis',
 } as const;
+
+function getPortraitFileName(dataUrl: string): string {
+  if (dataUrl.startsWith('data:image/webp;')) {
+    return 'character-portrait.webp';
+  }
+
+  if (dataUrl.startsWith('data:image/jpeg;')) {
+    return 'character-portrait.jpg';
+  }
+
+  return 'character-portrait.png';
+}
+
+function createUploadedPortraitReferenceFromSource(
+  source: string,
+): CharacterLibraryPortraitReference | null {
+  if (source.startsWith('data:')) {
+    return createUploadedPortraitReferenceFromDataUrl(source, {
+      fileName: getPortraitFileName(source),
+    });
+  }
+
+  if (
+    source.startsWith('/api/character-library/portraits/') ||
+    /^https?:\/\/[^/]+\/api\/character-library\/portraits\//.test(source)
+  ) {
+    const mimeType =
+      source.endsWith('.jpg') || source.endsWith('.jpeg')
+        ? 'image/jpeg'
+        : source.endsWith('.png')
+          ? 'image/png'
+          : 'image/webp';
+
+    return {
+      fileName: source.split('/').pop() ?? 'character-portrait.webp',
+      kind: 'uploaded',
+      mimeType,
+      sizeBytes: 1,
+      uploadedAt: new Date().toISOString(),
+      url: source,
+    };
+  }
+
+  return null;
+}
 
 export function createSimpleBuilderSelections(
   state: CharacterState,
@@ -105,9 +151,7 @@ export function createSimpleBuilderLibraryEntry(
     notes: state.backstory,
     ownerParticipantId,
     portrait: state.portraitDataUrl
-      ? createUploadedPortraitReferenceFromDataUrl(state.portraitDataUrl, {
-          fileName: 'character-portrait.png',
-        })
+      ? createUploadedPortraitReferenceFromSource(state.portraitDataUrl)
       : null,
     pronouns: state.pronouns,
     rulesProfileId:

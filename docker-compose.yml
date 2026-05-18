@@ -44,12 +44,15 @@ services:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgres://dnd_web:dnd_web_password@db:5432/dnd_web
+      CHARACTER_PORTRAIT_STORAGE_DIR: /app/data/character-portraits
       SERVER_HOST: 0.0.0.0
       SERVER_PERSISTENCE_MODE: db
       SERVER_PORT: 2567
     ports:
       - '2567:2567'
     restart: unless-stopped
+    volumes:
+      - character-portrait-uploads:/app/data/character-portraits
 
   web:
     build:
@@ -68,4 +71,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  character-portrait-uploads:
   postgres-data:

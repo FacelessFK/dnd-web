@@ -22,6 +22,7 @@ import {
 } from '@dnd/db';
 
 import { AuthService } from './auth-store.js';
+import { FileSystemCharacterPortraitStorage } from './character-portrait-storage.js';
 import {
   CommandEventOutboxDispatcher,
   type CommandEventOutboxDispatcherLike,
@@ -182,6 +183,7 @@ export async function createBootstrappedSessionServer(
     );
     const characterLibrary = new CharacterLibraryService(
       new DbBackedCharacterLibraryRepository(characterLibraryEntries),
+      FileSystemCharacterPortraitStorage.fromEnv(env),
     );
     const auth = new AuthService(authUsers);
     const commandEventOutboxDispatcher =

@@ -1,16 +1,22 @@
 import { randomUUID } from 'node:crypto';
 
 import type { CharacterLibraryEntryDatabase } from '@dnd/db';
-import type {
-  CharacterLibraryCommand,
-  CharacterLibraryEntry,
-  CharacterLibraryEntryInput,
-  CharacterLibraryEntryId,
-  CharacterLibraryPortraitReference,
-  RuntimeErrorCode,
+import {
+  uploadedPortraitSizeMaxBytes,
+  type CharacterLibraryCommand,
+  type CharacterLibraryEntry,
+  type CharacterLibraryEntryInput,
+  type CharacterLibraryEntryId,
+  type CharacterLibraryPortraitReference,
+  type RuntimeErrorCode,
 } from '@dnd/protocol';
 
-const MAX_PORTRAIT_BYTES = 1_000_000;
+import {
+  type CharacterPortraitStorage,
+  validateStoredPortraitReference,
+} from './character-portrait-storage.js';
+
+const MAX_PORTRAIT_BYTES = uploadedPortraitSizeMaxBytes;
 const ALLOWED_PORTRAIT_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -284,50 +290,53 @@ export class DbBackedCharacterLibraryRepository implements CharacterLibraryRepos
 export class CharacterLibraryService {
   constructor(
     private readonly repository: CharacterLibraryRepository = new InMemoryCharacterLibraryRepository(),
+    private readonly portraitStorage?: CharacterPortraitStorage,
   ) {}
 
-  createEntry(
+  async createEntry(
     command: Extract<
       CharacterLibraryCommand,
       { type: 'create_character_library_entry' }
     >,
     ownerUserId?: string,
-  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
+  ): Promise<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
     this.validateEntryInput(command.payload.entry);
 
     const now = this.now();
-    const entry: CharacterLibraryEntry = {
-      ...this.clone(command.payload.entry),
-      createdAt: now,
-      id: this.createEntryId(),
-      ownerParticipantId: command.payload.ownerParticipantId,
+    const entry = await this.materializePortrait(
+      {
+        ...this.clone(command.payload.entry),
+        createdAt: now,
+        id: this.createEntryId(),
+        ownerParticipantId: command.payload.ownerParticipantId,
+        ownerUserId,
+        status: 'draft',
+        updatedAt: now,
+      },
       ownerUserId,
-      status: 'draft',
-      updatedAt: now,
-    };
+    );
 
     return this.repository.createEntry(entry);
   }
 
-  updateEntry(
+  async updateEntry(
     command: Extract<
       CharacterLibraryCommand,
       { type: 'update_character_library_entry' }
     >,
     ownerUserId?: string,
-  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
+  ): Promise<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
     this.validateEntryInput(command.payload.entry);
-    const existingResult = ownerUserId
-      ? this.repository.getEntryByUser({
+    const existing = ownerUserId
+      ? await this.repository.getEntryByUser({
           entryId: command.payload.entryId,
           ownerUserId,
         })
-      : this.repository.getEntry(command.payload);
-
-    return this.resolveRepositoryResult(existingResult, (existing) => {
-      const updatedEntry: CharacterLibraryEntry = {
+      : await this.repository.getEntry(command.payload);
+    const updatedEntry = await this.materializePortrait(
+      {
         ...this.clone(command.payload.entry),
         createdAt: existing.createdAt,
         id: existing.id,
@@ -335,93 +344,195 @@ export class CharacterLibraryService {
         ownerUserId: existing.ownerUserId,
         status: existing.status,
         updatedAt: this.now(),
-      };
+      },
+      ownerUserId,
+    );
 
-      return ownerUserId
-        ? this.repository.updateEntryByUser({
-            ...updatedEntry,
-            ownerUserId,
-          })
-        : this.repository.updateEntry(updatedEntry);
-    });
+    return ownerUserId
+      ? this.repository.updateEntryByUser({
+          ...updatedEntry,
+          ownerUserId,
+        })
+      : this.repository.updateEntry(updatedEntry);
   }
 
-  finalizeEntry(
+  async finalizeEntry(
     command: Extract<
       CharacterLibraryCommand,
       { type: 'finalize_character_library_entry' }
     >,
     ownerUserId?: string,
-  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
+  ): Promise<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
-    const existingResult = ownerUserId
-      ? this.repository.getEntryByUser({
+    const existing = ownerUserId
+      ? await this.repository.getEntryByUser({
           entryId: command.payload.entryId,
           ownerUserId,
         })
-      : this.repository.getEntry(command.payload);
+      : await this.repository.getEntry(command.payload);
 
-    return this.resolveRepositoryResult(existingResult, (existing) => {
-      if (existing.status === 'finalized') {
-        throw new CharacterLibraryStoreError(
-          'invalid_character_library_entry',
-          `Character library entry "${existing.id}" is already finalized.`,
-        );
-      }
+    if (existing.status === 'finalized') {
+      throw new CharacterLibraryStoreError(
+        'invalid_character_library_entry',
+        `Character library entry "${existing.id}" is already finalized.`,
+      );
+    }
 
-      this.validateEntryInput(existing);
+    this.validateEntryInput(existing);
 
-      const finalizedEntry: CharacterLibraryEntry = {
+    const finalizedEntry = await this.materializePortrait(
+      {
         ...existing,
         builderStep: 'review',
         status: 'finalized',
         updatedAt: this.now(),
-      };
+      },
+      ownerUserId,
+    );
 
-      return ownerUserId
-        ? this.repository.updateEntryByUser({
-            ...finalizedEntry,
-            ownerUserId,
-          })
-        : this.repository.updateEntry(finalizedEntry);
-    });
+    return ownerUserId
+      ? this.repository.updateEntryByUser({
+          ...finalizedEntry,
+          ownerUserId,
+        })
+      : this.repository.updateEntry(finalizedEntry);
   }
 
-  getEntry(
+  async getEntry(
     command: Extract<
       CharacterLibraryCommand,
       { type: 'get_character_library_entry' }
     >,
     ownerUserId?: string,
-  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry> {
+  ): Promise<CharacterLibraryEntry> {
     this.assertOwnerActor(command);
 
-    return ownerUserId
-      ? this.repository.getEntryByUser({
+    const entry = ownerUserId
+      ? await this.repository.getEntryByUser({
           entryId: command.payload.entryId,
           ownerUserId,
         })
-      : this.repository.getEntry(command.payload);
+      : await this.repository.getEntry(command.payload);
+
+    return this.materializeAndPersistExistingPortrait(entry, ownerUserId);
   }
 
-  listEntries(
+  async listEntries(
     command: Extract<
       CharacterLibraryCommand,
       { type: 'list_character_library_entries' }
     >,
     ownerUserId?: string,
-  ): CharacterLibraryRepositoryResult<CharacterLibraryEntry[]> {
+  ): Promise<CharacterLibraryEntry[]> {
     this.assertOwnerActor(command);
 
-    return ownerUserId
-      ? this.repository.listEntriesByUser(ownerUserId)
-      : this.repository.listEntries(command.payload.ownerParticipantId);
+    const entries = ownerUserId
+      ? await this.repository.listEntriesByUser(ownerUserId)
+      : await this.repository.listEntries(command.payload.ownerParticipantId);
+
+    return Promise.all(
+      entries.map((entry) =>
+        this.materializeAndPersistExistingPortrait(entry, ownerUserId),
+      ),
+    );
   }
 
   withRepository(
     repository: CharacterLibraryRepository,
   ): CharacterLibraryService {
-    return new CharacterLibraryService(repository);
+    return new CharacterLibraryService(repository, this.portraitStorage);
+  }
+
+  async readPortrait(params: {
+    entryId: CharacterLibraryEntryId;
+    fileName: string;
+    ownerUserId: string;
+  }) {
+    if (!this.portraitStorage) {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        'Character portrait storage is not configured.',
+      );
+    }
+
+    await this.repository.getEntryByUser({
+      entryId: params.entryId,
+      ownerUserId: params.ownerUserId,
+    });
+
+    try {
+      return await this.portraitStorage.read(params);
+    } catch {
+      throw new CharacterLibraryStoreError(
+        'character_library_entry_not_found',
+        'Character portrait file was not found.',
+      );
+    }
+  }
+
+  private async materializeAndPersistExistingPortrait(
+    entry: CharacterLibraryEntry,
+    ownerUserId?: string,
+  ): Promise<CharacterLibraryEntry> {
+    const materialized = await this.materializePortrait(entry, ownerUserId);
+
+    if (materialized === entry || !materialized.portrait?.kind) {
+      return entry;
+    }
+
+    if (ownerUserId) {
+      return this.repository.updateEntryByUser({
+        ...materialized,
+        ownerUserId,
+      });
+    }
+
+    return materialized.ownerParticipantId
+      ? this.repository.updateEntry(materialized)
+      : materialized;
+  }
+
+  private async materializePortrait(
+    entry: CharacterLibraryEntry,
+    ownerUserId?: string,
+  ): Promise<CharacterLibraryEntry> {
+    const portrait = entry.portrait ?? null;
+
+    if (!portrait || portrait.kind === 'asset') {
+      return entry;
+    }
+
+    if (!this.portraitStorage || !ownerUserId) {
+      return entry;
+    }
+
+    try {
+      if (!portrait.dataUrl) {
+        validateStoredPortraitReference({
+          entryId: entry.id,
+          ownerUserId,
+          portrait,
+        });
+
+        return entry;
+      }
+
+      return {
+        ...entry,
+        portrait: await this.portraitStorage.store({
+          entryId: entry.id,
+          ownerUserId,
+          portrait,
+        }),
+      };
+    } catch (error) {
+      throw new CharacterLibraryStoreError(
+        'invalid_character_library_entry',
+        error instanceof Error
+          ? error.message
+          : 'Unable to store character portrait.',
+      );
+    }
   }
 
   private validateEntryInput(entry: CharacterLibraryEntryInput): void {
@@ -454,6 +565,10 @@ export class CharacterLibraryService {
         'invalid_character_library_entry',
         'Portrait upload is larger than the 1 MB MVP limit.',
       );
+    }
+
+    if (!portrait.dataUrl) {
+      return;
     }
 
     const expectedPrefix = `data:${portrait.mimeType};base64,`;

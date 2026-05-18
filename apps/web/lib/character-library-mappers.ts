@@ -54,7 +54,7 @@ export function getPortraitImageSource(
   }
 
   if (portrait.kind === 'uploaded') {
-    return portrait.dataUrl;
+    return portrait.url ?? portrait.dataUrl ?? null;
   }
 
   const assetKey = asKnownPortraitAssetKey(portrait.assetKey);
