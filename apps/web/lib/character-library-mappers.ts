@@ -18,10 +18,7 @@ import {
   deriveCharacterBuilderSummary,
   normalizeCharacterBuilderDraft,
 } from './character-builder-helpers';
-import {
-  deriveRuleDerivedPreview,
-  getRuleSpeciesById,
-} from './character-builder-rules-helpers';
+import { deriveRuleDerivedPreview } from './character-builder-rules-helpers';
 
 export const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
 
@@ -35,26 +32,18 @@ function asKnownAssetKey(value: string): CharacterBuilderAssetKey | undefined {
     : undefined;
 }
 
-export function getSpeciesFallbackAssetKey(
-  speciesOrRace: string,
-  rulesProfileId: string,
+function asKnownPortraitAssetKey(
+  value: string,
 ): CharacterBuilderAssetKey | undefined {
-  return getRuleSpeciesById(speciesOrRace, rulesProfileId)?.assetKey;
+  const assetKey = asKnownAssetKey(value);
+
+  return assetKey?.startsWith('portrait.') ? assetKey : undefined;
 }
 
 export function getDraftPortraitReference(
   draft: CharacterBuilderDraft,
 ): CharacterLibraryPortraitReference | null {
-  if (draft.portrait) {
-    return draft.portrait;
-  }
-
-  const assetKey = getSpeciesFallbackAssetKey(
-    draft.speciesOrRace,
-    draft.rulesProfileId,
-  );
-
-  return assetKey ? { assetKey, kind: 'asset' } : null;
+  return draft.portrait ?? null;
 }
 
 export function getPortraitImageSource(
@@ -68,7 +57,7 @@ export function getPortraitImageSource(
     return portrait.dataUrl;
   }
 
-  const assetKey = asKnownAssetKey(portrait.assetKey);
+  const assetKey = asKnownPortraitAssetKey(portrait.assetKey);
 
   return assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
 }
@@ -115,7 +104,7 @@ export function getPortraitAssetKey(
   portrait: CharacterLibraryPortraitReference | null | undefined,
 ): CharacterBuilderAssetKey | undefined {
   return portrait?.kind === 'asset'
-    ? asKnownAssetKey(portrait.assetKey)
+    ? asKnownPortraitAssetKey(portrait.assetKey)
     : undefined;
 }
 
@@ -182,12 +171,7 @@ export function characterLibraryEntryToCard(
 ): CharacterBuilderLibraryEntry {
   const draft = characterLibraryEntryToDraft(entry);
   const summary = deriveCharacterBuilderSummary(draft);
-  const portrait =
-    entry.portrait ??
-    getDraftPortraitReference({
-      ...draft,
-      portrait: null,
-    });
+  const portrait = entry.portrait ?? null;
 
   return {
     armorClass: summary.armorClass,

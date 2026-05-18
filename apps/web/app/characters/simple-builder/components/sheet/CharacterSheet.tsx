@@ -7,6 +7,10 @@ import {
   updateCharacterLibraryEntry,
 } from '../../../../../lib/character-library-api';
 import {
+  formatCharacterLibrarySaveFailure,
+  getPortraitDataUrlValidationMessage,
+} from '../../../../../lib/character-library-errors';
+import {
   downloadCharacterSheetPdf,
   type CharacterSheetTemplateId,
 } from '../../../../../lib/character-sheet-pdf';
@@ -134,6 +138,16 @@ export function CharacterSheet({
       return;
     }
 
+    const portraitError = getPortraitDataUrlValidationMessage(
+      portraitDataUrl,
+      isFa,
+    );
+
+    if (portraitError) {
+      setSaveNotice(portraitError);
+      return;
+    }
+
     setSaving(true);
     setSaveNotice('');
 
@@ -156,7 +170,12 @@ export function CharacterSheet({
           : 'کاراکتر در کتابخانه حساب شما ذخیره شد.',
       );
     } else {
-      setSaveNotice(`ذخیره ناموفق بود: ${result.error.message}`);
+      setSaveNotice(
+        `ذخیره ناموفق بود: ${formatCharacterLibrarySaveFailure(
+          result.error.message,
+          isFa,
+        )}`,
+      );
     }
 
     setSaving(false);

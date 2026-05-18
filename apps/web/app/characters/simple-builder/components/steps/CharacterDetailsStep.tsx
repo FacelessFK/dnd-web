@@ -1,4 +1,8 @@
 import { useRef, useState } from 'react';
+import {
+  getPortraitDataUrlValidationMessage,
+  getPortraitFileValidationMessage,
+} from '../../../../../lib/character-library-errors';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import type { Alignment } from '../../types';
@@ -67,21 +71,33 @@ export function CharacterDetailsStep() {
   } = useCharacterStore();
   const { alignment: alignmentLabel, copy, isFa } = useBuilderI18n();
   const [dragging, setDragging] = useState(false);
+  const [portraitError, setPortraitError] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const readPortraitFile = (file: File | undefined) => {
-    if (
-      !file ||
-      !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
-    ) {
+    if (!file) {
+      return;
+    }
+
+    const fileError = getPortraitFileValidationMessage(file, isFa);
+
+    if (fileError) {
+      setPortraitError(fileError);
       return;
     }
 
     const reader = new FileReader();
     reader.addEventListener('load', () => {
-      setPortraitDataUrl(
-        typeof reader.result === 'string' ? reader.result : '',
-      );
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      const dataUrlError = getPortraitDataUrlValidationMessage(dataUrl, isFa);
+
+      if (dataUrlError) {
+        setPortraitError(dataUrlError);
+        return;
+      }
+
+      setPortraitError('');
+      setPortraitDataUrl(dataUrl);
     });
     reader.readAsDataURL(file);
   };
@@ -167,7 +183,10 @@ export function CharacterDetailsStep() {
               {portraitDataUrl ? (
                 <button
                   className="w-fit text-xs"
-                  onClick={() => setPortraitDataUrl('')}
+                  onClick={() => {
+                    setPortraitError('');
+                    setPortraitDataUrl('');
+                  }}
                   style={{ color: 'var(--color-text-muted)' }}
                   type="button"
                 >
@@ -176,11 +195,16 @@ export function CharacterDetailsStep() {
               ) : null}
               <p
                 className="text-xs"
-                style={{ color: 'var(--color-text-muted)' }}
+                style={{
+                  color: portraitError
+                    ? 'var(--color-error)'
+                    : 'var(--color-text-muted)',
+                }}
               >
-                {isFa
-                  ? 'فایل PNG، JPEG یا WebP را بکش و رها کن یا از دستگاه انتخاب کن.'
-                  : 'Drop a PNG, JPEG, or WebP image here or choose one from your device.'}
+                {portraitError ||
+                  (isFa
+                    ? 'فایل PNG، JPEG یا WebP تا حداکثر ۱ مگابایت را انتخاب کن.'
+                    : 'Choose a PNG, JPEG, or WebP image up to 1 MB.')}
               </p>
             </div>
           </div>

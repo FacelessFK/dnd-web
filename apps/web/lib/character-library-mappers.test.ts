@@ -12,6 +12,10 @@ import {
   listCharacterLibraryEntries,
 } from './character-library-api';
 import {
+  formatCharacterLibrarySaveFailure,
+  getPortraitDataUrlValidationMessage,
+} from './character-library-errors';
+import {
   characterLibraryEntryToCard,
   characterLibraryEntryToDraft,
   createUploadedPortraitReferenceFromDataUrl,
@@ -91,17 +95,14 @@ async function createBlankTemplate(): Promise<Uint8Array> {
 }
 
 describe('character library mappers', () => {
-  it('stores species fallback portrait metadata when no upload is present', () => {
+  it('does not store species fallback portrait metadata when no portrait is present', () => {
     const draft = createDefaultCharacterBuilderDraft({
       portrait: null,
       speciesOrRace: 'Human',
     });
     const input = draftToCharacterLibraryEntryInput(draft);
 
-    assert.deepEqual(input.portrait, {
-      assetKey: 'species.human',
-      kind: 'asset',
-    });
+    assert.equal(input.portrait, null);
   });
 
   it('maps persisted entries back to builder drafts and library cards', () => {
@@ -113,10 +114,50 @@ describe('character library mappers', () => {
     assert.equal(draft.ownerParticipantId, 'dev-player-001');
     assert.equal(card.name, 'Persisted Test Hero');
     assert.equal(card.status, 'draft');
-    assert.equal(
-      getPortraitImageSource(card.portrait),
-      '/assets/character-builder/species/human.webp',
+    assert.equal(card.portrait, null);
+    assert.equal(card.portraitAssetKey, undefined);
+    assert.equal(getPortraitImageSource(card.portrait), null);
+  });
+
+  it('shows only explicit uploaded or portrait asset images on library cards', () => {
+    const uploadedPortrait = createUploadedPortraitReferenceFromDataUrl(
+      'data:image/png;base64,aGVybw==',
     );
+    if (uploadedPortrait?.kind !== 'uploaded') {
+      throw new Error('Expected uploaded portrait fixture');
+    }
+    const uploadedCard = characterLibraryEntryToCard(
+      createEntry({
+        portrait: uploadedPortrait,
+      }),
+    );
+    const portraitAssetCard = characterLibraryEntryToCard(
+      createEntry({
+        portrait: {
+          assetKey: 'portrait.elara',
+          kind: 'asset',
+        },
+      }),
+    );
+    const speciesAssetCard = characterLibraryEntryToCard(
+      createEntry({
+        portrait: {
+          assetKey: 'species.human',
+          kind: 'asset',
+        },
+      }),
+    );
+
+    assert.equal(
+      getPortraitImageSource(uploadedCard.portrait),
+      uploadedPortrait.dataUrl,
+    );
+    assert.equal(
+      getPortraitImageSource(portraitAssetCard.portrait),
+      '/assets/character-builder/portraits/elara-nightbloom.webp',
+    );
+    assert.equal(speciesAssetCard.portraitAssetKey, undefined);
+    assert.equal(getPortraitImageSource(speciesAssetCard.portrait), null);
   });
 
   it('normalizes uploaded portrait data URLs for persisted library entries', () => {
@@ -145,6 +186,23 @@ describe('character library mappers', () => {
         'data:image/gif;base64,R0lGODlhAQABAIA=',
       ),
       null,
+    );
+  });
+
+  it('explains oversized uploaded portrait validation errors', () => {
+    assert.match(
+      getPortraitDataUrlValidationMessage(
+        `data:image/png;base64,${'a'.repeat(1_500_001)}`,
+        false,
+      ) ?? '',
+      /portrait image is too large/i,
+    );
+    assert.match(
+      formatCharacterLibrarySaveFailure(
+        'String must contain at most 1500000 character(s)',
+        false,
+      ),
+      /portrait image is too large/i,
     );
   });
 

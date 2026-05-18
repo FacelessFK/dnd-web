@@ -11,6 +11,10 @@ import {
   getCharacterLibraryEntry,
   updateCharacterLibraryEntry,
 } from '../../../lib/character-library-api';
+import {
+  formatCharacterLibrarySaveFailure,
+  getPortraitDataUrlValidationMessage,
+} from '../../../lib/character-library-errors';
 import { getPortraitImageSource } from '../../../lib/character-library-mappers';
 import { LanguageSwitcher } from '../../../lib/i18n';
 import { BACKGROUNDS } from './data/backgrounds';
@@ -228,6 +232,16 @@ function BuilderApp({
       return;
     }
 
+    const portraitError = getPortraitDataUrlValidationMessage(
+      store.portraitDataUrl,
+      isFa,
+    );
+
+    if (portraitError) {
+      setSaveNotice(portraitError);
+      return;
+    }
+
     setSavingDraft(true);
     setSaveNotice('');
 
@@ -248,9 +262,10 @@ function BuilderApp({
         ? isFa
           ? 'تغییرات ذخیره شد؛ کتابخانه همین پرتره را نمایش می‌دهد.'
           : 'Changes saved; the library will show this portrait.'
-        : `${isFa ? 'ذخیره ناموفق بود' : 'Save failed'}: ${
-            result.error.message
-          }`,
+        : `${isFa ? 'ذخیره ناموفق بود' : 'Save failed'}: ${formatCharacterLibrarySaveFailure(
+            result.error.message,
+            isFa,
+          )}`,
     );
     setSavingDraft(false);
   };

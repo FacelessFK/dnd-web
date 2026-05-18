@@ -219,9 +219,9 @@ function PlaceholderArt({
 
   return (
     <div
-      aria-label={`${label} ${shouldShowImage ? 'تصویر' : 'تصویر جایگزین'}`}
+      aria-label={`${label} ${shouldShowImage ? 'تصویر' : 'بدون تصویر'}`}
       className={[
-        'relative grid overflow-hidden rounded-2xl border border-amber-400/35 bg-[radial-gradient(circle_at_28%_18%,rgba(168,85,247,0.55),transparent_24%),radial-gradient(circle_at_72%_80%,rgba(217,119,6,0.38),transparent_30%),linear-gradient(135deg,#1b1225,#101827_55%,#21140c)] shadow-inner shadow-black/45',
+        'relative grid overflow-hidden rounded-2xl border border-slate-600/70 bg-slate-950 shadow-inner shadow-black/45',
         size === 'avatar'
           ? 'mx-auto aspect-[4/5] w-full max-w-sm rounded-3xl'
           : '',
@@ -256,12 +256,11 @@ function PlaceholderArt({
         />
       ) : (
         <>
-          <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_46%,rgba(251,191,36,0.12)_48%,transparent_50%)]" />
-          <span className="m-auto rounded-full border border-amber-200/35 bg-black/35 px-4 py-2 text-xl font-black tracking-[0.18em] text-amber-100">
+          <span className="m-auto rounded-full border border-slate-500/55 bg-slate-900 px-4 py-2 text-xl font-black tracking-[0.18em] text-slate-200">
             {initials || 'CB'}
           </span>
-          <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-black/45 px-2 py-1 text-center text-[0.65rem] uppercase tracking-[0.18em] text-amber-100/70">
-            تصویر جایگزین
+          <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-black/35 px-2 py-1 text-center text-[0.65rem] uppercase tracking-[0.18em] text-slate-400">
+            بدون تصویر
           </span>
         </>
       )}

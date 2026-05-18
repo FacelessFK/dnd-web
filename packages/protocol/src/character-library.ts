@@ -41,6 +41,9 @@ export const characterAbilityScoreMethodSchema = z.enum([
   'standard-array',
 ]);
 
+export const uploadedPortraitDataUrlMaxLength = 1_500_000;
+export const uploadedPortraitSizeMaxBytes = 1_000_000;
+
 export const characterLibrarySelectionsSchema = z.object({
   cantrips: z.array(z.string().trim().min(1).max(128)).max(100),
   equipment: z.array(z.string().trim().min(1).max(128)).max(100),
@@ -63,10 +66,10 @@ export const characterLibrarySelectionsSchema = z.object({
 
 export const uploadedPortraitReferenceSchema = z.object({
   kind: z.literal('uploaded'),
-  dataUrl: z.string().trim().min(1).max(1_500_000),
+  dataUrl: z.string().trim().min(1).max(uploadedPortraitDataUrlMaxLength),
   fileName: z.string().trim().min(1).max(180).nullable().optional(),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  sizeBytes: z.number().int().min(1).max(1_000_000),
+  sizeBytes: z.number().int().min(1).max(uploadedPortraitSizeMaxBytes),
   uploadedAt: z.string().datetime(),
 });
 
