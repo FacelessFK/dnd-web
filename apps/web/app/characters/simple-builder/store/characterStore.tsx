@@ -29,6 +29,7 @@ const DEFAULT_ABILITY_SCORES: Record<AbilityName, number> = {
 interface CharacterStore extends CharacterState {
   setRace: (race: Race | null) => void;
   setSubrace: (subrace: Subrace | null) => void;
+  setRaceAbilityChoices: (abilities: AbilityName[]) => void;
   setRaceLanguageChoices: (languages: string[]) => void;
   setRaceSkillChoices: (skills: SkillName[]) => void;
   setClass: (dndClass: DnDClass | null) => void;
@@ -54,6 +55,7 @@ interface CharacterStore extends CharacterState {
 const DEFAULT_CHARACTER_STATE: CharacterState = {
   race: null,
   subrace: null,
+  raceAbilityChoices: [],
   raceLanguageChoices: [],
   raceSkillChoices: [],
   dndClass: null,
@@ -98,6 +100,7 @@ export function CharacterStoreProvider({
         setState((current) => ({
           ...current,
           race,
+          raceAbilityChoices: [],
           raceLanguageChoices: [],
           raceSkillChoices: [],
           subrace: null,
@@ -108,6 +111,8 @@ export function CharacterStoreProvider({
           raceLanguageChoices: [],
           subrace,
         })),
+      setRaceAbilityChoices: (raceAbilityChoices) =>
+        setState((current) => ({ ...current, raceAbilityChoices })),
       setRaceLanguageChoices: (raceLanguageChoices) =>
         setState((current) => ({ ...current, raceLanguageChoices })),
       setRaceSkillChoices: (raceSkillChoices) =>

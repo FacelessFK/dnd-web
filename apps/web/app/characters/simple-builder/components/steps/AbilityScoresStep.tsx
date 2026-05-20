@@ -5,6 +5,7 @@ import {
   getCostToIncrease,
   getFinalAbilityScores,
   getPointsRemaining,
+  getRaceAbilityBonusForAbility,
 } from '../../store/selectors';
 import type { AbilityName } from '../../types';
 
@@ -21,11 +22,8 @@ export function AbilityScoresStep() {
   const finals = getFinalAbilityScores(store);
   const pointsLeft = getPointsRemaining(abilityScores);
 
-  const raceAsi = store.race?.asi ?? {};
-  const subraceAsi = store.subrace?.asi ?? {};
-
   const racialBonus = (name: AbilityName): number =>
-    (raceAsi[name] ?? 0) + (subraceAsi[name] ?? 0);
+    getRaceAbilityBonusForAbility(store, name);
 
   const canIncrease = (name: AbilityName): boolean => {
     const score = abilityScores[name];

@@ -4,8 +4,10 @@ import { RACES } from '../../data/races';
 import { useBuilderI18n } from '../../localization';
 import { useCharacterStore } from '../../store/characterStore';
 import {
+  getAvailableRaceAbilityChoices,
   getAvailableLanguageChoices,
   getAvailableRaceSkillChoices,
+  getRaceAbilityChoiceLimit,
   getRaceLanguageChoiceLimit,
   getRaceSkillChoiceLimit,
 } from '../../store/selectors';
@@ -61,9 +63,11 @@ export function RaceStep() {
   const store = useCharacterStore();
   const {
     race,
+    raceAbilityChoices,
     raceLanguageChoices,
     raceSkillChoices,
     setRace,
+    setRaceAbilityChoices,
     setRaceLanguageChoices,
     setRaceSkillChoices,
     setSubrace,
@@ -82,6 +86,9 @@ export function RaceStep() {
   } = useBuilderI18n();
   const [panelRace, setPanelRace] = useState<Race | null>(null);
   const [localSubrace, setLocalSubrace] = useState<Subrace | null>(null);
+  const [localAbilityChoices, setLocalAbilityChoices] = useState<AbilityName[]>(
+    [],
+  );
   const [localLanguages, setLocalLanguages] = useState<string[]>([]);
   const [localSkills, setLocalSkills] = useState<SkillName[]>([]);
 
@@ -89,6 +96,7 @@ export function RaceStep() {
     const nextRace = RACES.find((candidate) => candidate.id === id) ?? null;
     setPanelRace(nextRace);
     setLocalSubrace(nextRace?.id === race?.id ? subrace : null);
+    setLocalAbilityChoices(nextRace?.id === race?.id ? raceAbilityChoices : []);
     setLocalLanguages(nextRace?.id === race?.id ? raceLanguageChoices : []);
     setLocalSkills(nextRace?.id === race?.id ? raceSkillChoices : []);
   };
@@ -97,6 +105,7 @@ export function RaceStep() {
     if (!panelRace) return;
     setRace(panelRace);
     setSubrace(panelRace.subraces ? localSubrace : null);
+    setRaceAbilityChoices(localAbilityChoices);
     setRaceLanguageChoices(localLanguages);
     setRaceSkillChoices(localSkills);
   };
@@ -104,17 +113,26 @@ export function RaceStep() {
   const previewState = {
     ...store,
     race: panelRace,
+    raceAbilityChoices: localAbilityChoices,
     raceLanguageChoices: localLanguages,
     raceSkillChoices: localSkills,
     subrace: localSubrace,
   };
+  const raceAbilityLimit = getRaceAbilityChoiceLimit(previewState);
   const raceLanguageLimit = getRaceLanguageChoiceLimit(previewState);
   const raceSkillLimit = getRaceSkillChoiceLimit(previewState);
   const selectDisabled = Boolean(
     (panelRace?.subraces && !localSubrace) ||
+    localAbilityChoices.length < raceAbilityLimit ||
     localLanguages.length < raceLanguageLimit ||
     localSkills.length < raceSkillLimit,
   );
+
+  const toggleAbility = (nextAbility: AbilityName) => {
+    setLocalAbilityChoices((current) =>
+      toggleChoice(current, nextAbility, raceAbilityLimit),
+    );
+  };
 
   const toggleLanguage = (language: string) => {
     setLocalLanguages((current) =>
@@ -218,6 +236,7 @@ export function RaceStep() {
                         key={candidate.id}
                         onClick={() => {
                           setLocalSubrace(candidate);
+                          setLocalAbilityChoices([]);
                           setLocalLanguages([]);
                         }}
                         style={{
@@ -285,6 +304,24 @@ export function RaceStep() {
                 {fmtAsi(panelRace.asi, ability, copy.noValue)}
               </div>
             </PanelSection>
+
+            {raceAbilityLimit > 0 ? (
+              <PanelSection
+                title={`${phrase('Ability Score Increase')}: ${raceAbilityLimit} ${phrase('choice')}`}
+              >
+                <ChoiceGrid
+                  options={getAvailableRaceAbilityChoices(previewState)}
+                  selected={localAbilityChoices}
+                  onToggle={toggleAbility}
+                  phrase={ability}
+                />
+                <ChoiceCount
+                  current={localAbilityChoices.length}
+                  target={raceAbilityLimit}
+                  suffix={copy.selectedCount}
+                />
+              </PanelSection>
+            ) : null}
 
             <PanelSection title={phrase('Languages')}>
               <div className="text-sm" style={{ color: 'var(--color-text)' }}>

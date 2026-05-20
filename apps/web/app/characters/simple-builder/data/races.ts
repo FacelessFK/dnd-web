@@ -148,6 +148,8 @@ export const RACES: Race[] = [
     speed: 30,
     size: 'Medium',
     asi: { CHA: 2 },
+    abilityChoiceCount: 2,
+    abilityChoiceOptions: ['STR', 'DEX', 'CON', 'INT', 'WIS'],
     languages: ['Common', 'Elvish'],
     languageChoiceCount: 1,
     skillChoiceCount: 2,

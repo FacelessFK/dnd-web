@@ -101,6 +101,8 @@ export interface Race {
   speed: number;
   size: Size;
   asi: Partial<Record<AbilityName, number>>;
+  abilityChoiceCount?: number;
+  abilityChoiceOptions?: AbilityName[];
   languageChoiceCount?: number;
   languages: string[];
   skillChoiceCount?: number;
@@ -149,6 +151,7 @@ export interface Background {
 export interface CharacterState {
   race: Race | null;
   subrace: Subrace | null;
+  raceAbilityChoices: AbilityName[];
   raceLanguageChoices: string[];
   raceSkillChoices: SkillName[];
   dndClass: DnDClass | null;

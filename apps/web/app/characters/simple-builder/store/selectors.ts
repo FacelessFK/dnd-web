@@ -1,6 +1,8 @@
 import type { AbilityName, CharacterState, SkillName } from '../types';
 import { SKILL_MAP, ALL_SKILLS } from '../data/skills';
 
+const ABILITIES: AbilityName[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+
 export const LANGUAGE_OPTIONS = [
   'Common',
   'Dwarvish',
@@ -24,16 +26,26 @@ export function getFinalAbilityScores(
   state: CharacterState,
 ): Record<AbilityName, number> {
   const base = state.abilityScores;
-  const raceAsi = state.race?.asi ?? {};
-  const subraceAsi = state.subrace?.asi ?? {};
 
-  const abilities: AbilityName[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   return Object.fromEntries(
-    abilities.map((a) => [
+    ABILITIES.map((a) => [
       a,
-      base[a] + (raceAsi[a] ?? 0) + (subraceAsi[a] ?? 0),
+      base[a] + getRaceAbilityBonusForAbility(state, a),
     ]),
   ) as Record<AbilityName, number>;
+}
+
+export function getRaceAbilityBonusForAbility(
+  state: CharacterState,
+  ability: AbilityName,
+): number {
+  const raceAsi = state.race?.asi ?? {};
+  const subraceAsi = state.subrace?.asi ?? {};
+  const chosenBonus = getSelectedRaceAbilityChoices(state).includes(ability)
+    ? 1
+    : 0;
+
+  return (raceAsi[ability] ?? 0) + (subraceAsi[ability] ?? 0) + chosenBonus;
 }
 
 export function getAbilityModifier(score: number): number {
@@ -44,9 +56,8 @@ export function getAbilityModifiers(
   state: CharacterState,
 ): Record<AbilityName, number> {
   const finals = getFinalAbilityScores(state);
-  const abilities: AbilityName[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
   return Object.fromEntries(
-    abilities.map((a) => [a, getAbilityModifier(finals[a])]),
+    ABILITIES.map((a) => [a, getAbilityModifier(finals[a])]),
   ) as Record<AbilityName, number>;
 }
 
@@ -57,8 +68,7 @@ export function getSavingThrows(
   const profBonus = 2;
   const classSaveProfs = state.dndClass?.savingThrows ?? [];
 
-  const abilities: AbilityName[] = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
-  return abilities.map((a) => {
+  return ABILITIES.map((a) => {
     const proficient = classSaveProfs.includes(a);
     return {
       ability: a,
@@ -322,6 +332,16 @@ export function getRaceLanguageChoiceLimit(state: CharacterState): number {
   );
 }
 
+export function getRaceAbilityChoiceLimit(state: CharacterState): number {
+  return state.race?.abilityChoiceCount ?? 0;
+}
+
+export function getAvailableRaceAbilityChoices(
+  state: CharacterState,
+): AbilityName[] {
+  return state.race?.abilityChoiceOptions ?? ABILITIES;
+}
+
 export function getBackgroundLanguageChoiceLimit(
   state: CharacterState,
 ): number {
@@ -452,6 +472,19 @@ function getFixedRaceSkills(state: CharacterState): SkillName[] {
   if (state.race?.id === 'elf') return ['Perception'];
   if (state.race?.id === 'half-orc') return ['Intimidation'];
   return [];
+}
+
+function getSelectedRaceAbilityChoices(state: CharacterState): AbilityName[] {
+  const choiceLimit = getRaceAbilityChoiceLimit(state);
+  const abilityOptions = new Set(getAvailableRaceAbilityChoices(state));
+
+  if (choiceLimit <= 0) return [];
+
+  return state.raceAbilityChoices
+    .filter((ability, index, choices) => {
+      return abilityOptions.has(ability) && choices.indexOf(ability) === index;
+    })
+    .slice(0, choiceLimit);
 }
 
 function arraysEqual(left: string[], right: string[]): boolean {

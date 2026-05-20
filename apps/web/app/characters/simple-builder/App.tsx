@@ -40,6 +40,7 @@ import {
 import {
   getBackgroundLanguageChoiceLimit,
   getConflictingSkill,
+  getRaceAbilityChoiceLimit,
   getRaceLanguageChoiceLimit,
   getRaceSkillChoiceLimit,
   hasValidClassEquipmentChoices,
@@ -118,6 +119,7 @@ function characterLibraryEntryToSimpleState(
         : '',
     pronouns: entry.pronouns ?? '',
     race: findByName(RACES, entry.speciesOrRace),
+    raceAbilityChoices: [],
     raceLanguageChoices: [],
     raceSkillChoices: [],
     subrace: null,
@@ -136,6 +138,7 @@ function useStepValidity(): boolean {
     dndClass,
     name,
     race,
+    raceAbilityChoices,
     raceLanguageChoices,
     raceSkillChoices,
     subrace,
@@ -145,6 +148,9 @@ function useStepValidity(): boolean {
     case 'race':
       if (!race) return false;
       if (race.subraces && !subrace) return false;
+      if (raceAbilityChoices.length < getRaceAbilityChoiceLimit(store)) {
+        return false;
+      }
       if (raceLanguageChoices.length < getRaceLanguageChoiceLimit(store)) {
         return false;
       }
