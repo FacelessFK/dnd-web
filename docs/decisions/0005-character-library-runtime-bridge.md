@@ -83,15 +83,16 @@ Current behavior:
 - records `meta.sourceCharacterLibraryEntryId` on the runtime character;
 - submits the copied runtime character as the player's `pendingCharacterId` for
   the existing DM assignment command.
+- provides a Player-mode `/runtime` selector for finalized saved entries owned
+  by the authenticated user.
 
 Remaining work:
 
-- localization-aware UI affordances for player submission and pending status;
 - optional DB transaction/outbox hardening for the multi-store bridge path;
 - continued validation that live HP, movement, conditions, and DM overrides do
   not mutate the reusable library entry.
 
 ## Next Milestone
 
-Use `docs/delivery/NEXT_MILESTONE.md` as the planning source for completing the
-Character Library -> Runtime Assignment Bridge.
+Use `docs/delivery/NEXT_MILESTONE.md` as the planning source for the next
+bridge hardening slice.

@@ -47,6 +47,42 @@ const messages = {
     'nav.soon': 'Soon',
     'page.characterBuilder.title': 'Character Builder',
     'page.characterLibrary.title': 'Character Library',
+    'runtime.characterLibrary.blocker.alreadyAssigned':
+      'This participant already has an assigned character.',
+    'runtime.characterLibrary.blocker.alreadySubmitted':
+      'A character is already waiting for DM assignment.',
+    'runtime.characterLibrary.blocker.busy':
+      'Wait for the current runtime task to finish.',
+    'runtime.characterLibrary.blocker.missingAuth':
+      'Sign in before loading saved Character Library entries.',
+    'runtime.characterLibrary.blocker.missingSelection':
+      'Choose a finalized saved character first.',
+    'runtime.characterLibrary.blocker.missingSession':
+      'Create, paste, or recover a session first.',
+    'runtime.characterLibrary.blocker.noFinalizedEntries':
+      'No finalized saved characters are available.',
+    'runtime.characterLibrary.blocker.notJoined':
+      'Join or recover this session as the player first.',
+    'runtime.characterLibrary.description':
+      'Submit a finalized saved character into this live session. The server creates a separate runtime copy; live HP, movement, conditions, and DM overrides do not mutate the saved entry.',
+    'runtime.characterLibrary.emptyDetail':
+      'Finalize a character in the Character Library, then refresh this list.',
+    'runtime.characterLibrary.emptyTitle': 'No finalized saved characters',
+    'runtime.characterLibrary.entryClass': 'Class / level',
+    'runtime.characterLibrary.entryId': 'Library entry',
+    'runtime.characterLibrary.entryStatus': 'Library status',
+    'runtime.characterLibrary.errorTitle': 'Character Library unavailable',
+    'runtime.characterLibrary.loading': 'Loading library',
+    'runtime.characterLibrary.optionLabel':
+      '{name} - {className} level {level}',
+    'runtime.characterLibrary.refresh': 'Refresh Library',
+    'runtime.characterLibrary.selectLabel': 'Saved character',
+    'runtime.characterLibrary.selectRequired':
+      'Choose a finalized saved character first.',
+    'runtime.characterLibrary.signInRequired':
+      'Sign in before loading saved Character Library entries.',
+    'runtime.characterLibrary.submit': 'Submit Saved Character',
+    'runtime.characterLibrary.title': 'Saved Character Library',
     'runtime.eyebrow': 'Authoritative table surface',
     'runtime.mode.dm': 'DM Mode',
     'runtime.mode.player': 'Player Mode',
@@ -93,6 +129,42 @@ const messages = {
     'nav.soon': 'به‌زودی',
     'page.characterBuilder.title': 'سازنده کاراکتر',
     'page.characterLibrary.title': 'کتابخانه کاراکترها',
+    'runtime.characterLibrary.blocker.alreadyAssigned':
+      'این شرکت‌کننده از قبل کاراکتر assign شده دارد.',
+    'runtime.characterLibrary.blocker.alreadySubmitted':
+      'یک کاراکتر همین حالا منتظر assign شدن توسط DM است.',
+    'runtime.characterLibrary.blocker.busy':
+      'صبر کنید کار فعلی میز زنده تمام شود.',
+    'runtime.characterLibrary.blocker.missingAuth':
+      'برای بارگذاری کاراکترهای ذخیره‌شده وارد شوید.',
+    'runtime.characterLibrary.blocker.missingSelection':
+      'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
+    'runtime.characterLibrary.blocker.missingSession':
+      'اول یک session بسازید، وارد کنید، یا بازیابی کنید.',
+    'runtime.characterLibrary.blocker.noFinalizedEntries':
+      'کاراکتر ذخیره‌شده و نهایی‌شده‌ای در دسترس نیست.',
+    'runtime.characterLibrary.blocker.notJoined':
+      'اول به عنوان این بازیکن وارد session شوید یا آن را بازیابی کنید.',
+    'runtime.characterLibrary.description':
+      'یک کاراکتر ذخیره‌شده و نهایی‌شده را وارد این session زنده کنید. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، conditionها و overrideهای DM ورودی ذخیره‌شده را تغییر نمی‌دهند.',
+    'runtime.characterLibrary.emptyDetail':
+      'یک کاراکتر را در کتابخانه نهایی کنید و بعد این فهرست را refresh کنید.',
+    'runtime.characterLibrary.emptyTitle':
+      'کاراکتر ذخیره‌شده و نهایی‌شده‌ای نیست',
+    'runtime.characterLibrary.entryClass': 'کلاس / سطح',
+    'runtime.characterLibrary.entryId': 'ورودی کتابخانه',
+    'runtime.characterLibrary.entryStatus': 'وضعیت کتابخانه',
+    'runtime.characterLibrary.errorTitle': 'کتابخانه کاراکتر در دسترس نیست',
+    'runtime.characterLibrary.loading': 'در حال بارگذاری کتابخانه',
+    'runtime.characterLibrary.optionLabel': '{name} - {className} سطح {level}',
+    'runtime.characterLibrary.refresh': 'Refresh کتابخانه',
+    'runtime.characterLibrary.selectLabel': 'کاراکتر ذخیره‌شده',
+    'runtime.characterLibrary.selectRequired':
+      'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
+    'runtime.characterLibrary.signInRequired':
+      'برای بارگذاری کاراکترهای ذخیره‌شده وارد شوید.',
+    'runtime.characterLibrary.submit': 'Submit کاراکتر ذخیره‌شده',
+    'runtime.characterLibrary.title': 'کتابخانه کاراکترهای ذخیره‌شده',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
     'runtime.mode.dm': 'حالت DM',
     'runtime.mode.player': 'حالت بازیکن',

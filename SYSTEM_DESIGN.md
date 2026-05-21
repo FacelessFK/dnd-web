@@ -75,8 +75,6 @@ Implemented areas:
 
 Intentionally incomplete areas:
 
-- localization-aware UI for the Character Library -> runtime assignment
-  bridge;
 - DB transaction/outbox hardening for the bridge command if multi-store
   atomicity becomes required;
 - full adventure authoring;
@@ -153,8 +151,8 @@ not live overlays.
 
 ## Character Library -> Runtime Bridge
 
-The server-side bridge foundation now exists for finalized Character Library
-entries to enter runtime pending assignment.
+The server-side bridge foundation and first Player-mode UI affordance now exist
+for finalized Character Library entries to enter runtime pending assignment.
 
 Design rule:
 
@@ -165,9 +163,11 @@ Design rule:
 - current implementation copies the library entry into a separate ready runtime
   character, records `meta.sourceCharacterLibraryEntryId`, and uses existing
   pending assignment plus DM assignment semantics.
+- current Player-mode UI lists finalized saved entries for the authenticated
+  user and submits the selected entry through the bridge.
 
-Remaining design work is product UI and, if required, a dedicated DB
-transaction/outbox boundary for the multi-store bridge command.
+Remaining design work is a dedicated DB transaction/outbox boundary for the
+multi-store bridge command if that durability level is required.
 
 See `docs/decisions/0005-character-library-runtime-bridge.md`.
 

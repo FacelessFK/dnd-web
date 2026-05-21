@@ -2,32 +2,32 @@
 
 ## Recommendation
 
-Complete Character Library -> Runtime Assignment Bridge.
+DB Transaction/Outbox Hardening For The Character Library -> Runtime Assignment
+Bridge.
 
 This is the next product milestone because the Character Library and Builder
-MVP now exists and the first server-side bridge foundation is implemented, but
-the product still needs UI affordances and DB-mode hardening before the bridge
-feels complete.
+MVP now exists, the server-side bridge foundation is implemented, and
+Player-mode `/runtime` has a localization-aware saved-character submission UI.
+The remaining bridge risk is DB-mode multi-store durability.
 
 ## Goal
 
-Allow a finalized Character Library entry to be selected/submitted for a live
-session and assigned by the DM, creating or linking runtime session state while
-preserving the reusable entry as immutable-with-respect-to-live-play.
+Make bridge submission durable and idempotent across the runtime character
+copy, session pending assignment, command success cache, and stream/outbox
+publication path, while preserving the reusable library entry as
+immutable-with-respect-to-live-play.
 
 ## Scope
 
-- Inspect existing Character Library commands, runtime character commands,
-  session assignment flows, DB ownership, and i18n surfaces.
-- Define the bridge contract between a reusable library entry and live runtime
-  character/session state.
-- Preserve the server-side command that lets eligible finalized library entries
-  be submitted for a live session.
-- Add product UI that lets a player select/submit a finalized library entry.
-- Let the DM review pending runtime character assignment and assign it through
-  the existing authoritative DM assignment path.
-- Create or link runtime character/session overlay state from the reusable
-  entry without mutating the entry.
+- Inspect the existing DB-backed character repository, session transaction
+  boundary, idempotency claim/success records, and command outbox patterns.
+- Preserve the existing command and UI contract for
+  `submit_character_library_entry_for_assignment`.
+- Add a narrow transaction boundary if the current DB architecture can support
+  character-copy creation, session pending assignment, idempotency, and outbox
+  publication in one honest slice.
+- Keep runtime character/session overlay state separate from the reusable
+  library entry.
 - Ensure live HP, movement, conditions, encounter state, and DM overrides remain
   separate from the library entry.
 - Preserve English/Persian UI support for any new copy.
@@ -55,7 +55,7 @@ preserving the reusable entry as immutable-with-respect-to-live-play.
 
 ## Acceptance Criteria
 
-- A finalized library entry can be selected for submission to a live session.
+- Existing UI submission of a finalized library entry still works.
 - Server verifies ownership/auth where auth is injected.
 - Server rejects non-finalized or unauthorized entries.
 - DM remains the actor who authoritatively assigns a participant.
@@ -68,8 +68,8 @@ preserving the reusable entry as immutable-with-respect-to-live-play.
 - Tests cover server-side boundaries and any changed UI helpers.
 - Docs and API notes are updated without claiming replay/exactly-once/full auth
   guarantees.
-- DB-mode behavior is documented honestly until the bridge is covered by a
-  transaction/outbox boundary.
+- DB-mode behavior is either covered by a narrow transaction/outbox boundary or
+  the remaining gap is documented honestly.
 
 ## Suggested Small Slices For Codex
 
@@ -105,10 +105,9 @@ existing `assign_character_to_participant` command.
 
 ### Slice 4: Web UI Affordance
 
-Add localization-aware UI for selecting/submitting a library entry and showing
-pending/assigned status.
-
-This is the recommended next implementation slice.
+Implemented: Player-mode `/runtime` can load finalized saved entries for the
+authenticated user, select one, submit it through the bridge, and show the
+result through existing pending/assignment state.
 
 ### Slice 5: DB Transaction/Outbox Hardening
 
@@ -116,6 +115,8 @@ If the bridge must be durable across multi-store DB failures, add a narrow
 transaction boundary for creating the runtime character, updating session
 pending assignment, idempotency, and event publication. Keep replay/cursor
 claims out of scope unless explicitly implemented.
+
+This is the recommended next implementation slice.
 
 ### Slice 6: Validation And Docs
 

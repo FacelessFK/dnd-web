@@ -33,6 +33,8 @@ import {
   getPlayerNextStep,
   getPlayerParticipantIds,
   getKnownSceneOptions,
+  getFinalizedLibraryEntriesForRuntime,
+  getLibraryEntrySubmissionBlocker,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   isCombatantEntityDefeated,
@@ -498,6 +500,93 @@ describe('runtime cockpit helpers', () => {
         title: 'Waiting for DM assignment',
         tone: 'warning',
       },
+    );
+  });
+
+  it('filters finalized library entries for runtime submission', () => {
+    assert.deepEqual(
+      getFinalizedLibraryEntriesForRuntime([
+        {
+          className: 'Wizard',
+          id: 'charlib_22222222-2222-4222-8222-222222222222',
+          level: 3,
+          name: 'Zara',
+          status: 'finalized',
+        },
+        {
+          className: 'Fighter',
+          id: 'charlib_11111111-1111-4111-8111-111111111111',
+          level: 1,
+          name: 'Aria',
+          status: 'finalized',
+        },
+        {
+          className: 'Rogue',
+          id: 'charlib_33333333-3333-4333-8333-333333333333',
+          level: 2,
+          name: 'Draft Scout',
+          status: 'draft',
+        },
+      ]),
+      [
+        {
+          className: 'Fighter',
+          id: 'charlib_11111111-1111-4111-8111-111111111111',
+          level: 1,
+          name: 'Aria',
+          status: 'finalized',
+        },
+        {
+          className: 'Wizard',
+          id: 'charlib_22222222-2222-4222-8222-222222222222',
+          level: 3,
+          name: 'Zara',
+          status: 'finalized',
+        },
+      ],
+    );
+  });
+
+  it('returns localizable blockers for library entry runtime submission', () => {
+    const base = {
+      busyLabel: null,
+      finalizedEntryCount: 1,
+      hasAuthUser: true,
+      isPlayerCharacterAssigned: false,
+      isPlayerCharacterSubmitted: false,
+      isPlayerJoined: true,
+      selectedEntryId: 'charlib_11111111-1111-4111-8111-111111111111',
+      sessionId: 'ABC123',
+    };
+
+    assert.equal(getLibraryEntrySubmissionBlocker(base), null);
+    assert.equal(
+      getLibraryEntrySubmissionBlocker({
+        ...base,
+        hasAuthUser: false,
+      }),
+      'missing_auth',
+    );
+    assert.equal(
+      getLibraryEntrySubmissionBlocker({
+        ...base,
+        finalizedEntryCount: 0,
+      }),
+      'no_finalized_entries',
+    );
+    assert.equal(
+      getLibraryEntrySubmissionBlocker({
+        ...base,
+        selectedEntryId: '',
+      }),
+      'missing_selection',
+    );
+    assert.equal(
+      getLibraryEntrySubmissionBlocker({
+        ...base,
+        isPlayerCharacterSubmitted: true,
+      }),
+      'already_submitted',
     );
   });
 

@@ -1,5 +1,6 @@
 import type {
   CharacterInput,
+  CharacterLibraryEntry,
   CharacterResource,
   CharacterUpdateInput,
   DmCombatantInput,
@@ -1086,6 +1087,87 @@ export type AssignmentRequest = {
   participantId: string;
   pendingCharacterId: string;
 };
+
+export type RuntimeLibraryEntrySummary = Pick<
+  CharacterLibraryEntry,
+  'className' | 'id' | 'level' | 'name' | 'status'
+>;
+
+export type LibraryEntrySubmissionBlocker =
+  | 'already_assigned'
+  | 'already_submitted'
+  | 'busy'
+  | 'missing_auth'
+  | 'missing_selection'
+  | 'missing_session'
+  | 'no_finalized_entries'
+  | 'not_joined';
+
+export function getFinalizedLibraryEntriesForRuntime<
+  TEntry extends RuntimeLibraryEntrySummary,
+>(entries: TEntry[]): TEntry[] {
+  return [...entries]
+    .filter((entry) => entry.status === 'finalized')
+    .sort((left, right) => {
+      const nameOrder = left.name.localeCompare(right.name);
+
+      return nameOrder === 0 ? left.id.localeCompare(right.id) : nameOrder;
+    });
+}
+
+export function getLibraryEntrySubmissionBlocker({
+  busyLabel,
+  finalizedEntryCount,
+  hasAuthUser,
+  isPlayerCharacterAssigned,
+  isPlayerCharacterSubmitted,
+  isPlayerJoined,
+  selectedEntryId,
+  sessionId,
+}: {
+  busyLabel: string | null;
+  finalizedEntryCount: number;
+  hasAuthUser: boolean;
+  isPlayerCharacterAssigned: boolean;
+  isPlayerCharacterSubmitted: boolean;
+  isPlayerJoined: boolean;
+  selectedEntryId: string;
+  sessionId: string;
+}): LibraryEntrySubmissionBlocker | null {
+  if (busyLabel) {
+    return 'busy';
+  }
+
+  if (!hasAuthUser) {
+    return 'missing_auth';
+  }
+
+  if (!sessionId) {
+    return 'missing_session';
+  }
+
+  if (!isPlayerJoined) {
+    return 'not_joined';
+  }
+
+  if (isPlayerCharacterAssigned) {
+    return 'already_assigned';
+  }
+
+  if (isPlayerCharacterSubmitted) {
+    return 'already_submitted';
+  }
+
+  if (finalizedEntryCount === 0) {
+    return 'no_finalized_entries';
+  }
+
+  if (!selectedEntryId) {
+    return 'missing_selection';
+  }
+
+  return null;
+}
 
 export function getPendingAssignmentRequests({
   charactersByParticipant,

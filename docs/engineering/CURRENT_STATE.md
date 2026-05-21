@@ -52,9 +52,12 @@ Current implementation includes:
 - English/Persian UI direction through `I18nProvider`;
 - portrait validation and MVP storage;
 - generated local builder art;
-- PDF export through local templates with simple fallback.
+- PDF export through local templates with simple fallback;
 - server-side submission of finalized Character Library entries into runtime
-  pending assignment via `submit_character_library_entry_for_assignment`.
+  pending assignment via `submit_character_library_entry_for_assignment`;
+- Player-mode `/runtime` UI for loading finalized saved Character Library
+  entries for the authenticated user, selecting one, and submitting it into
+  the live session pending-assignment path.
 
 Current bridge state:
 
@@ -62,8 +65,8 @@ Current bridge state:
   library entry, records the source library entry ID in runtime metadata, and
   sets the session participant's `pendingCharacterId` for DM assignment;
 - the reusable library entry is not mutated by live runtime state;
-- the browser API helper exists, but the product UI for selecting/submitting
-  library entries into live sessions is not wired yet.
+- the browser API helper and first Player-mode UI affordance are wired;
+- DB transaction/outbox hardening for the bridge path is still pending.
 
 ## What Is DB-Backed
 
@@ -154,8 +157,8 @@ Current runtime is intentionally narrow:
 - `/characters` is a usable Character Library/Builder MVP, not a complete D&D
   character product.
 - The Character Library to runtime assignment bridge has a server-side
-  foundation, but still needs localization-aware product UI and DB transaction
-  hardening.
+  foundation and first Player-mode UI affordance, but still needs DB
+  transaction/outbox hardening if multi-store atomicity becomes required.
 - Adventure authoring and reusable map/content authoring are not complete
   product surfaces.
 - Portrait uploads are MVP storage, not production asset storage.

@@ -62,8 +62,10 @@ that scope.
   Character Library entry can be copied into a separate ready runtime character
   and submitted as `pendingCharacterId` for DM assignment. The reusable library
   entry is not mutated.
-- A web API helper exists for the bridge, but the `/characters` and `/runtime`
-  product UI affordance is not wired yet.
+- `/runtime` Player mode now includes a localization-aware saved-character
+  selector that lists finalized Character Library entries for the authenticated
+  user, submits the selected entry through the bridge, and preserves existing
+  DM assignment authority.
 
 ## Known Limitations
 
@@ -84,21 +86,21 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-complete the Character Library -> Runtime Assignment Bridge product slice.
+DB transaction/outbox hardening for the Character Library -> Runtime
+Assignment Bridge.
 
-The server-side foundation now exists. The next work should add
-localization-aware UI affordances for selecting/submitting finalized library
-entries, showing pending assignment state clearly, and keeping DM assignment
-authority intact.
+The server-side foundation and first Player-mode UI affordance now exist. The
+next work should make the bridge's DB-mode multi-store behavior more robust
+without claiming replay or exactly-once delivery.
 
 Break this into small Codex tasks:
 
 1. inspect current library, runtime character, session assignment, and i18n
    paths;
 2. define the protocol/data bridge shape;
-3. extend the bridge only where needed for UI and DB-mode honesty;
-4. add localization-aware web UI affordances;
-5. validate DB mode, in-memory behavior, and runtime recovery honestly.
+3. design a narrow DB transaction/outbox boundary for bridge submission;
+4. validate DB mode, in-memory behavior, and runtime recovery honestly;
+5. update docs after each slice.
 
 ## Coding Rules For Future Codex Tasks
 

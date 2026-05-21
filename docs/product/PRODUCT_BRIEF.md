@@ -60,12 +60,12 @@ platform:
 - create and persist reusable Character Library entries in DB mode;
 - submit finalized library entries through a server-side bridge into runtime
   pending assignment;
+- select and submit finalized saved entries from Player-mode `/runtime`;
 - export simple character sheet PDFs from local templates;
 - preserve read-model recovery after refresh or reconnect.
 
-The next product gap is the localization-aware UI that lets players select and
-submit finalized Character Library entries into live runtime assignment while
-keeping live session state separate from reusable library records.
+The next product gap is DB transaction/outbox hardening for the bridge path,
+while keeping live session state separate from reusable library records.
 
 ## Product Principles
 

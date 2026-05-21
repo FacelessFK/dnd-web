@@ -61,9 +61,10 @@ ID in runtime metadata, and submits that runtime character as the player's
 `pendingCharacterId` for existing DM assignment. Live overlays remain separate
 from reusable library entries.
 
-The browser API helper exists, but `/characters` and `/runtime` do not yet have
-the final localization-aware UI affordance for selecting/submitting saved
-library entries into live sessions.
+Player-mode `/runtime` now has the first localization-aware UI affordance for
+loading finalized saved library entries for the authenticated user, selecting
+one, and submitting it into live pending assignment. DM assignment still uses
+the existing authoritative assignment path.
 
 ## Persistence Reality
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import type {
   ActiveSceneState,
+  CharacterLibraryEntry,
   CharacterResource,
   DmCommand,
   Encounter,
@@ -14,6 +15,11 @@ import type {
   SessionStreamEvent,
 } from '@dnd/protocol';
 
+import { useAuth } from '../../lib/auth-context';
+import {
+  listCharacterLibraryEntries,
+  submitCharacterLibraryEntryForAssignment,
+} from '../../lib/character-library-api';
 import {
   createCommandId,
   runtimeServerUrl,
@@ -55,13 +61,15 @@ import {
   getCurrentTurnLabel,
   getCurrentTurnParticipantId,
   getDmCombatantActionDisabledReason,
+  getFinalizedLibraryEntriesForRuntime,
   getKnownCharacterIds,
+  getLibraryEntrySubmissionBlocker,
+  getKnownSceneOptions,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
-  getKnownSceneOptions,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
@@ -90,6 +98,7 @@ import {
   type AbilityKey,
   type CharacterDraftForm,
   type CombatantDraftForm,
+  type LibraryEntrySubmissionBlocker,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -123,6 +132,7 @@ type TurnUsageDraft = Encounter['currentTurnUsage'];
 
 export function RuntimeCockpit() {
   const { t } = useI18n();
+  const { loading: authLoading, user } = useAuth();
   const [dmParticipantId, setDmParticipantId] = useState<string>(
     defaultDm.participantId,
   );
@@ -155,6 +165,14 @@ export function RuntimeCockpit() {
   const [characterDraft, setCharacterDraft] = useState<CharacterDraftForm>(() =>
     createDefaultCharacterDraftForm(defaultPlayer.displayName),
   );
+  const [libraryEntries, setLibraryEntries] = useState<CharacterLibraryEntry[]>(
+    [],
+  );
+  const [libraryEntryError, setLibraryEntryError] = useState<string | null>(
+    null,
+  );
+  const [libraryEntriesLoading, setLibraryEntriesLoading] = useState(false);
+  const [selectedLibraryEntryId, setSelectedLibraryEntryId] = useState('');
   const [sceneDraft, setSceneDraft] = useState<SceneDraftForm>(() =>
     createDefaultSceneDraftForm(),
   );
@@ -212,6 +230,10 @@ export function RuntimeCockpit() {
   const playerParticipantIds = useMemo(
     () => getPlayerParticipantIds(sessionState),
     [sessionState],
+  );
+  const finalizedLibraryEntries = useMemo(
+    () => getFinalizedLibraryEntriesForRuntime(libraryEntries),
+    [libraryEntries],
   );
   const actingParticipantId = getActingParticipantId({
     mode,
@@ -316,6 +338,53 @@ export function RuntimeCockpit() {
         : firstPlayerParticipantId,
     );
   }, [mode, playerParticipantIds]);
+
+  useEffect(() => {
+    let canceled = false;
+    const ownerUserId = user?.id;
+
+    if (authLoading || mode !== 'player' || !ownerUserId) {
+      setLibraryEntries([]);
+      setLibraryEntriesLoading(false);
+      setLibraryEntryError(null);
+      return;
+    }
+
+    setLibraryEntriesLoading(true);
+    setLibraryEntryError(null);
+
+    void listCharacterLibraryEntries(ownerUserId)
+      .then((result) => {
+        if (canceled) {
+          return;
+        }
+
+        if (result.ok) {
+          setLibraryEntries(result.data);
+          return;
+        }
+
+        setLibraryEntries([]);
+        setLibraryEntryError(result.error.message);
+      })
+      .finally(() => {
+        if (!canceled) {
+          setLibraryEntriesLoading(false);
+        }
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [authLoading, mode, user?.id]);
+
+  useEffect(() => {
+    setSelectedLibraryEntryId((current) =>
+      finalizedLibraryEntries.some((entry) => entry.id === current)
+        ? current
+        : (finalizedLibraryEntries[0]?.id ?? ''),
+    );
+  }, [finalizedLibraryEntries]);
 
   useEffect(() => {
     if (!playerParticipantIds.length) {
@@ -468,6 +537,31 @@ export function RuntimeCockpit() {
     }
 
     return response.response;
+  }
+
+  async function refreshPlayerLibraryEntries(): Promise<void> {
+    const ownerUserId = user?.id;
+
+    if (!ownerUserId) {
+      setLibraryEntries([]);
+      setLibraryEntryError(t('runtime.characterLibrary.signInRequired'));
+      return;
+    }
+
+    setLibraryEntriesLoading(true);
+    setLibraryEntryError(null);
+
+    const result = await listCharacterLibraryEntries(ownerUserId);
+
+    if (result.ok) {
+      setLibraryEntries(result.data);
+      setLibraryEntryError(null);
+    } else {
+      setLibraryEntries([]);
+      setLibraryEntryError(result.error.message);
+    }
+
+    setLibraryEntriesLoading(false);
   }
 
   function pushLog(label: string, payload: unknown): void {
@@ -2326,6 +2420,75 @@ export function RuntimeCockpit() {
     });
   }
 
+  async function submitSelectedLibraryEntryForAssignment(): Promise<void> {
+    await runTask(
+      'submit_character_library_entry_for_assignment player',
+      async () => {
+        assertSession();
+
+        const ownerUserId = user?.id;
+
+        if (!ownerUserId) {
+          throw new Error(t('runtime.characterLibrary.signInRequired'));
+        }
+
+        const entry = finalizedLibraryEntries.find(
+          (candidate) => candidate.id === selectedLibraryEntryId,
+        );
+
+        if (!entry) {
+          throw new Error(t('runtime.characterLibrary.selectRequired'));
+        }
+
+        const result = await submitCharacterLibraryEntryForAssignment({
+          actorParticipantId: playerParticipantId,
+          entryId: entry.id,
+          ownerParticipantId: ownerUserId,
+          sessionId,
+        });
+
+        if (!result.ok) {
+          throw new Error(
+            formatRuntimeFailure(
+              'submit_character_library_entry_for_assignment',
+              result.error,
+            ),
+          );
+        }
+
+        applySessionSnapshot(result.data.state);
+        setKnownCharacterIdsByParticipant((current) => ({
+          ...current,
+          [playerParticipantId]: result.data.characterId,
+        }));
+
+        const characterResult = await unwrap(
+          'get_character',
+          sendCharacterCommand({
+            actor: {
+              participantId: playerParticipantId,
+            },
+            commandId: createCommandId('player-read-library-runtime-character'),
+            payload: {
+              characterId: result.data.characterId,
+              sessionId,
+            },
+            type: 'get_character',
+          }),
+        );
+
+        if ('character' in characterResult.data) {
+          rememberCharacter(characterResult.data);
+        }
+
+        return {
+          data: result.data,
+          ok: true,
+        };
+      },
+    );
+  }
+
   async function dmAssignSelectedLoadedCharacter(): Promise<void> {
     await runTask('assign selected loaded character', async () => {
       assertSession();
@@ -3103,6 +3266,24 @@ export function RuntimeCockpit() {
     (isPlayerCharacterSubmitted
       ? 'This character is already waiting for DM assignment.'
       : null);
+  const selectedLibraryEntry =
+    finalizedLibraryEntries.find(
+      (entry) => entry.id === selectedLibraryEntryId,
+    ) ?? null;
+  const libraryEntrySubmissionBlocker = getLibraryEntrySubmissionBlocker({
+    busyLabel:
+      busyLabel ?? (libraryEntriesLoading ? 'character library' : null),
+    finalizedEntryCount: finalizedLibraryEntries.length,
+    hasAuthUser: Boolean(user),
+    isPlayerCharacterAssigned,
+    isPlayerCharacterSubmitted,
+    isPlayerJoined,
+    selectedEntryId: selectedLibraryEntryId,
+    sessionId,
+  });
+  const libraryEntrySubmitDisabledReason = libraryEntrySubmissionBlocker
+    ? getLibraryEntryBlockerMessage(libraryEntrySubmissionBlocker)
+    : null;
   const playerParticipants = participants.filter(
     (participant) => participant.role === 'player',
   );
@@ -3222,6 +3403,29 @@ export function RuntimeCockpit() {
         : [],
     )
     .slice(0, 8);
+
+  function getLibraryEntryBlockerMessage(
+    blocker: LibraryEntrySubmissionBlocker,
+  ): string {
+    switch (blocker) {
+      case 'already_assigned':
+        return t('runtime.characterLibrary.blocker.alreadyAssigned');
+      case 'already_submitted':
+        return t('runtime.characterLibrary.blocker.alreadySubmitted');
+      case 'busy':
+        return t('runtime.characterLibrary.blocker.busy');
+      case 'missing_auth':
+        return t('runtime.characterLibrary.blocker.missingAuth');
+      case 'missing_selection':
+        return t('runtime.characterLibrary.blocker.missingSelection');
+      case 'missing_session':
+        return t('runtime.characterLibrary.blocker.missingSession');
+      case 'no_finalized_entries':
+        return t('runtime.characterLibrary.blocker.noFinalizedEntries');
+      case 'not_joined':
+        return t('runtime.characterLibrary.blocker.notJoined');
+    }
+  }
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
@@ -3759,16 +3963,27 @@ export function RuntimeCockpit() {
                 characterDraftErrors={characterDraftErrors}
                 createDisabledReason={createPlayerCharacterReason}
                 isAssigned={isPlayerCharacterAssigned}
+                libraryEntries={finalizedLibraryEntries}
+                libraryEntryError={libraryEntryError}
+                libraryEntriesLoading={libraryEntriesLoading}
+                libraryEntrySubmitDisabledReason={
+                  libraryEntrySubmitDisabledReason
+                }
                 onAbilityChange={updateCharacterDraftAbility}
                 onCreate={createPlayerCharacter}
                 onFieldChange={updateCharacterDraftField}
                 onFinalize={finalizePlayerCharacter}
                 onHpChange={updateCharacterDraftHp}
+                onLibraryEntryChange={setSelectedLibraryEntryId}
+                onRefreshLibraryEntries={refreshPlayerLibraryEntries}
                 onSubmit={submitPlayerCharacterForAssignment}
+                onSubmitLibraryEntry={submitSelectedLibraryEntryForAssignment}
                 onUpdate={updatePlayerCharacter}
                 pendingCharacterId={playerPendingCharacterId}
                 playerCharacter={playerCharacter}
                 playerParticipantId={playerParticipantId}
+                selectedLibraryEntry={selectedLibraryEntry}
+                selectedLibraryEntryId={selectedLibraryEntryId}
                 submitDisabledReason={submitPlayerCharacterReason}
                 updateDisabledReason={updatePlayerCharacterReason}
                 finalizeDisabledReason={finalizePlayerCharacterReason}
@@ -5502,16 +5717,25 @@ function CharacterOnboardingPanel({
   createDisabledReason,
   finalizeDisabledReason,
   isAssigned,
+  libraryEntries,
+  libraryEntriesLoading,
+  libraryEntryError,
+  libraryEntrySubmitDisabledReason,
   onAbilityChange,
   onCreate,
   onFieldChange,
   onFinalize,
   onHpChange,
+  onLibraryEntryChange,
+  onRefreshLibraryEntries,
   onSubmit,
+  onSubmitLibraryEntry,
   onUpdate,
   pendingCharacterId,
   playerCharacter,
   playerParticipantId,
+  selectedLibraryEntry,
+  selectedLibraryEntryId,
   submitDisabledReason,
   updateDisabledReason,
 }: {
@@ -5520,6 +5744,10 @@ function CharacterOnboardingPanel({
   createDisabledReason: string | null;
   finalizeDisabledReason: string | null;
   isAssigned: boolean;
+  libraryEntries: CharacterLibraryEntry[];
+  libraryEntriesLoading: boolean;
+  libraryEntryError: string | null;
+  libraryEntrySubmitDisabledReason: string | null;
   onAbilityChange: (abilityKey: AbilityKey, value: string) => void;
   onCreate: () => void | Promise<void>;
   onFieldChange: (
@@ -5536,14 +5764,20 @@ function CharacterOnboardingPanel({
   ) => void;
   onFinalize: () => void | Promise<void>;
   onHpChange: (field: keyof CharacterDraftForm['hp'], value: string) => void;
+  onLibraryEntryChange: (entryId: string) => void;
+  onRefreshLibraryEntries: () => void | Promise<void>;
   onSubmit: () => void | Promise<void>;
+  onSubmitLibraryEntry: () => void | Promise<void>;
   onUpdate: () => void | Promise<void>;
   pendingCharacterId: string | null;
   playerCharacter?: CharacterResource;
   playerParticipantId: string;
+  selectedLibraryEntry: CharacterLibraryEntry | null;
+  selectedLibraryEntryId: string;
   submitDisabledReason: string | null;
   updateDisabledReason: string | null;
 }) {
+  const { t } = useI18n();
   const statusTone: RuntimeNoticeTone = playerCharacter
     ? isAssigned
       ? 'success'
@@ -5558,6 +5792,14 @@ function CharacterOnboardingPanel({
         ? 'Submitted'
         : 'Ready for submission'
     : 'No character yet';
+  const libraryEntryOptions = libraryEntries.map((entry) => ({
+    label: t('runtime.characterLibrary.optionLabel', {
+      className: entry.className,
+      level: String(entry.level),
+      name: entry.name,
+    }),
+    value: entry.id,
+  }));
 
   return (
     <Panel
@@ -5599,6 +5841,83 @@ function CharacterOnboardingPanel({
               : 'This character is finalized but not submitted yet. Submit it so a DM in another browser can assign it.'}
           </Notice>
         ) : null}
+
+        <div className="grid gap-3 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
+          <div>
+            <p className="text-sm font-bold text-amber-50">
+              {t('runtime.characterLibrary.title')}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-amber-100/60">
+              {t('runtime.characterLibrary.description')}
+            </p>
+          </div>
+
+          {libraryEntryError ? (
+            <Notice
+              title={t('runtime.characterLibrary.errorTitle')}
+              tone="danger"
+            >
+              {libraryEntryError}
+            </Notice>
+          ) : null}
+
+          {libraryEntries.length ? (
+            <>
+              <SelectField
+                label={t('runtime.characterLibrary.selectLabel')}
+                onChange={onLibraryEntryChange}
+                options={libraryEntryOptions}
+                value={selectedLibraryEntryId}
+              />
+              {selectedLibraryEntry ? (
+                <dl className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3 text-sm">
+                  <StatusRow
+                    label={t('runtime.characterLibrary.entryStatus')}
+                    value={selectedLibraryEntry.status}
+                  />
+                  <StatusRow
+                    label={t('runtime.characterLibrary.entryClass')}
+                    value={`${selectedLibraryEntry.className} ${selectedLibraryEntry.level}`}
+                  />
+                  <StatusRow
+                    label={t('runtime.characterLibrary.entryId')}
+                    value={selectedLibraryEntry.id}
+                  />
+                </dl>
+              ) : null}
+            </>
+          ) : (
+            <EmptyState
+              detail={t('runtime.characterLibrary.emptyDetail')}
+              title={t('runtime.characterLibrary.emptyTitle')}
+            />
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <ActionButton
+              disabled={libraryEntriesLoading}
+              disabledReason={
+                libraryEntriesLoading
+                  ? t('runtime.characterLibrary.loading')
+                  : undefined
+              }
+              label={
+                libraryEntriesLoading
+                  ? t('runtime.characterLibrary.loading')
+                  : t('runtime.characterLibrary.refresh')
+              }
+              onClick={onRefreshLibraryEntries}
+              variant="secondary"
+            />
+            <ActionButton
+              disabled={Boolean(libraryEntrySubmitDisabledReason)}
+              disabledReason={libraryEntrySubmitDisabledReason ?? undefined}
+              label={t('runtime.characterLibrary.submit')}
+              onClick={onSubmitLibraryEntry}
+              variant="secondary"
+            />
+          </div>
+        </div>
 
         <div className="grid gap-3">
           <LabeledInput

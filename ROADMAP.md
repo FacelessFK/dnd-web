@@ -39,6 +39,8 @@ Already implemented:
 - `/characters` Character Library and Builder surface;
 - `/login` auth surface for DB-backed Character Library ownership;
 - server-side Character Library -> runtime pending-assignment bridge;
+- Player-mode runtime UI for submitting finalized saved library entries into
+  live pending assignment;
 - local SRD-style builder data and derived previews;
 - English/Persian UI direction through `I18nProvider`;
 - local portrait handling, generated builder assets, and PDF export;
@@ -49,8 +51,6 @@ Already implemented:
 
 Still missing before a stronger MVP:
 
-- localization-aware UI for submitting finalized library entries into live
-  sessions;
 - DB transaction/outbox hardening for the bridge path if multi-store atomicity
   becomes required;
 - fuller product UX around session setup and assignment;
@@ -61,17 +61,18 @@ Still missing before a stronger MVP:
 - multi-process coordination;
 - broader D&D rules systems.
 
-## Immediate Next Milestone: Complete Character Library -> Runtime Assignment Bridge
+## Immediate Next Milestone: Bridge DB Transaction/Outbox Hardening
 
 ### Goal
 
-Finish the bridge so finalized Character Library entries can be selected from
-the product UI, submitted for a live session, and assigned by the DM, while
-runtime session state remains separate from the reusable library entry.
+Harden the existing bridge so finalized Character Library entries can continue
+to be submitted from the product UI while DB-mode character copy, pending
+assignment, idempotency, and stream/outbox behavior are handled through an
+honest narrow boundary.
 
 ### Exit Criteria
 
-- Finalized library entries can be submitted to a session from the UI.
+- Finalized library entries can still be submitted to a session from the UI.
 - Unauthorized or non-finalized entries are rejected.
 - DM remains the authoritative assignment actor.
 - Runtime character/session overlay state is created or linked from the library
@@ -79,6 +80,8 @@ runtime session state remains separate from the reusable library entry.
 - Live HP, movement, conditions, encounter state, and DM overrides do not mutate
   the reusable entry.
 - New UI copy is localization-aware for English/Persian.
+- DB-mode bridge behavior is covered by a transaction/outbox boundary or the
+  remaining limitation is documented explicitly.
 
 See `docs/delivery/NEXT_MILESTONE.md`.
 

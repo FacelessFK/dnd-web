@@ -61,6 +61,13 @@ no portrait is uploaded, confirm the card and summary fall back to selected
 species/race art. Portrait embedding into the PDF is not required for this MVP;
 the exported PDF may remain text-only.
 
+For the Character Library -> runtime bridge UI, keep the same logged-in
+browser session, open `/runtime`, switch to Player mode, join or recover a live
+session, refresh the saved-character list, select a finalized saved character,
+and submit it. Confirm the player shows a pending assignment and the DM roster
+can assign that pending runtime character without changing the reusable library
+entry.
+
 For the rule-aware builder slice, also check:
 
 - Select different species and confirm the summary rail and Species step show

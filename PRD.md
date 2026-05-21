@@ -61,9 +61,9 @@ and non-goals.
 10. A narrow encounter can be played through with turn tracking, attack
     resolution, downed-state handling, and DM corrections.
 
-Current gap: the server-side bridge from reusable Character Library entries
-into live pending assignment now exists, but the product UI for selecting and
-submitting saved entries into a session is still the recommended next slice.
+Current gap: the bridge from reusable Character Library entries into live
+pending assignment now has a server-side path and Player-mode UI. The remaining
+near-term gap is DB transaction/outbox hardening for the bridge path.
 
 ## Domain Shape
 
@@ -121,6 +121,8 @@ Implemented:
 - `submit_character_library_entry_for_assignment` on the runtime character
   command surface, which copies a finalized library entry into a separate
   runtime character and pending assignment state;
+- Player-mode `/runtime` UI for selecting a finalized saved Character Library
+  entry and submitting it into the live session;
 - DB-backed `character_library_entries`;
 - `/login` auth MVP with opaque HttpOnly-cookie sessions in DB mode;
 - local SRD-style rules data and derived previews;
@@ -139,8 +141,8 @@ Still limited:
 - unpublished outbox rows are not auto-redelivered on cold boot;
 - no replay, cursor, catch-up API, exactly-once delivery, production auth, or
   multi-process coordination;
-- Character Library entries can be submitted through a server-side bridge, but
-  the localization-aware UI affordance is not wired yet;
+- Character Library entries can be submitted through the bridge from the
+  Player-mode runtime UI;
 - the bridge is not yet covered by a dedicated multi-store DB
   transaction/outbox boundary;
 - player-specific visibility is not complete;
@@ -185,8 +187,7 @@ The product is moving in the right direction when:
 
 ## Recommended Next Milestone
 
-Complete Character Library -> Runtime Assignment Bridge, starting with the
-localization-aware UI affordance for player submission and pending assignment
-status.
+DB transaction/outbox hardening for the Character Library -> Runtime
+Assignment Bridge.
 
 See `docs/delivery/NEXT_MILESTONE.md`.
