@@ -4,6 +4,12 @@ This document started as the Phase 10 Slice 1 design pass. Later Phase 10
 slices update it as the source of truth for the currently implemented durable
 boundaries and remaining persistence gaps, without changing gameplay behavior.
 
+For the product/domain separation between reusable Character Library entries
+and live runtime overlays, see `docs/domain/DOMAIN_MODEL.md` and
+`docs/decisions/0005-character-library-runtime-bridge.md`. This document
+describes persistence reality; it should not be read as a claim that reusable
+library entries are already bridged into live runtime assignment.
+
 ## Current Boundary Audit
 
 ### `CharacterLibraryEntryDatabase`

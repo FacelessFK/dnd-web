@@ -84,9 +84,17 @@ Current limits remain:
 
 ## Useful Docs
 
+- `CODEX_CONTEXT.md`: concise AI/Codex execution context.
 - `README.md`: concise project entry point.
 - `AGENTS.md`: Codex instructions.
 - `docs/codex-workflow.md`: validation and environment workflow.
+- `docs/product/PRODUCT_BRIEF.md`: product brief and principles.
+- `docs/product/I18N_POLICY.md`: English/Persian localization policy.
+- `docs/product/USER_FLOWS.md`: current and proposed user flows.
+- `docs/domain/DOMAIN_MODEL.md`: domain concepts and separation rules.
+- `docs/engineering/CURRENT_STATE.md`: current implementation reality.
+- `docs/delivery/NEXT_MILESTONE.md`: recommended next milestone.
+- `docs/delivery/TASK_TEMPLATE.md`: reusable Codex task prompt template.
 - `docs/api-surface.md`: endpoint and protocol overview.
 - `docs/manual-validation.md`: manual runtime and character checks.
 - `docs/persistence-boundaries.md`: persistence and transaction notes.

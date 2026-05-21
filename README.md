@@ -42,6 +42,16 @@ library paths, plus current transaction/idempotency/outbox slices. There is no
 event replay, stream cursor, catch-up API, exactly-once delivery, production
 auth, or multi-process coordination.
 
+## Documentation Source Of Truth
+
+Start with [CODEX_CONTEXT.md](CODEX_CONTEXT.md) for AI-assisted work. Current
+product and delivery docs live under `docs/product/`, `docs/domain/`,
+`docs/engineering/`, and `docs/delivery/`.
+
+Raw context under `docs/context/` is archive/input material only. It is useful
+for extracting intent, but it is not source of truth when it conflicts with the
+current handoff, API surface, persistence notes, or implementation.
+
 ## Stack
 
 - TypeScript pnpm monorepo
@@ -114,11 +124,29 @@ guardrails, and confirms Local Reset stays browser-local.
 
 ## Main Docs
 
+- [CODEX_CONTEXT.md](CODEX_CONTEXT.md): concise context for future Codex tasks.
 - [AGENTS.md](AGENTS.md): Codex/project instructions.
+- [PRD.md](PRD.md): product requirements aligned to the current implementation.
+- [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md): architecture and authority model.
+- [ROADMAP.md](ROADMAP.md): product roadmap and next milestone direction.
 - [docs/codex-workflow.md](docs/codex-workflow.md): validation, DB mode, and
   browser QA workflow.
 - [docs/project-handoff.md](docs/project-handoff.md): current implementation
   handoff.
+- [docs/product/PRODUCT_BRIEF.md](docs/product/PRODUCT_BRIEF.md): professional
+  product brief.
+- [docs/product/I18N_POLICY.md](docs/product/I18N_POLICY.md): English/Persian
+  localization policy.
+- [docs/product/USER_FLOWS.md](docs/product/USER_FLOWS.md): current and
+  proposed product flows.
+- [docs/domain/DOMAIN_MODEL.md](docs/domain/DOMAIN_MODEL.md): product/domain
+  concepts and boundaries.
+- [docs/engineering/CURRENT_STATE.md](docs/engineering/CURRENT_STATE.md):
+  current implementation reality and known limits.
+- [docs/delivery/NEXT_MILESTONE.md](docs/delivery/NEXT_MILESTONE.md): proposed
+  Character Library -> Runtime Assignment Bridge milestone.
+- [docs/delivery/TASK_TEMPLATE.md](docs/delivery/TASK_TEMPLATE.md): reusable
+  Codex implementation prompt template.
 - [docs/api-surface.md](docs/api-surface.md): command endpoints, SSE, and
   recovery surface.
 - [docs/manual-validation.md](docs/manual-validation.md): manual runtime and

@@ -1,7 +1,9 @@
 # Codex Workflow
 
 Use this for DND-web validation and environment reporting. Keep product details
-in `README.md` and `docs/project-handoff.md`.
+in `README.md`, `CODEX_CONTEXT.md`, `docs/project-handoff.md`, and the
+`docs/product/`, `docs/domain/`, `docs/engineering/`, and `docs/delivery/`
+source-of-truth docs.
 
 ## Standard Validation
 
