@@ -58,6 +58,15 @@ const messages = {
     'runtime.assignmentRequests.runtimeCopy': 'Runtime copy',
     'runtime.assignmentRequests.sourceLibraryEntry': 'Source library entry',
     'runtime.assignmentRequests.speed': 'Speed',
+    'runtime.board.camera': 'Camera',
+    'runtime.board.panDown': 'Pan down',
+    'runtime.board.panLeft': 'Pan left',
+    'runtime.board.panRight': 'Pan right',
+    'runtime.board.panUp': 'Pan up',
+    'runtime.board.resetView': 'Reset view',
+    'runtime.board.viewportSummary': '{zoom} zoom · pan {panX}, {panY}',
+    'runtime.board.zoomIn': 'Zoom in',
+    'runtime.board.zoomOut': 'Zoom out',
     'runtime.characterLibrary.blocker.alreadyAssigned':
       'This participant already has an assigned character.',
     'runtime.characterLibrary.blocker.alreadySubmitted':
@@ -158,6 +167,15 @@ const messages = {
     'runtime.assignmentRequests.runtimeCopy': 'نسخه runtime',
     'runtime.assignmentRequests.sourceLibraryEntry': 'ورودی کتابخانه منبع',
     'runtime.assignmentRequests.speed': 'سرعت',
+    'runtime.board.camera': 'دوربین',
+    'runtime.board.panDown': 'حرکت دوربین به پایین',
+    'runtime.board.panLeft': 'حرکت دوربین به چپ',
+    'runtime.board.panRight': 'حرکت دوربین به راست',
+    'runtime.board.panUp': 'حرکت دوربین به بالا',
+    'runtime.board.resetView': 'بازنشانی نما',
+    'runtime.board.viewportSummary': 'زوم {zoom} · جابه‌جایی {panX}, {panY}',
+    'runtime.board.zoomIn': 'زوم بیشتر',
+    'runtime.board.zoomOut': 'زوم کمتر',
     'runtime.characterLibrary.blocker.alreadyAssigned':
       'این شرکت‌کننده از قبل کاراکتر assign شده دارد.',
     'runtime.characterLibrary.blocker.alreadySubmitted':

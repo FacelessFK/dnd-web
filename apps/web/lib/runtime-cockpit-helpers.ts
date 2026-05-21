@@ -32,6 +32,15 @@ export type Cell = {
   y: number;
 };
 
+export type TacticalBoardViewport = {
+  panX: number;
+  panY: number;
+  zoom: number;
+};
+
+export type TacticalBoardZoomDirection = 'in' | 'out';
+export type TacticalBoardPanDirection = 'down' | 'left' | 'right' | 'up';
+
 export type RuntimeMode = 'dm' | 'player';
 
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -144,6 +153,17 @@ export const samplePlayers = [
 
 export const defaultPlayer = samplePlayers[0];
 
+export const defaultTacticalBoardViewport: TacticalBoardViewport = {
+  panX: 0,
+  panY: 0,
+  zoom: 1,
+};
+
+export const tacticalBoardZoomLevels = [0.75, 1, 1.25, 1.5, 2] as const;
+
+const tacticalBoardBaseCellSizePixels = 52;
+const tacticalBoardPanStepCells = 2;
+
 export const sampleCharacters: Record<string, CharacterInput> = {
   'player-001': {
     abilities: {
@@ -219,6 +239,77 @@ export function createDefaultCharacterDraftForm(
     notes: '',
     speciesOrRace: 'Human',
     speed: '30',
+  };
+}
+
+export function getTacticalBoardCellSizePixels(zoom: number): number {
+  return Math.round(tacticalBoardBaseCellSizePixels * zoom);
+}
+
+export function getTacticalBoardViewportAfterZoom(
+  viewport: TacticalBoardViewport,
+  direction: TacticalBoardZoomDirection,
+): TacticalBoardViewport {
+  const currentZoom = viewport.zoom;
+  const nextZoom =
+    direction === 'in'
+      ? (tacticalBoardZoomLevels.find((zoom) => zoom > currentZoom) ??
+        tacticalBoardZoomLevels.at(-1) ??
+        currentZoom)
+      : ([...tacticalBoardZoomLevels]
+          .reverse()
+          .find((zoom) => zoom < currentZoom) ??
+        tacticalBoardZoomLevels[0] ??
+        currentZoom);
+
+  return {
+    ...viewport,
+    zoom: nextZoom,
+  };
+}
+
+export function getTacticalBoardViewportAfterPan({
+  direction,
+  grid,
+  viewport,
+}: {
+  direction: TacticalBoardPanDirection;
+  grid: Pick<GridDefinition, 'height' | 'width'>;
+  viewport: TacticalBoardViewport;
+}): TacticalBoardViewport {
+  const next = {
+    ...viewport,
+  };
+
+  switch (direction) {
+    case 'down':
+      next.panY -= tacticalBoardPanStepCells;
+      break;
+    case 'left':
+      next.panX += tacticalBoardPanStepCells;
+      break;
+    case 'right':
+      next.panX -= tacticalBoardPanStepCells;
+      break;
+    case 'up':
+      next.panY += tacticalBoardPanStepCells;
+      break;
+  }
+
+  return clampTacticalBoardViewportPan(next, grid);
+}
+
+function clampTacticalBoardViewportPan(
+  viewport: TacticalBoardViewport,
+  grid: Pick<GridDefinition, 'height' | 'width'>,
+): TacticalBoardViewport {
+  const panLimitX = Math.max(0, grid.width - 1);
+  const panLimitY = Math.max(0, grid.height - 1);
+
+  return {
+    ...viewport,
+    panX: Math.min(panLimitX, Math.max(-panLimitX, viewport.panX)),
+    panY: Math.min(panLimitY, Math.max(-panLimitY, viewport.panY)),
   };
 }
 

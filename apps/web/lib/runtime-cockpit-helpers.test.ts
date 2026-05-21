@@ -32,6 +32,9 @@ import {
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
+  getTacticalBoardCellSizePixels,
+  getTacticalBoardViewportAfterPan,
+  getTacticalBoardViewportAfterZoom,
   getPlayerNextStep,
   getPlayerParticipantIds,
   getKnownSceneOptions,
@@ -389,6 +392,97 @@ describe('runtime cockpit helpers', () => {
       }),
       'player-001',
     );
+  });
+
+  it('steps tactical board viewport through bounded zoom levels', () => {
+    assert.deepEqual(
+      getTacticalBoardViewportAfterZoom(
+        {
+          panX: 0,
+          panY: 0,
+          zoom: 1,
+        },
+        'in',
+      ),
+      {
+        panX: 0,
+        panY: 0,
+        zoom: 1.25,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardViewportAfterZoom(
+        {
+          panX: 0,
+          panY: 0,
+          zoom: 2,
+        },
+        'in',
+      ),
+      {
+        panX: 0,
+        panY: 0,
+        zoom: 2,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardViewportAfterZoom(
+        {
+          panX: 0,
+          panY: 0,
+          zoom: 1,
+        },
+        'out',
+      ),
+      {
+        panX: 0,
+        panY: 0,
+        zoom: 0.75,
+      },
+    );
+  });
+
+  it('pans tactical board viewport in bounded cell offsets', () => {
+    assert.deepEqual(
+      getTacticalBoardViewportAfterPan({
+        direction: 'left',
+        grid: {
+          height: 6,
+          width: 8,
+        },
+        viewport: {
+          panX: 0,
+          panY: 0,
+          zoom: 1,
+        },
+      }),
+      {
+        panX: 2,
+        panY: 0,
+        zoom: 1,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardViewportAfterPan({
+        direction: 'down',
+        grid: {
+          height: 6,
+          width: 8,
+        },
+        viewport: {
+          panX: 99,
+          panY: -99,
+          zoom: 1.5,
+        },
+      }),
+      {
+        panX: 7,
+        panY: -5,
+        zoom: 1.5,
+      },
+    );
+    assert.equal(getTacticalBoardCellSizePixels(0.75), 39);
+    assert.equal(getTacticalBoardCellSizePixels(2), 104);
   });
 
   it('guards DM-only controls from player mode', () => {

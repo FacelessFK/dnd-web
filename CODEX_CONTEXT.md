@@ -46,8 +46,9 @@ that scope.
 - `/runtime` is a live tactical cockpit with DM and Player modes, session
   create/join/reconnect, SSE subscription, read-model recovery, scene creation
   and activation, passive scene entities, transition nodes, placement/movement,
-  mixed player/combatant encounters, narrow melee attacks, turn usage, readable
-  event feed, and explicit DM controls.
+  local tactical board camera controls, mixed player/combatant encounters,
+  narrow melee attacks, turn usage, readable event feed, and explicit DM
+  controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.

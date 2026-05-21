@@ -48,6 +48,7 @@ import {
   createSceneEntityDraftFormFromEntity,
   createSceneDraftFormFromScene,
   createSceneTransitionDraftFormFromEntity,
+  defaultTacticalBoardViewport,
   defaultDm,
   defaultPlayer,
   describeSessionStreamEvent,
@@ -78,6 +79,9 @@ import {
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
+  getTacticalBoardCellSizePixels,
+  getTacticalBoardViewportAfterPan,
+  getTacticalBoardViewportAfterZoom,
   getTransitionSceneEntities,
   initials,
   isSessionStreamEvent,
@@ -113,6 +117,9 @@ import {
   type SceneTransitionDraftForm,
   type SessionSnapshot,
   type StoredCockpitState,
+  type TacticalBoardPanDirection,
+  type TacticalBoardViewport,
+  type TacticalBoardZoomDirection,
 } from '../../lib/runtime-cockpit-helpers';
 import { useSessionStream } from '../../lib/use-session-stream';
 
@@ -245,6 +252,8 @@ export function RuntimeCockpit() {
   const [selectedTargetCombatantId, setSelectedTargetCombatantId] =
     useState('');
   const [selectedCell, setSelectedCell] = useState<Cell>({ x: 0, y: 0 });
+  const [tacticalBoardViewport, setTacticalBoardViewport] =
+    useState<TacticalBoardViewport>(defaultTacticalBoardViewport);
   const [selectedCombatantId, setSelectedCombatantId] = useState('');
   const [hpDraft, setHpDraft] = useState('1');
   const [combatantHpDraft, setCombatantHpDraft] = useState('8');
@@ -3132,6 +3141,26 @@ export function RuntimeCockpit() {
     height: 8,
     width: 8,
   };
+  function panTacticalBoard(direction: TacticalBoardPanDirection): void {
+    setTacticalBoardViewport((current) =>
+      getTacticalBoardViewportAfterPan({
+        direction,
+        grid,
+        viewport: current,
+      }),
+    );
+  }
+
+  function zoomTacticalBoard(direction: TacticalBoardZoomDirection): void {
+    setTacticalBoardViewport((current) =>
+      getTacticalBoardViewportAfterZoom(current, direction),
+    );
+  }
+
+  function resetTacticalBoardView(): void {
+    setTacticalBoardViewport(defaultTacticalBoardViewport);
+  }
+
   const activeSceneGuidance = getActiveSceneGuidance({
     activeSceneId: sceneId || sessionState?.session.activeSceneId || null,
     mode,
@@ -3723,9 +3752,12 @@ export function RuntimeCockpit() {
                 currentTurnParticipantId={currentTurnParticipantId}
                 grid={grid}
                 mode={mode}
+                onPanBoard={panTacticalBoard}
+                onResetBoardView={resetTacticalBoardView}
                 onSelectCell={setSelectedCell}
                 onSelectSceneEntity={selectPassiveSceneEntity}
                 onSelectTransition={selectSceneTransitionNode}
+                onZoomBoard={zoomTacticalBoard}
                 scene={scene}
                 selectedCell={selectedCell}
                 selectedCombatantId={selectedCombatantId}
@@ -3733,6 +3765,7 @@ export function RuntimeCockpit() {
                 selectedTargetCombatantId={selectedTargetCombatantId}
                 selectedTargetParticipantId={selectedTarget}
                 selectedTransitionId={selectedTransitionId}
+                viewport={tacticalBoardViewport}
               />
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
                 {mode === 'dm' ? (
@@ -6206,9 +6239,12 @@ function TacticalGrid({
   currentTurnParticipantId,
   grid,
   mode,
+  onPanBoard,
+  onResetBoardView,
   onSelectCell,
   onSelectSceneEntity,
   onSelectTransition,
+  onZoomBoard,
   scene,
   selectedCell,
   selectedCombatantId,
@@ -6216,6 +6252,7 @@ function TacticalGrid({
   selectedTargetCombatantId,
   selectedTargetParticipantId,
   selectedTransitionId,
+  viewport,
 }: {
   activeScene: ActiveSceneState | null;
   actingParticipantId: string;
@@ -6227,9 +6264,12 @@ function TacticalGrid({
     width: number;
   };
   mode: RuntimeMode;
+  onPanBoard: (direction: TacticalBoardPanDirection) => void;
+  onResetBoardView: () => void;
   onSelectCell: (cell: Cell) => void;
   onSelectSceneEntity: (entityId: string) => void;
   onSelectTransition: (transitionId: string) => void;
+  onZoomBoard: (direction: TacticalBoardZoomDirection) => void;
   scene: Scene | null;
   selectedCell: Cell;
   selectedCombatantId: string;
@@ -6237,7 +6277,9 @@ function TacticalGrid({
   selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
   selectedTransitionId: string;
+  viewport: TacticalBoardViewport;
 }) {
+  const { t } = useI18n();
   const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
   const visibleEntityCells = useMemo(
     () =>
@@ -6261,186 +6303,294 @@ function TacticalGrid({
     }
   }
 
+  const boardCellSizePixels = getTacticalBoardCellSizePixels(viewport.zoom);
+  const zoomPercent = `${Math.round(viewport.zoom * 100)}%`;
+  const boardPixelWidth = grid.width * boardCellSizePixels;
+  const cameraButtonClassName =
+    'flex size-9 items-center justify-center rounded-lg border border-amber-400/25 bg-black/25 text-xs font-black text-amber-100 transition hover:border-amber-200 hover:bg-amber-300/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200';
+
   return (
-    <div
-      className="grid overflow-hidden rounded-3xl border border-amber-400/30 bg-[#110d0a] p-2 shadow-inner shadow-black/70"
-      style={{
-        gridTemplateColumns: `repeat(${grid.width}, minmax(0, 1fr))`,
-      }}
-    >
-      {cells.map((cell) => {
-        const entitiesAtCell = visibleEntityCells.filter(
-          (candidate) => candidate.x === cell.x && candidate.y === cell.y,
-        );
-        const primaryEntityCell = entitiesAtCell[0];
-        const combatantsAtCell = combatantCells.filter(
-          (candidate) => candidate.x === cell.x && candidate.y === cell.y,
-        );
-        const primaryCombatantCell = combatantsAtCell[0];
-        const placement = activeScene?.placedCharacters.find(
-          (candidate) =>
-            candidate.position.x === cell.x && candidate.position.y === cell.y,
-        );
-        const resource = placement
-          ? charactersByParticipant[placement.participantId]
-          : undefined;
-        const isCurrentTurn =
-          placement?.participantId === currentTurnParticipantId;
-        const isSelected =
-          selectedCell.x === cell.x && selectedCell.y === cell.y;
-        const isSelectedEntity =
-          primaryEntityCell?.entity.id === selectedSceneEntityId;
-        const isSelectedTransition =
-          primaryEntityCell?.entity.id === selectedTransitionId;
-        const isTransitionEntity = Boolean(
-          primaryEntityCell?.entity.transition,
-        );
-        const isActingToken = placement?.participantId === actingParticipantId;
-        const isTarget =
-          placement?.participantId === selectedTargetParticipantId;
-        const isPlayerOwn =
-          mode === 'player' && placement?.participantId === actingParticipantId;
-        const isCurrentCombatant =
-          primaryCombatantCell?.entity.id === currentTurnCombatantId;
-        const isSelectedCombatant =
-          primaryCombatantCell?.entity.id === selectedCombatantId;
-        const isTargetCombatant =
-          primaryCombatantCell?.entity.id === selectedTargetCombatantId;
-        const isDefeatedCombatant = primaryCombatantCell
-          ? isCombatantEntityDefeated(primaryCombatantCell.entity)
-          : false;
-        const tokenTone = isTarget
-          ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
-          : isPlayerOwn
-            ? 'border-sky-200 bg-sky-500 text-slate-950 shadow-sky-300/35'
-            : isCurrentTurn
-              ? 'border-amber-100 bg-amber-400 text-stone-950 shadow-amber-300/40'
-              : isActingToken
-                ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
-                : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
-        const entityTone = primaryCombatantCell
-          ? isDefeatedCombatant
-            ? 'border-stone-400/50 bg-stone-900/70 text-stone-200'
-            : 'border-red-200/60 bg-red-900/65 text-red-50'
-          : isTransitionEntity
-            ? 'border-violet-200/60 bg-violet-950/55 text-violet-100'
-            : primaryEntityCell?.entity.type === 'terrain'
-              ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
-              : primaryEntityCell?.entity.type === 'monster'
-                ? 'border-red-300/45 bg-red-950/45 text-red-100'
-                : primaryEntityCell?.entity.type === 'player_spawn'
-                  ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
-                  : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
-        const ariaParts = [
-          `Select cell ${cell.x}, ${cell.y}`,
-          primaryCombatantCell
-            ? primaryCombatantCell.label
-            : primaryEntityCell
-              ? primaryEntityCell.label
-              : null,
-          placement
-            ? `token ${resource?.character.name ?? placement.participantId}`
-            : null,
-        ].filter(Boolean);
-
-        return (
-          <button
-            aria-label={ariaParts.join(', ')}
-            className={`group relative aspect-square min-h-11 border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
-              isSelected
-                ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
-                : primaryCombatantCell
-                  ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
-                  : primaryEntityCell
-                    ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
-                    : 'bg-[#211711] hover:bg-[#332316]'
-            }`}
-            key={`${cell.x}-${cell.y}`}
-            onClick={() => {
-              onSelectCell(cell);
-
-              if (
-                mode === 'dm' &&
-                primaryEntityCell &&
-                !primaryEntityCell.entity.combatant
-              ) {
-                if (primaryEntityCell.entity.transition) {
-                  onSelectTransition(primaryEntityCell.entity.id);
-                } else {
-                  onSelectSceneEntity(primaryEntityCell.entity.id);
-                }
-              }
-            }}
-            type="button"
-          >
-            <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
-              {cell.x},{cell.y}
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-black/25 p-3">
+        <div>
+          <p className="text-xs font-black uppercase text-amber-100">
+            {t('runtime.board.camera')}
+          </p>
+          <p className="mt-1 text-xs text-amber-100/60">
+            {t('runtime.board.viewportSummary', {
+              panX: String(viewport.panX),
+              panY: String(viewport.panY),
+              zoom: zoomPercent,
+            })}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-xl border border-amber-500/15 bg-black/30 p-1">
+            <button
+              aria-label={t('runtime.board.zoomOut')}
+              className={cameraButtonClassName}
+              onClick={() => onZoomBoard('out')}
+              title={t('runtime.board.zoomOut')}
+              type="button"
+            >
+              -
+            </button>
+            <span className="min-w-14 text-center text-xs font-bold text-amber-100">
+              {zoomPercent}
             </span>
-            {primaryEntityCell ? (
-              <span
-                className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
-                  isSelectedEntity ? 'ring-2 ring-amber-200/80' : ''
-                } ${isSelectedTransition ? 'ring-2 ring-violet-100/90' : ''} ${
-                  primaryEntityCell.entity.hidden ? 'opacity-45' : ''
+            <button
+              aria-label={t('runtime.board.zoomIn')}
+              className={cameraButtonClassName}
+              onClick={() => onZoomBoard('in')}
+              title={t('runtime.board.zoomIn')}
+              type="button"
+            >
+              +
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1 rounded-xl border border-amber-500/15 bg-black/30 p-1">
+            <span aria-hidden="true" />
+            <button
+              aria-label={t('runtime.board.panUp')}
+              className={cameraButtonClassName}
+              onClick={() => onPanBoard('up')}
+              title={t('runtime.board.panUp')}
+              type="button"
+            >
+              ^
+            </button>
+            <span aria-hidden="true" />
+            <button
+              aria-label={t('runtime.board.panLeft')}
+              className={cameraButtonClassName}
+              onClick={() => onPanBoard('left')}
+              title={t('runtime.board.panLeft')}
+              type="button"
+            >
+              &lt;
+            </button>
+            <button
+              aria-label={t('runtime.board.resetView')}
+              className={cameraButtonClassName}
+              onClick={onResetBoardView}
+              title={t('runtime.board.resetView')}
+              type="button"
+            >
+              0
+            </button>
+            <button
+              aria-label={t('runtime.board.panRight')}
+              className={cameraButtonClassName}
+              onClick={() => onPanBoard('right')}
+              title={t('runtime.board.panRight')}
+              type="button"
+            >
+              &gt;
+            </button>
+            <span aria-hidden="true" />
+            <button
+              aria-label={t('runtime.board.panDown')}
+              className={cameraButtonClassName}
+              onClick={() => onPanBoard('down')}
+              title={t('runtime.board.panDown')}
+              type="button"
+            >
+              v
+            </button>
+            <span aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+      <div className="min-h-[360px] overflow-hidden rounded-3xl border border-amber-400/30 bg-[#110d0a] p-2 shadow-inner shadow-black/70">
+        <div
+          className="mx-auto grid transition-transform duration-200 ease-out"
+          style={{
+            gridAutoRows: `${boardCellSizePixels}px`,
+            gridTemplateColumns: `repeat(${grid.width}, ${boardCellSizePixels}px)`,
+            transform: `translate(${viewport.panX * boardCellSizePixels}px, ${viewport.panY * boardCellSizePixels}px)`,
+            width: `${boardPixelWidth}px`,
+          }}
+        >
+          {cells.map((cell) => {
+            const entitiesAtCell = visibleEntityCells.filter(
+              (candidate) => candidate.x === cell.x && candidate.y === cell.y,
+            );
+            const primaryEntityCell = entitiesAtCell[0];
+            const combatantsAtCell = combatantCells.filter(
+              (candidate) => candidate.x === cell.x && candidate.y === cell.y,
+            );
+            const primaryCombatantCell = combatantsAtCell[0];
+            const placement = activeScene?.placedCharacters.find(
+              (candidate) =>
+                candidate.position.x === cell.x &&
+                candidate.position.y === cell.y,
+            );
+            const resource = placement
+              ? charactersByParticipant[placement.participantId]
+              : undefined;
+            const isCurrentTurn =
+              placement?.participantId === currentTurnParticipantId;
+            const isSelected =
+              selectedCell.x === cell.x && selectedCell.y === cell.y;
+            const isSelectedEntity =
+              primaryEntityCell?.entity.id === selectedSceneEntityId;
+            const isSelectedTransition =
+              primaryEntityCell?.entity.id === selectedTransitionId;
+            const isTransitionEntity = Boolean(
+              primaryEntityCell?.entity.transition,
+            );
+            const isActingToken =
+              placement?.participantId === actingParticipantId;
+            const isTarget =
+              placement?.participantId === selectedTargetParticipantId;
+            const isPlayerOwn =
+              mode === 'player' &&
+              placement?.participantId === actingParticipantId;
+            const isCurrentCombatant =
+              primaryCombatantCell?.entity.id === currentTurnCombatantId;
+            const isSelectedCombatant =
+              primaryCombatantCell?.entity.id === selectedCombatantId;
+            const isTargetCombatant =
+              primaryCombatantCell?.entity.id === selectedTargetCombatantId;
+            const isDefeatedCombatant = primaryCombatantCell
+              ? isCombatantEntityDefeated(primaryCombatantCell.entity)
+              : false;
+            const tokenTone = isTarget
+              ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
+              : isPlayerOwn
+                ? 'border-sky-200 bg-sky-500 text-slate-950 shadow-sky-300/35'
+                : isCurrentTurn
+                  ? 'border-amber-100 bg-amber-400 text-stone-950 shadow-amber-300/40'
+                  : isActingToken
+                    ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
+                    : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
+            const entityTone = primaryCombatantCell
+              ? isDefeatedCombatant
+                ? 'border-stone-400/50 bg-stone-900/70 text-stone-200'
+                : 'border-red-200/60 bg-red-900/65 text-red-50'
+              : isTransitionEntity
+                ? 'border-violet-200/60 bg-violet-950/55 text-violet-100'
+                : primaryEntityCell?.entity.type === 'terrain'
+                  ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
+                  : primaryEntityCell?.entity.type === 'monster'
+                    ? 'border-red-300/45 bg-red-950/45 text-red-100'
+                    : primaryEntityCell?.entity.type === 'player_spawn'
+                      ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
+                      : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
+            const ariaParts = [
+              `Select cell ${cell.x}, ${cell.y}`,
+              primaryCombatantCell
+                ? primaryCombatantCell.label
+                : primaryEntityCell
+                  ? primaryEntityCell.label
+                  : null,
+              placement
+                ? `token ${resource?.character.name ?? placement.participantId}`
+                : null,
+            ].filter(Boolean);
+
+            return (
+              <button
+                aria-label={ariaParts.join(', ')}
+                className={`group relative border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
+                  isSelected
+                    ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
+                    : primaryCombatantCell
+                      ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
+                      : primaryEntityCell
+                        ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
+                        : 'bg-[#211711] hover:bg-[#332316]'
                 }`}
-                title={primaryEntityCell.label}
+                key={`${cell.x}-${cell.y}`}
+                onClick={() => {
+                  onSelectCell(cell);
+
+                  if (
+                    mode === 'dm' &&
+                    primaryEntityCell &&
+                    !primaryEntityCell.entity.combatant
+                  ) {
+                    if (primaryEntityCell.entity.transition) {
+                      onSelectTransition(primaryEntityCell.entity.id);
+                    } else {
+                      onSelectSceneEntity(primaryEntityCell.entity.id);
+                    }
+                  }
+                }}
+                type="button"
               >
-                {primaryEntityCell.isOrigin ? (
-                  primaryEntityCell.entity.transition ? (
-                    <span className="flex items-center gap-1">
-                      <span>T</span>
-                      <span>
-                        {initials(primaryEntityCell.entity.name) || 'T'}
-                      </span>
-                    </span>
-                  ) : (
-                    initials(primaryEntityCell.entity.name) || 'E'
-                  )
-                ) : (
-                  '·'
-                )}
-              </span>
-            ) : null}
-            {primaryCombatantCell ? (
-              <span
-                className={`runtime-token-pop absolute inset-x-2 top-1/2 z-20 mx-auto flex size-10 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${
-                  isTargetCombatant
-                    ? 'border-fuchsia-100 bg-fuchsia-500 text-stone-950 shadow-fuchsia-300/45'
-                    : isSelectedCombatant
-                      ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
-                      : isCurrentCombatant
-                        ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
-                        : isDefeatedCombatant
-                          ? 'border-stone-300/70 bg-stone-800 text-stone-200 opacity-75 shadow-black/40'
-                          : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
-                } ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
-                title={primaryCombatantCell.label}
-              >
-                {primaryCombatantCell.isOrigin
-                  ? initials(primaryCombatantCell.entity.name) || 'M'
-                  : '·'}
-                {isDefeatedCombatant ? (
-                  <span className="absolute -bottom-4 text-[8px] uppercase tracking-wide text-stone-200">
-                    defeated
+                <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
+                  {cell.x},{cell.y}
+                </span>
+                {primaryEntityCell ? (
+                  <span
+                    className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
+                      isSelectedEntity ? 'ring-2 ring-amber-200/80' : ''
+                    } ${isSelectedTransition ? 'ring-2 ring-violet-100/90' : ''} ${
+                      primaryEntityCell.entity.hidden ? 'opacity-45' : ''
+                    }`}
+                    title={primaryEntityCell.label}
+                  >
+                    {primaryEntityCell.isOrigin ? (
+                      primaryEntityCell.entity.transition ? (
+                        <span className="flex items-center gap-1">
+                          <span>T</span>
+                          <span>
+                            {initials(primaryEntityCell.entity.name) || 'T'}
+                          </span>
+                        </span>
+                      ) : (
+                        initials(primaryEntityCell.entity.name) || 'E'
+                      )
+                    ) : (
+                      '·'
+                    )}
                   </span>
                 ) : null}
-              </span>
-            ) : null}
-            {placement ? (
-              <span
-                className={`runtime-token-pop relative z-10 mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
-                  isCurrentTurn ? 'animate-pulse' : ''
-                }`}
-                title={resource?.character.name ?? placement.participantId}
-              >
-                {initials(resource?.character.name ?? placement.participantId)}
-              </span>
-            ) : (
-              <span className="sr-only">no character token</span>
-            )}
-          </button>
-        );
-      })}
+                {primaryCombatantCell ? (
+                  <span
+                    className={`runtime-token-pop absolute inset-x-2 top-1/2 z-20 mx-auto flex size-10 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${
+                      isTargetCombatant
+                        ? 'border-fuchsia-100 bg-fuchsia-500 text-stone-950 shadow-fuchsia-300/45'
+                        : isSelectedCombatant
+                          ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
+                          : isCurrentCombatant
+                            ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
+                            : isDefeatedCombatant
+                              ? 'border-stone-300/70 bg-stone-800 text-stone-200 opacity-75 shadow-black/40'
+                              : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
+                    } ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
+                    title={primaryCombatantCell.label}
+                  >
+                    {primaryCombatantCell.isOrigin
+                      ? initials(primaryCombatantCell.entity.name) || 'M'
+                      : '·'}
+                    {isDefeatedCombatant ? (
+                      <span className="absolute -bottom-4 text-[8px] uppercase tracking-wide text-stone-200">
+                        defeated
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {placement ? (
+                  <span
+                    className={`runtime-token-pop relative z-10 mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
+                      isCurrentTurn ? 'animate-pulse' : ''
+                    }`}
+                    title={resource?.character.name ?? placement.participantId}
+                  >
+                    {initials(
+                      resource?.character.name ?? placement.participantId,
+                    )}
+                  </span>
+                ) : (
+                  <span className="sr-only">no character token</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
