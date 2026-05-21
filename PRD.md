@@ -61,8 +61,9 @@ and non-goals.
 10. A narrow encounter can be played through with turn tracking, attack
     resolution, downed-state handling, and DM corrections.
 
-Current gap: reusable Character Library entries do not yet flow directly into
-live runtime assignment. That bridge is the recommended next milestone.
+Current gap: the server-side bridge from reusable Character Library entries
+into live pending assignment now exists, but the product UI for selecting and
+submitting saved entries into a session is still the recommended next slice.
 
 ## Domain Shape
 
@@ -117,6 +118,9 @@ Implemented:
   usage, and encounter end;
 - `/characters` Character Library and Builder routes;
 - `POST /api/character-library/command`;
+- `submit_character_library_entry_for_assignment` on the runtime character
+  command surface, which copies a finalized library entry into a separate
+  runtime character and pending assignment state;
 - DB-backed `character_library_entries`;
 - `/login` auth MVP with opaque HttpOnly-cookie sessions in DB mode;
 - local SRD-style rules data and derived previews;
@@ -135,8 +139,10 @@ Still limited:
 - unpublished outbox rows are not auto-redelivered on cold boot;
 - no replay, cursor, catch-up API, exactly-once delivery, production auth, or
   multi-process coordination;
-- Character Library entries are not yet directly submitted into live runtime
-  assignment;
+- Character Library entries can be submitted through a server-side bridge, but
+  the localization-aware UI affordance is not wired yet;
+- the bridge is not yet covered by a dedicated multi-store DB
+  transaction/outbox boundary;
 - player-specific visibility is not complete;
 - broader D&D rules remain intentionally narrow.
 
@@ -179,6 +185,8 @@ The product is moving in the right direction when:
 
 ## Recommended Next Milestone
 
-Character Library -> Runtime Assignment Bridge.
+Complete Character Library -> Runtime Assignment Bridge, starting with the
+localization-aware UI affordance for player submission and pending assignment
+status.
 
 See `docs/delivery/NEXT_MILESTONE.md`.

@@ -1,4 +1,5 @@
 import type {
+  CharacterAssignmentSuccess,
   CharacterLibraryEntry,
   CharacterLibraryEntryId,
   CharacterLibraryEntryInput,
@@ -7,6 +8,7 @@ import type {
 
 import {
   createCommandId,
+  sendCharacterCommand,
   sendCharacterLibraryCommand,
   type RuntimeApiFailure,
 } from './runtime-api';
@@ -143,6 +145,39 @@ export async function finalizeCharacterLibraryEntry(
     result,
     'Runtime server did not return the finalized character.',
   );
+}
+
+export async function submitCharacterLibraryEntryForAssignment(params: {
+  actorParticipantId: string;
+  entryId: CharacterLibraryEntryId;
+  ownerParticipantId: string;
+  sessionId: string;
+}): Promise<CharacterLibraryApiResult<CharacterAssignmentSuccess['data']>> {
+  const result = await sendCharacterCommand({
+    actor: {
+      participantId: params.actorParticipantId,
+    },
+    commandId: createCommandId('character-library-submit-runtime'),
+    payload: {
+      entryId: params.entryId,
+      ownerParticipantId: params.ownerParticipantId,
+      sessionId: params.sessionId,
+    },
+    type: 'submit_character_library_entry_for_assignment',
+  });
+
+  if (!result.ok) {
+    return result;
+  }
+
+  if (!('state' in result.response.data)) {
+    return apiFailure('Runtime server did not return a character assignment.');
+  }
+
+  return {
+    data: result.response.data,
+    ok: true,
+  };
 }
 
 function unwrapEntry(

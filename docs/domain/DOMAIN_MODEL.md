@@ -47,8 +47,10 @@ A character resource used by the live runtime through
 assignment, placement, movement, HP, attacks, and encounter reads.
 
 Current runtime character APIs already support create, update, finalize,
-submit-for-assignment, DM assignment, and read flows. They do not yet accept
-reusable Character Library entries as the direct source for session assignment.
+submit-for-assignment, DM assignment, read flows, and server-side submission of
+finalized Character Library entries into pending assignment. The bridge creates
+a separate runtime character copy and records the source library entry ID in
+runtime metadata; it does not reuse the library entry as live state.
 
 ## Character Session Overlay
 

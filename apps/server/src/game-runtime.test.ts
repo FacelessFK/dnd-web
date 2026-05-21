@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type {
+  CharacterLibraryEntry,
   CharacterStateUpdate,
   CombatEvent,
   EncounterStateUpdate,
@@ -108,6 +109,60 @@ function createPlayerCharacter(
     'player-001',
     overrides,
   );
+}
+
+function createFinalizedLibraryEntry(
+  overrides: Partial<CharacterLibraryEntry> = {},
+): CharacterLibraryEntry {
+  const now = new Date('2026-05-21T00:00:00.000Z').toISOString();
+
+  return {
+    abilities: {
+      str: 14,
+      dex: 12,
+      con: 13,
+      int: 10,
+      wis: 11,
+      cha: 16,
+    },
+    abilityScoreMethod: 'standard-array',
+    armorClass: 13,
+    background: 'Acolyte',
+    builderSelections: {
+      cantrips: [],
+      equipment: ['Explorer Pack'],
+      languages: ['Common'],
+      originFeatAbility: '',
+      originFeatCantrips: [],
+      originFeatSpell: '',
+      skills: ['Religion'],
+      spells: [],
+      tools: [],
+    },
+    builderStep: 'review',
+    className: 'Cleric',
+    concept: 'Temple envoy',
+    createdAt: now,
+    hp: {
+      current: 9,
+      max: 9,
+      temp: 0,
+    },
+    id: 'charlib_00000000-0000-4000-8000-000000000001',
+    level: 1,
+    meta: {},
+    name: 'Seren',
+    notes: 'Reusable library note',
+    ownerParticipantId: 'library-owner-001',
+    portrait: null,
+    pronouns: '',
+    rulesProfileId: 'dnd5e-2024-core',
+    speciesOrRace: 'Human',
+    speed: 30,
+    status: 'finalized',
+    updatedAt: now,
+    ...overrides,
+  };
 }
 
 function createSecondPlayerCharacter(
@@ -1508,6 +1563,122 @@ test('player can submit own finalized character for DM assignment', () => {
   assert.equal(participant?.pendingCharacterId, character.character.id);
   assert.equal(participant?.characterId, null);
   assert.equal(updates.at(-1), 'participant_character_submitted');
+});
+
+test('player can submit a finalized library entry for DM assignment without mutating the reusable entry', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+  const libraryEntry = createFinalizedLibraryEntry();
+  const originalLibraryEntry = structuredClone(libraryEntry);
+
+  joinPlayer(runtime, session.sessionId);
+
+  const submitted = runtime.submitCharacterLibraryEntryForAssignment(
+    {
+      actor: {
+        participantId: 'player-001',
+      },
+      commandId: 'submit-library-entry-1',
+      payload: {
+        entryId: libraryEntry.id,
+        ownerParticipantId: 'library-owner-001',
+        sessionId: session.sessionId,
+      },
+      type: 'submit_character_library_entry_for_assignment',
+    },
+    libraryEntry,
+  );
+  const participant = submitted.state.participants.find(
+    (candidate) => candidate.id === 'player-001',
+  );
+  const runtimeCharacter = runtime.getCharacter({
+    actor: {
+      participantId: 'player-001',
+    },
+    commandId: 'get-runtime-character-from-library',
+    payload: {
+      characterId: submitted.characterId,
+      sessionId: session.sessionId,
+    },
+    type: 'get_character',
+  });
+
+  assert.notEqual(submitted.characterId, libraryEntry.id);
+  assert.equal(participant?.pendingCharacterId, submitted.characterId);
+  assert.equal(runtimeCharacter.character.name, libraryEntry.name);
+  assert.equal(runtimeCharacter.character.status, 'ready');
+  assert.equal(runtimeCharacter.character.ownerParticipantId, 'player-001');
+  assert.equal(
+    runtimeCharacter.character.meta.sourceCharacterLibraryEntryId,
+    libraryEntry.id,
+  );
+  assert.deepEqual(libraryEntry, originalLibraryEntry);
+});
+
+test('draft library entry submission is rejected before runtime state is created', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.submitCharacterLibraryEntryForAssignment(
+        {
+          actor: {
+            participantId: 'player-001',
+          },
+          commandId: 'submit-draft-library-entry',
+          payload: {
+            entryId: 'charlib_00000000-0000-4000-8000-000000000002',
+            ownerParticipantId: 'library-owner-001',
+            sessionId: session.sessionId,
+          },
+          type: 'submit_character_library_entry_for_assignment',
+        },
+        createFinalizedLibraryEntry({
+          id: 'charlib_00000000-0000-4000-8000-000000000002',
+          status: 'draft',
+        }),
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_character_library_entry',
+  );
+});
+
+test('library entry owner mismatch is rejected before runtime state is created', () => {
+  const runtime = new InMemoryGameRuntime();
+  const session = createSession(runtime);
+
+  joinPlayer(runtime, session.sessionId);
+
+  assert.throws(
+    () => {
+      runtime.submitCharacterLibraryEntryForAssignment(
+        {
+          actor: {
+            participantId: 'player-001',
+          },
+          commandId: 'submit-mismatched-owner-library-entry',
+          payload: {
+            entryId: 'charlib_00000000-0000-4000-8000-000000000003',
+            ownerParticipantId: 'library-owner-002',
+            sessionId: session.sessionId,
+          },
+          type: 'submit_character_library_entry_for_assignment',
+        },
+        createFinalizedLibraryEntry({
+          id: 'charlib_00000000-0000-4000-8000-000000000003',
+          ownerParticipantId: 'library-owner-001',
+        }),
+      );
+    },
+    (error: unknown) =>
+      error instanceof CharacterStoreError &&
+      error.code === 'invalid_participant_session_association',
+  );
 });
 
 test('submitting another participant character is rejected', () => {

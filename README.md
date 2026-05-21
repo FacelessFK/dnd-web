@@ -35,7 +35,10 @@ The Character Builder is separate from `/runtime`. It stores reusable
 library/build records, supports English/Persian direction, local portrait upload
 as MVP data URLs, SRD-style local rules previews, generated local art assets,
 and PDF export through local character sheet templates with a simple fallback.
-Library entries are not live-session HP/position/condition overlays.
+Library entries are not live-session HP/position/condition overlays. The server
+now has a bridge command that copies finalized library entries into separate
+runtime characters for pending DM assignment; the product UI for that bridge is
+still a follow-up slice.
 
 DB mode injects Drizzle/Postgres stores for the covered runtime and character
 library paths, plus current transaction/idempotency/outbox slices. There is no

@@ -257,6 +257,8 @@ export async function handleRequest(
       idempotency,
       characterCommandTransaction,
       sessionCommandTransaction,
+      characterLibrary,
+      auth,
     );
     return;
   }
@@ -673,6 +675,8 @@ async function handleCharacterCommandRequest(
   idempotency: CommandIdempotencyStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
+  characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
+  auth?: AuthService,
 ): Promise<void> {
   let body: unknown;
 
@@ -705,6 +709,23 @@ async function handleCharacterCommandRequest(
 
   try {
     const command = commandResult.data;
+    const authenticatedUser =
+      command.type === 'submit_character_library_entry_for_assignment' && auth
+        ? await requireAuthenticatedUser(request, auth)
+        : null;
+
+    if (
+      auth &&
+      command.type === 'submit_character_library_entry_for_assignment' &&
+      (!authenticatedUser ||
+        command.payload.ownerParticipantId !== authenticatedUser.id)
+    ) {
+      throw new CharacterLibraryStoreError(
+        'invalid_participant_session_association',
+        'Authenticated user cannot submit another owner character library entry.',
+      );
+    }
+
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_character' ? null : 'character';
 
@@ -863,6 +884,30 @@ async function handleCharacterCommandRequest(
         const success: CharacterAssignmentSuccess = {
           ok: true,
           data: await runtime.submitCharacterForAssignment(command),
+        };
+
+        await idempotency.cacheSuccess({
+          category: 'character',
+          command,
+          response: success,
+        });
+        sendCharacterSuccess(response, command.type, success);
+        return;
+      }
+      case 'submit_character_library_entry_for_assignment': {
+        const entry = await characterLibrary.getEntryForOwner(
+          {
+            entryId: command.payload.entryId,
+            ownerParticipantId: command.payload.ownerParticipantId,
+          },
+          authenticatedUser?.id,
+        );
+        const success: CharacterAssignmentSuccess = {
+          ok: true,
+          data: await runtime.submitCharacterLibraryEntryForAssignment(
+            command,
+            entry,
+          ),
         };
 
         await idempotency.cacheSuccess({
@@ -2166,7 +2211,10 @@ function sendCharacterSuccess(
     return;
   }
 
-  if (commandType === 'submit_character_for_assignment') {
+  if (
+    commandType === 'submit_character_for_assignment' ||
+    commandType === 'submit_character_library_entry_for_assignment'
+  ) {
     sendJson(response, 200, payload, characterAssignmentSuccessSchema);
     return;
   }

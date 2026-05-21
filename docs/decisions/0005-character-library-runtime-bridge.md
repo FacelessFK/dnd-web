@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -11,7 +11,7 @@ build/identity records. The runtime already has session character assignment,
 pending assignment, placement, movement, HP, conditions, encounters, attacks,
 and DM overrides.
 
-The next likely product milestone is connecting these surfaces so a finalized
+The active product milestone is connecting these surfaces so a finalized
 Character Library entry can be used in a live session.
 
 The main risk is collapsing reusable character identity/build data and mutable
@@ -68,7 +68,30 @@ Reusable library state includes:
   library entry.
 - Docs must keep the distinction clear for future Codex tasks.
 
+## Implementation Note
+
+The first server-side bridge foundation now exists through
+`submit_character_library_entry_for_assignment`.
+
+Current behavior:
+
+- reads a finalized Character Library entry through the Character Library
+  service;
+- validates ownership scope, player role, finalization status, and rules
+  profile compatibility;
+- creates a separate ready runtime character copy;
+- records `meta.sourceCharacterLibraryEntryId` on the runtime character;
+- submits the copied runtime character as the player's `pendingCharacterId` for
+  the existing DM assignment command.
+
+Remaining work:
+
+- localization-aware UI affordances for player submission and pending status;
+- optional DB transaction/outbox hardening for the multi-store bridge path;
+- continued validation that live HP, movement, conditions, and DM overrides do
+  not mutate the reusable library entry.
+
 ## Next Milestone
 
-Use `docs/delivery/NEXT_MILESTONE.md` as the planning source for the Character
-Library -> Runtime Assignment Bridge.
+Use `docs/delivery/NEXT_MILESTONE.md` as the planning source for completing the
+Character Library -> Runtime Assignment Bridge.

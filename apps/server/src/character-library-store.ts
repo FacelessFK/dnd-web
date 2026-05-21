@@ -417,6 +417,23 @@ export class CharacterLibraryService {
     return this.materializeAndPersistExistingPortrait(entry, ownerUserId);
   }
 
+  async getEntryForOwner(
+    params: {
+      entryId: CharacterLibraryEntryId;
+      ownerParticipantId: string;
+    },
+    ownerUserId?: string,
+  ): Promise<CharacterLibraryEntry> {
+    const entry = ownerUserId
+      ? await this.repository.getEntryByUser({
+          entryId: params.entryId,
+          ownerUserId,
+        })
+      : await this.repository.getEntry(params);
+
+    return this.materializeAndPersistExistingPortrait(entry, ownerUserId);
+  }
+
   async listEntries(
     command: Extract<
       CharacterLibraryCommand,

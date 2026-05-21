@@ -62,6 +62,8 @@ Implemented areas:
 - Character Library command endpoint and DB-backed entries;
 - auth MVP endpoints in DB mode;
 - runtime character create/update/finalize/submit/assign/read flows;
+- server-side Character Library entry submission into runtime pending
+  assignment;
 - scene create/read/activate and passive scene entity operations;
 - transition node operations and activation;
 - active-scene placement and movement;
@@ -73,7 +75,10 @@ Implemented areas:
 
 Intentionally incomplete areas:
 
-- Character Library -> runtime assignment bridge;
+- localization-aware UI for the Character Library -> runtime assignment
+  bridge;
+- DB transaction/outbox hardening for the bridge command if multi-store
+  atomicity becomes required;
 - full adventure authoring;
 - full player-specific visibility filtering;
 - full player intent/DM adjudication queues;
@@ -146,10 +151,10 @@ Current implementation still stores some runtime character and overlay fields
 together, but the product boundary remains clear: reusable library records are
 not live overlays.
 
-## Character Library -> Runtime Bridge Direction
+## Character Library -> Runtime Bridge
 
-The recommended next milestone is a bridge from finalized Character Library
-entries to runtime assignment.
+The server-side bridge foundation now exists for finalized Character Library
+entries to enter runtime pending assignment.
 
 Design rule:
 
@@ -157,6 +162,12 @@ Design rule:
 - live HP, position, conditions, encounter state, and DM overrides must remain
   session-local;
 - the reusable library entry must not be mutated by live play.
+- current implementation copies the library entry into a separate ready runtime
+  character, records `meta.sourceCharacterLibraryEntryId`, and uses existing
+  pending assignment plus DM assignment semantics.
+
+Remaining design work is product UI and, if required, a dedicated DB
+transaction/outbox boundary for the multi-store bridge command.
 
 See `docs/decisions/0005-character-library-runtime-bridge.md`.
 

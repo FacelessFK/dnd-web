@@ -54,9 +54,16 @@ on logout. It is not full production account security: no password reset, email
 verification, MFA, OAuth, account management UI, or dedicated CSRF token exists
 yet.
 
-The Character Library does not submit reusable entries into live sessions yet.
-Runtime character commands still own session character assignment and live
-overlays.
+The server now supports `submit_character_library_entry_for_assignment` on the
+runtime character command surface. It reads a finalized reusable library entry,
+creates a separate ready runtime character copy, stores the source library entry
+ID in runtime metadata, and submits that runtime character as the player's
+`pendingCharacterId` for existing DM assignment. Live overlays remain separate
+from reusable library entries.
+
+The browser API helper exists, but `/characters` and `/runtime` do not yet have
+the final localization-aware UI affordance for selecting/submitting saved
+library entries into live sessions.
 
 ## Persistence Reality
 

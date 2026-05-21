@@ -58,12 +58,14 @@ platform:
 - start and run narrow encounters;
 - use explicit DM correction controls;
 - create and persist reusable Character Library entries in DB mode;
+- submit finalized library entries through a server-side bridge into runtime
+  pending assignment;
 - export simple character sheet PDFs from local templates;
 - preserve read-model recovery after refresh or reconnect.
 
-The next product gap is bridging finalized Character Library entries into live
-runtime assignment while keeping live session state separate from reusable
-library records.
+The next product gap is the localization-aware UI that lets players select and
+submit finalized Character Library entries into live runtime assignment while
+keeping live session state separate from reusable library records.
 
 ## Product Principles
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import {
+  characterLibraryEntryIdSchema,
   commandIdSchema,
   levelSchema,
   participantIdSchema,
@@ -13,13 +14,6 @@ import {
 } from './character.js';
 import { commandErrorSchema } from './errors.js';
 import { rulesConfigValueSchema } from './rules-profile.js';
-
-export const characterLibraryEntryIdSchema = z
-  .string()
-  .regex(
-    /^charlib_[a-f0-9-]{36}$/,
-    'Character library entry ID must be a server-generated ID like "charlib_<uuid>".',
-  );
 
 export const characterLibraryStatusSchema = z.enum(['draft', 'finalized']);
 

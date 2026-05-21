@@ -24,6 +24,7 @@ import type {
   ActivateSceneForSessionCommand,
   CharacterAssignmentSuccess,
   CharacterInput,
+  CharacterLibraryEntry,
   CharacterResource,
   CharacterStateUpdate,
   CharacterStateUpdateReason,
@@ -67,6 +68,7 @@ import type {
   SceneActivationSuccess,
   StartEncounterCommand,
   SubmitCharacterForAssignmentCommand,
+  SubmitCharacterLibraryEntryForAssignmentCommand,
   UpdateCharacterCommand,
   UpdateSceneEntityCommand,
   UseActionCommand,
@@ -692,6 +694,52 @@ export class InMemoryGameRuntime<
           }),
         );
       },
+    );
+  }
+
+  submitCharacterLibraryEntryForAssignment(
+    command: SubmitCharacterLibraryEntryForAssignmentCommand,
+    entry: CharacterLibraryEntry,
+  ): CharacterAssignmentSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    if (actor.role !== 'player') {
+      throw new CharacterStoreError(
+        'invalid_role_assumption',
+        `Participant "${actor.id}" must be a player to submit a character library entry for assignment.`,
+      );
+    }
+
+    this.assertLibraryEntryCanEnterRuntime(command, entry, snapshot);
+
+    return this.resolveRepositoryResult(
+      this.characters.createCharacter(
+        this.createReadyCharacterRecordFromLibraryEntry({
+          entry,
+          ownerParticipantId: actor.id,
+        }),
+      ),
+      (record) =>
+        this.resolveSessionResult(
+          this.sessions.submitCharacterForAssignment(
+            snapshot.session.id,
+            actor.id,
+            record.character.id,
+          ),
+          (state) => ({
+            sessionId: snapshot.session.id,
+            participantId: actor.id,
+            characterId: record.character.id,
+            state,
+          }),
+        ),
     );
   }
 
@@ -2445,6 +2493,41 @@ export class InMemoryGameRuntime<
     };
   }
 
+  private createReadyCharacterRecordFromLibraryEntry(params: {
+    entry: CharacterLibraryEntry;
+    ownerParticipantId: ParticipantId;
+  }): StoredCharacterRecord {
+    const now = this.now();
+    const characterId = this.createCharacterId();
+    const character: Character = {
+      abilities: structuredClone(params.entry.abilities),
+      armorClass: params.entry.armorClass,
+      background: params.entry.background,
+      className: params.entry.className,
+      createdAt: now,
+      hp: structuredClone(params.entry.hp),
+      id: characterId,
+      level: params.entry.level,
+      meta: {
+        ...structuredClone(params.entry.meta ?? {}),
+        sourceCharacterLibraryEntryId: params.entry.id,
+      },
+      name: params.entry.name,
+      notes: params.entry.notes ?? null,
+      ownerParticipantId: params.ownerParticipantId,
+      rulesProfileId: params.entry.rulesProfileId,
+      speciesOrRace: params.entry.speciesOrRace,
+      speed: params.entry.speed,
+      status: 'ready',
+      updatedAt: now,
+    };
+
+    return {
+      character,
+      overlay: this.createEncounterOverlay(characterId),
+    };
+  }
+
   private withUpdatedCharacterDetails(
     record: StoredCharacterRecord,
     characterUpdate: CharacterUpdateInput,
@@ -3406,6 +3489,43 @@ export class InMemoryGameRuntime<
       throw new CharacterStoreError(
         'invalid_participant_session_association',
         `Character "${characterId}" was created for rules profile "${record.character.rulesProfileId}" and cannot be used in session "${snapshot.session.id}".`,
+      );
+    }
+  }
+
+  private assertLibraryEntryCanEnterRuntime(
+    command: SubmitCharacterLibraryEntryForAssignmentCommand,
+    entry: CharacterLibraryEntry,
+    snapshot: SessionSnapshot,
+  ): void {
+    if (entry.id !== command.payload.entryId) {
+      throw new CharacterStoreError(
+        'invalid_character_library_entry',
+        `Character library entry "${entry.id}" does not match requested entry "${command.payload.entryId}".`,
+      );
+    }
+
+    if (entry.status !== 'finalized') {
+      throw new CharacterStoreError(
+        'invalid_character_library_entry',
+        `Character library entry "${entry.id}" must be finalized before it can be submitted for assignment.`,
+      );
+    }
+
+    if (
+      entry.ownerParticipantId &&
+      entry.ownerParticipantId !== command.payload.ownerParticipantId
+    ) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Character library entry "${entry.id}" does not belong to owner "${command.payload.ownerParticipantId}".`,
+      );
+    }
+
+    if (entry.rulesProfileId !== snapshot.session.rulesProfileId) {
+      throw new CharacterStoreError(
+        'invalid_participant_session_association',
+        `Character library entry "${entry.id}" uses rules profile "${entry.rulesProfileId}" and cannot be used in session "${snapshot.session.id}".`,
       );
     }
   }

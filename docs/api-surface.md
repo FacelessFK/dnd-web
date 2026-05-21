@@ -9,8 +9,9 @@ For product/domain context, see `docs/domain/DOMAIN_MODEL.md` and
 
 Important boundary: `POST /api/characters/command` is the runtime character
 surface, while `POST /api/character-library/command` owns reusable Character
-Library entries. The bridge from reusable library entries into live runtime
-assignment is the recommended next milestone, not current implemented behavior.
+Library entries. The current bridge command copies a finalized library entry
+into a separate runtime character and pending assignment state; it does not
+mutate the reusable library entry.
 
 ## Base Runtime
 
@@ -104,6 +105,7 @@ Mutating commands:
 - `update_character`
 - `finalize_character`
 - `submit_character_for_assignment`
+- `submit_character_library_entry_for_assignment`
 - `assign_character_to_participant`
 
 Read command:
@@ -116,6 +118,18 @@ Notes:
   derived stats, overlay, and rules profile.
 - `submit_character_for_assignment` lets the owning player submit a finalized
   character into session state as `pendingCharacterId` for DM assignment.
+- `submit_character_library_entry_for_assignment` lets a player submit a
+  finalized reusable Character Library entry into a live session. The server
+  reads the entry through the Character Library service, validates ownership
+  scope, finalization status, rules profile compatibility, and player role,
+  creates a separate ready runtime character copy, stores
+  `meta.sourceCharacterLibraryEntryId`, and sets that runtime character as the
+  participant's `pendingCharacterId`.
+- This bridge command does not mutate the Character Library entry. Live HP,
+  position, conditions, encounter state, and DM overrides remain runtime state.
+- The bridge command currently uses the non-transactional runtime path rather
+  than the DB-backed session command transaction/outbox boundary; do not claim
+  atomic multi-store commit or durable replay for this command yet.
 - `assign_character_to_participant` mutates the session snapshot and emits the
   same `session_state` semantics as the runtime already had. Assignment clears
   that participant's pending character request.
@@ -152,7 +166,9 @@ Notes:
 - Uploaded portrait references must be JPEG, PNG, or WebP data URLs up to 1 MB.
   Entries without uploads can store a selected species/race asset reference.
 - `finalize_character_library_entry` marks a reusable library entry finalized.
-  It does not submit the character into a runtime session.
+  It does not by itself submit the character into a runtime session. Submission
+  now happens through the runtime character command
+  `submit_character_library_entry_for_assignment`.
 - Read/list commands are not idempotency-cached. Mutating commands use the
   `character-library` idempotency category.
 

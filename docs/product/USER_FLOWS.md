@@ -60,17 +60,19 @@ Current implementation:
 
 1. Runtime character commands can create/update/finalize a session character.
 2. Player can submit a finalized runtime character for assignment.
-3. Session stores `pendingCharacterId` on the participant.
-4. DM assigns that character to the participant.
-5. Session state emits assignment updates.
+3. Player can also submit a finalized Character Library entry through the
+   server-side bridge command.
+4. The bridge creates a separate ready runtime character copy and stores
+   `pendingCharacterId` on the participant.
+5. DM assigns that runtime character to the participant.
+6. Session state emits assignment updates.
 
-Next milestone proposal:
+Remaining product gap:
 
-- Let finalized reusable Character Library entries be selected/submitted for a
-  live session.
-- DM approves or assigns the selected library entry to a participant.
-- Runtime session character/session overlay state is created or linked.
-- Reusable library entries are not mutated by live session play.
+- Add localization-aware UI for selecting/submitting finalized reusable
+  Character Library entries into a live session.
+- Show pending/assigned state clearly for Player and DM surfaces.
+- Keep reusable library entries unmutated by live session play.
 
 ## Exploration Flow
 

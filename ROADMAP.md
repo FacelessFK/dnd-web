@@ -38,6 +38,7 @@ Already implemented:
   current turn, turn usage, and encounter end;
 - `/characters` Character Library and Builder surface;
 - `/login` auth surface for DB-backed Character Library ownership;
+- server-side Character Library -> runtime pending-assignment bridge;
 - local SRD-style builder data and derived previews;
 - English/Persian UI direction through `I18nProvider`;
 - local portrait handling, generated builder assets, and PDF export;
@@ -48,7 +49,10 @@ Already implemented:
 
 Still missing before a stronger MVP:
 
-- Character Library -> runtime assignment bridge;
+- localization-aware UI for submitting finalized library entries into live
+  sessions;
+- DB transaction/outbox hardening for the bridge path if multi-store atomicity
+  becomes required;
 - fuller product UX around session setup and assignment;
 - full adventure/content authoring;
 - production-grade visibility filtering;
@@ -57,17 +61,17 @@ Still missing before a stronger MVP:
 - multi-process coordination;
 - broader D&D rules systems.
 
-## Immediate Next Milestone: Character Library -> Runtime Assignment Bridge
+## Immediate Next Milestone: Complete Character Library -> Runtime Assignment Bridge
 
 ### Goal
 
-Let finalized Character Library entries be selected/submitted for a live
-session and assigned by the DM, while creating/linking runtime session state
-that remains separate from the reusable library entry.
+Finish the bridge so finalized Character Library entries can be selected from
+the product UI, submitted for a live session, and assigned by the DM, while
+runtime session state remains separate from the reusable library entry.
 
 ### Exit Criteria
 
-- Finalized library entries can be submitted to a session.
+- Finalized library entries can be submitted to a session from the UI.
 - Unauthorized or non-finalized entries are rejected.
 - DM remains the authoritative assignment actor.
 - Runtime character/session overlay state is created or linked from the library

@@ -4,6 +4,7 @@ export const sessionIdPattern = /^[A-Z0-9]{6}$/;
 export const participantIdPattern = /^[a-zA-Z0-9_-]{2,64}$/;
 export const rulesProfileIdPattern = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 export const characterIdPattern = /^char_[a-f0-9-]{36}$/;
+export const characterLibraryEntryIdPattern = /^charlib_[a-f0-9-]{36}$/;
 export const sceneIdPattern = /^scene_[a-f0-9-]{36}$/;
 export const sceneEntityIdPattern = /^scene_entity_[a-f0-9-]{36}$/;
 export const encounterIdPattern = /^encounter_[a-f0-9-]{36}$/;
@@ -35,6 +36,14 @@ export const characterIdSchema = z
   .regex(
     characterIdPattern,
     'Character ID must be a server-generated ID like "char_<uuid>".',
+  );
+
+export const characterLibraryEntryIdSchema = z
+  .string()
+  .trim()
+  .regex(
+    characterLibraryEntryIdPattern,
+    'Character library entry ID must be a server-generated ID like "charlib_<uuid>".',
   );
 
 export const sceneIdSchema = z

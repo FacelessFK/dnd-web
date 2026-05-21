@@ -4,6 +4,7 @@ import { characterStatuses, visibilityStates } from '@dnd/shared';
 
 import {
   characterIdSchema,
+  characterLibraryEntryIdSchema,
   characterNameSchema,
   commandIdSchema,
   levelSchema,
@@ -233,6 +234,17 @@ export const submitCharacterForAssignmentCommandSchema = z.object({
   }),
 });
 
+export const submitCharacterLibraryEntryForAssignmentCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('submit_character_library_entry_for_assignment'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    entryId: characterLibraryEntryIdSchema,
+    ownerParticipantId: participantIdSchema,
+  }),
+});
+
 export const characterCommandSchema = z.discriminatedUnion('type', [
   createCharacterCommandSchema,
   getCharacterCommandSchema,
@@ -240,6 +252,7 @@ export const characterCommandSchema = z.discriminatedUnion('type', [
   finalizeCharacterCommandSchema,
   assignCharacterToParticipantCommandSchema,
   submitCharacterForAssignmentCommandSchema,
+  submitCharacterLibraryEntryForAssignmentCommandSchema,
 ]);
 
 export const characterCommandSuccessSchema = z.object({
@@ -286,6 +299,9 @@ export type AssignCharacterToParticipantCommand = z.infer<
 >;
 export type SubmitCharacterForAssignmentCommand = z.infer<
   typeof submitCharacterForAssignmentCommandSchema
+>;
+export type SubmitCharacterLibraryEntryForAssignmentCommand = z.infer<
+  typeof submitCharacterLibraryEntryForAssignmentCommandSchema
 >;
 export type CharacterCommand = z.infer<typeof characterCommandSchema>;
 export type CharacterCommandSuccess = z.infer<

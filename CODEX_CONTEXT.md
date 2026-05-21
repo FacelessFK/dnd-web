@@ -57,9 +57,13 @@ that scope.
   users/sessions, session snapshots, scene records, active encounters, command
   idempotency records/claims, covered transaction boundaries, and
   single-process outbox dispatch for covered live-command paths.
-- Runtime character assignment currently works through runtime character
-  commands. Reusable Character Library entries are not yet submitted directly
-  into live sessions.
+- Runtime character assignment supports the server-side bridge command
+  `submit_character_library_entry_for_assignment`: a finalized reusable
+  Character Library entry can be copied into a separate ready runtime character
+  and submitted as `pendingCharacterId` for DM assignment. The reusable library
+  entry is not mutated.
+- A web API helper exists for the bridge, but the `/characters` and `/runtime`
+  product UI affordance is not wired yet.
 
 ## Known Limitations
 
@@ -80,18 +84,19 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Character Library -> Runtime Assignment Bridge.
+complete the Character Library -> Runtime Assignment Bridge product slice.
 
-The bridge should let finalized reusable library entries be selected/submitted
-for a live session, reviewed or assigned by the DM, and linked or copied into
-runtime session state without mutating the reusable library entry during play.
+The server-side foundation now exists. The next work should add
+localization-aware UI affordances for selecting/submitting finalized library
+entries, showing pending assignment state clearly, and keeping DM assignment
+authority intact.
 
 Break this into small Codex tasks:
 
 1. inspect current library, runtime character, session assignment, and i18n
    paths;
 2. define the protocol/data bridge shape;
-3. implement server-side bridge behavior and tests;
+3. extend the bridge only where needed for UI and DB-mode honesty;
 4. add localization-aware web UI affordances;
 5. validate DB mode, in-memory behavior, and runtime recovery honestly.
 

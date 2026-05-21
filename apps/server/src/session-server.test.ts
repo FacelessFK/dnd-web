@@ -62,7 +62,9 @@ import {
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
 import { CommandEventOutboxDispatcher } from './command-event-outbox-dispatcher.js';
+import { CharacterLibraryService } from './character-library-store.js';
 import { InMemoryCharacterStore } from './character-store.js';
+import { AuthService } from './auth-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
 import { DbBackedCharacterCommandTransactionBoundary } from './db-character-command-transaction.js';
 import { DbBackedCombatCommandTransactionBoundary } from './db-combat-command-transaction.js';
@@ -97,6 +99,8 @@ async function postJson<TResponse>(
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
+  characterLibrary?: CharacterLibraryService,
+  auth?: AuthService,
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -122,6 +126,8 @@ async function postJson<TResponse>(
     encounterCommandTransaction,
     combatCommandTransaction,
     sceneCommandTransaction,
+    characterLibrary,
+    auth,
   );
 
   return {
@@ -2876,6 +2882,137 @@ test('server command paths can use the DB-backed character repository without pu
       .activeConditions,
     ['prone'],
   );
+});
+
+test('character command route submits finalized library entries into runtime assignment state', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const characterLibrary = new CharacterLibraryService();
+  const session = await runtime.createSession({
+    actor: {
+      displayName: 'Dungeon Master',
+      participantId: 'dm-001',
+      role: 'dm',
+    },
+    commandId: 'library-bridge-create-session',
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+    type: 'create_session',
+  });
+
+  await runtime.joinSession({
+    actor: {
+      displayName: 'Player One',
+      participantId: 'player-001',
+      role: 'player',
+    },
+    commandId: 'library-bridge-join-player',
+    payload: {
+      sessionId: session.sessionId,
+    },
+    type: 'join_session',
+  });
+
+  const draftEntry = await characterLibrary.createEntry({
+    actor: {
+      participantId: 'library-owner-001',
+    },
+    commandId: 'library-bridge-create-entry',
+    payload: {
+      entry: {
+        abilities: {
+          cha: 16,
+          con: 13,
+          dex: 12,
+          int: 10,
+          str: 14,
+          wis: 11,
+        },
+        abilityScoreMethod: 'standard-array',
+        armorClass: 13,
+        background: 'Acolyte',
+        builderSelections: {
+          cantrips: [],
+          equipment: ['Explorer Pack'],
+          languages: ['Common'],
+          originFeatAbility: '',
+          originFeatCantrips: [],
+          originFeatSpell: '',
+          skills: ['Religion'],
+          spells: [],
+          tools: [],
+        },
+        builderStep: 'review',
+        className: 'Cleric',
+        concept: 'Temple envoy',
+        hp: {
+          current: 9,
+          max: 9,
+          temp: 0,
+        },
+        level: 1,
+        meta: {},
+        name: 'Seren',
+        notes: 'Reusable library note',
+        portrait: null,
+        pronouns: '',
+        rulesProfileId: 'dnd5e-2024-core',
+        speciesOrRace: 'Human',
+        speed: 30,
+      },
+      ownerParticipantId: 'library-owner-001',
+    },
+    type: 'create_character_library_entry',
+  });
+  const finalizedEntry = await characterLibrary.finalizeEntry({
+    actor: {
+      participantId: 'library-owner-001',
+    },
+    commandId: 'library-bridge-finalize-entry',
+    payload: {
+      entryId: draftEntry.id,
+      ownerParticipantId: 'library-owner-001',
+    },
+    type: 'finalize_character_library_entry',
+  });
+  const response = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    {
+      actor: {
+        participantId: 'player-001',
+      },
+      commandId: 'library-bridge-submit-entry',
+      payload: {
+        entryId: finalizedEntry.id,
+        ownerParticipantId: 'library-owner-001',
+        sessionId: session.sessionId,
+      },
+      type: 'submit_character_library_entry_for_assignment',
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    characterLibrary,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+
+  if (!response.body.ok || !('state' in response.body.data)) {
+    throw new Error('Expected a character assignment response.');
+  }
+
+  const participant = response.body.data.state.participants.find(
+    (candidate) => candidate.id === 'player-001',
+  );
+
+  assert.equal(participant?.pendingCharacterId, response.body.data.characterId);
+  assert.notEqual(response.body.data.characterId, finalizedEntry.id);
 });
 
 test('db-backed character state can be reread after runtime reinitialization, while reconnect remains limited by non-durable session state', async () => {

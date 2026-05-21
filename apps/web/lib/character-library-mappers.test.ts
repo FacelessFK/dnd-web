@@ -10,6 +10,7 @@ import { createDefaultCharacterBuilderDraft } from './character-builder-helpers'
 import {
   createCharacterLibraryEntry,
   listCharacterLibraryEntries,
+  submitCharacterLibraryEntryForAssignment,
 } from './character-library-api';
 import {
   formatCharacterLibrarySaveFailure,
@@ -430,6 +431,92 @@ describe('character library API helpers', () => {
     assert.deepEqual(calls, [
       'POST /api/character-library/command list_character_library_entries',
       'POST /api/character-library/command create_character_library_entry',
+    ]);
+  });
+
+  it('submits finalized library entries through the runtime character command route', async () => {
+    const calls: string[] = [];
+
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body));
+
+      calls.push(
+        `${init?.method ?? 'GET'} ${new URL(url).pathname} ${body.type}`,
+      );
+
+      assert.equal(body.actor.participantId, 'player-001');
+      assert.equal(body.payload.ownerParticipantId, 'usr_00000000');
+      assert.equal(
+        body.payload.entryId,
+        'charlib_00000000-0000-4000-8000-000000000001',
+      );
+
+      return new Response(
+        JSON.stringify({
+          data: {
+            characterId: 'char_00000000-0000-4000-8000-000000000002',
+            participantId: 'player-001',
+            sessionId: 'ABC123',
+            state: {
+              participants: [
+                {
+                  characterId: null,
+                  connectionStatus: 'connected',
+                  displayName: 'Player One',
+                  id: 'player-001',
+                  joinedAt: '2026-01-01T00:00:00.000Z',
+                  lastSeenAt: '2026-01-01T00:00:00.000Z',
+                  pendingCharacterId:
+                    'char_00000000-0000-4000-8000-000000000002',
+                  role: 'player',
+                },
+              ],
+              session: {
+                activeSceneId: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                dmParticipantId: 'dm-001',
+                id: 'ABC123',
+                playerParticipantIds: ['player-001'],
+                revision: 2,
+                rulesProfileId: 'dnd5e-2024-core',
+                status: 'lobby',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            },
+          },
+          ok: true,
+        }),
+        {
+          headers: {
+            'content-type': 'application/json',
+          },
+          status: 200,
+        },
+      );
+    }) as typeof fetch;
+
+    const submitted = await submitCharacterLibraryEntryForAssignment({
+      actorParticipantId: 'player-001',
+      entryId: 'charlib_00000000-0000-4000-8000-000000000001',
+      ownerParticipantId: 'usr_00000000',
+      sessionId: 'ABC123',
+    });
+
+    assert.equal(submitted.ok, true);
+
+    if (submitted.ok) {
+      assert.equal(
+        submitted.data.characterId,
+        'char_00000000-0000-4000-8000-000000000002',
+      );
+    }
+
+    assert.deepEqual(calls, [
+      'POST /api/characters/command submit_character_library_entry_for_assignment',
     ]);
   });
 });

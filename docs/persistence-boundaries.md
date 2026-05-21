@@ -7,8 +7,9 @@ boundaries and remaining persistence gaps, without changing gameplay behavior.
 For the product/domain separation between reusable Character Library entries
 and live runtime overlays, see `docs/domain/DOMAIN_MODEL.md` and
 `docs/decisions/0005-character-library-runtime-bridge.md`. This document
-describes persistence reality; it should not be read as a claim that reusable
-library entries are already bridged into live runtime assignment.
+describes persistence reality; the current bridge copies reusable library
+entries into separate runtime characters and does not make library entries live
+overlays.
 
 ## Current Boundary Audit
 
@@ -49,8 +50,13 @@ Durability notes:
   category. In DB mode their idempotency success rows are durable, but this
   slice does not add a separate multi-store transaction/outbox boundary because
   the reusable library table is intentionally isolated from live runtime state.
-- Finalized library entries remain reusable records and are not submitted into
-  sessions or runtime overlays.
+- Finalized library entries remain reusable records. The runtime bridge command
+  can copy one into a separate runtime character and pending assignment, but
+  that live state is not stored back on the library entry.
+- The bridge command currently uses the non-transactional runtime path. In DB
+  mode, do not treat character-copy creation, session pending assignment,
+  idempotency success, and stream publication as one atomic transaction/outbox
+  boundary yet.
 
 ### `AuthUserDatabase`
 
