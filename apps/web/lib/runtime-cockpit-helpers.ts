@@ -38,6 +38,21 @@ export type TacticalBoardViewport = {
   zoom: number;
 };
 
+export type TacticalBoardCellBadgeKind =
+  | 'move'
+  | 'selected'
+  | 'target'
+  | 'turn';
+
+export type TacticalBoardCellAffordance = {
+  badges: TacticalBoardCellBadgeKind[];
+  isAttackTarget: boolean;
+  isCurrentTurnActor: boolean;
+  isMovementTarget: boolean;
+  isSelectedCell: boolean;
+  isSelectedToken: boolean;
+};
+
 export type TacticalBoardZoomDirection = 'in' | 'out';
 export type TacticalBoardPanDirection = 'down' | 'left' | 'right' | 'up';
 
@@ -297,6 +312,73 @@ export function getTacticalBoardViewportAfterPan({
   }
 
   return clampTacticalBoardViewportPan(next, grid);
+}
+
+export function getTacticalBoardCellAffordance({
+  actingParticipantId,
+  cell,
+  combatantId,
+  currentTurnCombatantId,
+  currentTurnParticipantId,
+  moveDisabledReason,
+  participantId,
+  selectedCell,
+  selectedCombatantId,
+  selectedTargetCombatantId,
+  selectedTargetParticipantId,
+}: {
+  actingParticipantId: string;
+  cell: Cell;
+  combatantId: string | null;
+  currentTurnCombatantId: string | null;
+  currentTurnParticipantId: string | null;
+  moveDisabledReason: string | null;
+  participantId: string | null;
+  selectedCell: Cell;
+  selectedCombatantId: string;
+  selectedTargetCombatantId: string;
+  selectedTargetParticipantId: string;
+}): TacticalBoardCellAffordance {
+  const isSelectedCell = selectedCell.x === cell.x && selectedCell.y === cell.y;
+  const isSelectedToken = Boolean(
+    (participantId && participantId === actingParticipantId) ||
+    (combatantId && combatantId === selectedCombatantId),
+  );
+  const isCurrentTurnActor = Boolean(
+    (participantId && participantId === currentTurnParticipantId) ||
+    (combatantId && combatantId === currentTurnCombatantId),
+  );
+  const isAttackTarget = Boolean(
+    (participantId && participantId === selectedTargetParticipantId) ||
+    (combatantId && combatantId === selectedTargetCombatantId),
+  );
+  const isMovementTarget = isSelectedCell && !moveDisabledReason;
+  const badges: TacticalBoardCellBadgeKind[] = [];
+
+  if (isMovementTarget) {
+    badges.push('move');
+  }
+
+  if (isSelectedToken) {
+    badges.push('selected');
+  }
+
+  if (isCurrentTurnActor) {
+    badges.push('turn');
+  }
+
+  if (isAttackTarget) {
+    badges.push('target');
+  }
+
+  return {
+    badges,
+    isAttackTarget,
+    isCurrentTurnActor,
+    isMovementTarget,
+    isSelectedCell,
+    isSelectedToken,
+  };
 }
 
 function clampTacticalBoardViewportPan(

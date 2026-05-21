@@ -32,6 +32,7 @@ import {
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
+  getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
   getTacticalBoardViewportAfterPan,
   getTacticalBoardViewportAfterZoom,
@@ -483,6 +484,68 @@ describe('runtime cockpit helpers', () => {
     );
     assert.equal(getTacticalBoardCellSizePixels(0.75), 39);
     assert.equal(getTacticalBoardCellSizePixels(2), 104);
+  });
+
+  it('derives tactical board cell affordances from selected runtime state', () => {
+    assert.deepEqual(
+      getTacticalBoardCellAffordance({
+        actingParticipantId: 'player-001',
+        cell: {
+          x: 4,
+          y: 2,
+        },
+        combatantId: null,
+        currentTurnCombatantId: null,
+        currentTurnParticipantId: 'player-001',
+        moveDisabledReason: null,
+        participantId: 'player-001',
+        selectedCell: {
+          x: 4,
+          y: 2,
+        },
+        selectedCombatantId: '',
+        selectedTargetCombatantId: '',
+        selectedTargetParticipantId: 'player-002',
+      }),
+      {
+        badges: ['move', 'selected', 'turn'],
+        isAttackTarget: false,
+        isCurrentTurnActor: true,
+        isMovementTarget: true,
+        isSelectedCell: true,
+        isSelectedToken: true,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardCellAffordance({
+        actingParticipantId: 'player-001',
+        cell: {
+          x: 1,
+          y: 1,
+        },
+        combatantId: 'combatant-001',
+        currentTurnCombatantId: 'combatant-001',
+        currentTurnParticipantId: null,
+        moveDisabledReason:
+          'Create/recover an active scene before moving or starting combat.',
+        participantId: null,
+        selectedCell: {
+          x: 1,
+          y: 1,
+        },
+        selectedCombatantId: 'combatant-001',
+        selectedTargetCombatantId: 'combatant-001',
+        selectedTargetParticipantId: '',
+      }),
+      {
+        badges: ['selected', 'turn', 'target'],
+        isAttackTarget: true,
+        isCurrentTurnActor: true,
+        isMovementTarget: false,
+        isSelectedCell: true,
+        isSelectedToken: true,
+      },
+    );
   });
 
   it('guards DM-only controls from player mode', () => {

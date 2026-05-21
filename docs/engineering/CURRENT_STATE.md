@@ -28,6 +28,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - transition node create/update/delete/activation;
 - character placement and movement;
 - local tactical board camera controls for zoom, bounded pan, and reset view;
+- tactical board badges for selected movement cell, selected token,
+  current-turn actor, and attack target affordances;
 - mixed player/combatant encounters;
 - turn usage;
 - narrow melee attack handling;

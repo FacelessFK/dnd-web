@@ -50,9 +50,12 @@ Already implemented:
 - Character Library to runtime assignment bridge;
 - DB-backed transaction/outbox coverage for covered bridge/runtime paths;
 - manual outbox status badge;
-- assignment-request previews and post-assignment source provenance.
+- assignment-request previews and post-assignment source provenance;
 - Phase 1 Slice 1 tactical board camera controls: local zoom levels, bounded
-  pan offsets, reset view, and helper tests for viewport math.
+  pan offsets, reset view, and helper tests for viewport math;
+- Phase 1 Slice 2 tactical board affordances: selected movement cell,
+  selected token, current-turn actor, and attack target badges with helper
+  tests for derived cell state.
 
 ## Remaining Phases
 
@@ -87,8 +90,12 @@ Suggested first implementation slice:
 
 Suggested next implementation slice:
 
-- Improve selected-token and movement-target affordances now that the board can
-  zoom and pan.
+- Implemented: selected-token, movement-target, current-turn, and attack-target
+  affordances now that the board can zoom and pan.
+
+Suggested follow-up slice:
+
+- Add a small keyboard/focus pass for camera and board selection controls.
 
 ### Phase 2: DM Scene Authoring Pass
 
@@ -229,22 +236,22 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement Phase 1 Slice 1:
+Implement the Phase 1 follow-up slice:
 
-> Add tactical board zoom levels, pan offset, reset-view control, and helper
-> tests for viewport math in `/runtime`.
+> Add a small keyboard/focus pass for camera and board selection controls in
+> `/runtime`.
 
 Non-goals for that task:
 
 - no new server protocol;
-- no persisted camera state;
+- no persisted camera or board selection state;
 - no full drag-and-drop map editor;
 - no fog of war, line of sight, or lighting;
 - no refactor of scene/encounter command semantics.
 
 Validation for that task should include:
 
-- focused helper tests for viewport math;
+- focused helper or component-level checks where behavior is extracted;
 - web tests;
 - web typecheck;
 - build and runtime smoke when practical.

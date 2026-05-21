@@ -79,6 +79,7 @@ import {
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
+  getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
   getTacticalBoardViewportAfterPan,
   getTacticalBoardViewportAfterZoom,
@@ -117,6 +118,7 @@ import {
   type SceneTransitionDraftForm,
   type SessionSnapshot,
   type StoredCockpitState,
+  type TacticalBoardCellBadgeKind,
   type TacticalBoardPanDirection,
   type TacticalBoardViewport,
   type TacticalBoardZoomDirection,
@@ -3752,6 +3754,7 @@ export function RuntimeCockpit() {
                 currentTurnParticipantId={currentTurnParticipantId}
                 grid={grid}
                 mode={mode}
+                moveDisabledReason={disabledReasons.move}
                 onPanBoard={panTacticalBoard}
                 onResetBoardView={resetTacticalBoardView}
                 onSelectCell={setSelectedCell}
@@ -6239,6 +6242,7 @@ function TacticalGrid({
   currentTurnParticipantId,
   grid,
   mode,
+  moveDisabledReason,
   onPanBoard,
   onResetBoardView,
   onSelectCell,
@@ -6264,6 +6268,7 @@ function TacticalGrid({
     width: number;
   };
   mode: RuntimeMode;
+  moveDisabledReason: string | null;
   onPanBoard: (direction: TacticalBoardPanDirection) => void;
   onResetBoardView: () => void;
   onSelectCell: (cell: Cell) => void;
@@ -6308,6 +6313,12 @@ function TacticalGrid({
   const boardPixelWidth = grid.width * boardCellSizePixels;
   const cameraButtonClassName =
     'flex size-9 items-center justify-center rounded-lg border border-amber-400/25 bg-black/25 text-xs font-black text-amber-100 transition hover:border-amber-200 hover:bg-amber-300/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200';
+  const boardBadgeLabels: Record<TacticalBoardCellBadgeKind, string> = {
+    move: t('runtime.board.badge.move'),
+    selected: t('runtime.board.badge.selected'),
+    target: t('runtime.board.badge.target'),
+    turn: t('runtime.board.badge.turn'),
+  };
 
   return (
     <div className="grid gap-3">
@@ -6428,10 +6439,22 @@ function TacticalGrid({
             const resource = placement
               ? charactersByParticipant[placement.participantId]
               : undefined;
+            const cellAffordance = getTacticalBoardCellAffordance({
+              actingParticipantId,
+              cell,
+              combatantId: primaryCombatantCell?.entity.id ?? null,
+              currentTurnCombatantId,
+              currentTurnParticipantId,
+              moveDisabledReason,
+              participantId: placement?.participantId ?? null,
+              selectedCell,
+              selectedCombatantId,
+              selectedTargetCombatantId,
+              selectedTargetParticipantId,
+            });
             const isCurrentTurn =
               placement?.participantId === currentTurnParticipantId;
-            const isSelected =
-              selectedCell.x === cell.x && selectedCell.y === cell.y;
+            const isSelected = cellAffordance.isSelectedCell;
             const isSelectedEntity =
               primaryEntityCell?.entity.id === selectedSceneEntityId;
             const isSelectedTransition =
@@ -6487,19 +6510,22 @@ function TacticalGrid({
               placement
                 ? `token ${resource?.character.name ?? placement.participantId}`
                 : null,
+              ...cellAffordance.badges.map((badge) => boardBadgeLabels[badge]),
             ].filter(Boolean);
 
             return (
               <button
                 aria-label={ariaParts.join(', ')}
                 className={`group relative border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
-                  isSelected
-                    ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
-                    : primaryCombatantCell
-                      ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
-                      : primaryEntityCell
-                        ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
-                        : 'bg-[#211711] hover:bg-[#332316]'
+                  cellAffordance.isMovementTarget
+                    ? 'bg-emerald-300/15 shadow-[inset_0_0_0_2px_rgba(52,211,153,0.95)]'
+                    : isSelected
+                      ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
+                      : primaryCombatantCell
+                        ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
+                        : primaryEntityCell
+                          ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
+                          : 'bg-[#211711] hover:bg-[#332316]'
                 }`}
                 key={`${cell.x}-${cell.y}`}
                 onClick={() => {
@@ -6522,6 +6548,19 @@ function TacticalGrid({
                 <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
                   {cell.x},{cell.y}
                 </span>
+                {cellAffordance.badges.length ? (
+                  <span className="pointer-events-none absolute right-1 top-1 z-30 flex max-w-[calc(100%-0.5rem)] flex-wrap justify-end gap-0.5">
+                    {cellAffordance.badges.map((badge) => (
+                      <span
+                        className={getTacticalBoardBadgeClassName(badge)}
+                        key={badge}
+                        title={boardBadgeLabels[badge]}
+                      >
+                        {getTacticalBoardBadgeGlyph(badge)}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
                 {primaryEntityCell ? (
                   <span
                     className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
@@ -6559,7 +6598,7 @@ function TacticalGrid({
                             : isDefeatedCombatant
                               ? 'border-stone-300/70 bg-stone-800 text-stone-200 opacity-75 shadow-black/40'
                               : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
-                    } ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
+                    } ${cellAffordance.isSelectedToken ? 'ring-2 ring-cyan-100 ring-offset-2 ring-offset-[#110d0a]' : ''} ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
                     title={primaryCombatantCell.label}
                   >
                     {primaryCombatantCell.isOrigin
@@ -6576,7 +6615,7 @@ function TacticalGrid({
                   <span
                     className={`runtime-token-pop relative z-10 mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
                       isCurrentTurn ? 'animate-pulse' : ''
-                    }`}
+                    } ${cellAffordance.isSelectedToken ? 'ring-2 ring-cyan-100 ring-offset-2 ring-offset-[#110d0a]' : ''}`}
                     title={resource?.character.name ?? placement.participantId}
                   >
                     {initials(
@@ -6593,6 +6632,37 @@ function TacticalGrid({
       </div>
     </div>
   );
+}
+
+function getTacticalBoardBadgeGlyph(kind: TacticalBoardCellBadgeKind): string {
+  switch (kind) {
+    case 'move':
+      return 'MV';
+    case 'selected':
+      return 'SEL';
+    case 'target':
+      return 'TGT';
+    case 'turn':
+      return 'TRN';
+  }
+}
+
+function getTacticalBoardBadgeClassName(
+  kind: TacticalBoardCellBadgeKind,
+): string {
+  const base =
+    'rounded border px-1 py-0.5 text-[8px] font-black leading-none shadow-sm';
+
+  switch (kind) {
+    case 'move':
+      return `${base} border-emerald-100 bg-emerald-400 text-emerald-950 shadow-emerald-300/30`;
+    case 'selected':
+      return `${base} border-cyan-100 bg-cyan-300 text-slate-950 shadow-cyan-300/25`;
+    case 'target':
+      return `${base} border-fuchsia-100 bg-fuchsia-400 text-slate-950 shadow-fuchsia-300/30`;
+    case 'turn':
+      return `${base} border-amber-100 bg-amber-300 text-stone-950 shadow-amber-300/30`;
+  }
 }
 
 function CharacterSummary({
