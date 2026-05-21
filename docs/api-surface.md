@@ -77,6 +77,35 @@ currently installed in the workspace. This remains an MVP, not full production
 auth: there is no password reset, email verification, MFA, OAuth, account
 settings UI, or dedicated CSRF token beyond `SameSite=Lax`.
 
+## Operational Status Endpoints
+
+### `GET /api/outbox/status`
+
+Returns a read-only summary of unpublished command-event outbox rows when a
+DB-backed outbox dispatcher is injected:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "configured": true,
+    "unpublishedCount": 2,
+    "eventTypeCounts": {
+      "session_state": 1,
+      "character_state": 0,
+      "movement_state": 1,
+      "encounter_state": 0,
+      "combat_event": 0
+    },
+    "oldestCreatedAt": "2026-04-23T00:05:00.000Z"
+  }
+}
+```
+
+If no outbox dispatcher is injected, `configured` is `false` and all counts are
+zero. This endpoint does not drain, publish, mark rows as published, expose row
+IDs, or provide replay/cursor/catch-up semantics.
+
 ### `POST /api/session/command`
 
 Mutating commands:

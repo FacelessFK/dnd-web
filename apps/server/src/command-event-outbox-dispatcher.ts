@@ -7,6 +7,8 @@ import type {
   CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
+  OutboxEventTypeCounts,
+  OutboxStatusSuccess,
   SessionStateUpdate,
 } from '@dnd/protocol';
 
@@ -15,6 +17,7 @@ import type { RuntimeSessionStore } from './session-store.js';
 export interface CommandEventOutboxDispatcherLike {
   drainAllUnpublished(): Promise<void>;
   drainUnpublishedByIdempotencyKey(idempotencyKey: string): Promise<void>;
+  getUnpublishedStatus(): Promise<OutboxStatusSuccess['data']>;
 }
 
 export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatcherLike {
@@ -43,6 +46,34 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
         ),
       );
     });
+  }
+
+  async getUnpublishedStatus(): Promise<OutboxStatusSuccess['data']> {
+    const rows = await this.outbox.listUnpublishedCommandEventOutboxRecords();
+    const eventTypeCounts = this.createEmptyEventTypeCounts();
+
+    for (const row of rows) {
+      if (!(row.eventType in eventTypeCounts)) {
+        throw new Error(`Unsupported outbox event type "${row.eventType}".`);
+      }
+
+      const eventType = row.eventType as keyof OutboxEventTypeCounts;
+      eventTypeCounts[eventType] += 1;
+    }
+
+    return {
+      configured: true,
+      eventTypeCounts,
+      oldestCreatedAt:
+        rows.length > 0
+          ? rows
+              .reduce((oldest, row) =>
+                row.createdAt < oldest.createdAt ? row : oldest,
+              )
+              .createdAt.toISOString()
+          : null,
+      unpublishedCount: rows.length,
+    };
   }
 
   private enqueueDrain(run: () => Promise<void>): Promise<void> {
@@ -112,5 +143,15 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
 
   private clone<T>(value: T): T {
     return structuredClone(value);
+  }
+
+  private createEmptyEventTypeCounts(): OutboxEventTypeCounts {
+    return {
+      character_state: 0,
+      combat_event: 0,
+      encounter_state: 0,
+      movement_state: 0,
+      session_state: 0,
+    };
   }
 }

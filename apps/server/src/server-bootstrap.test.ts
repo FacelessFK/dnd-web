@@ -366,6 +366,18 @@ function createDbModeDependencies(params: {
           }
         },
         drainUnpublishedByIdempotencyKey: async () => undefined,
+        getUnpublishedStatus: async () => ({
+          configured: true,
+          eventTypeCounts: {
+            character_state: 0,
+            combat_event: 0,
+            encounter_state: 0,
+            movement_state: 0,
+            session_state: 0,
+          },
+          oldestCreatedAt: null,
+          unpublishedCount: 0,
+        }),
       }),
     createPersistenceConnection: () => ({
       db: {} as DndDatabase,

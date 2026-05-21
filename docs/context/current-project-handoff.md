@@ -80,13 +80,15 @@ Apply `packages/db/migrations/` before DB-mode use.
 Covered DB-backed slices include character records, Character Library entries,
 auth users/sessions, session snapshots, scene records, active encounters,
 command idempotency records/claims, transaction boundaries for current covered
-paths, and single-process outbox dispatch for covered live-command paths.
+paths, single-process outbox dispatch for covered live-command paths, and a
+read-only unpublished outbox backlog summary at `GET /api/outbox/status`.
 
 Current limits remain:
 
 - default startup can be in-memory,
 - SSE subscribers are process-local,
 - unpublished outbox rows are not auto-redelivered on cold boot,
+- `GET /api/outbox/status` does not drain, replay, or expose row details,
 - no replay, cursor, catch-up API, exactly-once delivery, full production auth,
   or multi-process coordination.
 

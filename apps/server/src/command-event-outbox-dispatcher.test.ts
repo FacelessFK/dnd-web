@@ -333,6 +333,18 @@ test('createSessionServer startup does not auto-drain unpublished outbox rows', 
       startupCount += 1;
     },
     drainUnpublishedByIdempotencyKey: async () => undefined,
+    getUnpublishedStatus: async () => ({
+      configured: true,
+      eventTypeCounts: {
+        character_state: 0,
+        combat_event: 0,
+        encounter_state: 0,
+        movement_state: 0,
+        session_state: 0,
+      },
+      oldestCreatedAt: null,
+      unpublishedCount: 0,
+    }),
   };
   const injectedServer = createSessionServer(
     undefined,

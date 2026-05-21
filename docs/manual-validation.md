@@ -16,8 +16,10 @@ persistence foundation plus covered live-command post-commit dispatch for the
 already-covered DB paths. Unpublished outbox rows may remain stored after a
 restart, but they are not auto-redelivered on cold boot because SSE
 subscribers are process-local and there is still no replay or catch-up
-surface. This manual curl flow still validates the default in-memory startup
-path rather than those injected durable restart or transactional paths.
+surface. DB-backed runs can inspect unpublished backlog counts with
+`GET /api/outbox/status`; that status read does not drain or replay rows. This
+manual curl flow still validates the default in-memory startup path rather than
+those injected durable restart or transactional paths.
 
 For browser-based manual operation of the same runtime surface, start both apps
 with `pnpm dev` and open `http://localhost:3000/runtime`.

@@ -11,3 +11,4 @@ export * from './encounter.js';
 export * from './combat.js';
 export * from './dm.js';
 export * from './stream.js';
+export * from './outbox.js';

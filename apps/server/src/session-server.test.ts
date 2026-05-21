@@ -92,6 +92,22 @@ type JsonResponse<T> = {
   status: number;
 };
 
+type OutboxStatusResponse = {
+  data: {
+    configured: boolean;
+    eventTypeCounts: {
+      character_state: number;
+      combat_event: number;
+      encounter_state: number;
+      movement_state: number;
+      session_state: number;
+    };
+    oldestCreatedAt: string | null;
+    unpublishedCount: number;
+  };
+  ok: true;
+};
+
 async function postJson<TResponse>(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   idempotency: CommandIdempotencyStore,
@@ -131,6 +147,46 @@ async function postJson<TResponse>(
     sceneCommandTransaction,
     characterLibrary,
     auth,
+  );
+
+  return {
+    status: response.statusCode,
+    body: JSON.parse(response.body) as TResponse,
+  };
+}
+
+async function getJson<TResponse>(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  idempotency: CommandIdempotencyStore,
+  path: string,
+  commandEventOutboxDispatcher?: CommandEventOutboxDispatcher,
+): Promise<JsonResponse<TResponse>> {
+  const request = Readable.from([]) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+  };
+  const response = createMockResponse();
+
+  request.headers = {
+    host: '127.0.0.1',
+  };
+  request.method = 'GET';
+  request.url = path;
+
+  await handleRequest(
+    request as never,
+    response as never,
+    runtime,
+    idempotency,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    commandEventOutboxDispatcher,
   );
 
   return {
@@ -4363,6 +4419,98 @@ test('db-backed session transaction boundary writes one outbox row for submit_ch
 
   assert.equal(submittedParticipant?.pendingCharacterId, characterId);
   assert.equal(submittedParticipant?.characterId, null);
+});
+
+test('outbox status endpoint reports unpublished backlog without draining rows', async () => {
+  const runtime = new InMemoryGameRuntime();
+  const idempotency = new InMemoryCommandIdempotencyStore();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const session = runtime.createSession({
+    commandId: 'outbox-status-create-session',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+
+  await outboxDatabase.insertCommandEventOutboxRecord({
+    eventOrder: 0,
+    eventType: 'session_state',
+    idempotencyKey: 'session:status-1',
+    outboxId: 'session:status-1:0',
+    payload: {
+      reason: 'participant_joined',
+      revision: 2,
+      sessionId: session.sessionId,
+      state: session.state,
+      type: 'session_state',
+    },
+    sessionId: session.sessionId,
+  });
+  await outboxDatabase.insertCommandEventOutboxRecord({
+    eventOrder: 0,
+    eventType: 'movement_state',
+    idempotencyKey: 'movement:status-1',
+    outboxId: 'movement:status-1:0',
+    payload: {
+      activeSceneId: 'scene-001',
+      characterId: 'character-001',
+      footprint: {
+        height: 1,
+        width: 1,
+      },
+      participantId: 'player-001',
+      position: {
+        x: 1,
+        y: 1,
+      },
+      reason: 'character_moved',
+      sessionId: session.sessionId,
+      type: 'movement_state',
+    },
+    sessionId: session.sessionId,
+  });
+
+  const response = await getJson<OutboxStatusResponse>(
+    runtime,
+    idempotency,
+    '/api/outbox/status',
+    new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.ok, true);
+  assert.match(
+    response.body.data.oldestCreatedAt ?? '',
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/,
+  );
+  assert.deepEqual(
+    {
+      ...response.body.data,
+      oldestCreatedAt: null,
+    },
+    {
+      configured: true,
+      eventTypeCounts: {
+        character_state: 0,
+        combat_event: 0,
+        encounter_state: 0,
+        movement_state: 1,
+        session_state: 1,
+      },
+      oldestCreatedAt: null,
+      unpublishedCount: 2,
+    },
+  );
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    2,
+  );
 });
 
 test('db-backed session transaction boundary writes one runtime copy and one outbox row for submit_character_library_entry_for_assignment duplicate retries', async () => {

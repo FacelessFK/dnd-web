@@ -29,6 +29,7 @@ import {
   movementCommandErrorSchema,
   movementCommandSchema,
   movementCommandSuccessSchema,
+  outboxStatusSuccessSchema,
   participantIdSchema,
   registerAuthRequestSchema,
   sceneActivationSuccessSchema,
@@ -163,6 +164,7 @@ export function createSessionServer(
         sceneCommandTransaction,
         characterLibrary,
         auth,
+        commandEventOutboxDispatcher,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -198,6 +200,7 @@ export async function handleRequest(
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
   auth?: AuthService,
+  commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
 ): Promise<void> {
   setCorsHeaders(response, request);
 
@@ -221,6 +224,11 @@ export async function handleRequest(
 
   if (request.method === 'GET' && url.pathname === '/api/auth/me') {
     await handleAuthMeRequest(request, response, auth);
+    return;
+  }
+
+  if (request.method === 'GET' && url.pathname === '/api/outbox/status') {
+    await handleOutboxStatusRequest(response, commandEventOutboxDispatcher);
     return;
   }
 
@@ -403,6 +411,36 @@ async function handleAuthMeRequest(
   } catch (error) {
     handleRuntimeError(response, error, authMeResponseSchema);
   }
+}
+
+async function handleOutboxStatusRequest(
+  response: ServerResponse,
+  commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
+): Promise<void> {
+  const data = commandEventOutboxDispatcher
+    ? await commandEventOutboxDispatcher.getUnpublishedStatus()
+    : {
+        configured: false,
+        eventTypeCounts: {
+          character_state: 0,
+          combat_event: 0,
+          encounter_state: 0,
+          movement_state: 0,
+          session_state: 0,
+        },
+        oldestCreatedAt: null,
+        unpublishedCount: 0,
+      };
+
+  sendJson(
+    response,
+    200,
+    {
+      data,
+      ok: true,
+    },
+    outboxStatusSuccessSchema,
+  );
 }
 
 async function handleAuthRegisterRequest(

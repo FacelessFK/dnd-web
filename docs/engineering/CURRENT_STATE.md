@@ -92,7 +92,8 @@ Covered DB-backed slices include:
 - active encounters;
 - completed command idempotency records and pre-execution claims;
 - transaction boundaries for the current covered paths;
-- single-process outbox dispatch for covered live-command paths.
+- single-process outbox dispatch for covered live-command paths;
+- read-only outbox backlog status at `GET /api/outbox/status`.
 
 ## What Is Still In-Memory Or Process-Local
 
@@ -101,6 +102,8 @@ Covered DB-backed slices include:
 - Some runtime caches are still intentionally in-memory after DB preload.
 - Presence/subscriber state resets on restart.
 - Unpublished outbox rows are not auto-redelivered on cold boot.
+- `GET /api/outbox/status` reports unpublished backlog counts, but it does not
+  drain rows, expose row IDs, or implement replay/catch-up.
 
 ## Auth MVP Limitations
 

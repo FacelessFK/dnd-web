@@ -73,6 +73,8 @@ that scope.
 - Character Library auth is an MVP, not production account security.
 - SSE subscribers are process-local.
 - Unpublished outbox rows are not auto-redelivered on cold boot.
+- `GET /api/outbox/status` reports unpublished outbox backlog counts without
+  draining rows or exposing row details.
 - There is no replay, cursor, catch-up API, exactly-once delivery, or
   multi-process coordination.
 - Runtime rules remain narrow: no full spell system, full condition engine,

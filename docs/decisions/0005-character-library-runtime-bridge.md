@@ -96,4 +96,4 @@ Remaining work:
 ## Next Milestone
 
 Use `docs/delivery/NEXT_MILESTONE.md` as the planning source for the next
-bridge hardening slice.
+read-model recovery and realtime delivery-boundary slice.
