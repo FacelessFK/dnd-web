@@ -1155,6 +1155,11 @@ export type AssignmentRequestCharacterPreview = {
   status: CharacterResource['character']['status'];
 };
 
+export type CharacterLibrarySourceProvenance = {
+  runtimeCharacterId: string;
+  sourceLibraryEntryId: string;
+};
+
 export type RuntimeLibraryEntrySummary = Pick<
   CharacterLibraryEntry,
   'className' | 'id' | 'level' | 'name' | 'status'
@@ -1283,6 +1288,29 @@ export function getAssignmentRequestCharacterPreview(
     sourceLibraryEntryId,
     speed: `${character.character.speed} ft`,
     status: character.character.status,
+  };
+}
+
+export function getCharacterLibrarySourceProvenance(
+  character?: CharacterResource,
+): CharacterLibrarySourceProvenance | null {
+  if (!character) {
+    return null;
+  }
+
+  const sourceLibraryEntryId =
+    typeof character.character.meta.sourceCharacterLibraryEntryId ===
+      'string' && character.character.meta.sourceCharacterLibraryEntryId
+      ? character.character.meta.sourceCharacterLibraryEntryId
+      : null;
+
+  if (!sourceLibraryEntryId) {
+    return null;
+  }
+
+  return {
+    runtimeCharacterId: character.character.id,
+    sourceLibraryEntryId,
   };
 }
 

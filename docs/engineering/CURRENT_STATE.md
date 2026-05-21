@@ -33,6 +33,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - readable combat/event feed;
 - DM assignment request previews for pending Player-submitted runtime
   characters, including source Character Library entry IDs when present;
+- assigned character cards preserve the runtime copy/source library entry
+  provenance after DM assignment;
 - DM HP, condition, reposition, combatant, current-turn, turn-usage, and
   encounter-end controls.
 
@@ -61,7 +63,9 @@ Current implementation includes:
   entries for the authenticated user, selecting one, and submitting it into
   the live session pending-assignment path;
 - DM-mode `/runtime` assignment request cards that preview submitted runtime
-  copies before assignment.
+  copies before assignment;
+- assigned runtime character cards that keep showing source library provenance
+  after DM assignment.
 
 Current bridge state:
 

@@ -72,9 +72,11 @@ session, refresh the saved-character list, select a finalized saved character,
 and submit it. Confirm the player shows a pending assignment. Switch to DM mode
 and confirm the Roster's Assignment Requests card shows a character preview
 with name, build, HP, AC, speed, runtime copy ID, and source library entry ID
-before assigning that pending runtime character. Confirm the reusable library
-entry remains separate from live runtime HP, movement, conditions, and DM
-overrides.
+before assigning that pending runtime character. Click **Assign Pending
+Character** and confirm the assigned character card still shows the runtime
+copy ID and source library entry ID after the pending request clears. Confirm
+the reusable library entry remains separate from live runtime HP, movement,
+conditions, and DM overrides.
 
 For the rule-aware builder slice, also check:
 

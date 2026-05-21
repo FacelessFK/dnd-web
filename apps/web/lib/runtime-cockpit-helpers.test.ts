@@ -21,6 +21,7 @@ import {
   getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
   getAttackableCombatantEntities,
+  getCharacterLibrarySourceProvenance,
   getAssignedCharacterRefs,
   getCombatantDisplayCells,
   getCombatantEntities,
@@ -189,6 +190,35 @@ describe('runtime cockpit helpers', () => {
     );
 
     assert.equal(getAssignmentRequestCharacterPreview(undefined), null);
+  });
+
+  it('summarizes assigned runtime character library source provenance', () => {
+    assert.deepEqual(
+      getCharacterLibrarySourceProvenance({
+        character: {
+          id: 'CHAR-RUNTIME',
+          meta: {
+            sourceCharacterLibraryEntryId:
+              'charlib_11111111-1111-4111-8111-111111111111',
+          },
+        },
+      } as unknown as CharacterResource),
+      {
+        runtimeCharacterId: 'CHAR-RUNTIME',
+        sourceLibraryEntryId: 'charlib_11111111-1111-4111-8111-111111111111',
+      },
+    );
+
+    assert.equal(
+      getCharacterLibrarySourceProvenance({
+        character: {
+          id: 'CHAR-LOCAL',
+          meta: {},
+        },
+      } as unknown as CharacterResource),
+      null,
+    );
+    assert.equal(getCharacterLibrarySourceProvenance(undefined), null);
   });
 
   it('prefers session assigned IDs over loaded character resources', () => {

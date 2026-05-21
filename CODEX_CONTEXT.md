@@ -69,6 +69,8 @@ that scope.
 - `/runtime` DM mode previews pending Player-submitted assignment requests with
   the runtime copy's build, HP, AC, speed, runtime copy ID, and source Character
   Library entry ID when present.
+- Assigned runtime character cards continue showing the runtime copy/source
+  Character Library entry provenance after DM assignment.
 
 ## Known Limitations
 

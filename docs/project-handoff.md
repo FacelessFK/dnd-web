@@ -67,6 +67,9 @@ one, and submitting it into live pending assignment. DM assignment still uses
 the existing authoritative assignment path. DM-mode `/runtime` now previews
 pending assignment requests with the submitted runtime copy's build, HP, AC,
 speed, runtime copy ID, and source Character Library entry ID when present.
+After assignment, the assigned character card keeps showing the runtime copy ID
+and source Character Library entry ID so the saved-entry/runtime-copy boundary
+stays visible.
 
 ## Persistence Reality
 

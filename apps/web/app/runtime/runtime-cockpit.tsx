@@ -58,6 +58,7 @@ import {
   getAssignmentRequestCharacterPreview,
   getAssignedCharacterRefs,
   getAttackableCombatantEntities,
+  getCharacterLibrarySourceProvenance,
   getCombatantDisplayCells,
   getCombatantEntities,
   getCurrentTurnCombatantId,
@@ -6457,6 +6458,8 @@ function CharacterSummary({
   title: string;
   variant?: 'hero' | 'normal';
 }) {
+  const { t } = useI18n();
+
   if (!resource) {
     return (
       <EmptyState
@@ -6465,6 +6468,8 @@ function CharacterSummary({
       />
     );
   }
+
+  const sourceProvenance = getCharacterLibrarySourceProvenance(resource);
 
   return (
     <article
@@ -6513,6 +6518,18 @@ function CharacterSummary({
           ? resource.overlay.activeConditions.join(', ')
           : 'none'}
       </p>
+      {sourceProvenance ? (
+        <dl className="mt-3 grid gap-2 rounded-xl border border-sky-300/15 bg-sky-950/20 p-2 text-xs">
+          <StatusRow
+            label={t('runtime.assignmentRequests.runtimeCopy')}
+            value={sourceProvenance.runtimeCharacterId}
+          />
+          <StatusRow
+            label={t('runtime.assignmentRequests.sourceLibraryEntry')}
+            value={sourceProvenance.sourceLibraryEntryId}
+          />
+        </dl>
+      ) : null}
     </article>
   );
 }
