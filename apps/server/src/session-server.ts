@@ -61,6 +61,7 @@ import {
 import { AuthService, AuthStoreError } from './auth-store.js';
 import { CharacterStoreError } from './character-store.js';
 import {
+  DbBackedCharacterLibraryRepository,
   CharacterLibraryService,
   CharacterLibraryStoreError,
 } from './character-library-store.js';
@@ -895,6 +896,46 @@ async function handleCharacterCommandRequest(
         return;
       }
       case 'submit_character_library_entry_for_assignment': {
+        if (
+          sessionCommandTransaction?.supports({
+            category: 'character',
+            command,
+          })
+        ) {
+          const success: CharacterAssignmentSuccess = {
+            ok: true,
+            data: await sessionCommandTransaction.run({
+              category: 'character',
+              command,
+              execute: async (transactionRuntime, context) => {
+                const transactionCharacterLibrary =
+                  characterLibrary.withRepository(
+                    new DbBackedCharacterLibraryRepository(
+                      context.characterLibrary,
+                    ),
+                  );
+                const entry =
+                  await transactionCharacterLibrary.getEntryForOwner(
+                    {
+                      entryId: command.payload.entryId,
+                      ownerParticipantId: command.payload.ownerParticipantId,
+                    },
+                    authenticatedUser?.id,
+                  );
+
+                return transactionRuntime.submitCharacterLibraryEntryForAssignment(
+                  command,
+                  entry,
+                );
+              },
+              runtime,
+            }),
+          };
+
+          sendCharacterSuccess(response, command.type, success);
+          return;
+        }
+
         const entry = await characterLibrary.getEntryForOwner(
           {
             entryId: command.payload.entryId,

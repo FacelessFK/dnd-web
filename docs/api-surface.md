@@ -127,9 +127,11 @@ Notes:
   participant's `pendingCharacterId`.
 - This bridge command does not mutate the Character Library entry. Live HP,
   position, conditions, encounter state, and DM overrides remain runtime state.
-- The bridge command currently uses the non-transactional runtime path rather
-  than the DB-backed session command transaction/outbox boundary; do not claim
-  atomic multi-store commit or durable replay for this command yet.
+- In DB mode, this bridge uses the DB-backed session command transaction
+  boundary when injected: library-entry read, runtime character-copy creation,
+  session pending assignment, durable idempotency success, and one
+  `session_state` outbox row commit together. The outbox dispatch is still
+  post-commit and process-local; do not claim durable replay or catch-up.
 - `assign_character_to_participant` mutates the session snapshot and emits the
   same `session_state` semantics as the runtime already had. Assignment clears
   that participant's pending character request.

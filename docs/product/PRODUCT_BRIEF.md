@@ -64,8 +64,10 @@ platform:
 - export simple character sheet PDFs from local templates;
 - preserve read-model recovery after refresh or reconnect.
 
-The next product gap is DB transaction/outbox hardening for the bridge path,
-while keeping live session state separate from reusable library records.
+The bridge path now has narrow DB transaction/outbox coverage while keeping
+live session state separate from reusable library records. Remaining delivery
+gaps are still about process-local realtime delivery, replay/catch-up, and
+broader product depth rather than mutating reusable entries.
 
 ## Product Principles
 

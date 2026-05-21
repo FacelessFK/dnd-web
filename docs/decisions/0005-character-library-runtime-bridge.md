@@ -88,7 +88,8 @@ Current behavior:
 
 Remaining work:
 
-- optional DB transaction/outbox hardening for the multi-store bridge path;
+- continued validation that the DB transaction/outbox bridge path does not
+  mutate reusable library entries;
 - continued validation that live HP, movement, conditions, and DM overrides do
   not mutate the reusable library entry.
 

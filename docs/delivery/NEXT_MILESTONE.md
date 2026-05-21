@@ -111,12 +111,11 @@ result through existing pending/assignment state.
 
 ### Slice 5: DB Transaction/Outbox Hardening
 
-If the bridge must be durable across multi-store DB failures, add a narrow
-transaction boundary for creating the runtime character, updating session
-pending assignment, idempotency, and event publication. Keep replay/cursor
-claims out of scope unless explicitly implemented.
-
-This is the recommended next implementation slice.
+Implemented: DB mode routes `submit_character_library_entry_for_assignment`
+through the DB-backed session command transaction boundary when injected. The
+library entry read, runtime character copy, session pending assignment, durable
+idempotency success, and one post-commit `session_state` outbox row are covered
+without adding replay/cursor guarantees.
 
 ### Slice 6: Validation And Docs
 

@@ -62,7 +62,10 @@ import {
   type CommandIdempotencyStore,
 } from './command-idempotency-store.js';
 import { CommandEventOutboxDispatcher } from './command-event-outbox-dispatcher.js';
-import { CharacterLibraryService } from './character-library-store.js';
+import {
+  CharacterLibraryService,
+  DbBackedCharacterLibraryRepository,
+} from './character-library-store.js';
 import { InMemoryCharacterStore } from './character-store.js';
 import { AuthService } from './auth-store.js';
 import { DbBackedCharacterRepository } from './db-character-repository.js';
@@ -4360,6 +4363,218 @@ test('db-backed session transaction boundary writes one outbox row for submit_ch
 
   assert.equal(submittedParticipant?.pendingCharacterId, characterId);
   assert.equal(submittedParticipant?.characterId, null);
+});
+
+test('db-backed session transaction boundary writes one runtime copy and one outbox row for submit_character_library_entry_for_assignment duplicate retries', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterLibraryDatabase = new InMemoryCharacterLibraryEntryDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+    undefined,
+    characterLibraryDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  );
+  const characterLibrary = new CharacterLibraryService(
+    new DbBackedCharacterLibraryRepository(characterLibraryDatabase),
+  );
+  let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const session = await runtime.createSession({
+    commandId: 'library-transaction-create-session',
+    type: 'create_session',
+    actor: {
+      participantId: 'dm-001',
+      displayName: 'Dungeon Master',
+      role: 'dm',
+    },
+    payload: {
+      rulesProfileId: 'dnd5e-2024-core',
+    },
+  });
+
+  await runtime.joinSession({
+    commandId: 'library-transaction-join-player',
+    type: 'join_session',
+    actor: {
+      participantId: 'player-001',
+      displayName: 'Player One',
+      role: 'player',
+    },
+    payload: {
+      sessionId: session.sessionId,
+    },
+  });
+
+  const draftEntry = await characterLibrary.createEntry({
+    actor: {
+      participantId: 'library-owner-001',
+    },
+    commandId: 'library-transaction-create-entry',
+    payload: {
+      entry: {
+        abilities: {
+          cha: 16,
+          con: 13,
+          dex: 12,
+          int: 10,
+          str: 14,
+          wis: 11,
+        },
+        abilityScoreMethod: 'standard-array',
+        armorClass: 13,
+        background: 'Acolyte',
+        builderSelections: {
+          cantrips: [],
+          equipment: ['Explorer Pack'],
+          languages: ['Common'],
+          originFeatAbility: '',
+          originFeatCantrips: [],
+          originFeatSpell: '',
+          skills: ['Religion'],
+          spells: [],
+          tools: [],
+        },
+        builderStep: 'review',
+        className: 'Cleric',
+        concept: 'Temple envoy',
+        hp: {
+          current: 9,
+          max: 9,
+          temp: 0,
+        },
+        level: 1,
+        meta: {},
+        name: 'Seren',
+        notes: 'Reusable library note',
+        portrait: null,
+        pronouns: '',
+        rulesProfileId: 'dnd5e-2024-core',
+        speciesOrRace: 'Human',
+        speed: 30,
+      },
+      ownerParticipantId: 'library-owner-001',
+    },
+    type: 'create_character_library_entry',
+  });
+  const finalizedEntry = await characterLibrary.finalizeEntry({
+    actor: {
+      participantId: 'library-owner-001',
+    },
+    commandId: 'library-transaction-finalize-entry',
+    payload: {
+      entryId: draftEntry.id,
+      ownerParticipantId: 'library-owner-001',
+    },
+    type: 'finalize_character_library_entry',
+  });
+  const updates = subscribeToSessionEvents(runtime, session.sessionId);
+  const sessionUpdateCountBefore = updates.length;
+  const command = {
+    actor: {
+      participantId: 'player-001',
+    },
+    commandId: 'library-transaction-submit-entry',
+    payload: {
+      entryId: finalizedEntry.id,
+      ownerParticipantId: 'library-owner-001',
+      sessionId: session.sessionId,
+    },
+    type: 'submit_character_library_entry_for_assignment',
+  };
+  const first = await postJson<CharacterCommandResponse>(
+    runtime,
+    new InMemoryCommandIdempotencyStore(),
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+    undefined,
+    characterLibrary,
+  );
+
+  ({ sessionCommandTransaction } = createSessionCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  ));
+
+  const second = await postJson<CharacterCommandResponse>(
+    runtime,
+    new InMemoryCommandIdempotencyStore(),
+    '/api/characters/command',
+    command,
+    undefined,
+    undefined,
+    undefined,
+    sessionCommandTransaction,
+    undefined,
+    characterLibrary,
+  );
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(second.body, first.body);
+
+  if (!first.body.ok || !('state' in first.body.data)) {
+    throw new Error('Expected a character assignment response.');
+  }
+
+  const sessionSnapshotRow = await sessionDatabase.getSessionSnapshot(
+    session.sessionId,
+  );
+  const sessionUpdates = updates.slice(sessionUpdateCountBefore);
+  const submittedParticipant = sessionSnapshotRow?.snapshot.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+  const runtimeCharacterRow = await characterDatabase.getCharacterRecord(
+    first.body.data.characterId,
+  );
+  const reusableEntry = await characterLibrary.getEntryForOwner({
+    entryId: finalizedEntry.id,
+    ownerParticipantId: 'library-owner-001',
+  });
+
+  assert.equal(characterDatabase.recordCount, 1);
+  assert.equal(idempotencyDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(sessionUpdates.length, 1);
+  assert.equal(sessionUpdates[0]?.type, 'session_state');
+  assert.equal(sessionUpdates[0]?.reason, 'participant_character_submitted');
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+  assert.equal(
+    submittedParticipant?.pendingCharacterId,
+    first.body.data.characterId,
+  );
+  assert.equal(submittedParticipant?.characterId, null);
+  assert.notEqual(first.body.data.characterId, finalizedEntry.id);
+  assert.equal(
+    runtimeCharacterRow?.record.character.ownerParticipantId,
+    'player-001',
+  );
+  assert.equal(reusableEntry.status, 'finalized');
+  assert.equal(reusableEntry.hp.current, 9);
 });
 
 test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate activate retry', async () => {

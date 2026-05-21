@@ -47,16 +47,16 @@ Durability notes:
 - The default in-memory server path still exists for local development and
   tests.
 - Mutating Character Library commands use the normal command idempotency store
-  category. In DB mode their idempotency success rows are durable, but this
-  slice does not add a separate multi-store transaction/outbox boundary because
-  the reusable library table is intentionally isolated from live runtime state.
+  category. In DB mode their idempotency success rows are durable.
 - Finalized library entries remain reusable records. The runtime bridge command
   can copy one into a separate runtime character and pending assignment, but
   that live state is not stored back on the library entry.
-- The bridge command currently uses the non-transactional runtime path. In DB
-  mode, do not treat character-copy creation, session pending assignment,
-  idempotency success, and stream publication as one atomic transaction/outbox
-  boundary yet.
+- In DB mode, `submit_character_library_entry_for_assignment` uses the
+  DB-backed session command transaction boundary when it is injected. The
+  library-entry read, runtime character-copy creation, session pending
+  assignment, durable idempotency success, and one `session_state` outbox row
+  commit in the same unit of work. Dispatch remains a post-commit,
+  process-local SSE action with no replay/cursor/catch-up guarantee.
 
 ### `AuthUserDatabase`
 
@@ -870,8 +870,10 @@ The point where outbox work stops being easy to defer is:
 
 ## Remaining Atomicity Gaps
 
-- Character assignment still validates durable character state and then writes
-  the durable session snapshot without a single cross-store transaction.
+- Covered character assignment and player submit-for-assignment commands now
+  validate durable character or library state and write the durable session
+  snapshot through the DB-backed session transaction boundary when that boundary
+  is injected.
 - Scene activation still validates the scene and then writes the durable
   session snapshot without a single cross-store transaction.
 - Supported scene-only writes now use the DB-backed scene transaction boundary

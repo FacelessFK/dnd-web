@@ -22,6 +22,7 @@ import {
 } from './command-idempotency-store.js';
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
+import { DbBackedCharacterRepository } from './db-character-repository.js';
 import type {
   InMemoryGameRuntime,
   RuntimeCharacterRepository,
@@ -34,6 +35,7 @@ export const DURABLE_SESSION_MUTATION_COMMAND_TYPES = [
   'join_session',
   'assign_character_to_participant',
   'submit_character_for_assignment',
+  'submit_character_library_entry_for_assignment',
   'activate_scene_for_session',
   'activate_scene_transition',
 ] as const;
@@ -57,6 +59,7 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
       RuntimeCharacterRepository,
       RuntimeSessionStore
     >,
+    context: DndDatabaseUnitOfWorkContext,
   ) => Promise<TResponse>;
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>;
 };
@@ -86,7 +89,10 @@ export class DbBackedSessionCommandTransactionBoundary {
       return params.category === 'character';
     }
 
-    if (params.command.type === 'submit_character_for_assignment') {
+    if (
+      params.command.type === 'submit_character_for_assignment' ||
+      params.command.type === 'submit_character_library_entry_for_assignment'
+    ) {
       return params.category === 'character';
     }
 
@@ -179,14 +185,17 @@ export class DbBackedSessionCommandTransactionBoundary {
     const transactionSessions = runtimeSessions.forkForTransaction(
       context.sessions,
     );
-    const transactionRuntime =
-      params.runtime.withSessionStore(transactionSessions);
+    const transactionRuntime = params.runtime
+      .withSessionStore(transactionSessions)
+      .withCharacterRepository(
+        new DbBackedCharacterRepository(context.characters),
+      );
     const commandSessionId = getCommandSessionId(params.command);
     const initialSnapshot =
       params.command.type === 'create_session' || !commandSessionId
         ? null
         : transactionSessions.getSessionSnapshot(commandSessionId);
-    const response = await params.execute(transactionRuntime);
+    const response = await params.execute(transactionRuntime, context);
     const nextSnapshot = this.getSessionSnapshotFromResponse(
       response as SessionMutationSuccessData,
     );
@@ -297,7 +306,10 @@ export class DbBackedSessionCommandTransactionBoundary {
       return 'participant_character_assigned';
     }
 
-    if (commandType === 'submit_character_for_assignment') {
+    if (
+      commandType === 'submit_character_for_assignment' ||
+      commandType === 'submit_character_library_entry_for_assignment'
+    ) {
       return 'participant_character_submitted';
     }
 

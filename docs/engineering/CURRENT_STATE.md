@@ -66,7 +66,10 @@ Current bridge state:
   sets the session participant's `pendingCharacterId` for DM assignment;
 - the reusable library entry is not mutated by live runtime state;
 - the browser API helper and first Player-mode UI affordance are wired;
-- DB transaction/outbox hardening for the bridge path is still pending.
+- in DB mode, the bridge path is covered by the DB-backed session transaction
+  boundary when injected, including runtime character-copy creation, session
+  pending assignment, durable idempotency success, and a post-commit
+  `session_state` outbox row.
 
 ## What Is DB-Backed
 
@@ -157,8 +160,8 @@ Current runtime is intentionally narrow:
 - `/characters` is a usable Character Library/Builder MVP, not a complete D&D
   character product.
 - The Character Library to runtime assignment bridge has a server-side
-  foundation and first Player-mode UI affordance, but still needs DB
-  transaction/outbox hardening if multi-store atomicity becomes required.
+  foundation, first Player-mode UI affordance, and narrow DB transaction/outbox
+  coverage, but no replay/cursor/catch-up delivery guarantees.
 - Adventure authoring and reusable map/content authoring are not complete
   product surfaces.
 - Portrait uploads are MVP storage, not production asset storage.
