@@ -64,7 +64,9 @@ from reusable library entries.
 Player-mode `/runtime` now has the first localization-aware UI affordance for
 loading finalized saved library entries for the authenticated user, selecting
 one, and submitting it into live pending assignment. DM assignment still uses
-the existing authoritative assignment path.
+the existing authoritative assignment path. DM-mode `/runtime` now previews
+pending assignment requests with the submitted runtime copy's build, HP, AC,
+speed, runtime copy ID, and source Character Library entry ID when present.
 
 ## Persistence Reality
 

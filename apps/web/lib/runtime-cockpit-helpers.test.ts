@@ -19,6 +19,7 @@ import {
   formatRuntimeFailure,
   getActingParticipantId,
   getActiveSceneGuidance,
+  getAssignmentRequestCharacterPreview,
   getAttackableCombatantEntities,
   getAssignedCharacterRefs,
   getCombatantDisplayCells,
@@ -137,6 +138,57 @@ describe('runtime cockpit helpers', () => {
         },
       ],
     );
+  });
+
+  it('summarizes pending assignment character previews for the DM roster', () => {
+    assert.deepEqual(
+      getAssignmentRequestCharacterPreview({
+        character: {
+          armorClass: 15,
+          background: 'Sage',
+          className: 'Wizard',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          hp: {
+            current: 18,
+            max: 24,
+            temp: 3,
+          },
+          id: 'CHAR-PENDING',
+          level: 4,
+          meta: {
+            sourceCharacterLibraryEntryId:
+              'charlib_11111111-1111-4111-8111-111111111111',
+          },
+          name: 'Aria',
+          notes: null,
+          ownerParticipantId: 'player-001',
+          rulesProfileId: 'dnd5e-2024-core',
+          speciesOrRace: 'Elf',
+          speed: 30,
+          status: 'ready',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          abilities: {
+            cha: 10,
+            con: 13,
+            dex: 14,
+            int: 16,
+            str: 8,
+            wis: 12,
+          },
+        },
+      } as unknown as CharacterResource),
+      {
+        armorClass: '15',
+        build: 'Elf Wizard level 4',
+        hitPoints: '18/24 +3 temp',
+        name: 'Aria',
+        sourceLibraryEntryId: 'charlib_11111111-1111-4111-8111-111111111111',
+        speed: '30 ft',
+        status: 'ready',
+      },
+    );
+
+    assert.equal(getAssignmentRequestCharacterPreview(undefined), null);
   });
 
   it('prefers session assigned IDs over loaded character resources', () => {

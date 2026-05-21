@@ -55,6 +55,7 @@ import {
   formatRuntimeFailure,
   getActingParticipantId,
   getActiveSceneGuidance,
+  getAssignmentRequestCharacterPreview,
   getAssignedCharacterRefs,
   getAttackableCombatantEntities,
   getCombatantDisplayCells,
@@ -4259,55 +4260,108 @@ export function RuntimeCockpit() {
                         </p>
                       </div>
                       {pendingAssignmentRequests.length ? (
-                        pendingAssignmentRequests.map((request) => (
-                          <div
-                            className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3"
-                            key={`${request.participantId}-${request.pendingCharacterId}`}
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="text-sm font-semibold text-amber-50">
-                                  {request.displayName}
-                                </p>
-                                <p className="mt-1 break-all text-xs text-amber-100/60">
-                                  {request.participantId}
-                                </p>
+                        pendingAssignmentRequests.map((request) => {
+                          const preview = getAssignmentRequestCharacterPreview(
+                            request.character,
+                          );
+
+                          return (
+                            <div
+                              className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3"
+                              key={`${request.participantId}-${request.pendingCharacterId}`}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-semibold text-amber-50">
+                                    {request.displayName}
+                                  </p>
+                                  <p className="mt-1 break-all text-xs text-amber-100/60">
+                                    {request.participantId}
+                                  </p>
+                                </div>
+                                <StatusBadge
+                                  label={
+                                    request.assignedCharacterId
+                                      ? 'Replacement pending'
+                                      : 'Needs assignment'
+                                  }
+                                  tone="warning"
+                                />
                               </div>
-                              <StatusBadge
-                                label={
-                                  request.assignedCharacterId
-                                    ? 'Replacement pending'
-                                    : 'Needs assignment'
+                              {preview ? (
+                                <dl className="grid gap-2 rounded-2xl border border-sky-300/15 bg-sky-950/20 p-3 text-sm">
+                                  <StatusRow
+                                    label={t(
+                                      'runtime.assignmentRequests.character',
+                                    )}
+                                    value={preview.name}
+                                  />
+                                  <StatusRow
+                                    label={t(
+                                      'runtime.assignmentRequests.build',
+                                    )}
+                                    value={preview.build}
+                                  />
+                                  <StatusRow
+                                    label={t('runtime.assignmentRequests.hp')}
+                                    value={preview.hitPoints}
+                                  />
+                                  <StatusRow
+                                    label={t('runtime.assignmentRequests.ac')}
+                                    value={preview.armorClass}
+                                  />
+                                  <StatusRow
+                                    label={t(
+                                      'runtime.assignmentRequests.speed',
+                                    )}
+                                    value={preview.speed}
+                                  />
+                                  <StatusRow
+                                    label={t(
+                                      'runtime.assignmentRequests.runtimeCopy',
+                                    )}
+                                    value={request.pendingCharacterId}
+                                  />
+                                  {preview.sourceLibraryEntryId ? (
+                                    <StatusRow
+                                      label={t(
+                                        'runtime.assignmentRequests.sourceLibraryEntry',
+                                      )}
+                                      value={preview.sourceLibraryEntryId}
+                                    />
+                                  ) : null}
+                                </dl>
+                              ) : (
+                                <Notice
+                                  title={t(
+                                    'runtime.assignmentRequests.previewUnavailableTitle',
+                                  )}
+                                  tone="info"
+                                >
+                                  {t(
+                                    'runtime.assignmentRequests.previewUnavailableDetail',
+                                  )}
+                                </Notice>
+                              )}
+                              <StatusRow
+                                label="Assigned"
+                                value={request.assignedCharacterId ?? 'none'}
+                              />
+                              <ActionButton
+                                disabled={Boolean(busyReason)}
+                                disabledReason={busyReason ?? undefined}
+                                label="Assign Pending Character"
+                                onClick={() =>
+                                  dmAssignPendingCharacter(
+                                    request.participantId,
+                                    request.pendingCharacterId,
+                                  )
                                 }
-                                tone="warning"
+                                variant="secondary"
                               />
                             </div>
-                            <StatusRow
-                              label="Pending"
-                              value={
-                                request.character
-                                  ? `${request.character.character.name} (${request.pendingCharacterId})`
-                                  : request.pendingCharacterId
-                              }
-                            />
-                            <StatusRow
-                              label="Assigned"
-                              value={request.assignedCharacterId ?? 'none'}
-                            />
-                            <ActionButton
-                              disabled={Boolean(busyReason)}
-                              disabledReason={busyReason ?? undefined}
-                              label="Assign Pending Character"
-                              onClick={() =>
-                                dmAssignPendingCharacter(
-                                  request.participantId,
-                                  request.pendingCharacterId,
-                                )
-                              }
-                              variant="secondary"
-                            />
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <EmptyState
                           detail="Players can submit finalized characters from Player mode."

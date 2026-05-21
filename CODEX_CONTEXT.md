@@ -66,6 +66,9 @@ that scope.
   selector that lists finalized Character Library entries for the authenticated
   user, submits the selected entry through the bridge, and preserves existing
   DM assignment authority.
+- `/runtime` DM mode previews pending Player-submitted assignment requests with
+  the runtime copy's build, HP, AC, speed, runtime copy ID, and source Character
+  Library entry ID when present.
 
 ## Known Limitations
 

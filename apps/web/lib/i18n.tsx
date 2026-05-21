@@ -47,6 +47,17 @@ const messages = {
     'nav.soon': 'Soon',
     'page.characterBuilder.title': 'Character Builder',
     'page.characterLibrary.title': 'Character Library',
+    'runtime.assignmentRequests.ac': 'AC',
+    'runtime.assignmentRequests.build': 'Build',
+    'runtime.assignmentRequests.character': 'Character',
+    'runtime.assignmentRequests.hp': 'HP',
+    'runtime.assignmentRequests.previewUnavailableDetail':
+      'Recover table state or read the pending character to show the full request preview.',
+    'runtime.assignmentRequests.previewUnavailableTitle':
+      'Character preview unavailable',
+    'runtime.assignmentRequests.runtimeCopy': 'Runtime copy',
+    'runtime.assignmentRequests.sourceLibraryEntry': 'Source library entry',
+    'runtime.assignmentRequests.speed': 'Speed',
     'runtime.characterLibrary.blocker.alreadyAssigned':
       'This participant already has an assigned character.',
     'runtime.characterLibrary.blocker.alreadySubmitted':
@@ -136,6 +147,17 @@ const messages = {
     'nav.soon': 'به‌زودی',
     'page.characterBuilder.title': 'سازنده کاراکتر',
     'page.characterLibrary.title': 'کتابخانه کاراکترها',
+    'runtime.assignmentRequests.ac': 'AC',
+    'runtime.assignmentRequests.build': 'ساختار',
+    'runtime.assignmentRequests.character': 'کاراکتر',
+    'runtime.assignmentRequests.hp': 'HP',
+    'runtime.assignmentRequests.previewUnavailableDetail':
+      'برای نمایش preview کامل درخواست، وضعیت میز را recover کنید یا کاراکتر pending را دوباره بخوانید.',
+    'runtime.assignmentRequests.previewUnavailableTitle':
+      'Preview کاراکتر در دسترس نیست',
+    'runtime.assignmentRequests.runtimeCopy': 'نسخه runtime',
+    'runtime.assignmentRequests.sourceLibraryEntry': 'ورودی کتابخانه منبع',
+    'runtime.assignmentRequests.speed': 'سرعت',
     'runtime.characterLibrary.blocker.alreadyAssigned':
       'این شرکت‌کننده از قبل کاراکتر assign شده دارد.',
     'runtime.characterLibrary.blocker.alreadySubmitted':

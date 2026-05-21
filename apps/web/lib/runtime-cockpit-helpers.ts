@@ -1145,6 +1145,16 @@ export type AssignmentRequest = {
   pendingCharacterId: string;
 };
 
+export type AssignmentRequestCharacterPreview = {
+  armorClass: string;
+  build: string;
+  hitPoints: string;
+  name: string;
+  sourceLibraryEntryId: string | null;
+  speed: string;
+  status: CharacterResource['character']['status'];
+};
+
 export type RuntimeLibraryEntrySummary = Pick<
   CharacterLibraryEntry,
   'className' | 'id' | 'level' | 'name' | 'status'
@@ -1246,6 +1256,34 @@ export function getPendingAssignmentRequests({
       participantId: participant.id,
       pendingCharacterId: participant.pendingCharacterId as string,
     }));
+}
+
+export function getAssignmentRequestCharacterPreview(
+  character?: CharacterResource,
+): AssignmentRequestCharacterPreview | null {
+  if (!character) {
+    return null;
+  }
+
+  const sourceLibraryEntryId =
+    typeof character.character.meta.sourceCharacterLibraryEntryId ===
+      'string' && character.character.meta.sourceCharacterLibraryEntryId
+      ? character.character.meta.sourceCharacterLibraryEntryId
+      : null;
+  const tempHp =
+    character.character.hp.temp > 0
+      ? ` +${character.character.hp.temp} temp`
+      : '';
+
+  return {
+    armorClass: String(character.character.armorClass),
+    build: `${character.character.speciesOrRace} ${character.character.className} level ${character.character.level}`,
+    hitPoints: `${character.character.hp.current}/${character.character.hp.max}${tempHp}`,
+    name: character.character.name,
+    sourceLibraryEntryId,
+    speed: `${character.character.speed} ft`,
+    status: character.character.status,
+  };
 }
 
 export function getParticipantName(

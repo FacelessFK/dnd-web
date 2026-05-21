@@ -31,6 +31,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - turn usage;
 - narrow melee attack handling;
 - readable combat/event feed;
+- DM assignment request previews for pending Player-submitted runtime
+  characters, including source Character Library entry IDs when present;
 - DM HP, condition, reposition, combatant, current-turn, turn-usage, and
   encounter-end controls.
 
@@ -57,7 +59,9 @@ Current implementation includes:
   pending assignment via `submit_character_library_entry_for_assignment`;
 - Player-mode `/runtime` UI for loading finalized saved Character Library
   entries for the authenticated user, selecting one, and submitting it into
-  the live session pending-assignment path.
+  the live session pending-assignment path;
+- DM-mode `/runtime` assignment request cards that preview submitted runtime
+  copies before assignment.
 
 Current bridge state:
 
@@ -65,7 +69,8 @@ Current bridge state:
   library entry, records the source library entry ID in runtime metadata, and
   sets the session participant's `pendingCharacterId` for DM assignment;
 - the reusable library entry is not mutated by live runtime state;
-- the browser API helper and first Player-mode UI affordance are wired;
+- the browser API helper, Player-mode submit affordance, and DM-mode pending
+  request preview are wired;
 - in DB mode, the bridge path is covered by the DB-backed session transaction
   boundary when injected, including runtime character-copy creation, session
   pending assignment, durable idempotency success, and a post-commit
