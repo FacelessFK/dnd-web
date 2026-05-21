@@ -70,9 +70,10 @@ historical event replay.
 
 ### Slice 3: UI Or Operator Surface
 
-If product needs it, decide whether `/runtime` or a separate dev/operator view
-should show a non-blocking "realtime backlog exists" indicator. Keep it
-localization-aware and avoid production monitoring claims.
+Implemented: `/runtime` DM mode now has a compact manual outbox status badge
+and "Check Outbox" control backed by `GET /api/outbox/status`. It stays
+localization-aware and remains a non-blocking visibility aid, not production
+monitoring, alerting, replay, or recovery control.
 
 ### Slice 4: Future Replay Design
 

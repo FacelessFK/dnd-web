@@ -94,6 +94,7 @@ Covered DB-backed slices include:
 - transaction boundaries for the current covered paths;
 - single-process outbox dispatch for covered live-command paths;
 - read-only outbox backlog status at `GET /api/outbox/status`.
+- a compact manual `/runtime` DM-mode outbox status badge using that endpoint.
 
 ## What Is Still In-Memory Or Process-Local
 
@@ -104,6 +105,8 @@ Covered DB-backed slices include:
 - Unpublished outbox rows are not auto-redelivered on cold boot.
 - `GET /api/outbox/status` reports unpublished backlog counts, but it does not
   drain rows, expose row IDs, or implement replay/catch-up.
+- The `/runtime` outbox badge is a manual development/operator visibility aid,
+  not production monitoring or alerting.
 
 ## Auth MVP Limitations
 

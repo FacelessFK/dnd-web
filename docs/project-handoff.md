@@ -82,6 +82,8 @@ auth users/sessions, session snapshots, scene records, active encounters,
 command idempotency records/claims, transaction boundaries for current covered
 paths, single-process outbox dispatch for covered live-command paths, and a
 read-only unpublished outbox backlog summary at `GET /api/outbox/status`.
+DM mode in `/runtime` has a compact manual outbox status badge backed by that
+endpoint.
 The server suite also audits DB-backed missed realtime delivery recovery:
 current session, scene, active-scene placement, encounter usage, and character
 HP can be reread after missed SSE events without claiming event replay.
@@ -92,6 +94,7 @@ Current limits remain:
 - SSE subscribers are process-local,
 - unpublished outbox rows are not auto-redelivered on cold boot,
 - `GET /api/outbox/status` does not drain, replay, or expose row details,
+- the `/runtime` outbox badge is not production monitoring or alerting,
 - no replay, cursor, catch-up API, exactly-once delivery, full production auth,
   or multi-process coordination.
 

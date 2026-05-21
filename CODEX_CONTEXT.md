@@ -75,6 +75,8 @@ that scope.
 - Unpublished outbox rows are not auto-redelivered on cold boot.
 - `GET /api/outbox/status` reports unpublished outbox backlog counts without
   draining rows or exposing row details.
+- `/runtime` DM mode has a manual outbox status badge backed by that endpoint;
+  it is a development/operator visibility aid, not monitoring or alerting.
 - DB-backed missed realtime delivery is covered by a recovery audit test:
   reconnect/read-model commands rebuild current truth, but late SSE subscribers
   do not receive historical event replay.

@@ -6,6 +6,7 @@ import type {
   DmCombatantInput,
   Encounter,
   GridDefinition,
+  OutboxStatusSuccess,
   RuntimeErrorCode,
   Scene,
   SceneEntity,
@@ -1017,6 +1018,62 @@ export function formatRuntimeFailure(
   return `${label} failed. ${status}${code}${failure.message}`;
 }
 
+export function getOutboxStatusView({
+  data,
+  error,
+  loading,
+}: {
+  data: OutboxStatusSuccess['data'] | null;
+  error: string | null;
+  loading: boolean;
+}): OutboxStatusView {
+  if (loading) {
+    return {
+      count: data?.unpublishedCount ?? null,
+      kind: 'loading',
+      tone: 'info',
+    };
+  }
+
+  if (error) {
+    return {
+      count: null,
+      kind: 'error',
+      tone: 'danger',
+    };
+  }
+
+  if (!data) {
+    return {
+      count: null,
+      kind: 'unknown',
+      tone: 'info',
+    };
+  }
+
+  if (!data.configured) {
+    return {
+      count: 0,
+      kind: 'not_configured',
+      tone: 'info',
+    };
+  }
+
+  if (data.unpublishedCount === 0) {
+    return {
+      count: 0,
+      kind: 'clear',
+      tone: 'success',
+    };
+  }
+
+  return {
+    count: data.unpublishedCount,
+    kind: 'backlog',
+    tone: 'warning',
+  };
+}
+
 export function getKnownCharacterIds(
   sessionState: SessionSnapshot | null,
   charactersByParticipant: Record<string, CharacterResource | undefined>,
@@ -1242,6 +1299,20 @@ export type RuntimeDisabledReasons = {
 };
 
 export type RuntimeNoticeTone = 'danger' | 'info' | 'success' | 'warning';
+
+export type OutboxStatusViewKind =
+  | 'backlog'
+  | 'clear'
+  | 'error'
+  | 'loading'
+  | 'not_configured'
+  | 'unknown';
+
+export type OutboxStatusView = {
+  count: number | null;
+  kind: OutboxStatusViewKind;
+  tone: RuntimeNoticeTone;
+};
 
 export type RuntimeEventSummary = {
   detail: string;

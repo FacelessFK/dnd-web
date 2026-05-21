@@ -35,6 +35,7 @@ import {
   getKnownSceneOptions,
   getFinalizedLibraryEntriesForRuntime,
   getLibraryEntrySubmissionBlocker,
+  getOutboxStatusView,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   isCombatantEntityDefeated,
@@ -175,6 +176,102 @@ describe('runtime cockpit helpers', () => {
     assert.equal(isExpectedRecoveryMiss('scene_not_found'), true);
     assert.equal(isExpectedRecoveryMiss('command_id_conflict'), false);
     assert.equal(isExpectedRecoveryMiss(undefined), false);
+  });
+
+  it('summarizes outbox status for the runtime operator badge', () => {
+    assert.deepEqual(
+      getOutboxStatusView({
+        data: null,
+        error: null,
+        loading: false,
+      }),
+      {
+        count: null,
+        kind: 'unknown',
+        tone: 'info',
+      },
+    );
+    assert.deepEqual(
+      getOutboxStatusView({
+        data: null,
+        error: 'Runtime server unavailable',
+        loading: false,
+      }),
+      {
+        count: null,
+        kind: 'error',
+        tone: 'danger',
+      },
+    );
+    assert.deepEqual(
+      getOutboxStatusView({
+        data: {
+          configured: false,
+          eventTypeCounts: {
+            character_state: 0,
+            combat_event: 0,
+            encounter_state: 0,
+            movement_state: 0,
+            session_state: 0,
+          },
+          oldestCreatedAt: null,
+          unpublishedCount: 0,
+        },
+        error: null,
+        loading: false,
+      }),
+      {
+        count: 0,
+        kind: 'not_configured',
+        tone: 'info',
+      },
+    );
+    assert.deepEqual(
+      getOutboxStatusView({
+        data: {
+          configured: true,
+          eventTypeCounts: {
+            character_state: 0,
+            combat_event: 0,
+            encounter_state: 0,
+            movement_state: 0,
+            session_state: 0,
+          },
+          oldestCreatedAt: null,
+          unpublishedCount: 0,
+        },
+        error: null,
+        loading: false,
+      }),
+      {
+        count: 0,
+        kind: 'clear',
+        tone: 'success',
+      },
+    );
+    assert.deepEqual(
+      getOutboxStatusView({
+        data: {
+          configured: true,
+          eventTypeCounts: {
+            character_state: 0,
+            combat_event: 0,
+            encounter_state: 0,
+            movement_state: 2,
+            session_state: 1,
+          },
+          oldestCreatedAt: '2026-05-21T00:00:00.000Z',
+          unpublishedCount: 3,
+        },
+        error: null,
+        loading: false,
+      }),
+      {
+        count: 3,
+        kind: 'backlog',
+        tone: 'warning',
+      },
+    );
   });
 
   it('formats runtime failures for the cockpit', () => {

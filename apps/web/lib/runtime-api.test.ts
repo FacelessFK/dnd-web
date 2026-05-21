@@ -8,8 +8,10 @@ import {
 } from '@dnd/protocol';
 
 import {
+  fetchOutboxStatus,
   buildSessionStreamUrl,
   createCommandId,
+  parseOutboxStatusResponse,
   parseRuntimeCommandResponse,
 } from './runtime-api';
 
@@ -27,6 +29,79 @@ describe('runtime-api helpers', () => {
     const commandId = createCommandId('recover');
 
     assert.match(commandId, /^web-recover-/);
+  });
+
+  it('parses successful outbox status responses', () => {
+    const response = parseOutboxStatusResponse(200, {
+      ok: true,
+      data: {
+        configured: true,
+        eventTypeCounts: {
+          character_state: 0,
+          combat_event: 0,
+          encounter_state: 0,
+          movement_state: 2,
+          session_state: 1,
+        },
+        oldestCreatedAt: '2026-05-21T00:00:00.000Z',
+        unpublishedCount: 3,
+      },
+    });
+
+    assert.equal(response.ok, true);
+
+    if (response.ok) {
+      assert.equal(response.response.data.unpublishedCount, 3);
+      assert.equal(response.response.data.eventTypeCounts.movement_state, 2);
+    }
+  });
+
+  it('fetches outbox status with cookie credentials', async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+
+    globalThis.fetch = async (input, init) => {
+      calls.push({ input, init });
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            configured: false,
+            eventTypeCounts: {
+              character_state: 0,
+              combat_event: 0,
+              encounter_state: 0,
+              movement_state: 0,
+              session_state: 0,
+            },
+            oldestCreatedAt: null,
+            unpublishedCount: 0,
+          },
+        }),
+        {
+          headers: {
+            'content-type': 'application/json',
+          },
+          status: 200,
+        },
+      );
+    };
+
+    try {
+      const response = await fetchOutboxStatus();
+
+      assert.equal(response.ok, true);
+      assert.equal(calls.length, 1);
+      assert.equal(
+        calls[0]?.input.toString(),
+        'http://localhost:2567/api/outbox/status',
+      );
+      assert.equal(calls[0]?.init?.credentials, 'include');
+      assert.equal(calls[0]?.init?.method, 'GET');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('accepts combatant targets on the existing attack command schema', () => {

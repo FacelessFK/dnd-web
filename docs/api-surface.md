@@ -106,6 +106,11 @@ If no outbox dispatcher is injected, `configured` is `false` and all counts are
 zero. This endpoint does not drain, publish, mark rows as published, expose row
 IDs, or provide replay/cursor/catch-up semantics.
 
+The `/runtime` DM surface includes a manual "Check Outbox" control that reads
+this endpoint and shows a compact backlog badge. It is a development/operator
+visibility aid, not a production monitoring, alerting, replay, or recovery
+control.
+
 ### `POST /api/session/command`
 
 Mutating commands:
@@ -448,7 +453,8 @@ state, view active scene entities and visible transition markers after
 recovery, move only its own token, use turn resources as itself, and attack
 selected player or active non-defeated combatant targets. A readable
 combat/event feed is primary; raw JSON remains available as secondary debug
-detail.
+detail. DM mode also has a compact manual outbox status badge backed by
+`GET /api/outbox/status`; Player mode does not surface this operator check.
 
 The browser still treats the server as authoritative: grid, encounter,
 character, and session state are rendered from command responses, read-model

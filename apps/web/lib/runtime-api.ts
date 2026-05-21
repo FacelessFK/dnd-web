@@ -4,6 +4,7 @@ import {
   dmCommandResponseSchema,
   encounterCommandResponseSchema,
   movementCommandResponseSchema,
+  outboxStatusSuccessSchema,
   sceneCommandResponseSchema,
   sessionCommandResponseSchema,
   type CharacterCommand,
@@ -17,6 +18,7 @@ import {
   type EncounterCommandResponse,
   type MovementCommand,
   type MovementCommandResponse,
+  type OutboxStatusSuccess,
   type RuntimeErrorCode,
   type SceneCommand,
   type SceneCommandResponse,
@@ -96,6 +98,7 @@ export type SessionCommandSuccessResponse = Extract<
   SessionCommandResponse,
   { ok: true }
 >;
+export type OutboxStatusSuccessResponse = OutboxStatusSuccess;
 
 export const runtimeServerUrl =
   process.env.NEXT_PUBLIC_SERVER_URL ?? DEFAULT_SERVER_URL;
@@ -187,6 +190,45 @@ export async function sendDmCommand(
   return postCommand('/api/dm/command', command, dmCommandResponseSchema);
 }
 
+export async function fetchOutboxStatus(): Promise<
+  RuntimeApiResult<OutboxStatusSuccessResponse>
+> {
+  let response: Response;
+
+  try {
+    response = await fetch(new URL('/api/outbox/status', runtimeServerUrl), {
+      credentials: 'include',
+      method: 'GET',
+    });
+  } catch (error) {
+    return {
+      error: {
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Unable to reach the runtime server.',
+      },
+      ok: false,
+    };
+  }
+
+  let body: unknown;
+
+  try {
+    body = await response.json();
+  } catch {
+    return {
+      error: {
+        message: `Runtime server returned ${response.status} without a JSON body.`,
+        status: response.status,
+      },
+      ok: false,
+    };
+  }
+
+  return parseOutboxStatusResponse(response.status, body);
+}
+
 async function postCommand<TResponse extends CommandResponse>(
   path: string,
   command: unknown,
@@ -267,5 +309,29 @@ export function parseRuntimeCommandResponse<TResponse extends CommandResponse>(
   return {
     ok: true,
     response: parsed.data as Extract<TResponse, { ok: true }>,
+  };
+}
+
+export function parseOutboxStatusResponse(
+  status: number,
+  body: unknown,
+): RuntimeApiResult<OutboxStatusSuccessResponse> {
+  const parsed = outboxStatusSuccessSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return {
+      error: {
+        message:
+          parsed.error.issues[0]?.message ??
+          'Runtime server returned an unexpected response shape.',
+        status,
+      },
+      ok: false,
+    };
+  }
+
+  return {
+    ok: true,
+    response: parsed.data,
   };
 }

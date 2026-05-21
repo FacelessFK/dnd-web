@@ -22,6 +22,7 @@ import {
 } from '../../lib/character-library-api';
 import {
   createCommandId,
+  fetchOutboxStatus,
   runtimeServerUrl,
   sendCharacterCommand,
   sendDmCommand,
@@ -29,6 +30,7 @@ import {
   sendMovementCommand,
   sendSceneCommand,
   sendSessionCommand,
+  type OutboxStatusSuccessResponse,
   type RuntimeApiResult,
 } from '../../lib/runtime-api';
 import { LanguageSwitcher, useI18n } from '../../lib/i18n';
@@ -65,6 +67,7 @@ import {
   getKnownCharacterIds,
   getLibraryEntrySubmissionBlocker,
   getKnownSceneOptions,
+  getOutboxStatusView,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
@@ -99,6 +102,7 @@ import {
   type CharacterDraftForm,
   type CombatantDraftForm,
   type LibraryEntrySubmissionBlocker,
+  type OutboxStatusView,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -129,6 +133,29 @@ type LastResponse = {
 };
 
 type TurnUsageDraft = Encounter['currentTurnUsage'];
+type RuntimeTranslator = ReturnType<typeof useI18n>['t'];
+
+function formatOutboxStatusLabel(
+  view: OutboxStatusView,
+  t: RuntimeTranslator,
+): string {
+  switch (view.kind) {
+    case 'backlog':
+      return t('runtime.outbox.status.backlog', {
+        count: String(view.count ?? 0),
+      });
+    case 'clear':
+      return t('runtime.outbox.status.clear');
+    case 'error':
+      return t('runtime.outbox.status.error');
+    case 'loading':
+      return t('runtime.outbox.status.loading');
+    case 'not_configured':
+      return t('runtime.outbox.status.off');
+    case 'unknown':
+      return t('runtime.outbox.status.unknown');
+  }
+}
 
 export function RuntimeCockpit() {
   const { t } = useI18n();
@@ -199,6 +226,13 @@ export function RuntimeCockpit() {
   const [commandError, setCommandError] = useState<string | null>(null);
   const [recoveryNotes, setRecoveryNotes] = useState<string[]>([]);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const [outboxStatus, setOutboxStatus] = useState<
+    OutboxStatusSuccessResponse['data'] | null
+  >(null);
+  const [outboxStatusError, setOutboxStatusError] = useState<string | null>(
+    null,
+  );
+  const [outboxStatusLoading, setOutboxStatusLoading] = useState(false);
   const [streamEnabled, setStreamEnabled] = useState(false);
   const [selectedActor, setSelectedActor] = useState<string>(
     samplePlayers[0].participantId,
@@ -220,6 +254,20 @@ export function RuntimeCockpit() {
     reactionUsed: false,
   });
 
+  const outboxStatusView = getOutboxStatusView({
+    data: outboxStatus,
+    error: outboxStatusError,
+    loading: outboxStatusLoading,
+  });
+  const outboxStatusLabel = formatOutboxStatusLabel(outboxStatusView, t);
+  const statusGridClassName =
+    mode === 'dm'
+      ? 'grid gap-2 text-xs text-slate-300 sm:grid-cols-4 xl:min-w-[640px]'
+      : 'grid gap-2 text-xs text-slate-300 sm:grid-cols-3 xl:min-w-[520px]';
+  const statusServerClassName =
+    mode === 'dm'
+      ? 'flex min-h-9 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 sm:col-span-4'
+      : 'flex min-h-9 flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 sm:col-span-3';
   const currentTurnParticipantId = getCurrentTurnParticipantId(encounter);
   const currentTurnCombatantId = getCurrentTurnCombatantId(encounter);
   const knownCharacterIds = getKnownCharacterIds(
@@ -576,6 +624,22 @@ export function RuntimeCockpit() {
         ...current,
       ].slice(0, 40),
     );
+  }
+
+  async function refreshOutboxStatus(): Promise<void> {
+    setOutboxStatusLoading(true);
+    setOutboxStatusError(null);
+
+    const result = await fetchOutboxStatus();
+
+    if (result.ok) {
+      setOutboxStatus(result.response.data);
+    } else {
+      setOutboxStatus(null);
+      setOutboxStatusError(result.error.message);
+    }
+
+    setOutboxStatusLoading(false);
   }
 
   function clearRuntimeReadModels(
@@ -3460,7 +3524,7 @@ export function RuntimeCockpit() {
                 {t('runtime.summary')}
               </p>
             </div>
-            <div className="grid gap-2 text-xs text-slate-300 sm:grid-cols-3 xl:min-w-[520px]">
+            <div className={statusGridClassName}>
               <StatusBadge
                 label={
                   mode === 'dm'
@@ -3485,11 +3549,29 @@ export function RuntimeCockpit() {
                 }
                 tone={busyLabel ? 'warning' : 'success'}
               />
-              <div className="rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 sm:col-span-3">
-                <span className="font-semibold text-amber-200">
-                  {t('common.server')}
-                </span>{' '}
-                {runtimeServerUrl}
+              {mode === 'dm' ? (
+                <StatusBadge
+                  label={outboxStatusLabel}
+                  tone={outboxStatusView.tone}
+                />
+              ) : null}
+              <div className={statusServerClassName}>
+                <span>
+                  <span className="font-semibold text-amber-200">
+                    {t('common.server')}
+                  </span>{' '}
+                  {runtimeServerUrl}
+                </span>
+                {mode === 'dm' ? (
+                  <button
+                    className="rounded-lg border border-slate-600 px-2 py-1 text-[11px] font-bold uppercase text-slate-200 transition hover:border-amber-300 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={outboxStatusLoading}
+                    onClick={refreshOutboxStatus}
+                    type="button"
+                  >
+                    {t('runtime.outbox.refresh')}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
