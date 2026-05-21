@@ -82,6 +82,9 @@ auth users/sessions, session snapshots, scene records, active encounters,
 command idempotency records/claims, transaction boundaries for current covered
 paths, single-process outbox dispatch for covered live-command paths, and a
 read-only unpublished outbox backlog summary at `GET /api/outbox/status`.
+The server suite also audits DB-backed missed realtime delivery recovery:
+current session, scene, active-scene placement, encounter usage, and character
+HP can be reread after missed SSE events without claiming event replay.
 
 Current limits remain:
 
@@ -492,6 +495,11 @@ The browser cockpit follows this model: SSE updates live state when connected,
 and the Recover button rereads authoritative state through command read models.
 Expected empty-read cases such as `no_active_scene` and `no_active_encounter`
 are treated as recoverable local state, not failed recovery.
+
+The DB-backed recovery audit covers the same contract when movement,
+encounter, and combat updates were published while no subscriber was connected:
+late clients rebuild current truth from read models, and historical transient
+events are not replayed.
 
 ## Browser Runtime Surface
 

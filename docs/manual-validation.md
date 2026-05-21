@@ -19,7 +19,9 @@ subscribers are process-local and there is still no replay or catch-up
 surface. DB-backed runs can inspect unpublished backlog counts with
 `GET /api/outbox/status`; that status read does not drain or replay rows. This
 manual curl flow still validates the default in-memory startup path rather than
-those injected durable restart or transactional paths.
+those injected durable restart or transactional paths. The automated server
+suite now carries the DB-backed missed-delivery recovery audit for that
+transactional/read-model contract.
 
 For browser-based manual operation of the same runtime surface, start both apps
 with `pnpm dev` and open `http://localhost:3000/runtime`.

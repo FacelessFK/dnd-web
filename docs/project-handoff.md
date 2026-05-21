@@ -82,6 +82,9 @@ auth users/sessions, session snapshots, scene records, active encounters,
 command idempotency records/claims, transaction boundaries for current covered
 paths, single-process outbox dispatch for covered live-command paths, and a
 read-only unpublished outbox backlog summary at `GET /api/outbox/status`.
+The server suite also audits DB-backed missed realtime delivery recovery:
+current session, scene, active-scene placement, encounter usage, and character
+HP can be reread after missed SSE events without claiming event replay.
 
 Current limits remain:
 

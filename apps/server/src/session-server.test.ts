@@ -4215,6 +4215,276 @@ test('db-backed active encounters can be reread after restart when durable sessi
   }
 });
 
+test('db-backed missed realtime delivery is recovered through read models without event replay', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const encounterDatabase = new InMemoryActiveEncounterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    encounterDatabase,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+    await DbBackedEncounterStore.fromDatabase(encounterDatabase),
+    () => 20,
+  );
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const { characterCommandTransaction } =
+    createCharacterCommandTransactionHarness(
+      runtime,
+      unitOfWork,
+      outboxDatabase,
+    );
+  const { combatCommandTransaction } = createCombatCommandTransactionHarness(
+    runtime,
+    unitOfWork,
+    outboxDatabase,
+  );
+  const { firstCharacterId, secondCharacterId, sessionId } =
+    await setupDurableEncounterForIdempotency(runtime);
+
+  const movedWhileNoSubscriber = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'recovery-audit-missed-movement-1',
+      type: 'move_character_in_active_scene',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        participantId: 'player-001',
+        position: {
+          x: 1,
+          y: 1,
+        },
+      },
+    },
+    characterCommandTransaction,
+    undefined,
+    combatCommandTransaction,
+  );
+  const attackedWhileNoSubscriber = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    {
+      commandId: 'recovery-audit-missed-attack-1',
+      type: 'attack',
+      actor: {
+        participantId: 'player-001',
+      },
+      payload: {
+        sessionId,
+        targetParticipantId: 'player-002',
+      },
+    },
+    undefined,
+    undefined,
+    combatCommandTransaction,
+  );
+
+  assert.equal(movedWhileNoSubscriber.status, 200);
+  assert.equal(movedWhileNoSubscriber.body.ok, true);
+  assert.equal(attackedWhileNoSubscriber.status, 200);
+  assert.equal(attackedWhileNoSubscriber.body.ok, true);
+  assert.equal(outboxDatabase.recordCount, 4);
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+
+  const reconnect = await postJson<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'recovery-audit-reconnect-after-missed-events',
+      type: 'reconnect_session',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+
+  assert.equal(reconnect.status, 200);
+  assert.equal(reconnect.body.ok, true);
+
+  if (!reconnect.body.ok) {
+    return;
+  }
+
+  const activeSceneId = reconnect.body.data.state.session.activeSceneId;
+  const reconnectedPlayerOne = reconnect.body.data.state.participants.find(
+    (participant) => participant.id === 'player-001',
+  );
+  const reconnectedPlayerTwo = reconnect.body.data.state.participants.find(
+    (participant) => participant.id === 'player-002',
+  );
+
+  assert.notEqual(activeSceneId, null);
+  assert.equal(reconnectedPlayerOne?.characterId, firstCharacterId);
+  assert.equal(reconnectedPlayerTwo?.characterId, secondCharacterId);
+
+  if (activeSceneId === null) {
+    return;
+  }
+
+  const sceneRead = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    {
+      commandId: 'recovery-audit-read-scene',
+      type: 'get_scene',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+        sceneId: activeSceneId,
+      },
+    },
+  );
+  const activeSceneRead = await postJson<MovementCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'recovery-audit-read-active-scene',
+      type: 'get_active_scene_state',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+  const encounterRead = await postJson<EncounterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/encounters/command',
+    {
+      commandId: 'recovery-audit-read-encounter',
+      type: 'get_encounter_state',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+      },
+    },
+  );
+  const targetCharacterRead = await postJson<CharacterCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/characters/command',
+    {
+      commandId: 'recovery-audit-read-target-character',
+      type: 'get_character',
+      actor: {
+        participantId: 'player-002',
+      },
+      payload: {
+        sessionId,
+        characterId: secondCharacterId,
+      },
+    },
+  );
+  const lateStreamUpdates: SessionStreamEvent[] = [];
+
+  runtime.connectParticipant(sessionId, 'player-002', {
+    connectionId: 'recovery-audit-late-subscriber',
+    close: () => undefined,
+    send: (update) => {
+      lateStreamUpdates.push(update);
+    },
+  });
+
+  assert.equal(sceneRead.status, 200);
+  assert.equal(sceneRead.body.ok, true);
+  assert.equal(activeSceneRead.status, 200);
+  assert.equal(activeSceneRead.body.ok, true);
+  assert.equal(encounterRead.status, 200);
+  assert.equal(encounterRead.body.ok, true);
+  assert.equal(targetCharacterRead.status, 200);
+  assert.equal(targetCharacterRead.body.ok, true);
+
+  if (
+    !sceneRead.body.ok ||
+    !activeSceneRead.body.ok ||
+    !encounterRead.body.ok ||
+    !targetCharacterRead.body.ok ||
+    !('scene' in sceneRead.body.data) ||
+    !('placedCharacters' in activeSceneRead.body.data) ||
+    !('encounter' in encounterRead.body.data) ||
+    !('character' in targetCharacterRead.body.data)
+  ) {
+    return;
+  }
+
+  const playerOnePlacement = activeSceneRead.body.data.placedCharacters.find(
+    (placement) => placement.participantId === 'player-001',
+  );
+  const playerTwoPlacement = activeSceneRead.body.data.placedCharacters.find(
+    (placement) => placement.participantId === 'player-002',
+  );
+
+  assert.equal(sceneRead.body.data.scene.id, activeSceneId);
+  assert.deepEqual(playerOnePlacement?.position, {
+    x: 1,
+    y: 1,
+  });
+  assert.deepEqual(playerTwoPlacement?.position, {
+    x: 1,
+    y: 0,
+  });
+  assert.equal(
+    encounterRead.body.data.encounter.currentTurnUsage.actionUsed,
+    true,
+  );
+  assert.equal(
+    encounterRead.body.data.encounter.currentTurnUsage.movementUsed,
+    10,
+  );
+  assert.equal(targetCharacterRead.body.data.character.hp.current, 33);
+  assert.equal(lateStreamUpdates.length, 1);
+  assert.equal(lateStreamUpdates[0]?.type, 'session_state');
+  assert.equal(
+    lateStreamUpdates.some((update) => update.type === 'combat_event'),
+    false,
+  );
+  assert.equal(
+    lateStreamUpdates.some((update) => update.type === 'encounter_state'),
+    false,
+  );
+  assert.equal(
+    lateStreamUpdates.some((update) => update.type === 'movement_state'),
+    false,
+  );
+  assert.equal(
+    lateStreamUpdates.some((update) => update.type === 'character_state'),
+    false,
+  );
+});
+
 test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate assign retry', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();

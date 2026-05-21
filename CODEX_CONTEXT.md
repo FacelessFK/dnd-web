@@ -75,6 +75,9 @@ that scope.
 - Unpublished outbox rows are not auto-redelivered on cold boot.
 - `GET /api/outbox/status` reports unpublished outbox backlog counts without
   draining rows or exposing row details.
+- DB-backed missed realtime delivery is covered by a recovery audit test:
+  reconnect/read-model commands rebuild current truth, but late SSE subscribers
+  do not receive historical event replay.
 - There is no replay, cursor, catch-up API, exactly-once delivery, or
   multi-process coordination.
 - Runtime rules remain narrow: no full spell system, full condition engine,

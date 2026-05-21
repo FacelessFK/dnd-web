@@ -423,6 +423,14 @@ and the Recover button rereads authoritative state through command read models.
 Expected empty-read cases such as `no_active_scene` and `no_active_encounter`
 are treated as recoverable local state, not failed recovery.
 
+Server recovery-audit coverage includes a DB-backed missed-live-delivery case
+where movement, encounter usage, and attack HP changes are committed and
+post-commit outbox rows are dispatched while no subscriber is connected. A late
+client recovers the current session, scene, active-scene placement, encounter,
+and target character HP through the read commands above. Historical
+`combat_event`, `encounter_state`, `movement_state`, and `character_state`
+events are not replayed to that late subscriber.
+
 ## Browser Runtime Surface
 
 The role-aware runtime surface at `/runtime` uses this API surface directly. The

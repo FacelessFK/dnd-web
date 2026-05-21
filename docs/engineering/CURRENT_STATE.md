@@ -140,6 +140,11 @@ Clients recover current state by rereading authoritative read models such as
 `reconnect_session`, `get_scene`, `get_active_scene_state`,
 `get_encounter_state`, and `get_character`.
 
+The server test suite now includes a DB-backed recovery audit for missed live
+delivery: movement, encounter usage, and attack HP changes remain recoverable
+through read models when no subscriber received the original SSE events, while
+late subscribers still do not receive historical event replay.
+
 ## Runtime Limitations
 
 Current runtime is intentionally narrow:

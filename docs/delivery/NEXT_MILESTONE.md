@@ -62,9 +62,11 @@ without draining rows or exposing row details.
 
 ### Slice 2: Recovery Audit
 
-Add focused tests or docs proving the current browser/server recovery contract:
-clients recover current truth by rereading session, character, scene, active
-scene, and encounter read models after reconnect or refresh.
+Implemented: a DB-backed missed-live-delivery test proves the current
+browser/server recovery contract. Clients can recover current truth by
+rereading session, scene, active-scene, encounter, and character read models
+after reconnect or refresh, while late SSE subscribers do not receive
+historical event replay.
 
 ### Slice 3: UI Or Operator Surface
 
