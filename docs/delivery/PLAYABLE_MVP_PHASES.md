@@ -55,6 +55,8 @@ Already implemented:
   controls;
 - selected movement destination and turn-budget feedback beside the tactical
   grid;
+- action economy feedback beside the existing turn controls, with per-resource
+  readiness and blockers for action, bonus action, and reaction usage;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -212,6 +214,13 @@ Suggested follow-up slice:
   the tactical grid, derived from loaded character, scene, active-scene, and
   encounter read models.
 
+Suggested slice 4:
+
+- Implemented: action economy feedback beside the existing turn controls,
+  derived from loaded turn read models and the live encounter event log, with
+  per-resource blockers for used or globally disabled action, bonus action, and
+  reaction commands.
+
 ### Phase 5: Recovery And Local Playtest Reliability
 
 Goal: make the playable MVP resilient enough for local playtesting.
@@ -276,10 +285,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 3:
+Implemented Phase 4 Slice 4:
 
-> Add selected movement destination and turn-budget feedback around the tactical
-> grid movement controls.
+> Add action economy feedback around the existing Use Action, Use Bonus, and
+> Use Reaction controls.
 
 Non-goals for that task:
 
@@ -292,6 +301,9 @@ Non-goals for that task:
   reasons.
 - no pathfinding, diagonal policy expansion, opportunity attacks, or movement
   automation beyond previewing the current Manhattan-distance baseline.
+- no action selection menu, spell system, inventory action system, or reaction
+  trigger window;
+- no change to server-owned turn usage validation.
 
 Validation for that task should include:
 

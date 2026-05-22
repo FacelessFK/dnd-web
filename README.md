@@ -19,7 +19,7 @@ Runtime support includes session create/join/reconnect, SSE session stream,
 scene creation/activation, passive scene entities, transition nodes, character
 placement and movement, mixed player/combatant encounters, turn usage, narrow
 attack handling, a compact current-turn rail, selected target/action-result
-feedback, selected movement/turn-budget feedback, DM
+feedback, selected movement/turn-budget feedback, action economy feedback, DM
 HP/condition/reposition/turn overrides, and read-model recovery after refresh.
 
 The Character Library has a backend command surface at

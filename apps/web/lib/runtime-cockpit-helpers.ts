@@ -117,6 +117,33 @@ export type MovementFeedbackSummary = {
   movementUsedFeet: number | null;
 };
 
+export type ActionEconomyResourceId = 'action' | 'bonusAction' | 'reaction';
+
+export type ActionEconomyCommandType =
+  | 'use_action'
+  | 'use_bonus_action'
+  | 'use_reaction';
+
+export type ActionEconomyResourceSummary = {
+  blockedReason: string | null;
+  commandType: ActionEconomyCommandType;
+  id: ActionEconomyResourceId;
+  ready: boolean;
+  used: boolean;
+};
+
+export type ActionEconomyFeedbackSummary = {
+  actorLabel: string;
+  blockedReason: string | null;
+  latestEncounterUpdate: {
+    reason: string;
+    roundNumber: number;
+    turnNumber: number;
+  } | null;
+  overallStatus: 'blocked' | 'no_encounter' | 'ready' | 'spent';
+  resources: ActionEconomyResourceSummary[];
+};
+
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 
 export type AbilityKey = (typeof abilityKeys)[number];
@@ -1451,6 +1478,99 @@ export function getActionTargetFeedbackSummary({
       : null,
     selectedTarget,
   };
+}
+
+export function getActionEconomyFeedbackSummary({
+  actorTurnActionDisabledReason,
+  currentTurn,
+  lastEncounterEvent,
+}: {
+  actorTurnActionDisabledReason: string | null;
+  currentTurn: CurrentTurnRailSummary | null;
+  lastEncounterEvent: Extract<
+    SessionStreamEvent,
+    { type: 'encounter_state' }
+  > | null;
+}): ActionEconomyFeedbackSummary {
+  const resources: ActionEconomyResourceSummary[] = [
+    getActionEconomyResourceSummary({
+      commandType: 'use_action',
+      disabledReason: actorTurnActionDisabledReason,
+      id: 'action',
+      used: currentTurn?.actionUsed ?? false,
+    }),
+    getActionEconomyResourceSummary({
+      commandType: 'use_bonus_action',
+      disabledReason: actorTurnActionDisabledReason,
+      id: 'bonusAction',
+      used: currentTurn?.bonusActionUsed ?? false,
+    }),
+    getActionEconomyResourceSummary({
+      commandType: 'use_reaction',
+      disabledReason: actorTurnActionDisabledReason,
+      id: 'reaction',
+      used: currentTurn?.reactionUsed ?? false,
+    }),
+  ];
+  const readyCount = resources.filter((resource) => resource.ready).length;
+  const overallStatus =
+    currentTurn === null
+      ? 'no_encounter'
+      : readyCount > 0
+        ? 'ready'
+        : resources.every((resource) => resource.used)
+          ? 'spent'
+          : 'blocked';
+
+  return {
+    actorLabel: currentTurn?.actorLabel ?? 'No active turn',
+    blockedReason: actorTurnActionDisabledReason,
+    latestEncounterUpdate: lastEncounterEvent
+      ? {
+          reason: lastEncounterEvent.reason,
+          roundNumber: lastEncounterEvent.encounter.roundNumber,
+          turnNumber: lastEncounterEvent.encounter.currentTurnIndex + 1,
+        }
+      : null,
+    overallStatus,
+    resources,
+  };
+}
+
+function getActionEconomyResourceSummary({
+  commandType,
+  disabledReason,
+  id,
+  used,
+}: {
+  commandType: ActionEconomyCommandType;
+  disabledReason: string | null;
+  id: ActionEconomyResourceId;
+  used: boolean;
+}): ActionEconomyResourceSummary {
+  const usedReason = used
+    ? `${getActionEconomyResourceLabel(id)} already used.`
+    : null;
+  const blockedReason = disabledReason ?? usedReason;
+
+  return {
+    blockedReason,
+    commandType,
+    id,
+    ready: !blockedReason,
+    used,
+  };
+}
+
+function getActionEconomyResourceLabel(id: ActionEconomyResourceId): string {
+  switch (id) {
+    case 'action':
+      return 'Action';
+    case 'bonusAction':
+      return 'Bonus action';
+    case 'reaction':
+      return 'Reaction';
+  }
 }
 
 export function getMovementFeedbackSummary({

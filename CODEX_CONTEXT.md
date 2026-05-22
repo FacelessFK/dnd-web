@@ -49,8 +49,9 @@ that scope.
   transition nodes, compact transition presets, placement/movement, local
   tactical board camera controls, tactical board state badges, tactical board
   keyboard navigation, DM-facing Table Setup checklist, mixed
-  player/combatant encounters, compact current-turn rail, narrow melee attacks,
-  turn usage, readable event feed, and explicit DM controls.
+  player/combatant encounters, compact current-turn rail, action economy
+  feedback, narrow melee attacks, turn usage, readable event feed, and explicit
+  DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -106,17 +107,19 @@ target, and movement feedback.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
-current-turn rail, and Slice 2 adds selected target/action-result feedback from
-loaded read models. Slice 3 adds selected movement destination and turn-budget
-feedback. The next work should keep making the active encounter loop easier to
-read without adding broader D&D automation.
+current-turn rail, Slice 2 adds selected target/action-result feedback from
+loaded read models, Slice 3 adds selected movement destination and turn-budget
+feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
+existing turn controls. The next work should keep making the active encounter
+loop easier to read without adding broader D&D automation.
 
 Break this into small Codex tasks:
 
 1. inspect current encounter state helpers, turn controls, and tactical board
    current-turn affordances;
-2. continue action-economy and result-feedback polish around the existing
-   current-turn rail, target feedback, and movement preview;
+2. continue result, readiness, and encounter-status polish around the existing
+   current-turn rail, target feedback, movement preview, and action economy
+   feedback;
 3. avoid changing encounter command semantics or adding broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.

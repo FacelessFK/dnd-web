@@ -65,6 +65,7 @@ import {
   flag,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActionEconomyFeedbackSummary,
   getActionTargetFeedbackSummary,
   getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
@@ -122,6 +123,7 @@ import {
   validateSceneEntityDraftForm,
   validateSceneTransitionDraftForm,
   type Cell,
+  type ActionEconomyFeedbackSummary,
   type ActionTargetFeedbackSummary,
   type AbilityKey,
   type CharacterDraftForm,
@@ -3498,6 +3500,16 @@ export function RuntimeCockpit() {
         isSessionStreamEvent(entry.payload) &&
         entry.payload.type === 'combat_event',
     )?.payload ?? null;
+  const lastEncounterEvent =
+    eventLog.find(
+      (
+        entry,
+      ): entry is EventLogEntry & {
+        payload: Extract<SessionStreamEvent, { type: 'encounter_state' }>;
+      } =>
+        isSessionStreamEvent(entry.payload) &&
+        entry.payload.type === 'encounter_state',
+    )?.payload ?? null;
   const actionTargetFeedbackSummary = getActionTargetFeedbackSummary({
     attackDisabledReason: playerAttackDisabledReason,
     charactersByParticipant,
@@ -3507,6 +3519,26 @@ export function RuntimeCockpit() {
     selectedTargetCombatantId,
     selectedTargetParticipantId: selectedTarget,
   });
+  const actionEconomyFeedbackSummary = getActionEconomyFeedbackSummary({
+    actorTurnActionDisabledReason: disabledReasons.actorTurnAction,
+    currentTurn: currentTurnRailSummary,
+    lastEncounterEvent,
+  });
+  const actionEconomyAction = getActionEconomyResource(
+    actionEconomyFeedbackSummary,
+    'action',
+    t('runtime.actionEconomy.unavailable'),
+  );
+  const actionEconomyBonusAction = getActionEconomyResource(
+    actionEconomyFeedbackSummary,
+    'bonusAction',
+    t('runtime.actionEconomy.unavailable'),
+  );
+  const actionEconomyReaction = getActionEconomyResource(
+    actionEconomyFeedbackSummary,
+    'reaction',
+    t('runtime.actionEconomy.unavailable'),
+  );
   const selectedActorAssignedCharacterId =
     sessionState?.participants.find(
       (participant) => participant.id === selectedActor,
@@ -4300,32 +4332,42 @@ export function RuntimeCockpit() {
                   summary={actionTargetFeedbackSummary}
                   t={t}
                 />
+                <ActionEconomyFeedback
+                  summary={actionEconomyFeedbackSummary}
+                  t={t}
+                />
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton
-                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabled={Boolean(actionEconomyAction.blockedReason)}
                     disabledReason={
-                      disabledReasons.actorTurnAction ?? undefined
+                      actionEconomyAction.blockedReason ?? undefined
                     }
                     label="Use Action"
-                    onClick={() => runEncounterCommand('use_action')}
+                    onClick={() =>
+                      runEncounterCommand(actionEconomyAction.commandType)
+                    }
                     variant="secondary"
                   />
                   <ActionButton
-                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabled={Boolean(actionEconomyBonusAction.blockedReason)}
                     disabledReason={
-                      disabledReasons.actorTurnAction ?? undefined
+                      actionEconomyBonusAction.blockedReason ?? undefined
                     }
                     label="Use Bonus"
-                    onClick={() => runEncounterCommand('use_bonus_action')}
+                    onClick={() =>
+                      runEncounterCommand(actionEconomyBonusAction.commandType)
+                    }
                     variant="secondary"
                   />
                   <ActionButton
-                    disabled={Boolean(disabledReasons.actorTurnAction)}
+                    disabled={Boolean(actionEconomyReaction.blockedReason)}
                     disabledReason={
-                      disabledReasons.actorTurnAction ?? undefined
+                      actionEconomyReaction.blockedReason ?? undefined
                     }
                     label="Use Reaction"
-                    onClick={() => runEncounterCommand('use_reaction')}
+                    onClick={() =>
+                      runEncounterCommand(actionEconomyReaction.commandType)
+                    }
                     variant="secondary"
                   />
                   {mode === 'dm' ? (
@@ -5237,6 +5279,120 @@ function ActionTargetFeedback({
       </div>
     </div>
   );
+}
+
+function ActionEconomyFeedback({
+  summary,
+  t,
+}: {
+  summary: ActionEconomyFeedbackSummary;
+  t: RuntimeTranslator;
+}) {
+  const statusTone: RuntimeNoticeTone =
+    summary.overallStatus === 'ready'
+      ? 'success'
+      : summary.overallStatus === 'no_encounter'
+        ? 'info'
+        : 'warning';
+  const statusLabel =
+    summary.overallStatus === 'ready'
+      ? t('runtime.actionEconomy.ready')
+      : summary.overallStatus === 'spent'
+        ? t('runtime.actionEconomy.spent')
+        : summary.overallStatus === 'no_encounter'
+          ? t('runtime.actionEconomy.noEncounter')
+          : t('runtime.actionEconomy.blocked');
+  const latestLabel = summary.latestEncounterUpdate
+    ? t('runtime.actionEconomy.latest', {
+        reason: summary.latestEncounterUpdate.reason,
+        round: String(summary.latestEncounterUpdate.roundNumber),
+        turn: String(summary.latestEncounterUpdate.turnNumber),
+      })
+    : t('runtime.actionEconomy.noLatest');
+
+  return (
+    <div className="grid gap-2 rounded-xl border border-amber-300/15 bg-amber-950/10 p-3 text-xs text-amber-50">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-bold uppercase tracking-[0.12em] text-amber-200/80">
+            {t('runtime.actionEconomy.title')}
+          </p>
+          <p className="mt-1 truncate text-sm font-black text-white">
+            {summary.actorLabel}
+          </p>
+        </div>
+        <StatusBadge label={statusLabel} tone={statusTone} />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {summary.resources.map((resource) => {
+          const stateLabel = resource.used
+            ? t('runtime.actionEconomy.used')
+            : resource.ready
+              ? t('runtime.actionEconomy.available')
+              : t('runtime.actionEconomy.blocked');
+          const resourceLabel = t('runtime.actionEconomy.resource', {
+            name: getActionEconomyResourceName(resource.id, t),
+            state: stateLabel,
+          });
+
+          return (
+            <StatusBadge
+              key={resource.id}
+              label={resourceLabel}
+              tone={
+                resource.ready ? 'success' : resource.used ? 'warning' : 'info'
+              }
+            />
+          );
+        })}
+      </div>
+      <p className="text-amber-100/70">{latestLabel}</p>
+      {summary.blockedReason ? (
+        <p className="text-amber-100/80">{summary.blockedReason}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function getActionEconomyResourceName(
+  resourceId: ActionEconomyFeedbackSummary['resources'][number]['id'],
+  t: RuntimeTranslator,
+) {
+  switch (resourceId) {
+    case 'action':
+      return t('runtime.actionEconomy.action');
+    case 'bonusAction':
+      return t('runtime.actionEconomy.bonusAction');
+    case 'reaction':
+      return t('runtime.actionEconomy.reaction');
+  }
+}
+
+function getActionEconomyResource(
+  summary: ActionEconomyFeedbackSummary,
+  resourceId: ActionEconomyFeedbackSummary['resources'][number]['id'],
+  unavailableReason: string,
+): ActionEconomyFeedbackSummary['resources'][number] {
+  const resource = summary.resources.find(
+    (candidate) => candidate.id === resourceId,
+  );
+
+  if (resource) {
+    return resource;
+  }
+
+  return {
+    blockedReason: unavailableReason,
+    commandType:
+      resourceId === 'bonusAction'
+        ? 'use_bonus_action'
+        : resourceId === 'reaction'
+          ? 'use_reaction'
+          : 'use_action',
+    id: resourceId,
+    ready: false,
+    used: false,
+  };
 }
 
 function CurrentTurnRail({

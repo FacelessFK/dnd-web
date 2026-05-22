@@ -45,12 +45,17 @@ encounter, confirm the compact current-turn rail above the grid shows the
 current actor, remaining movement, and action/bonus/reaction usage. In the
 Turn & Target panel, choose a target and confirm the feedback block shows target
 HP/AC, attack readiness or the disabled reason, and the latest attack result
-after a hit or miss. Select a destination cell and confirm the movement preview
-shows the acting token, current cell, destination cell, distance, current turn
-movement budget, and any blocked reason before submitting movement. When a board
-cell is focused, use arrow keys to move the selected cell, Home to jump to
-the first cell, and End to jump to the last cell. Local Reset clears browser
-runtime state only; it does not delete backend sessions or runtime state.
+after a hit or miss. In the same panel, confirm the action economy feedback
+shows the current actor, latest encounter update, and action/bonus/reaction
+resources as available, used, or blocked. After spending one of those resources,
+confirm only that resource's button shows the used-resource blocker while the
+remaining resources stay available when the server read model allows them.
+Select a destination cell and confirm the movement preview shows the acting
+token, current cell, destination cell, distance, current turn movement budget,
+and any blocked reason before submitting movement. When a board cell is
+focused, use arrow keys to move the selected cell, Home to jump to the first
+cell, and End to jump to the last cell. Local Reset clears browser runtime state
+only; it does not delete backend sessions or runtime state.
 
 In DM mode, confirm the Table Setup checklist changes as the table advances:
 with no session it should show session creation as the next action; after
@@ -143,6 +148,8 @@ For the rule-aware builder slice, also check:
 - Mixed player/combatant encounter start, turn usage, attack, and encounter
   state read.
 - Reaction usage foundation through `use_reaction`.
+- Browser action economy feedback for current action, bonus action, and
+  reaction readiness around the existing turn controls.
 - Downed actor gating using a 1 HP target.
 - Backend DM controls for HP, condition tags, active-scene reposition, turn
   usage, current turn actor, combatants, and active encounter end.

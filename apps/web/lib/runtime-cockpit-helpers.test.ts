@@ -20,6 +20,7 @@ import {
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActionEconomyFeedbackSummary,
   getActionTargetFeedbackSummary,
   getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
@@ -2030,6 +2031,127 @@ describe('runtime cockpit helpers', () => {
         movementUsedFeet: 30,
         reactionUsed: false,
         roundNumber: 2,
+      },
+    );
+  });
+
+  it('summarizes action economy resources and per-resource blockers', () => {
+    const currentTurn = {
+      actionUsed: true,
+      actorId: 'player-001',
+      actorKind: 'character' as const,
+      actorLabel: 'Player One',
+      bonusActionUsed: false,
+      initiative: 14,
+      movementRemainingFeet: 20,
+      movementSpeedFeet: 30,
+      movementUsedFeet: 10,
+      reactionUsed: true,
+      roundNumber: 2,
+    };
+
+    assert.deepEqual(
+      getActionEconomyFeedbackSummary({
+        actorTurnActionDisabledReason: null,
+        currentTurn,
+        lastEncounterEvent: {
+          encounter: {
+            createdAt: '2026-01-01T00:00:00.000Z',
+            currentTurnIndex: 0,
+            currentTurnUsage: {
+              actionUsed: true,
+              bonusActionUsed: false,
+              movementUsed: 10,
+              reactionUsed: true,
+            },
+            id: 'encounter_11111111-1111-4111-8111-111111111111',
+            participants: [
+              {
+                characterId: 'CHAR-001',
+                initiative: 14,
+                participantId: 'player-001',
+              },
+            ],
+            roundNumber: 2,
+            sceneId: 'SCENE-001',
+            sessionId: 'SESSION-001',
+            status: 'active',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          reason: 'action_used',
+          sessionId: 'SESSION-001',
+          type: 'encounter_state',
+        },
+      }),
+      {
+        actorLabel: 'Player One',
+        blockedReason: null,
+        latestEncounterUpdate: {
+          reason: 'action_used',
+          roundNumber: 2,
+          turnNumber: 1,
+        },
+        overallStatus: 'ready',
+        resources: [
+          {
+            blockedReason: 'Action already used.',
+            commandType: 'use_action',
+            id: 'action',
+            ready: false,
+            used: true,
+          },
+          {
+            blockedReason: null,
+            commandType: 'use_bonus_action',
+            id: 'bonusAction',
+            ready: true,
+            used: false,
+          },
+          {
+            blockedReason: 'Reaction already used.',
+            commandType: 'use_reaction',
+            id: 'reaction',
+            ready: false,
+            used: true,
+          },
+        ],
+      },
+    );
+
+    assert.deepEqual(
+      getActionEconomyFeedbackSummary({
+        actorTurnActionDisabledReason: 'Start or recover an encounter first.',
+        currentTurn: null,
+        lastEncounterEvent: null,
+      }),
+      {
+        actorLabel: 'No active turn',
+        blockedReason: 'Start or recover an encounter first.',
+        latestEncounterUpdate: null,
+        overallStatus: 'no_encounter',
+        resources: [
+          {
+            blockedReason: 'Start or recover an encounter first.',
+            commandType: 'use_action',
+            id: 'action',
+            ready: false,
+            used: false,
+          },
+          {
+            blockedReason: 'Start or recover an encounter first.',
+            commandType: 'use_bonus_action',
+            id: 'bonusAction',
+            ready: false,
+            used: false,
+          },
+          {
+            blockedReason: 'Start or recover an encounter first.',
+            commandType: 'use_reaction',
+            id: 'reaction',
+            ready: false,
+            used: false,
+          },
+        ],
       },
     );
   });
