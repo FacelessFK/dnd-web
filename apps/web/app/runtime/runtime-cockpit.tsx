@@ -14,6 +14,7 @@ import type {
   ActiveSceneState,
   CharacterLibraryEntry,
   CharacterResource,
+  CombatEvent,
   DmCommand,
   Encounter,
   Scene,
@@ -64,6 +65,7 @@ import {
   flag,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActionTargetFeedbackSummary,
   getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
   getAssignedCharacterRefs,
@@ -119,6 +121,7 @@ import {
   validateSceneEntityDraftForm,
   validateSceneTransitionDraftForm,
   type Cell,
+  type ActionTargetFeedbackSummary,
   type AbilityKey,
   type CharacterDraftForm,
   type CombatantDraftForm,
@@ -3477,6 +3480,21 @@ export function RuntimeCockpit() {
     (currentTurnCombatantId
       ? 'Current turn is a monster/NPC; use the DM combatant attack control.'
       : null);
+  const lastCombatEvent =
+    eventLog.find(
+      (entry): entry is EventLogEntry & { payload: CombatEvent } =>
+        isSessionStreamEvent(entry.payload) &&
+        entry.payload.type === 'combat_event',
+    )?.payload ?? null;
+  const actionTargetFeedbackSummary = getActionTargetFeedbackSummary({
+    attackDisabledReason: playerAttackDisabledReason,
+    charactersByParticipant,
+    lastCombatEvent,
+    participants,
+    scene,
+    selectedTargetCombatantId,
+    selectedTargetParticipantId: selectedTarget,
+  });
   const selectedActorAssignedCharacterId =
     sessionState?.participants.find(
       (participant) => participant.id === selectedActor,
@@ -4261,6 +4279,10 @@ export function RuntimeCockpit() {
                   options={attackTargetOptions}
                   value={selectedAttackTargetValue}
                 />
+                <ActionTargetFeedback
+                  summary={actionTargetFeedbackSummary}
+                  t={t}
+                />
                 <div className="grid grid-cols-2 gap-2">
                   <ActionButton
                     disabled={Boolean(disabledReasons.actorTurnAction)}
@@ -5000,6 +5022,126 @@ function StatusBadge({
     >
       {label}
     </span>
+  );
+}
+
+function ActionTargetFeedback({
+  summary,
+  t,
+}: {
+  summary: ActionTargetFeedbackSummary;
+  t: RuntimeTranslator;
+}) {
+  const target = summary.selectedTarget;
+  const targetKindLabel =
+    target?.kind === 'combatant'
+      ? t('runtime.actionFeedback.targetKind.combatant')
+      : t('runtime.actionFeedback.targetKind.character');
+  const hpLabel =
+    target && target.hpCurrent !== null && target.hpMax !== null
+      ? t('runtime.actionFeedback.hp', {
+          current: String(target.hpCurrent),
+          max: String(target.hpMax),
+          temp: String(target.hpTemp ?? 0),
+        })
+      : t('runtime.actionFeedback.hpUnknown');
+  const armorClassLabel =
+    target?.armorClass === null || target?.armorClass === undefined
+      ? t('runtime.actionFeedback.acUnknown')
+      : t('runtime.actionFeedback.ac', {
+          armorClass: String(target.armorClass),
+        });
+  const attackTone = summary.attackReady
+    ? 'success'
+    : summary.attackBlockedReason
+      ? 'warning'
+      : 'info';
+  const attackLabel = summary.attackReady
+    ? t('runtime.actionFeedback.attackReady')
+    : summary.attackBlockedReason
+      ? t('runtime.actionFeedback.attackBlocked')
+      : t('runtime.actionFeedback.noTarget');
+  const result = summary.lastCombatResult;
+
+  return (
+    <div className="grid gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-slate-200 lg:grid-cols-2">
+      <div className="grid gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-bold uppercase tracking-[0.12em] text-slate-400">
+            {t('runtime.actionFeedback.targetTitle')}
+          </span>
+          <StatusBadge label={attackLabel} tone={attackTone} />
+        </div>
+        {target ? (
+          <>
+            <p className="truncate text-sm font-black text-white">
+              {target.label}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge label={targetKindLabel} tone="info" />
+              <StatusBadge label={hpLabel} tone="warning" />
+              <StatusBadge label={armorClassLabel} tone="info" />
+              <StatusBadge
+                label={t('runtime.actionFeedback.status', {
+                  status: target.status,
+                })}
+                tone={target.status === 'defeated' ? 'danger' : 'success'}
+              />
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">
+            {t('runtime.actionFeedback.noTargetDetail')}
+          </p>
+        )}
+        {summary.attackBlockedReason ? (
+          <p className="text-amber-100/75">{summary.attackBlockedReason}</p>
+        ) : null}
+      </div>
+      <div className="grid gap-2 border-t border-white/10 pt-2 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+        <span className="font-bold uppercase tracking-[0.12em] text-slate-400">
+          {t('runtime.actionFeedback.resultTitle')}
+        </span>
+        {result ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <StatusBadge
+                label={
+                  result.hit
+                    ? t('runtime.actionFeedback.hit')
+                    : t('runtime.actionFeedback.miss')
+                }
+                tone={result.hit ? 'danger' : 'warning'}
+              />
+              <StatusBadge
+                label={t('runtime.actionFeedback.roll', {
+                  roll: String(result.rollTotal),
+                })}
+                tone="info"
+              />
+              <StatusBadge
+                label={t('runtime.actionFeedback.damage', {
+                  damage: String(result.damage),
+                })}
+                tone={result.damage > 0 ? 'danger' : 'info'}
+              />
+            </div>
+            <p className="text-sm text-slate-200">
+              {t('runtime.actionFeedback.resultSummary', {
+                attacker: result.attackerLabel,
+                current: String(result.targetHpCurrent),
+                previous: String(result.targetHpPrevious),
+                target: result.targetLabel,
+              })}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-slate-400">
+            {t('runtime.actionFeedback.noResult')}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 

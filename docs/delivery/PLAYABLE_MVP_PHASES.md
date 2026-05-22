@@ -51,6 +51,8 @@ Already implemented:
 - mixed player/combatant encounters;
 - compact current-turn rail with actor, remaining movement, and used
   action/bonus/reaction state;
+- selected target and latest combat-result feedback beside the existing turn
+  controls;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -196,6 +198,12 @@ Suggested first implementation slice:
 - Implemented: compact current-turn rail with actor, remaining movement, and
   used action/bonus/reaction state.
 
+Suggested next implementation slice:
+
+- Implemented: selected attack target and latest combat-result feedback beside
+  the existing turn controls, derived from loaded read models and live event log
+  entries.
+
 ### Phase 5: Recovery And Local Playtest Reliability
 
 Goal: make the playable MVP resilient enough for local playtesting.
@@ -260,10 +268,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 1:
+Implemented Phase 4 Slice 2:
 
-> Add a compact current-turn rail with actor, remaining movement, and used
-> action/bonus/reaction state.
+> Add selected attack target and latest combat-result feedback around the
+> existing turn controls.
 
 Non-goals for that task:
 
@@ -272,6 +280,8 @@ Non-goals for that task:
 - no full spell, inventory, opportunity attack, or reaction-window system;
 - no refactor of encounter command semantics;
 - no new auth or DB requirements.
+- no target legality changes beyond existing command validation and disabled
+  reasons.
 
 Validation for that task should include:
 

@@ -3,6 +3,7 @@ import type {
   CharacterLibraryEntry,
   CharacterResource,
   CharacterUpdateInput,
+  CombatEvent,
   DmCombatantInput,
   Encounter,
   GridDefinition,
@@ -70,6 +71,35 @@ export type CurrentTurnRailSummary = {
   movementUsedFeet: number;
   reactionUsed: boolean;
   roundNumber: number;
+};
+
+export type ActionTargetFeedbackTarget = {
+  armorClass: number | null;
+  hpCurrent: number | null;
+  hpMax: number | null;
+  hpTemp: number | null;
+  id: string;
+  kind: 'character' | 'combatant';
+  label: string;
+  status: CharacterResource['character']['status'] | 'active' | 'defeated';
+};
+
+export type ActionTargetFeedbackResult = {
+  attackerLabel: string;
+  damage: number;
+  hit: boolean;
+  rollTotal: number;
+  targetArmorClass: number;
+  targetHpCurrent: number;
+  targetHpPrevious: number;
+  targetLabel: string;
+};
+
+export type ActionTargetFeedbackSummary = {
+  attackBlockedReason: string | null;
+  attackReady: boolean;
+  lastCombatResult: ActionTargetFeedbackResult | null;
+  selectedTarget: ActionTargetFeedbackTarget | null;
 };
 
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -1352,6 +1382,142 @@ export function getCurrentTurnRailSummary({
         : Math.max(0, movementSpeedFeet - movementUsedFeet),
     movementSpeedFeet,
   };
+}
+
+export function getActionTargetFeedbackSummary({
+  attackDisabledReason,
+  charactersByParticipant,
+  lastCombatEvent,
+  participants,
+  scene,
+  selectedTargetCombatantId,
+  selectedTargetParticipantId,
+}: {
+  attackDisabledReason: string | null;
+  charactersByParticipant: Record<string, CharacterResource | undefined>;
+  lastCombatEvent: CombatEvent | null;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+  selectedTargetCombatantId: string;
+  selectedTargetParticipantId: string;
+}): ActionTargetFeedbackSummary {
+  const selectedTarget = getSelectedAttackTargetFeedback({
+    charactersByParticipant,
+    participants,
+    scene,
+    selectedTargetCombatantId,
+    selectedTargetParticipantId,
+  });
+
+  return {
+    attackBlockedReason: attackDisabledReason,
+    attackReady: Boolean(selectedTarget && !attackDisabledReason),
+    lastCombatResult: lastCombatEvent
+      ? {
+          attackerLabel: getCombatEventActorLabel({
+            combatantId: lastCombatEvent.attackerCombatantId,
+            participantId: lastCombatEvent.attackerParticipantId,
+            participants,
+            scene,
+          }),
+          damage: lastCombatEvent.damage,
+          hit: lastCombatEvent.hit,
+          rollTotal: lastCombatEvent.roll.total,
+          targetArmorClass: lastCombatEvent.targetArmorClass,
+          targetHpCurrent: lastCombatEvent.targetHp.current,
+          targetHpPrevious: lastCombatEvent.targetHp.previous,
+          targetLabel: getCombatEventActorLabel({
+            combatantId: lastCombatEvent.targetCombatantId,
+            participantId: lastCombatEvent.targetParticipantId,
+            participants,
+            scene,
+          }),
+        }
+      : null,
+    selectedTarget,
+  };
+}
+
+function getSelectedAttackTargetFeedback({
+  charactersByParticipant,
+  participants,
+  scene,
+  selectedTargetCombatantId,
+  selectedTargetParticipantId,
+}: {
+  charactersByParticipant: Record<string, CharacterResource | undefined>;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+  selectedTargetCombatantId: string;
+  selectedTargetParticipantId: string;
+}): ActionTargetFeedbackTarget | null {
+  if (selectedTargetCombatantId) {
+    const combatant = getCombatantEntities(scene).find(
+      (entity) => entity.id === selectedTargetCombatantId,
+    );
+
+    if (!combatant) {
+      return null;
+    }
+
+    return {
+      armorClass: combatant.combatant.armorClass,
+      hpCurrent: combatant.combatant.hp.current,
+      hpMax: combatant.combatant.hp.max,
+      hpTemp: combatant.combatant.hp.temp,
+      id: combatant.id,
+      kind: 'combatant',
+      label: getCombatantName(combatant),
+      status: isCombatantEntityDefeated(combatant) ? 'defeated' : 'active',
+    };
+  }
+
+  if (!selectedTargetParticipantId) {
+    return null;
+  }
+
+  const character = charactersByParticipant[selectedTargetParticipantId];
+
+  return {
+    armorClass: character?.character.armorClass ?? null,
+    hpCurrent: character?.character.hp.current ?? null,
+    hpMax: character?.character.hp.max ?? null,
+    hpTemp: character?.character.hp.temp ?? null,
+    id: selectedTargetParticipantId,
+    kind: 'character',
+    label: getParticipantName(participants, selectedTargetParticipantId),
+    status: character?.character.status ?? 'draft',
+  };
+}
+
+function getCombatEventActorLabel({
+  combatantId,
+  participantId,
+  participants,
+  scene,
+}: {
+  combatantId?: string;
+  participantId: string;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+}): string {
+  if (combatantId) {
+    const combatant = getCombatantEntities(scene).find(
+      (entity) => entity.id === combatantId,
+    );
+
+    return combatant ? getCombatantName(combatant) : combatantId;
+  }
+
+  return getParticipantName(participants, participantId);
+}
+
+function getCombatantName(
+  combatant: SceneEntity & {
+    combatant: NonNullable<SceneEntity['combatant']>;
+  },
+): string {
+  return `${combatant.name} (${combatant.id})`;
 }
 
 export function getDmCombatantActionDisabledReason({

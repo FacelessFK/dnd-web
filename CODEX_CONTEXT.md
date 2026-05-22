@@ -106,15 +106,16 @@ target, and movement feedback.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
-current-turn rail. The next work should keep making the active encounter loop
+current-turn rail, and Slice 2 adds selected target/action-result feedback from
+loaded read models. The next work should keep making the active encounter loop
 easier to read without adding broader D&D automation.
 
 Break this into small Codex tasks:
 
 1. inspect current encounter state helpers, turn controls, and tactical board
    current-turn affordances;
-2. tighten selected target and action-result feedback around the existing
-   current-turn rail;
+2. continue movement and action-feedback polish around the existing current-turn
+   rail and target feedback;
 3. avoid changing encounter command semantics or adding broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.

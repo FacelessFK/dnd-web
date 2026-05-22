@@ -41,6 +41,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - mixed player/combatant encounters;
 - compact current-turn rail that shows the current actor, remaining movement,
   and used action/bonus/reaction state from loaded read models;
+- selected target and latest combat-result feedback derived from loaded read
+  models and live event log entries;
 - turn usage;
 - narrow melee attack handling;
 - readable combat/event feed;

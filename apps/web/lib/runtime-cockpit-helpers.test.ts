@@ -20,6 +20,7 @@ import {
   describeSessionStreamEvent,
   formatRuntimeFailure,
   getActingParticipantId,
+  getActionTargetFeedbackSummary,
   getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
   getAttackableCombatantEntities,
@@ -2028,6 +2029,235 @@ describe('runtime cockpit helpers', () => {
         movementUsedFeet: 30,
         reactionUsed: false,
         roundNumber: 2,
+      },
+    );
+  });
+
+  it('summarizes selected attack target and latest combat result feedback', () => {
+    const targetCharacter = {
+      character: {
+        abilities: {
+          cha: 10,
+          con: 12,
+          dex: 14,
+          int: 10,
+          str: 14,
+          wis: 10,
+        },
+        armorClass: 16,
+        background: 'Soldier',
+        className: 'Fighter',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hp: {
+          current: 5,
+          max: 12,
+          temp: 1,
+        },
+        id: 'CHAR-002',
+        level: 1,
+        meta: {},
+        name: 'Bram',
+        notes: null,
+        ownerParticipantId: 'player-002',
+        rulesProfileId: 'dnd5e-2024-core',
+        speed: 30,
+        speciesOrRace: 'Human',
+        status: 'ready' as const,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      derived: {
+        abilityModifiers: {
+          cha: 0,
+          con: 1,
+          dex: 2,
+          int: 0,
+          str: 2,
+          wis: 0,
+        },
+        initiativeModifier: 2,
+        passivePerception: 10,
+        proficiencyBonus: 2,
+        spellSaveDc: null,
+      },
+      overlay: {
+        activeConditions: [],
+        characterId: 'CHAR-002',
+        concentration: null,
+        currentVisibility: 'visible',
+        footprint: {
+          height: 1,
+          width: 1,
+        },
+        position: {
+          sceneId: 'SCENE-001',
+          x: 1,
+          y: 0,
+        },
+      },
+      rulesProfile: {
+        allowedSources: ['SRD'],
+        baseRuleset: 'dnd5e-2024',
+        houseRules: {},
+        id: 'dnd5e-2024-core',
+        optionalRules: [],
+        strictness: 'dm_led',
+      },
+    } satisfies CharacterResource;
+    const scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: true,
+          blocksVision: false,
+          combatant: {
+            abilities: {
+              cha: 8,
+              con: 12,
+              dex: 12,
+              int: 8,
+              str: 14,
+              wis: 10,
+            },
+            armorClass: 12,
+            hp: {
+              current: 8,
+              max: 8,
+              temp: 0,
+            },
+            kind: 'monster' as const,
+            speed: 25,
+          },
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          hidden: false,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          meta: {},
+          name: 'Ash Goblin',
+          position: {
+            x: 3,
+            y: 4,
+          },
+          type: 'monster' as const,
+          transition: null,
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const participants = [
+      ...sessionState.participants,
+      {
+        characterId: 'CHAR-002',
+        connectionStatus: 'connected' as const,
+        displayName: 'Player Two',
+        id: 'player-002',
+        joinedAt: '2026-01-01T00:00:00.000Z',
+        lastSeenAt: '2026-01-01T00:00:00.000Z',
+        pendingCharacterId: null,
+        role: 'player' as const,
+      },
+    ];
+
+    assert.deepEqual(
+      getActionTargetFeedbackSummary({
+        attackDisabledReason: null,
+        charactersByParticipant: {
+          'player-002': targetCharacter,
+        },
+        lastCombatEvent: {
+          attackerCharacterId: 'CHAR-001',
+          attackerKind: 'character',
+          attackerParticipantId: 'player-001',
+          damage: 4,
+          encounterId: 'encounter_11111111-1111-4111-8111-111111111111',
+          hit: true,
+          reason: 'attack_resolved',
+          roll: {
+            d20: 15,
+            modifier: 5,
+            total: 20,
+          },
+          sessionId: 'SESSION-001',
+          targetArmorClass: 12,
+          targetCombatantId:
+            'scene_entity_11111111-1111-4111-8111-111111111111',
+          targetHp: {
+            current: 4,
+            previous: 8,
+          },
+          targetKind: 'combatant',
+          targetParticipantId: 'dm-001',
+          type: 'combat_event',
+        },
+        participants,
+        scene,
+        selectedTargetCombatantId: '',
+        selectedTargetParticipantId: 'player-002',
+      }),
+      {
+        attackBlockedReason: null,
+        attackReady: true,
+        lastCombatResult: {
+          attackerLabel: 'Player One',
+          damage: 4,
+          hit: true,
+          rollTotal: 20,
+          targetArmorClass: 12,
+          targetHpCurrent: 4,
+          targetHpPrevious: 8,
+          targetLabel:
+            'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+        },
+        selectedTarget: {
+          armorClass: 16,
+          hpCurrent: 5,
+          hpMax: 12,
+          hpTemp: 1,
+          id: 'player-002',
+          kind: 'character',
+          label: 'Player Two',
+          status: 'ready',
+        },
+      },
+    );
+
+    assert.deepEqual(
+      getActionTargetFeedbackSummary({
+        attackDisabledReason:
+          'Choose a joined player participant or active monster/NPC target.',
+        charactersByParticipant: {},
+        lastCombatEvent: null,
+        participants,
+        scene,
+        selectedTargetCombatantId:
+          'scene_entity_11111111-1111-4111-8111-111111111111',
+        selectedTargetParticipantId: '',
+      }),
+      {
+        attackBlockedReason:
+          'Choose a joined player participant or active monster/NPC target.',
+        attackReady: false,
+        lastCombatResult: null,
+        selectedTarget: {
+          armorClass: 12,
+          hpCurrent: 8,
+          hpMax: 8,
+          hpTemp: 0,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          kind: 'combatant',
+          label:
+            'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+          status: 'active',
+        },
       },
     );
   });
