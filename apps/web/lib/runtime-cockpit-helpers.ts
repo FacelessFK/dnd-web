@@ -299,6 +299,69 @@ export const samplePlayers = [
 
 export const defaultPlayer = samplePlayers[0];
 
+export type DemoScenarioId = 'training-room-skirmish';
+
+export type DemoScenario = {
+  actionLabel: string;
+  characterNames: string[];
+  description: string;
+  id: DemoScenarioId;
+  name: string;
+  playerParticipantIds: Array<(typeof samplePlayers)[number]['participantId']>;
+  positions: Record<(typeof samplePlayers)[number]['participantId'], Cell>;
+  scene: SceneInput;
+};
+
+export type DemoScenarioSummary = {
+  detail: string;
+  rosterLabel: string;
+  sceneLabel: string;
+  title: string;
+};
+
+export const demoScenarios: readonly DemoScenario[] = [
+  {
+    actionLabel: 'Run Training Room Skirmish',
+    characterNames: ['Aria', 'Borin'],
+    description:
+      'Training Room Skirmish uses Training Room with Aria and Borin for a short two-player encounter.',
+    id: 'training-room-skirmish',
+    name: 'Training Room Skirmish',
+    playerParticipantIds: ['player-001', 'player-002'],
+    positions: {
+      'player-001': { x: 0, y: 0 },
+      'player-002': { x: 1, y: 0 },
+    },
+    scene: {
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      name: 'Training Room',
+    },
+  },
+];
+
+export const defaultDemoScenario: DemoScenario = demoScenarios[0]!;
+
+export function getDemoScenarioById(id: string): DemoScenario {
+  return (
+    demoScenarios.find((scenario) => scenario.id === id) ?? defaultDemoScenario
+  );
+}
+
+export function getDemoScenarioSummary(
+  scenario: DemoScenario,
+): DemoScenarioSummary {
+  return {
+    detail: scenario.description,
+    rosterLabel: scenario.characterNames.join(', '),
+    sceneLabel: `${scenario.scene.name} · ${scenario.scene.grid.width}x${scenario.scene.grid.height}`,
+    title: scenario.name,
+  };
+}
+
 export const defaultTacticalBoardViewport: TacticalBoardViewport = {
   panX: 0,
   panY: 0,

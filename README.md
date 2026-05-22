@@ -21,8 +21,9 @@ placement and movement, mixed player/combatant encounters, turn usage, narrow
 attack handling, a compact current-turn rail, selected target/action-result
 feedback, selected movement/turn-budget feedback, encounter status feedback,
 player readiness feedback, action economy feedback,
-DM HP/condition/reposition/turn overrides, read-model recovery after refresh,
-and recovery status feedback for local playtesting.
+DM HP/condition/reposition/turn overrides, a named Training Room Skirmish demo
+scenario option, read-model recovery after refresh, and recovery status
+feedback for local playtesting.
 
 The Character Library has a backend command surface at
 `POST /api/character-library/command`. In DB mode it persists entries in
@@ -126,14 +127,15 @@ corepack pnpm --filter @dnd/web test:smoke
 ```
 
 `@dnd/web test:smoke` starts local server/web dev processes, drives `/runtime`
-through headless Chrome, verifies recovery after reload, checks Player mode
-guardrails, confirms Local Reset stays browser-local, and verifies stale demo
-table text is not left visible after reset. It then restores the same session
-ID and recovers the table, Recovery Status summary, and Encounter Status
-summary again to verify Local Reset did not delete backend runtime state. On
-failure it prints the current URL, summarized cockpit local state, visible
-enabled buttons, visible page text, and recent child-process output to make
-local smoke failures actionable.
+through headless Chrome, runs the named Training Room Skirmish demo scenario,
+verifies recovery after reload, checks Player mode guardrails, confirms Local
+Reset stays browser-local, and verifies stale demo table text is not left
+visible after reset. It then restores the same session ID and recovers the
+table, Recovery Status summary, and Encounter Status summary again to verify
+Local Reset did not delete backend runtime state. On failure it prints the
+current URL, summarized cockpit local state, visible enabled buttons, visible
+page text, and recent child-process output to make local smoke failures
+actionable.
 
 ## Main Docs
 

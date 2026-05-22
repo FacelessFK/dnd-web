@@ -9,7 +9,7 @@ import { createServer } from 'node:net';
 import {
   formatSmokeStep,
   formatSmokeWaitFailure,
-  getAbsentVisibleTextsExpression,
+  getAbsentVisibleTextsOutsideSelectorExpression,
   getPageDiagnosticsExpression,
   getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
@@ -32,7 +32,7 @@ const smokeStepLabels = [
   'starting authoritative server',
   'starting Next runtime UI',
   'launching headless browser',
-  'running fresh DM demo setup',
+  'running named DM demo scenario',
   'starting encounter from UI',
   'validating recovery after reload',
   'validating player mode guardrails',
@@ -137,8 +137,9 @@ async function main() {
     await waitForNoStoredSession(page);
     await clickButton(page, 'DM Mode');
 
-    logSmokeStep('running fresh DM demo setup');
-    await clickButton(page, 'Run Fresh Demo Setup');
+    logSmokeStep('running named DM demo scenario');
+    await waitForText(page, 'Training Room Skirmish', 'named demo scenario');
+    await clickButton(page, 'Run Training Room Skirmish');
     await waitForCockpitState(page, (state) =>
       Boolean(state?.sessionId && state?.sceneId),
     );
@@ -229,7 +230,7 @@ async function main() {
         return hasReadinessSummary && hasTokenStatus;
       })()`,
     });
-    await expectVisibleButton(page, 'Run Fresh Demo Setup', false);
+    await expectVisibleButton(page, 'Run Training Room Skirmish', false);
     await expectVisibleText(page, 'Scene Builder', false);
     await expectVisibleText(page, 'Monsters & NPCs', false);
     const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
@@ -248,11 +249,10 @@ async function main() {
     });
     await waitFor(page, {
       label: 'stale recovered table content hidden after local reset',
-      predicate: getAbsentVisibleTextsExpression([
-        'Training Room',
-        'Aria',
-        'Borin',
-      ]),
+      predicate: getAbsentVisibleTextsOutsideSelectorExpression(
+        ['Training Room', 'Aria', 'Borin'],
+        '[data-runtime-demo-scenario]',
+      ),
     });
     await setSessionInputValue(page, sessionIdBeforeLocalReset);
     await clickButton(page, 'Recover');

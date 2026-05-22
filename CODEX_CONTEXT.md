@@ -112,8 +112,8 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 6: package the first named demo scenario using existing
-runtime commands and current local data.
+Playable MVP Phase 6: polish the first named demo scenario presentation using
+existing runtime commands and current local data.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
@@ -128,16 +128,18 @@ actionable smoke wait diagnostics, and Slice 3 verifies Local Reset clears
 stale recovered demo table text from the visible runtime surface. Slice 4
 verifies the same backend runtime session can be recovered again after Local
 Reset. Slice 5 adds a final post-reset recovery assertion for the table,
-Recovery Status, and Encounter Status summaries. Phase 5 can now close; the
-next work should start Phase 6 demo scenario packaging without adding replay,
-cursor, catch-up, or broader D&D automation.
+Recovery Status, and Encounter Status summaries. Phase 6 Slice 1 adds a named
+Training Room Skirmish demo scenario option that reuses existing runtime
+commands and current local sample data. The next work should polish that
+scenario's presentation and playtest script without adding replay, cursor,
+catch-up, or broader D&D automation.
 
 Break this into small Codex tasks:
 
-1. inspect current fresh demo setup commands, runtime sample data, and demo
-   setup UI;
-2. add a named demo scenario option without introducing new runtime protocol or
-   combat automation;
+1. inspect current named demo scenario commands, runtime sample data, and demo
+   setup UI when changing scenario behavior;
+2. polish the named Training Room Skirmish scenario presentation without
+   introducing new runtime protocol or combat automation;
 3. avoid adding replay, cursor, catch-up, or broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.

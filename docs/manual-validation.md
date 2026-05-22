@@ -33,7 +33,7 @@ environment variables manually.
 
 For browser-driven local playtesting, start the server and web app with
 `pnpm dev`, open `/runtime`, and choose DM mode or Player mode. DM mode exposes
-the Table Setup checklist, fresh demo setup, scene setup, monster/NPC
+the Table Setup checklist, named demo scenario setup, scene setup, monster/NPC
 combatant, encounter, and override controls. Player mode can join or recover a
 session, view its assigned
 character, move its own token, use its own turn resources, and attack selected
@@ -85,15 +85,16 @@ before submission.
 
 A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
-runs the DM fresh demo setup through headless Chrome, validates read-model
-recovery after reload, checks the Recovery Status summary, checks Player mode
-guardrails, confirms Local Reset clears only browser state, and verifies stale
-demo table text is no longer visible after reset. It then restores the same
-session ID and confirms the backend runtime state, Recovery Status summary, and
-Encounter Status summary can still be recovered. It is intentionally not a full
-production E2E suite. When a browser wait times out, the smoke report includes
-the current URL, summarized persisted cockpit state, visible enabled buttons,
-visible page text, and recent server/web/browser process output.
+runs the named Training Room Skirmish demo scenario through headless Chrome,
+validates read-model recovery after reload, checks the Recovery Status summary,
+checks Player mode guardrails, confirms Local Reset clears only browser state,
+and verifies stale demo table text is no longer visible after reset. It then
+restores the same session ID and confirms the backend runtime state, Recovery
+Status summary, and Encounter Status summary can still be recovered. It is
+intentionally not a full production E2E suite. When a browser wait times out,
+the smoke report includes the current URL, summarized persisted cockpit state,
+visible enabled buttons, visible page text, and recent server/web/browser
+process output.
 
 ## Browser Playable Session Script
 
@@ -101,7 +102,8 @@ Use this script for the first local playable-session pass after startup:
 
 1. Open `/runtime`, wait for the runtime shell, and run **Local Reset** if the
    browser still has a stored session.
-2. Switch to **DM Mode** and run **Run Fresh Demo Setup**.
+2. Switch to **DM Mode**, confirm **Demo scenario** is set to **Training Room
+   Skirmish**, and run **Run Training Room Skirmish**.
 3. Confirm the active scene is **Training Room**, the tactical grid is visible,
    and the sample characters **Aria** and **Borin** appear.
 4. Confirm the **Recovery status** panel reports the session, scene,
@@ -116,7 +118,7 @@ Use this script for the first local playable-session pass after startup:
    **Aria**, **Borin**, **Recovery status**, and **Encounter status** return.
 9. Switch to **Player Mode**, click **Recover**, and confirm **PLAYER VIEW**,
    the assigned character, tactical grid, and **Readiness summary** are visible.
-10. Confirm Player mode does not show **Run Fresh Demo Setup**, **Scene
+10. Confirm Player mode does not show **Run Training Room Skirmish**, **Scene
     Builder**, or **Monsters & NPCs**.
 11. Click **Local Reset** and confirm the browser session input is blank, and
     that stale demo table text such as **Training Room**, **Aria**, and

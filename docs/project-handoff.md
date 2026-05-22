@@ -18,13 +18,13 @@ DND-web is a TypeScript pnpm monorepo:
 session create/join/reconnect, SSE subscription, read-model recovery after
 refresh, scene create/activate, passive scene entity editing, transition nodes,
 compact scene entity presets, compact transition presets, character
-placement/movement, local tactical board camera controls, tactical board state
-badges, tactical board keyboard navigation, mixed player/combatant encounters,
-compact current-turn rail, selected target/action-result feedback, selected
-movement/turn-budget feedback, encounter status feedback, player readiness
-feedback, action economy feedback, turn usage, narrow melee attack handling,
-readable event feed, recovery status feedback, a DM-facing Table Setup
-checklist, and DM controls for HP, conditions,
+placement/movement, named Training Room Skirmish demo setup, local tactical
+board camera controls, tactical board state badges, tactical board keyboard
+navigation, mixed player/combatant encounters, compact current-turn rail,
+selected target/action-result feedback, selected movement/turn-budget feedback,
+encounter status feedback, player readiness feedback, action economy feedback,
+turn usage, narrow melee attack handling, readable event feed, recovery status
+feedback, a DM-facing Table Setup checklist, and DM controls for HP, conditions,
 repositioning, combatants, current turn, turn usage, and encounter end.
 
 The browser submits commands and renders server responses. It is not
@@ -143,10 +143,10 @@ corepack pnpm --filter @dnd/web test:smoke
 ```
 
 The smoke command starts temporary local server/web dev processes and drives
-`/runtime` through headless Chrome. Browser wait failures include step
-numbering, the current URL, summarized cockpit local state, visible enabled
-buttons, visible page text, and recent child-process output. The same smoke
-path also checks that Local Reset removes stale recovered demo table text from
-the visible runtime surface, then restores the same session ID and recovers the
-backend runtime session again, including Recovery Status and Encounter Status
-summaries.
+`/runtime` through headless Chrome using the named Training Room Skirmish demo
+scenario. Browser wait failures include step numbering, the current URL,
+summarized cockpit local state, visible enabled buttons, visible page text, and
+recent child-process output. The same smoke path also checks that Local Reset
+removes stale recovered demo table text from the visible runtime surface, then
+restores the same session ID and recovers the backend runtime session again,
+including Recovery Status and Encounter Status summaries.

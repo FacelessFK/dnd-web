@@ -18,6 +18,7 @@ import {
   createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
   describeSessionStreamEvent,
+  demoScenarios,
   formatRuntimeFailure,
   getActingParticipantId,
   getActionEconomyFeedbackSummary,
@@ -33,6 +34,8 @@ import {
   getCurrentTurnLabel,
   getCurrentTurnRailSummary,
   getDmCombatantActionDisabledReason,
+  getDemoScenarioById,
+  getDemoScenarioSummary,
   getDmTableSetupChecklist,
   getEncounterStatusSummary,
   getKnownCharacterIds,
@@ -112,6 +115,27 @@ const sessionState: SessionSnapshot = {
 };
 
 describe('runtime cockpit helpers', () => {
+  it('describes the named demo scenario option', () => {
+    assert.equal(demoScenarios.length, 1);
+    const scenario = getDemoScenarioById('training-room-skirmish');
+
+    assert.equal(scenario.name, 'Training Room Skirmish');
+    assert.equal(scenario.scene.name, 'Training Room');
+    assert.deepEqual(scenario.playerParticipantIds, [
+      'player-001',
+      'player-002',
+    ]);
+    assert.deepEqual(scenario.characterNames, ['Aria', 'Borin']);
+
+    assert.deepEqual(getDemoScenarioSummary(scenario), {
+      detail:
+        'Training Room Skirmish uses Training Room with Aria and Borin for a short two-player encounter.',
+      rosterLabel: 'Aria, Borin',
+      sceneLabel: 'Training Room · 8x8',
+      title: 'Training Room Skirmish',
+    });
+  });
+
   it('collects assigned character reads from recovered session state', () => {
     assert.deepEqual(getAssignedCharacterRefs(sessionState), [
       {

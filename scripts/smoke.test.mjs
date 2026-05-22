@@ -6,6 +6,7 @@ import {
   formatSmokeStep,
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
+  getAbsentVisibleTextsOutsideSelectorExpression,
   getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
@@ -107,6 +108,59 @@ test('runtime smoke diagnostics can assert stale visible text is gone', () => {
   assert.equal(
     evaluate({ body: { innerText: 'Runtime War Table\nTraining Room' } }),
     false,
+  );
+});
+
+test('runtime smoke diagnostics can ignore static demo scenario text', () => {
+  const expression = getAbsentVisibleTextsOutsideSelectorExpression(
+    ['Training Room', 'Aria'],
+    '[data-runtime-demo-scenario]',
+  );
+  const evaluate = Function('document', 'NodeFilter', `return ${expression};`);
+  const nodeFilter = {
+    FILTER_ACCEPT: 1,
+    FILTER_REJECT: 2,
+    SHOW_TEXT: 4,
+  };
+  const visibleElement = {
+    closest: () => null,
+    getClientRects: () => [true],
+  };
+  const ignoredElement = {
+    closest: (selector) =>
+      selector === '[data-runtime-demo-scenario]' ? true : null,
+    getClientRects: () => [true],
+  };
+  const nodes = [
+    {
+      nodeValue: 'Runtime War Table',
+      parentElement: visibleElement,
+    },
+    {
+      nodeValue: 'Training Room\nAria',
+      parentElement: ignoredElement,
+    },
+  ];
+
+  assert.equal(
+    evaluate(
+      {
+        createTreeWalker: (_body, _showText, filter) => {
+          const acceptedNodes = nodes.filter(
+            (node) => filter.acceptNode(node) === nodeFilter.FILTER_ACCEPT,
+          );
+
+          return {
+            nextNode: () => acceptedNodes.shift() ?? null,
+          };
+        },
+        body: {
+          nodeType: 1,
+        },
+      },
+      nodeFilter,
+    ),
+    true,
   );
 });
 

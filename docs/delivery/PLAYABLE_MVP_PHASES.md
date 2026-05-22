@@ -284,8 +284,8 @@ Acceptance:
 
 Suggested first implementation slice:
 
-- Add a named demo scenario option that uses existing runtime commands and
-  current local data.
+- Implemented: named Training Room Skirmish demo scenario option that uses
+  existing runtime commands and current local sample data.
 
 ## Recommended Order
 
@@ -328,6 +328,11 @@ Implemented Phase 5 Slice 5:
 > Add a final smoke assertion that the post-reset recovery includes the table,
 > Recovery Status summary, and Encounter Status summary, then close Phase 5.
 
+Implemented Phase 6 Slice 1:
+
+> Add a named Training Room Skirmish demo scenario option that uses existing
+> runtime commands and current local sample data.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -352,7 +357,8 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 1:
+Phase 6 Slice 2:
 
-> Add a named demo scenario option that uses existing runtime commands and
-> current local data.
+> Tighten the named demo scenario presentation and manual playtest script around
+> Training Room Skirmish without adding new runtime protocol or combat
+> automation.

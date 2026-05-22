@@ -59,6 +59,45 @@ export function getAbsentVisibleTextsExpression(texts) {
   })()`;
 }
 
+export function getAbsentVisibleTextsOutsideSelectorExpression(
+  texts,
+  ignoredSelector,
+) {
+  return `(() => {
+    const body = document.body;
+
+    if (!body) {
+      return true;
+    }
+
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        const parent = node.parentElement;
+
+        if (!parent || parent.closest(${JSON.stringify(ignoredSelector)})) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        if (
+          typeof parent.getClientRects === 'function' &&
+          parent.getClientRects().length === 0
+        ) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    let bodyText = '';
+
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      bodyText += node.nodeValue ?? '';
+    }
+
+    return ${JSON.stringify(texts)}.every((text) => !bodyText.includes(text));
+  })()`;
+}
+
 export function getPresentVisibleTextsExpression(texts) {
   return `(() => {
     const bodyText = document.body?.innerText ?? '';

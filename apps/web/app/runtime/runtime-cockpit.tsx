@@ -58,9 +58,11 @@ import {
   createSceneDraftFormFromScene,
   createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
+  defaultDemoScenario,
   defaultTacticalBoardViewport,
   defaultDm,
   defaultPlayer,
+  demoScenarios,
   describeSessionStreamEvent,
   flag,
   formatRuntimeFailure,
@@ -78,6 +80,8 @@ import {
   getCurrentTurnLabel,
   getCurrentTurnParticipantId,
   getCurrentTurnRailSummary,
+  getDemoScenarioById,
+  getDemoScenarioSummary,
   getDmCombatantActionDisabledReason,
   getDmTableSetupChecklist,
   getEncounterStatusSummary,
@@ -244,6 +248,9 @@ export function RuntimeCockpit() {
   );
   const [libraryEntriesLoading, setLibraryEntriesLoading] = useState(false);
   const [selectedLibraryEntryId, setSelectedLibraryEntryId] = useState('');
+  const [selectedDemoScenarioId, setSelectedDemoScenarioId] = useState<string>(
+    defaultDemoScenario.id,
+  );
   const [sceneDraft, setSceneDraft] = useState<SceneDraftForm>(() =>
     createDefaultSceneDraftForm(),
   );
@@ -305,6 +312,9 @@ export function RuntimeCockpit() {
     error: outboxStatusError,
     loading: outboxStatusLoading,
   });
+  const selectedDemoScenario = getDemoScenarioById(selectedDemoScenarioId);
+  const selectedDemoScenarioSummary =
+    getDemoScenarioSummary(selectedDemoScenario);
   const outboxStatusLabel = formatOutboxStatusLabel(outboxStatusView, t);
   const statusGridClassName =
     mode === 'dm'
@@ -978,8 +988,23 @@ export function RuntimeCockpit() {
   }
 
   async function runFreshDemoSetup(): Promise<void> {
-    await runTask('run fresh demo setup', async () => {
+    await runTask(`run ${selectedDemoScenario.name}`, async () => {
       setStreamEnabled(false);
+      const scenarioPlayers = selectedDemoScenario.playerParticipantIds.map(
+        (participantId) => {
+          const player = samplePlayers.find(
+            (candidate) => candidate.participantId === participantId,
+          );
+
+          if (!player) {
+            throw new Error(
+              `No sample player is defined for ${participantId}.`,
+            );
+          }
+
+          return player;
+        },
+      );
 
       const createdSession = await unwrap(
         'create_session',
@@ -989,7 +1014,9 @@ export function RuntimeCockpit() {
             participantId: dmParticipantId,
             role: 'dm',
           },
-          commandId: createCommandId('demo-create-session'),
+          commandId: createCommandId(
+            `${selectedDemoScenario.id}-create-session`,
+          ),
           payload: {
             rulesProfileId: 'dnd5e-2024-core',
           },
@@ -1003,7 +1030,7 @@ export function RuntimeCockpit() {
       setEventLog([]);
       applySessionSnapshot(latestState);
 
-      for (const player of samplePlayers) {
+      for (const player of scenarioPlayers) {
         const joined = await unwrap(
           `join_session ${player.participantId}`,
           sendSessionCommand({
@@ -1026,7 +1053,7 @@ export function RuntimeCockpit() {
 
       const createdCharacters: Record<string, CharacterResource> = {};
 
-      for (const player of samplePlayers) {
+      for (const player of scenarioPlayers) {
         const characterInput = sampleCharacters[player.participantId];
 
         if (!characterInput) {
@@ -1063,7 +1090,7 @@ export function RuntimeCockpit() {
         rememberCharacter(created.data);
       }
 
-      for (const player of samplePlayers) {
+      for (const player of scenarioPlayers) {
         const characterId =
           createdCharacters[player.participantId]?.character.id;
 
@@ -1120,16 +1147,9 @@ export function RuntimeCockpit() {
           actor: {
             participantId: streamParticipantId,
           },
-          commandId: createCommandId('demo-create-scene'),
+          commandId: createCommandId(`${selectedDemoScenario.id}-create-scene`),
           payload: {
-            scene: {
-              grid: {
-                cellSizeFeet: 5,
-                height: 8,
-                width: 8,
-              },
-              name: 'Training Room',
-            },
+            scene: selectedDemoScenario.scene,
             sessionId: activeSessionId,
           },
           type: 'create_scene',
@@ -1162,13 +1182,8 @@ export function RuntimeCockpit() {
         applySessionSnapshot(latestState);
       }
 
-      const positions: Record<string, Cell> = {
-        'player-001': { x: 0, y: 0 },
-        'player-002': { x: 1, y: 0 },
-      };
-
-      for (const player of samplePlayers) {
-        const position = positions[player.participantId];
+      for (const player of scenarioPlayers) {
+        const position = selectedDemoScenario.positions[player.participantId];
 
         if (!position) {
           throw new Error(
@@ -4050,11 +4065,38 @@ export function RuntimeCockpit() {
                 title="Demo Setup"
                 tone="dm"
               >
-                <div className="grid gap-3">
+                <div className="grid gap-3" data-runtime-demo-scenario>
+                  <SelectField
+                    label="Demo scenario"
+                    onChange={setSelectedDemoScenarioId}
+                    options={demoScenarios.map((scenario) => ({
+                      label: scenario.name,
+                      value: scenario.id,
+                    }))}
+                    value={selectedDemoScenario.id}
+                  />
+                  <div className="rounded-2xl border border-amber-300/15 bg-black/20 p-3">
+                    <p className="text-sm font-bold text-amber-50">
+                      {selectedDemoScenarioSummary.title}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-amber-100/65">
+                      {selectedDemoScenarioSummary.detail}
+                    </p>
+                    <div className="mt-3 grid gap-2 text-xs text-amber-100/70 sm:grid-cols-2">
+                      <StatusRow
+                        label="Scene"
+                        value={selectedDemoScenarioSummary.sceneLabel}
+                      />
+                      <StatusRow
+                        label="Roster"
+                        value={selectedDemoScenarioSummary.rosterLabel}
+                      />
+                    </div>
+                  </div>
                   <ActionButton
                     disabled={Boolean(busyLabel)}
                     disabledReason={busyReason ?? undefined}
-                    label="Run Fresh Demo Setup"
+                    label={selectedDemoScenario.actionLabel}
                     onClick={runFreshDemoSetup}
                   />
                   <div className="grid grid-cols-2 gap-2">
@@ -4450,7 +4492,7 @@ export function RuntimeCockpit() {
                       ))
                     ) : (
                       <EmptyState
-                        detail="Join players or run the fresh demo setup."
+                        detail="Join players or run a named demo scenario."
                         title="No players loaded"
                       />
                     )}

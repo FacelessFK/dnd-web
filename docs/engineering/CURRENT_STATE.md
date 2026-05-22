@@ -38,6 +38,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   arrow/Home/End navigation;
 - DM-facing Table Setup checklist derived from session, player assignment,
   scene, token placement, and encounter read state;
+- named Training Room Skirmish demo scenario setup that uses existing runtime
+  commands and current local sample data;
 - mixed player/combatant encounters;
 - compact current-turn rail that shows the current actor, remaining movement,
   and used action/bonus/reaction state from loaded read models;
