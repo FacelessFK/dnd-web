@@ -104,3 +104,12 @@ For task completion, include:
 8. Validation results
 9. Known limitations
 10. Anything needed from the user
+11. Next recommended step and model effort
+
+Always end task-completion reports with a concrete next step and the
+recommended Codex model effort for that step. Use:
+
+- `medium` for small UI/docs/helper changes.
+- `high` for normal multi-file frontend/backend tasks.
+- `extra high` for sensitive DB, schema, transaction, idempotency, security, or
+  data-model work.
