@@ -52,6 +52,13 @@ export function getPageDiagnosticsExpression(
   })()`;
 }
 
+export function getAbsentVisibleTextsExpression(texts) {
+  return `(() => {
+    const bodyText = document.body?.innerText ?? '';
+    return ${JSON.stringify(texts)}.every((text) => !bodyText.includes(text));
+  })()`;
+}
+
 export function normalizePageDiagnostics(rawDiagnostics) {
   return {
     cockpitState: summarizeCockpitState(rawDiagnostics?.rawCockpitState),

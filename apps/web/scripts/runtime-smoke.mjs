@@ -9,6 +9,7 @@ import { createServer } from 'node:net';
 import {
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getAbsentVisibleTextsExpression,
   getPageDiagnosticsExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
@@ -240,6 +241,14 @@ async function main() {
         );
         return Boolean(input && input.value === '');
       })()`,
+    });
+    await waitFor(page, {
+      label: 'stale recovered table content hidden after local reset',
+      predicate: getAbsentVisibleTextsExpression([
+        'Training Room',
+        'Aria',
+        'Borin',
+      ]),
     });
 
     console.log('[runtime-smoke] passed');

@@ -87,11 +87,11 @@ A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
 runs the DM fresh demo setup through headless Chrome, validates read-model
 recovery after reload, checks the Recovery Status summary, checks Player mode
-guardrails, and confirms Local Reset clears only browser state. It is
-intentionally not a full production E2E suite. When a browser wait times out,
-the smoke report includes the current URL, summarized persisted cockpit state,
-visible enabled buttons, visible page text, and recent server/web/browser
-process output.
+guardrails, confirms Local Reset clears only browser state, and verifies stale
+demo table text is no longer visible after reset. It is intentionally not a
+full production E2E suite. When a browser wait times out, the smoke report
+includes the current URL, summarized persisted cockpit state, visible enabled
+buttons, visible page text, and recent server/web/browser process output.
 
 ## Browser Playable Session Script
 
@@ -116,8 +116,10 @@ Use this script for the first local playable-session pass after startup:
    the assigned character, tactical grid, and **Readiness summary** are visible.
 10. Confirm Player mode does not show **Run Fresh Demo Setup**, **Scene
     Builder**, or **Monsters & NPCs**.
-11. Click **Local Reset** and confirm the browser session input is blank. This
-    reset is browser-local and does not delete backend runtime state.
+11. Click **Local Reset** and confirm the browser session input is blank, and
+    that stale demo table text such as **Training Room**, **Aria**, and
+    **Borin** is no longer visible. This reset is browser-local and does not
+    delete backend runtime state.
 
 For the persisted character product MVP, run the server in DB mode with
 `0008_character_library_entries.sql`, `0009_auth_users_and_sessions.sql`, and

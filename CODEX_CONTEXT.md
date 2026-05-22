@@ -56,6 +56,8 @@ that scope.
 - Runtime smoke coverage now reports numbered steps and richer wait-failure
   diagnostics: current URL, summarized cockpit local state, visible enabled
   buttons, visible page text, and recent child-process output.
+- Runtime smoke also verifies Local Reset clears stale recovered demo table text
+  from the visible runtime surface after a recovered playable session.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -118,10 +120,11 @@ feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
 existing turn controls. Slice 5 adds encounter status, round progress, next
 actor, latest encounter update, and latest combat result feedback. Slice 6 adds
 player-facing readiness and turn-ready feedback. Phase 5 Slice 1 adds Recovery
-Status feedback and Slice 2 adds playable-session script tightening plus
-actionable smoke wait diagnostics. The next work should keep making
-refresh/recover and local smoke coverage easier to trust without adding
-replay, cursor, catch-up, or broader D&D automation.
+Status feedback, Slice 2 adds playable-session script tightening plus
+actionable smoke wait diagnostics, and Slice 3 verifies Local Reset clears
+stale recovered demo table text from the visible runtime surface. The next work
+should keep making refresh/recover and local smoke coverage easier to trust
+without adding replay, cursor, catch-up, or broader D&D automation.
 
 Break this into small Codex tasks:
 

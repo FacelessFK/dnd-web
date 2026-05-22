@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getAbsentVisibleTextsExpression,
   summarizeCockpitState,
 } from '../apps/web/scripts/runtime-smoke-diagnostics.mjs';
 
@@ -92,5 +93,16 @@ test('runtime smoke diagnostics format failed waits with actionable context', ()
   assert.match(
     message,
     /Visible page text:\nRuntime War Table\nRecovery status/,
+  );
+});
+
+test('runtime smoke diagnostics can assert stale visible text is gone', () => {
+  const expression = getAbsentVisibleTextsExpression(['Training Room', 'Aria']);
+  const evaluate = Function('document', `return ${expression};`);
+
+  assert.equal(evaluate({ body: { innerText: 'Runtime War Table' } }), true);
+  assert.equal(
+    evaluate({ body: { innerText: 'Runtime War Table\nTraining Room' } }),
+    false,
   );
 });

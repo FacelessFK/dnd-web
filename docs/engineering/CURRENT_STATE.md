@@ -55,6 +55,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - browser smoke diagnostics that report step numbers, the current URL,
   summarized cockpit local state, visible enabled buttons, page text, and recent
   process output when local runtime smoke waits fail;
+- browser smoke coverage that verifies Local Reset removes stale recovered demo
+  table text from the visible runtime surface;
 - action economy feedback that shows current action, bonus action, and
   reaction readiness plus per-resource blockers around the existing turn
   controls;

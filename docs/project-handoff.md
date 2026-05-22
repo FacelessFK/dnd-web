@@ -145,4 +145,6 @@ corepack pnpm --filter @dnd/web test:smoke
 The smoke command starts temporary local server/web dev processes and drives
 `/runtime` through headless Chrome. Browser wait failures include step
 numbering, the current URL, summarized cockpit local state, visible enabled
-buttons, visible page text, and recent child-process output.
+buttons, visible page text, and recent child-process output. The same smoke
+path also checks that Local Reset removes stale recovered demo table text from
+the visible runtime surface.

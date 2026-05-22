@@ -313,6 +313,11 @@ Implemented Phase 5 Slice 2:
 > Tighten the browser playable-session script and add actionable smoke
 > diagnostics for timed-out browser waits.
 
+Implemented Phase 5 Slice 3:
+
+> Add a smoke assertion that Local Reset clears stale recovered table content
+> from the visible runtime surface after a recovered playable session.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -337,8 +342,8 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 5 Slice 3:
+Phase 5 Slice 4:
 
-> Add one small recovery/playtest diagnostic surface or smoke assertion that
-> catches a real local-runtime failure mode without adding replay, cursor,
-> catch-up, broader combat automation, or new persistence requirements.
+> Continue local playtest reliability with one narrow manual or smoke hardening
+> slice that does not add replay, cursor, catch-up, broader combat automation,
+> or new persistence requirements.
