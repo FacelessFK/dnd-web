@@ -86,8 +86,9 @@ before submission.
 A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
 runs the DM fresh demo setup through headless Chrome, validates read-model
-recovery after reload, checks Player mode guardrails, and confirms Local Reset
-clears only browser state. It is intentionally not a full production E2E suite.
+recovery after reload, checks the Recovery Status summary, checks Player mode
+guardrails, and confirms Local Reset clears only browser state. It is
+intentionally not a full production E2E suite.
 
 For the persisted character product MVP, run the server in DB mode with
 `0008_character_library_entries.sql`, `0009_auth_users_and_sessions.sql`, and
@@ -161,6 +162,8 @@ For the rule-aware builder slice, also check:
   encounter update, and latest combat result.
 - Browser player readiness feedback for joined, character, assignment,
   placement, and turn-ready states.
+- Browser recovery status feedback for session, scene, active-scene placement,
+  characters, encounter, and recover notes.
 - Downed actor gating using a 1 HP target.
 - Backend DM controls for HP, condition tags, active-scene reposition, turn
   usage, current turn actor, combatants, and active encounter end.

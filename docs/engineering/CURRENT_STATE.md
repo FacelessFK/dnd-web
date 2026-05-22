@@ -50,6 +50,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   result from read models and the live event log;
 - player readiness feedback that shows session, joined, character, assignment,
   scene, placement, and turn-ready states plus move/attack/action readiness;
+- recovery status feedback that shows session, scene, active-scene placement,
+  characters, encounter, and recovery notes for local refresh/recover checks;
 - action economy feedback that shows current action, bonus action, and
   reaction readiness plus per-resource blockers around the existing turn
   controls;

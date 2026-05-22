@@ -259,8 +259,9 @@ Acceptance:
 
 Suggested first implementation slice:
 
-- Add a browser smoke assertion for the setup checklist or board camera once
-  Phase 1 or Phase 3 lands.
+- Implemented: recovery status feedback plus browser smoke coverage for the
+  recovered session, scene, active-scene placement, character, and encounter
+  read models after reload/recover.
 
 ### Phase 6: MVP Content And Presentation Pass
 
@@ -302,10 +303,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 6:
+Implemented Phase 5 Slice 1:
 
-> Add Player-facing readiness and turn-ready feedback around the existing
-> Player readiness panel.
+> Add a Recovery Status summary and smoke assertion for recovered read models
+> after browser reload/recover.
 
 Non-goals for that task:
 

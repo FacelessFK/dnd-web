@@ -40,6 +40,7 @@ import {
   getPendingCharacterRefs,
   getPassiveSceneEntities,
   getPlayerReadinessSummary,
+  getRecoveryReliabilitySummary,
   getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
@@ -274,6 +275,114 @@ describe('runtime cockpit helpers', () => {
     assert.equal(isExpectedRecoveryMiss('scene_not_found'), true);
     assert.equal(isExpectedRecoveryMiss('command_id_conflict'), false);
     assert.equal(isExpectedRecoveryMiss(undefined), false);
+  });
+
+  it('summarizes recovery coverage from loaded read models', () => {
+    assert.deepEqual(
+      getRecoveryReliabilitySummary({
+        activeSceneId: 'SCENE-001',
+        activeSceneLoaded: true,
+        characterCount: 2,
+        encounterLoaded: true,
+        recoveryNotes: [],
+        sceneLoaded: true,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          '5/5 recovery read models are loaded: session, scene, active-scene placement, characters, and encounter.',
+        items: [
+          {
+            detail: 'Session SESSION-001 is present in local runtime state.',
+            id: 'session',
+            status: 'recovered',
+            title: 'Session',
+          },
+          {
+            detail: 'Active scene SCENE-001 is loaded.',
+            id: 'scene',
+            status: 'recovered',
+            title: 'Scene',
+          },
+          {
+            detail: 'Active-scene placement read model is loaded.',
+            id: 'activeScene',
+            status: 'recovered',
+            title: 'Placement read model',
+          },
+          {
+            detail: '2 character read models are loaded.',
+            id: 'characters',
+            status: 'recovered',
+            title: 'Characters',
+          },
+          {
+            detail: 'Active encounter read model is loaded.',
+            id: 'encounter',
+            status: 'recovered',
+            title: 'Encounter',
+          },
+        ],
+        loadedCount: 5,
+        notes: [],
+        status: 'recovered',
+        title: 'Recovery ready',
+        totalCount: 5,
+      },
+    );
+
+    assert.deepEqual(
+      getRecoveryReliabilitySummary({
+        activeSceneId: 'SCENE-001',
+        activeSceneLoaded: false,
+        characterCount: 0,
+        encounterLoaded: false,
+        recoveryNotes: ['get_encounter_state failed: no_active_encounter'],
+        sceneLoaded: false,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          '1/5 recovery read models are loaded. 1 recovery note was recorded.',
+        items: [
+          {
+            detail: 'Session SESSION-001 is present in local runtime state.',
+            id: 'session',
+            status: 'recovered',
+            title: 'Session',
+          },
+          {
+            detail: 'Active scene SCENE-001 is expected but not loaded.',
+            id: 'scene',
+            status: 'missing',
+            title: 'Scene',
+          },
+          {
+            detail: 'Active-scene placement read model is not loaded.',
+            id: 'activeScene',
+            status: 'missing',
+            title: 'Placement read model',
+          },
+          {
+            detail: 'No character read models are loaded yet.',
+            id: 'characters',
+            status: 'missing',
+            title: 'Characters',
+          },
+          {
+            detail: 'No active encounter read model is loaded.',
+            id: 'encounter',
+            status: 'optional_missing',
+            title: 'Encounter',
+          },
+        ],
+        loadedCount: 1,
+        notes: ['get_encounter_state failed: no_active_encounter'],
+        status: 'partial',
+        title: 'Recovery partial',
+        totalCount: 5,
+      },
+    );
   });
 
   it('summarizes outbox status for the runtime operator badge', () => {

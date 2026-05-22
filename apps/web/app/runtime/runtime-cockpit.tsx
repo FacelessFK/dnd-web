@@ -93,6 +93,7 @@ import {
   getPlayerNextStep,
   getPlayerParticipantIds,
   getPlayerReadinessSummary,
+  getRecoveryReliabilitySummary,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
@@ -137,6 +138,7 @@ import {
   type MovementFeedbackSummary,
   type OutboxStatusView,
   type PlayerReadinessSummary,
+  type RecoveryReliabilitySummary,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -3630,6 +3632,15 @@ export function RuntimeCockpit() {
     readyActionCount: playerReadyActionCount,
     sessionId,
   });
+  const recoveryReliabilitySummary = getRecoveryReliabilitySummary({
+    activeSceneId: sessionState?.session.activeSceneId ?? null,
+    activeSceneLoaded: Boolean(activeScene),
+    characterCount: Object.keys(charactersByParticipant).length,
+    encounterLoaded: Boolean(encounter),
+    recoveryNotes,
+    sceneLoaded: Boolean(scene),
+    sessionId,
+  });
   const feedEntries = eventLog
     .flatMap((entry) =>
       isSessionStreamEvent(entry.payload)
@@ -4023,6 +4034,11 @@ export function RuntimeCockpit() {
           </div>
 
           <aside className="grid content-start gap-5">
+            <RecoveryReliabilityPanel
+              summary={recoveryReliabilitySummary}
+              t={t}
+            />
+
             {mode === 'dm' ? (
               <DmTableSetupPanel checklist={dmTableSetupChecklist} />
             ) : null}
@@ -4868,6 +4884,123 @@ function getDmTableSetupItemTone(
   };
 
   return tones[status];
+}
+
+function RecoveryReliabilityPanel({
+  summary,
+  t,
+}: {
+  summary: RecoveryReliabilitySummary;
+  t: RuntimeTranslator;
+}) {
+  return (
+    <Panel
+      description={summary.detail}
+      eyebrow={t('runtime.recovery.eyebrow')}
+      title={t('runtime.recovery.title')}
+    >
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <StatusBadge
+            label={getRecoveryReliabilityStatusLabel(summary.status, t)}
+            tone={getRecoveryReliabilityStatusTone(summary.status)}
+          />
+          <StatusBadge
+            label={t('runtime.recovery.progress', {
+              loaded: String(summary.loadedCount),
+              total: String(summary.totalCount),
+            })}
+            tone={getRecoveryReliabilityStatusTone(summary.status)}
+          />
+        </div>
+        <ol className="grid gap-2">
+          {summary.items.map((item) => (
+            <li
+              className="grid grid-cols-[auto_1fr] gap-3 rounded-xl border border-amber-500/15 bg-black/20 p-3"
+              key={item.id}
+            >
+              <StatusBadge
+                label={getRecoveryReliabilityItemLabel(item.status, t)}
+                tone={getRecoveryReliabilityItemTone(item.status)}
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-amber-50">{item.title}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-100/60">
+                  {item.detail}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        {summary.notes.length ? (
+          <div className="rounded-xl border border-amber-300/15 bg-amber-950/15 p-3 text-xs leading-5 text-amber-100/75">
+            <p className="font-bold text-amber-100">
+              {t('runtime.recovery.notes')}
+            </p>
+            <ul className="mt-2 list-disc space-y-1 pl-4">
+              {summary.notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+function getRecoveryReliabilityStatusLabel(
+  status: RecoveryReliabilitySummary['status'],
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'empty':
+      return t('runtime.recovery.empty');
+    case 'partial':
+      return t('runtime.recovery.partial');
+    case 'recovered':
+      return t('runtime.recovery.recovered');
+  }
+}
+
+function getRecoveryReliabilityStatusTone(
+  status: RecoveryReliabilitySummary['status'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'empty':
+      return 'info';
+    case 'partial':
+      return 'warning';
+    case 'recovered':
+      return 'success';
+  }
+}
+
+function getRecoveryReliabilityItemLabel(
+  status: RecoveryReliabilitySummary['items'][number]['status'],
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'missing':
+      return t('runtime.recovery.missing');
+    case 'optional_missing':
+      return t('runtime.recovery.optional');
+    case 'recovered':
+      return t('runtime.recovery.loaded');
+  }
+}
+
+function getRecoveryReliabilityItemTone(
+  status: RecoveryReliabilitySummary['items'][number]['status'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'missing':
+      return 'warning';
+    case 'optional_missing':
+      return 'info';
+    case 'recovered':
+      return 'success';
+  }
 }
 
 function PlayerReadinessPanel({

@@ -51,7 +51,8 @@ that scope.
   keyboard navigation, DM-facing Table Setup checklist, mixed
   player/combatant encounters, compact current-turn rail, encounter status
   feedback, player readiness feedback, action economy feedback, narrow melee
-  attacks, turn usage, readable event feed, and explicit DM controls.
+  attacks, turn usage, readable event feed, recovery status feedback, and
+  explicit DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -102,8 +103,9 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 4 follow-up: continue play-loop polish around action,
-target, movement, encounter status, and player readiness feedback.
+Playable MVP Phase 5 follow-up: continue recovery and local playtest
+reliability around refresh/recover, smoke coverage, and honest read-model
+visibility.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
@@ -113,17 +115,16 @@ feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
 existing turn controls. Slice 5 adds encounter status, round progress, next
 actor, latest encounter update, and latest combat result feedback. Slice 6 adds
 player-facing readiness and turn-ready feedback. The next work should keep
-making the active encounter loop easier to read without adding broader D&D
-automation.
+making refresh/recover and local smoke coverage easier to trust without adding
+replay, cursor, catch-up, or broader D&D automation.
 
 Break this into small Codex tasks:
 
-1. inspect current encounter state helpers, turn controls, and tactical board
-   current-turn affordances;
-2. continue table-flow polish around the existing current-turn rail, target
-   feedback, movement preview, action economy feedback, encounter status
-   feedback, and player readiness feedback;
-3. avoid changing encounter command semantics or adding broader D&D automation;
+1. inspect current recovery helpers, browser smoke waits, and runtime read-model
+   status surfaces;
+2. continue local playtest reliability around recovery status, smoke
+   assertions, and manual validation;
+3. avoid adding replay, cursor, catch-up, or broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.
 

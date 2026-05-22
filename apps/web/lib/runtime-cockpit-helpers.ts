@@ -2459,6 +2459,35 @@ export type PlayerReadinessSummary = {
   waitingCount: number;
 };
 
+export type RecoveryReliabilityItemStatus =
+  | 'missing'
+  | 'optional_missing'
+  | 'recovered';
+
+export type RecoveryReliabilityItemId =
+  | 'activeScene'
+  | 'characters'
+  | 'encounter'
+  | 'scene'
+  | 'session';
+
+export type RecoveryReliabilityItem = {
+  detail: string;
+  id: RecoveryReliabilityItemId;
+  status: RecoveryReliabilityItemStatus;
+  title: string;
+};
+
+export type RecoveryReliabilitySummary = {
+  detail: string;
+  items: RecoveryReliabilityItem[];
+  loadedCount: number;
+  notes: string[];
+  status: 'empty' | 'partial' | 'recovered';
+  title: string;
+  totalCount: number;
+};
+
 export type DmTableSetupChecklistItemStatus = 'blocked' | 'done' | 'ready';
 
 export type DmTableSetupChecklistItemId =
@@ -3030,6 +3059,120 @@ export function getPlayerReadinessSummary({
       readyActionCount,
     },
     waitingCount,
+  };
+}
+
+export function getRecoveryReliabilitySummary({
+  activeSceneId,
+  activeSceneLoaded,
+  characterCount,
+  encounterLoaded,
+  recoveryNotes,
+  sceneLoaded,
+  sessionId,
+}: {
+  activeSceneId: string | null;
+  activeSceneLoaded: boolean;
+  characterCount: number;
+  encounterLoaded: boolean;
+  recoveryNotes: string[];
+  sceneLoaded: boolean;
+  sessionId: string;
+}): RecoveryReliabilitySummary {
+  const hasSession = Boolean(sessionId);
+  const hasExpectedScene = Boolean(activeSceneId);
+  const items: RecoveryReliabilityItem[] = [
+    {
+      detail: hasSession
+        ? `Session ${sessionId} is present in local runtime state.`
+        : 'No session is loaded in local runtime state.',
+      id: 'session',
+      status: hasSession ? 'recovered' : 'missing',
+      title: 'Session',
+    },
+    {
+      detail: hasExpectedScene
+        ? sceneLoaded
+          ? `Active scene ${activeSceneId} is loaded.`
+          : `Active scene ${activeSceneId} is expected but not loaded.`
+        : 'No active scene is currently expected.',
+      id: 'scene',
+      status: hasExpectedScene
+        ? sceneLoaded
+          ? 'recovered'
+          : 'missing'
+        : 'optional_missing',
+      title: 'Scene',
+    },
+    {
+      detail: activeSceneLoaded
+        ? 'Active-scene placement read model is loaded.'
+        : hasExpectedScene
+          ? 'Active-scene placement read model is not loaded.'
+          : 'No active-scene placement read model is currently expected.',
+      id: 'activeScene',
+      status: activeSceneLoaded
+        ? 'recovered'
+        : hasExpectedScene
+          ? 'missing'
+          : 'optional_missing',
+      title: 'Placement read model',
+    },
+    {
+      detail:
+        characterCount > 0
+          ? `${characterCount} character read model${characterCount === 1 ? '' : 's'} are loaded.`
+          : 'No character read models are loaded yet.',
+      id: 'characters',
+      status: characterCount > 0 ? 'recovered' : 'missing',
+      title: 'Characters',
+    },
+    {
+      detail: encounterLoaded
+        ? 'Active encounter read model is loaded.'
+        : 'No active encounter read model is loaded.',
+      id: 'encounter',
+      status: encounterLoaded ? 'recovered' : 'optional_missing',
+      title: 'Encounter',
+    },
+  ];
+  const loadedCount = items.filter(
+    (item) => item.status === 'recovered',
+  ).length;
+  const missingRequiredCount = items.filter(
+    (item) => item.status === 'missing',
+  ).length;
+  const totalCount = items.length;
+  const noteText =
+    recoveryNotes.length === 0
+      ? ''
+      : ` ${recoveryNotes.length} recovery note${recoveryNotes.length === 1 ? ' was' : 's were'} recorded.`;
+  const status = !hasSession
+    ? 'empty'
+    : missingRequiredCount === 0 && loadedCount === totalCount
+      ? 'recovered'
+      : 'partial';
+  const loadedList =
+    status === 'recovered'
+      ? ': session, scene, active-scene placement, characters, and encounter'
+      : '';
+
+  return {
+    detail:
+      status === 'empty'
+        ? 'No recoverable runtime session is loaded yet.'
+        : `${loadedCount}/${totalCount} recovery read models are loaded${loadedList}.${noteText}`,
+    items,
+    loadedCount,
+    notes: recoveryNotes,
+    status,
+    title:
+      status === 'recovered'
+        ? 'Recovery ready'
+        : status === 'partial'
+          ? 'Recovery partial'
+          : 'Recovery empty',
+    totalCount,
   };
 }
 

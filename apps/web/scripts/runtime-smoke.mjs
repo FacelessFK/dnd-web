@@ -160,6 +160,20 @@ async function main() {
     await waitForText(page, 'Aria', 'recovered character Aria');
     await waitForText(page, 'Borin', 'recovered character Borin');
     await waitFor(page, {
+      label: 'recovery status summary',
+      predicate: `(() => {
+        const text = document.body?.innerText ?? '';
+        const normalizedText = text.toLocaleLowerCase('en-US');
+        const hasRecoveryStatus =
+          normalizedText.includes('recovery status') ||
+          text.includes('وضعیت بازیابی');
+        const hasFullRecovery =
+          normalizedText.includes('5/5 loaded') ||
+          text.includes('5/5 بارگذاری شده');
+        return hasRecoveryStatus && hasFullRecovery;
+      })()`,
+    });
+    await waitFor(page, {
       label: 'recovered encounter summary',
       predicate: `(() => {
         const text = document.body?.innerText ?? '';

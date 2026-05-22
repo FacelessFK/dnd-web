@@ -21,8 +21,8 @@ placement and movement, mixed player/combatant encounters, turn usage, narrow
 attack handling, a compact current-turn rail, selected target/action-result
 feedback, selected movement/turn-budget feedback, encounter status feedback,
 player readiness feedback, action economy feedback,
-DM HP/condition/reposition/turn overrides, and read-model recovery after
-refresh.
+DM HP/condition/reposition/turn overrides, read-model recovery after refresh,
+and recovery status feedback for local playtesting.
 
 The Character Library has a backend command surface at
 `POST /api/character-library/command`. In DB mode it persists entries in
