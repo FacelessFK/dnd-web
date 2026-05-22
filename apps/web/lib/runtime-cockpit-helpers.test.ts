@@ -32,6 +32,7 @@ import {
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
+  getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
   getTacticalBoardViewportAfterPan,
@@ -545,6 +546,74 @@ describe('runtime cockpit helpers', () => {
         isSelectedCell: true,
         isSelectedToken: true,
       },
+    );
+  });
+
+  it('moves tactical board cell focus with bounded keyboard navigation', () => {
+    assert.deepEqual(
+      getTacticalBoardCellAfterKeyboardNavigation({
+        cell: {
+          x: 3,
+          y: 3,
+        },
+        grid: {
+          height: 8,
+          width: 8,
+        },
+        key: 'ArrowLeft',
+      }),
+      {
+        x: 2,
+        y: 3,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardCellAfterKeyboardNavigation({
+        cell: {
+          x: 0,
+          y: 0,
+        },
+        grid: {
+          height: 8,
+          width: 8,
+        },
+        key: 'ArrowUp',
+      }),
+      {
+        x: 0,
+        y: 0,
+      },
+    );
+    assert.deepEqual(
+      getTacticalBoardCellAfterKeyboardNavigation({
+        cell: {
+          x: 3,
+          y: 3,
+        },
+        grid: {
+          height: 8,
+          width: 8,
+        },
+        key: 'End',
+      }),
+      {
+        x: 7,
+        y: 7,
+      },
+    );
+    assert.equal(
+      getTacticalBoardCellAfterKeyboardNavigation({
+        cell: {
+          x: 3,
+          y: 3,
+        },
+        grid: {
+          height: 8,
+          width: 8,
+        },
+        key: 'Enter',
+      }),
+      null,
     );
   });
 

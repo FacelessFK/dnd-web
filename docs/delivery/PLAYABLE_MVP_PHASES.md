@@ -55,7 +55,10 @@ Already implemented:
   pan offsets, reset view, and helper tests for viewport math;
 - Phase 1 Slice 2 tactical board affordances: selected movement cell,
   selected token, current-turn actor, and attack target badges with helper
-  tests for derived cell state.
+  tests for derived cell state;
+- Phase 1 follow-up keyboard/focus pass: roving tactical grid focus,
+  arrow/Home/End cell navigation, grid semantics, and helper tests for bounded
+  keyboard movement.
 
 ## Remaining Phases
 
@@ -95,7 +98,8 @@ Suggested next implementation slice:
 
 Suggested follow-up slice:
 
-- Add a small keyboard/focus pass for camera and board selection controls.
+- Implemented: small keyboard/focus pass for camera and board selection
+  controls.
 
 ### Phase 2: DM Scene Authoring Pass
 
@@ -236,10 +240,9 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement the Phase 1 follow-up slice:
+Implement Phase 3 Slice 1:
 
-> Add a small keyboard/focus pass for camera and board selection controls in
-> `/runtime`.
+> Add a DM-facing "Table Setup" checklist derived from session state.
 
 Non-goals for that task:
 
@@ -247,7 +250,8 @@ Non-goals for that task:
 - no persisted camera or board selection state;
 - no full drag-and-drop map editor;
 - no fog of war, line of sight, or lighting;
-- no refactor of scene/encounter command semantics.
+- no refactor of scene/encounter command semantics;
+- no new auth or DB requirements.
 
 Validation for that task should include:
 

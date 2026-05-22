@@ -381,6 +381,51 @@ export function getTacticalBoardCellAffordance({
   };
 }
 
+export function getTacticalBoardCellAfterKeyboardNavigation({
+  cell,
+  grid,
+  key,
+}: {
+  cell: Cell;
+  grid: Pick<GridDefinition, 'height' | 'width'>;
+  key: string;
+}): Cell | null {
+  switch (key) {
+    case 'ArrowDown':
+      return {
+        x: cell.x,
+        y: Math.min(grid.height - 1, cell.y + 1),
+      };
+    case 'ArrowLeft':
+      return {
+        x: Math.max(0, cell.x - 1),
+        y: cell.y,
+      };
+    case 'ArrowRight':
+      return {
+        x: Math.min(grid.width - 1, cell.x + 1),
+        y: cell.y,
+      };
+    case 'ArrowUp':
+      return {
+        x: cell.x,
+        y: Math.max(0, cell.y - 1),
+      };
+    case 'End':
+      return {
+        x: Math.max(0, grid.width - 1),
+        y: Math.max(0, grid.height - 1),
+      };
+    case 'Home':
+      return {
+        x: 0,
+        y: 0,
+      };
+    default:
+      return null;
+  }
+}
+
 function clampTacticalBoardViewportPan(
   viewport: TacticalBoardViewport,
   grid: Pick<GridDefinition, 'height' | 'width'>,

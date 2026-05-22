@@ -63,6 +63,8 @@ const messages = {
     'runtime.board.badge.target': 'Attack target',
     'runtime.board.badge.turn': 'Current turn',
     'runtime.board.camera': 'Camera',
+    'runtime.board.gridLabel':
+      'Tactical grid. Use arrow keys to move the selected cell, Home for the first cell, and End for the last cell.',
     'runtime.board.panDown': 'Pan down',
     'runtime.board.panLeft': 'Pan left',
     'runtime.board.panRight': 'Pan right',
@@ -176,6 +178,8 @@ const messages = {
     'runtime.board.badge.target': 'هدف حمله',
     'runtime.board.badge.turn': 'نوبت فعلی',
     'runtime.board.camera': 'دوربین',
+    'runtime.board.gridLabel':
+      'گرید تاکتیکی. با کلیدهای جهت‌دار سلول انتخاب‌شده را حرکت دهید، Home برای اولین سلول و End برای آخرین سلول.',
     'runtime.board.panDown': 'حرکت دوربین به پایین',
     'runtime.board.panLeft': 'حرکت دوربین به چپ',
     'runtime.board.panRight': 'حرکت دوربین به راست',

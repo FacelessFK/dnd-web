@@ -1,6 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import Link from 'next/link';
 
 import type {
@@ -79,6 +86,7 @@ import {
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
+  getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
   getTacticalBoardViewportAfterPan,
@@ -6285,6 +6293,7 @@ function TacticalGrid({
   viewport: TacticalBoardViewport;
 }) {
   const { t } = useI18n();
+  const cellButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
   const visibleEntityCells = useMemo(
     () =>
@@ -6319,6 +6328,28 @@ function TacticalGrid({
     target: t('runtime.board.badge.target'),
     turn: t('runtime.board.badge.turn'),
   };
+
+  function handleCellKeyboardNavigation(
+    event: KeyboardEvent<HTMLButtonElement>,
+    cell: Cell,
+  ): void {
+    const nextCell = getTacticalBoardCellAfterKeyboardNavigation({
+      cell,
+      grid,
+      key: event.key,
+    });
+
+    if (!nextCell) {
+      return;
+    }
+
+    event.preventDefault();
+    onSelectCell(nextCell);
+
+    window.requestAnimationFrame(() => {
+      cellButtonRefs.current[getTacticalBoardCellKey(nextCell)]?.focus();
+    });
+  }
 
   return (
     <div className="grid gap-3">
@@ -6415,6 +6446,8 @@ function TacticalGrid({
       <div className="min-h-[360px] overflow-hidden rounded-3xl border border-amber-400/30 bg-[#110d0a] p-2 shadow-inner shadow-black/70">
         <div
           className="mx-auto grid transition-transform duration-200 ease-out"
+          aria-label={t('runtime.board.gridLabel')}
+          role="grid"
           style={{
             gridAutoRows: `${boardCellSizePixels}px`,
             gridTemplateColumns: `repeat(${grid.width}, ${boardCellSizePixels}px)`,
@@ -6439,6 +6472,7 @@ function TacticalGrid({
             const resource = placement
               ? charactersByParticipant[placement.participantId]
               : undefined;
+            const cellKey = getTacticalBoardCellKey(cell);
             const cellAffordance = getTacticalBoardCellAffordance({
               actingParticipantId,
               cell,
@@ -6516,6 +6550,7 @@ function TacticalGrid({
             return (
               <button
                 aria-label={ariaParts.join(', ')}
+                aria-selected={isSelected}
                 className={`group relative border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
                   cellAffordance.isMovementTarget
                     ? 'bg-emerald-300/15 shadow-[inset_0_0_0_2px_rgba(52,211,153,0.95)]'
@@ -6527,7 +6562,7 @@ function TacticalGrid({
                           ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
                           : 'bg-[#211711] hover:bg-[#332316]'
                 }`}
-                key={`${cell.x}-${cell.y}`}
+                key={cellKey}
                 onClick={() => {
                   onSelectCell(cell);
 
@@ -6543,6 +6578,12 @@ function TacticalGrid({
                     }
                   }
                 }}
+                onKeyDown={(event) => handleCellKeyboardNavigation(event, cell)}
+                ref={(element) => {
+                  cellButtonRefs.current[cellKey] = element;
+                }}
+                role="gridcell"
+                tabIndex={isSelected ? 0 : -1}
                 type="button"
               >
                 <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
@@ -6663,6 +6704,10 @@ function getTacticalBoardBadgeClassName(
     case 'turn':
       return `${base} border-amber-100 bg-amber-300 text-stone-950 shadow-amber-300/30`;
   }
+}
+
+function getTacticalBoardCellKey(cell: Cell): string {
+  return `${cell.x}-${cell.y}`;
 }
 
 function CharacterSummary({

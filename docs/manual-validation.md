@@ -39,9 +39,10 @@ character, move its own token, use its own turn resources, and attack selected
 player targets. On the tactical board, use the camera controls to zoom in/out,
 pan around the scene, and reset the view; this camera state is local browser UI
 state. The board also marks the selected movement cell, selected token,
-current-turn actor, and attack target with compact badges. Local Reset clears
-browser runtime state only; it does not delete backend sessions or runtime
-state.
+current-turn actor, and attack target with compact badges. When a board cell is
+focused, use arrow keys to move the selected cell, Home to jump to the first
+cell, and End to jump to the last cell. Local Reset clears browser runtime state
+only; it does not delete backend sessions or runtime state.
 
 A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,

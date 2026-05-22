@@ -30,6 +30,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - local tactical board camera controls for zoom, bounded pan, and reset view;
 - tactical board badges for selected movement cell, selected token,
   current-turn actor, and attack target affordances;
+- tactical board keyboard affordances for roving selected-cell focus and
+  arrow/Home/End navigation;
 - mixed player/combatant encounters;
 - turn usage;
 - narrow melee attack handling;
