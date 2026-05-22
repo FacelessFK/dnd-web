@@ -129,10 +129,11 @@ corepack pnpm --filter @dnd/web test:smoke
 through headless Chrome, verifies recovery after reload, checks Player mode
 guardrails, confirms Local Reset stays browser-local, and verifies stale demo
 table text is not left visible after reset. It then restores the same session
-ID and recovers the table again to verify Local Reset did not delete backend
-runtime state. On failure it prints the current URL, summarized cockpit local
-state, visible enabled buttons, visible page text, and recent child-process
-output to make local smoke failures actionable.
+ID and recovers the table, Recovery Status summary, and Encounter Status
+summary again to verify Local Reset did not delete backend runtime state. On
+failure it prints the current URL, summarized cockpit local state, visible
+enabled buttons, visible page text, and recent child-process output to make
+local smoke failures actionable.
 
 ## Main Docs
 

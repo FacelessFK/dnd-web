@@ -148,4 +148,5 @@ numbering, the current URL, summarized cockpit local state, visible enabled
 buttons, visible page text, and recent child-process output. The same smoke
 path also checks that Local Reset removes stale recovered demo table text from
 the visible runtime surface, then restores the same session ID and recovers the
-backend runtime session again.
+backend runtime session again, including Recovery Status and Encounter Status
+summaries.

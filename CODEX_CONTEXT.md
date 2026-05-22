@@ -60,6 +60,8 @@ that scope.
   from the visible runtime surface after a recovered playable session.
 - Runtime smoke then restores the same session ID and recovers the backend
   runtime session again to verify Local Reset stays browser-local.
+- Runtime smoke's final Phase 5 assertion confirms that post-reset recovery
+  includes the table, Recovery Status summary, and Encounter Status summary.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -110,9 +112,8 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 5 follow-up: continue recovery and local playtest
-reliability around refresh/recover, smoke diagnostics, and honest read-model
-visibility.
+Playable MVP Phase 6: package the first named demo scenario using existing
+runtime commands and current local data.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
@@ -126,16 +127,17 @@ Status feedback, Slice 2 adds playable-session script tightening plus
 actionable smoke wait diagnostics, and Slice 3 verifies Local Reset clears
 stale recovered demo table text from the visible runtime surface. Slice 4
 verifies the same backend runtime session can be recovered again after Local
-Reset. The next work should keep making refresh/recover and local smoke
-coverage easier to trust without adding replay, cursor, catch-up, or broader
-D&D automation.
+Reset. Slice 5 adds a final post-reset recovery assertion for the table,
+Recovery Status, and Encounter Status summaries. Phase 5 can now close; the
+next work should start Phase 6 demo scenario packaging without adding replay,
+cursor, catch-up, or broader D&D automation.
 
 Break this into small Codex tasks:
 
-1. inspect current recovery helpers, browser smoke waits, and runtime read-model
-   status surfaces;
-2. continue local playtest reliability around recovery status, smoke
-   assertions, and manual validation;
+1. inspect current fresh demo setup commands, runtime sample data, and demo
+   setup UI;
+2. add a named demo scenario option without introducing new runtime protocol or
+   combat automation;
 3. avoid adding replay, cursor, catch-up, or broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.

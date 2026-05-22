@@ -11,6 +11,7 @@ import {
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
   getPageDiagnosticsExpression,
+  getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
@@ -255,12 +256,31 @@ async function main() {
     });
     await setSessionInputValue(page, sessionIdBeforeLocalReset);
     await clickButton(page, 'Recover');
-    await waitForText(
-      page,
-      'Training Room',
-      'recovered scene after local reset',
-    );
-    await waitForText(page, 'Aria', 'recovered character after local reset');
+    await waitFor(page, {
+      label: 'full table recovery after local reset',
+      predicate: `(() => {
+        const text = document.body?.innerText ?? '';
+        const normalizedText = text.toLocaleLowerCase('en-US');
+        const hasStableScene = (${getPresentVisibleTextsExpression(['Training Room'])});
+        const hasRecoveryStatus =
+          normalizedText.includes('recovery status') ||
+          text.includes('وضعیت بازیابی');
+        const hasFullRecovery =
+          normalizedText.includes('5/5 loaded') ||
+          text.includes('5/5 بارگذاری شده');
+        const hasEncounterStatus =
+          normalizedText.includes('encounter status') ||
+          normalizedText.includes('وضعیت encounter');
+        const hasRoundProgress =
+          normalizedText.includes('round') ||
+          text.includes('راند');
+        return hasStableScene &&
+          hasRecoveryStatus &&
+          hasFullRecovery &&
+          hasEncounterStatus &&
+          hasRoundProgress;
+      })()`,
+    });
     await waitFor(page, {
       label: 'recovered cockpit state after local reset',
       predicate: `(() => {

@@ -6,6 +6,7 @@ import {
   formatSmokeStep,
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
+  getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
   summarizeCockpitState,
@@ -103,6 +104,25 @@ test('runtime smoke diagnostics can assert stale visible text is gone', () => {
   const evaluate = Function('document', `return ${expression};`);
 
   assert.equal(evaluate({ body: { innerText: 'Runtime War Table' } }), true);
+  assert.equal(
+    evaluate({ body: { innerText: 'Runtime War Table\nTraining Room' } }),
+    false,
+  );
+});
+
+test('runtime smoke diagnostics can assert required visible text is present', () => {
+  const expression = getPresentVisibleTextsExpression([
+    'Training Room',
+    'Recovery status',
+  ]);
+  const evaluate = Function('document', `return ${expression};`);
+
+  assert.equal(
+    evaluate({
+      body: { innerText: 'Runtime War Table\nTraining Room\nRecovery status' },
+    }),
+    true,
+  );
   assert.equal(
     evaluate({ body: { innerText: 'Runtime War Table\nTraining Room' } }),
     false,

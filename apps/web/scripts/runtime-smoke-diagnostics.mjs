@@ -59,6 +59,13 @@ export function getAbsentVisibleTextsExpression(texts) {
   })()`;
 }
 
+export function getPresentVisibleTextsExpression(texts) {
+  return `(() => {
+    const bodyText = document.body?.innerText ?? '';
+    return ${JSON.stringify(texts)}.every((text) => bodyText.includes(text));
+  })()`;
+}
+
 export function getStoredCockpitSessionIdExpression(storageKey) {
   return `(() => {
     const raw = localStorage.getItem(${JSON.stringify(storageKey)});
