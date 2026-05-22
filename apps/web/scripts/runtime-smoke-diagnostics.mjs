@@ -1,0 +1,110 @@
+const defaultTextLimit = 2000;
+
+export function formatSmokeStep({ index, label, total }) {
+  return `[runtime-smoke] ${index}/${total} ${label}`;
+}
+
+export function formatSmokeWaitFailure({
+  diagnostics,
+  label,
+  lastErrorMessage,
+}) {
+  const sections = [`Timed out waiting for ${label}.`];
+
+  if (lastErrorMessage) {
+    sections.push(`Last evaluation error: ${lastErrorMessage}`);
+  }
+
+  if (diagnostics?.url) {
+    sections.push(`Current URL: ${diagnostics.url}`);
+  }
+
+  if (diagnostics?.cockpitState) {
+    sections.push(`Cockpit state: ${diagnostics.cockpitState}`);
+  }
+
+  if (diagnostics?.enabledButtons?.length) {
+    sections.push(`Enabled buttons: ${diagnostics.enabledButtons.join(', ')}`);
+  }
+
+  sections.push(`Visible page text:\n${diagnostics?.visibleText ?? ''}`);
+
+  return sections.join('\n');
+}
+
+export function getPageDiagnosticsExpression(
+  storageKey,
+  textLimit = defaultTextLimit,
+) {
+  return `(() => {
+    const enabledButtons = [...document.querySelectorAll('button')]
+      .filter((candidate) => !candidate.disabled && candidate.getClientRects().length > 0)
+      .map((candidate) => candidate.textContent?.replace(/\\s+/g, ' ').trim())
+      .filter(Boolean)
+      .slice(0, 24);
+
+    return {
+      enabledButtons,
+      rawCockpitState: localStorage.getItem(${JSON.stringify(storageKey)}),
+      url: window.location.href,
+      visibleText: (document.body?.innerText ?? '').slice(0, ${Number(textLimit)}),
+    };
+  })()`;
+}
+
+export function normalizePageDiagnostics(rawDiagnostics) {
+  return {
+    cockpitState: summarizeCockpitState(rawDiagnostics?.rawCockpitState),
+    enabledButtons: Array.isArray(rawDiagnostics?.enabledButtons)
+      ? rawDiagnostics.enabledButtons
+      : [],
+    url:
+      typeof rawDiagnostics?.url === 'string' ? rawDiagnostics.url : 'unknown',
+    visibleText:
+      typeof rawDiagnostics?.visibleText === 'string'
+        ? rawDiagnostics.visibleText
+        : '',
+  };
+}
+
+export function summarizeCockpitState(rawCockpitState) {
+  if (!rawCockpitState) {
+    return 'empty';
+  }
+
+  let state;
+
+  try {
+    state = JSON.parse(rawCockpitState);
+  } catch {
+    return `unparseable: ${truncateForSummary(rawCockpitState)}`;
+  }
+
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return `unexpected: ${truncateForSummary(rawCockpitState)}`;
+  }
+
+  const summaryFields = [
+    'sessionId',
+    'sceneId',
+    'roleMode',
+    'selectedParticipantId',
+  ];
+  const summary = summaryFields
+    .filter((field) => state[field])
+    .map((field) => `${field}=${state[field]}`);
+
+  if (summary.length) {
+    return summary.join(', ');
+  }
+
+  return `keys=${Object.keys(state).sort().join(', ') || 'none'}`;
+}
+
+function truncateForSummary(value, limit = 160) {
+  if (value.length <= limit) {
+    return value;
+  }
+
+  return `${value.slice(0, limit - 1)}...`;
+}

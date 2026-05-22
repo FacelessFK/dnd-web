@@ -6,6 +6,12 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import {
+  formatSmokeStep,
+  formatSmokeWaitFailure,
+  getPageDiagnosticsExpression,
+  normalizePageDiagnostics,
+} from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../../..');
@@ -18,8 +24,19 @@ const smokeTimeoutMs = Number.parseInt(
 );
 
 const processLogs = new Map();
+const smokeStepLabels = [
+  'starting authoritative server',
+  'starting Next runtime UI',
+  'launching headless browser',
+  'running fresh DM demo setup',
+  'starting encounter from UI',
+  'validating recovery after reload',
+  'validating player mode guardrails',
+  'validating local reset stays local',
+];
 const startedProcesses = [];
 let chromeUserDataDir;
+let smokeStepIndex = 0;
 
 main().catch(async (error) => {
   console.error('\n[runtime-smoke] failed');
@@ -51,7 +68,7 @@ async function main() {
   const webOrigin = `http://127.0.0.1:${webPort}`;
   const runtimeUrl = `http://127.0.0.1:${webPort}/runtime`;
 
-  console.log('[runtime-smoke] starting authoritative server');
+  logSmokeStep('starting authoritative server');
   const serverProcess = startProcess(
     'server',
     corepackCommand,
@@ -67,7 +84,7 @@ async function main() {
     timeoutMs: smokeTimeoutMs,
   });
 
-  console.log('[runtime-smoke] starting Next runtime UI');
+  logSmokeStep('starting Next runtime UI');
   const webProcess = startProcess(
     'web',
     corepackCommand,
@@ -93,7 +110,7 @@ async function main() {
     timeoutMs: smokeTimeoutMs,
   });
 
-  console.log('[runtime-smoke] launching headless browser');
+  logSmokeStep('launching headless browser');
   const browserProcess = launchBrowser(browserPath, debugPort);
   await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`, {
     label: 'Chrome DevTools',
@@ -116,7 +133,7 @@ async function main() {
     await waitForNoStoredSession(page);
     await clickButton(page, 'DM Mode');
 
-    console.log('[runtime-smoke] running fresh DM demo setup');
+    logSmokeStep('running fresh DM demo setup');
     await clickButton(page, 'Run Fresh Demo Setup');
     await waitForCockpitState(page, (state) =>
       Boolean(state?.sessionId && state?.sceneId),
@@ -126,7 +143,7 @@ async function main() {
     await waitForText(page, 'Borin', 'sample character Borin');
     await waitForText(page, 'Tactical Grid', 'tactical grid');
 
-    console.log('[runtime-smoke] starting encounter from UI');
+    logSmokeStep('starting encounter from UI');
     await clickButton(page, 'Start Encounter');
     await waitFor(page, {
       label: 'encounter summary',
@@ -147,7 +164,7 @@ async function main() {
     await waitForText(page, 'Combat & Event Feed', 'event feed panel');
     await waitForText(page, 'Monsters & NPCs', 'DM combatant controls panel');
 
-    console.log('[runtime-smoke] validating recovery after reload');
+    logSmokeStep('validating recovery after reload');
     await page.send('Page.reload', { ignoreCache: true });
     await waitForAnyText(
       page,
@@ -188,7 +205,7 @@ async function main() {
       })()`,
     });
 
-    console.log('[runtime-smoke] validating player mode guardrails');
+    logSmokeStep('validating player mode guardrails');
     await clickButton(page, 'Player Mode');
     await waitForText(page, 'PLAYER VIEW', 'player mode tactical shell');
     await clickButton(page, 'Recover');
@@ -212,7 +229,7 @@ async function main() {
     await expectVisibleText(page, 'Scene Builder', false);
     await expectVisibleText(page, 'Monsters & NPCs', false);
 
-    console.log('[runtime-smoke] validating local reset stays local');
+    logSmokeStep('validating local reset stays local');
     await clickButton(page, 'Local Reset');
     await waitForNoStoredSession(page);
     await waitFor(page, {
@@ -294,6 +311,17 @@ function startProcess(name, command, args, env = {}) {
   });
 
   return child;
+}
+
+function logSmokeStep(label) {
+  smokeStepIndex += 1;
+  console.log(
+    formatSmokeStep({
+      index: smokeStepIndex,
+      label,
+      total: smokeStepLabels.length,
+    }),
+  );
 }
 
 function launchBrowser(browserPath, debugPort) {
@@ -641,13 +669,22 @@ async function waitFor(page, { label, predicate, timeoutMs = smokeTimeoutMs }) {
     await delay(250);
   }
 
-  const bodyText = await page
-    .evaluate(`(() => document.body?.innerText?.slice(0, 2000) ?? '')()`)
-    .catch(() => '');
+  const diagnostics = await page
+    .evaluate(getPageDiagnosticsExpression(storageKey))
+    .then((rawDiagnostics) => normalizePageDiagnostics(rawDiagnostics))
+    .catch((error) => ({
+      cockpitState: 'unavailable',
+      enabledButtons: [],
+      url: 'unavailable',
+      visibleText: `Unable to collect page diagnostics: ${error.message}`,
+    }));
+
   throw new Error(
-    `Timed out waiting for ${label}.${
-      lastError ? ` Last evaluation error: ${lastError.message}` : ''
-    }\nVisible page text:\n${bodyText}`,
+    formatSmokeWaitFailure({
+      diagnostics,
+      label,
+      lastErrorMessage: lastError?.message,
+    }),
   );
 }
 

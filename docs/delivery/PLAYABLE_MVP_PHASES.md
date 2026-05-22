@@ -301,14 +301,19 @@ runtime feature. Phase 3 should come early because it makes the current bridge
 and assignment work testable by a non-developer. Phase 2 and Phase 4 then turn
 the existing runtime controls into a real playable session loop.
 
-## First Next Task
+## Latest Completed Slices
 
 Implemented Phase 5 Slice 1:
 
 > Add a Recovery Status summary and smoke assertion for recovered read models
 > after browser reload/recover.
 
-Non-goals for that task:
+Implemented Phase 5 Slice 2:
+
+> Tighten the browser playable-session script and add actionable smoke
+> diagnostics for timed-out browser waits.
+
+Non-goals for these tasks:
 
 - no new server protocol;
 - no new combat rules automation;
@@ -322,9 +327,18 @@ Non-goals for that task:
 - no new attack resolution or damage automation beyond displaying existing
   combat events.
 
-Validation for that task should include:
+Validation for these tasks should include:
 
 - focused helper or component-level checks where behavior is extracted;
+- root smoke diagnostics checks;
 - web tests;
 - web typecheck;
 - build and runtime smoke when practical.
+
+## First Next Task
+
+Phase 5 Slice 3:
+
+> Add one small recovery/playtest diagnostic surface or smoke assertion that
+> catches a real local-runtime failure mode without adding replay, cursor,
+> catch-up, broader combat automation, or new persistence requirements.

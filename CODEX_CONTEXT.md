@@ -53,6 +53,9 @@ that scope.
   feedback, player readiness feedback, action economy feedback, narrow melee
   attacks, turn usage, readable event feed, recovery status feedback, and
   explicit DM controls.
+- Runtime smoke coverage now reports numbered steps and richer wait-failure
+  diagnostics: current URL, summarized cockpit local state, visible enabled
+  buttons, visible page text, and recent child-process output.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -104,7 +107,7 @@ that scope.
 
 Recommended next milestone:
 Playable MVP Phase 5 follow-up: continue recovery and local playtest
-reliability around refresh/recover, smoke coverage, and honest read-model
+reliability around refresh/recover, smoke diagnostics, and honest read-model
 visibility.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
@@ -114,8 +117,10 @@ loaded read models, Slice 3 adds selected movement destination and turn-budget
 feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
 existing turn controls. Slice 5 adds encounter status, round progress, next
 actor, latest encounter update, and latest combat result feedback. Slice 6 adds
-player-facing readiness and turn-ready feedback. The next work should keep
-making refresh/recover and local smoke coverage easier to trust without adding
+player-facing readiness and turn-ready feedback. Phase 5 Slice 1 adds Recovery
+Status feedback and Slice 2 adds playable-session script tightening plus
+actionable smoke wait diagnostics. The next work should keep making
+refresh/recover and local smoke coverage easier to trust without adding
 replay, cursor, catch-up, or broader D&D automation.
 
 Break this into small Codex tasks:

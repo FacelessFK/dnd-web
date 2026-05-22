@@ -127,7 +127,10 @@ corepack pnpm --filter @dnd/web test:smoke
 
 `@dnd/web test:smoke` starts local server/web dev processes, drives `/runtime`
 through headless Chrome, verifies recovery after reload, checks Player mode
-guardrails, and confirms Local Reset stays browser-local.
+guardrails, and confirms Local Reset stays browser-local. On failure it prints
+the current URL, summarized cockpit local state, visible enabled buttons,
+visible page text, and recent child-process output to make local smoke failures
+actionable.
 
 ## Main Docs
 

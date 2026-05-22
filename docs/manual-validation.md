@@ -88,7 +88,36 @@ A lightweight automated browser smoke for the same surface is available with
 runs the DM fresh demo setup through headless Chrome, validates read-model
 recovery after reload, checks the Recovery Status summary, checks Player mode
 guardrails, and confirms Local Reset clears only browser state. It is
-intentionally not a full production E2E suite.
+intentionally not a full production E2E suite. When a browser wait times out,
+the smoke report includes the current URL, summarized persisted cockpit state,
+visible enabled buttons, visible page text, and recent server/web/browser
+process output.
+
+## Browser Playable Session Script
+
+Use this script for the first local playable-session pass after startup:
+
+1. Open `/runtime`, wait for the runtime shell, and run **Local Reset** if the
+   browser still has a stored session.
+2. Switch to **DM Mode** and run **Run Fresh Demo Setup**.
+3. Confirm the active scene is **Training Room**, the tactical grid is visible,
+   and the sample characters **Aria** and **Borin** appear.
+4. Confirm the **Recovery status** panel reports the session, scene,
+   active-scene placement, characters, and encounter read models. Before an
+   encounter starts, the missing encounter row is expected to be optional.
+5. Start the encounter from the DM controls.
+6. Confirm **Encounter status** shows round/turn progress and the current or
+   next actor.
+7. Confirm **Combat & Event Feed** and **Monsters & NPCs** are visible in DM
+   mode.
+8. Reload the browser, click **Recover**, and confirm **Training Room**,
+   **Aria**, **Borin**, **Recovery status**, and **Encounter status** return.
+9. Switch to **Player Mode**, click **Recover**, and confirm **PLAYER VIEW**,
+   the assigned character, tactical grid, and **Readiness summary** are visible.
+10. Confirm Player mode does not show **Run Fresh Demo Setup**, **Scene
+    Builder**, or **Monsters & NPCs**.
+11. Click **Local Reset** and confirm the browser session input is blank. This
+    reset is browser-local and does not delete backend runtime state.
 
 For the persisted character product MVP, run the server in DB mode with
 `0008_character_library_entries.sql`, `0009_auth_users_and_sessions.sql`, and

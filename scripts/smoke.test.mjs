@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import {
+  formatSmokeStep,
+  formatSmokeWaitFailure,
+  summarizeCockpitState,
+} from '../apps/web/scripts/runtime-smoke-diagnostics.mjs';
 
 const root = process.cwd();
 
@@ -37,4 +42,55 @@ test('root node engine targets Node 20 or newer', () => {
   );
 
   assert.equal(packageJson.engines?.node, '>=20');
+});
+
+test('runtime smoke diagnostics summarize the active cockpit state', () => {
+  const summary = summarizeCockpitState(
+    JSON.stringify({
+      roleMode: 'player',
+      sceneId: 'scene-123',
+      selectedParticipantId: 'player-001',
+      sessionId: 'session-123',
+    }),
+  );
+
+  assert.equal(
+    summary,
+    'sessionId=session-123, sceneId=scene-123, roleMode=player, selectedParticipantId=player-001',
+  );
+});
+
+test('runtime smoke diagnostics format failed waits with actionable context', () => {
+  assert.equal(
+    formatSmokeStep({
+      index: 3,
+      label: 'validating recovery after reload',
+      total: 7,
+    }),
+    '[runtime-smoke] 3/7 validating recovery after reload',
+  );
+
+  const message = formatSmokeWaitFailure({
+    diagnostics: {
+      cockpitState: 'sessionId=session-123, sceneId=scene-123',
+      enabledButtons: ['Recover', 'Player Mode'],
+      url: 'http://127.0.0.1:3000/runtime',
+      visibleText: 'Runtime War Table\nRecovery status',
+    },
+    label: 'recovery status summary',
+    lastErrorMessage: 'document is not ready',
+  });
+
+  assert.match(message, /Timed out waiting for recovery status summary\./);
+  assert.match(message, /Last evaluation error: document is not ready/);
+  assert.match(message, /Current URL: http:\/\/127\.0\.0\.1:3000\/runtime/);
+  assert.match(
+    message,
+    /Cockpit state: sessionId=session-123, sceneId=scene-123/,
+  );
+  assert.match(message, /Enabled buttons: Recover, Player Mode/);
+  assert.match(
+    message,
+    /Visible page text:\nRuntime War Table\nRecovery status/,
+  );
 });
