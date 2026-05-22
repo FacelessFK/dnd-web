@@ -57,6 +57,13 @@ and monster spawn presets. Confirm selecting a preset does not persist anything
 until **Place Entity** succeeds, and that the footprint, blocking, vision, and
 hidden fields remain editable before submission.
 
+In the DM Scene Transitions panel, confirm the Transition presets buttons fill
+the existing Create transition draft for door, stairs, portal, gate, and other
+exits. Confirm selecting a preset preserves the currently chosen target scene
+ID/label, does not persist anything until **Create Transition** succeeds, and
+leaves kind, name, footprint, hidden, blocking, target, and notes editable
+before submission.
+
 A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
 runs the DM fresh demo setup through headless Chrome, validates read-model

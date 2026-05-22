@@ -55,6 +55,7 @@ import {
   createSceneEntityDraftFormFromPreset,
   createSceneEntityDraftFormFromEntity,
   createSceneDraftFormFromScene,
+  createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
   defaultTacticalBoardViewport,
   defaultDm,
@@ -107,6 +108,7 @@ import {
   sceneEntityTypeOptions,
   sceneTransitionInputFromDraft,
   sceneTransitionKindOptions,
+  sceneTransitionPresets,
   sceneTransitionUpdateInputFromDraft,
   combatantInputFromDraft,
   sceneInputFromDraft,
@@ -130,6 +132,8 @@ import {
   type SceneEntityPreset,
   type SceneEntityPresetId,
   type SceneTransitionDraftForm,
+  type SceneTransitionPreset,
+  type SceneTransitionPresetId,
   type SessionSnapshot,
   type StoredCockpitState,
   type TacticalBoardCellBadgeKind,
@@ -3028,6 +3032,12 @@ export function RuntimeCockpit() {
     }));
   }
 
+  function applySceneTransitionPreset(presetId: SceneTransitionPresetId): void {
+    setSceneTransitionDraft((current) =>
+      createSceneTransitionDraftFormFromPreset(presetId, current),
+    );
+  }
+
   function updateSceneTransitionEditDraftField(
     field:
       | 'footprintHeight'
@@ -4071,6 +4081,7 @@ export function RuntimeCockpit() {
                 onDelete={deleteSceneTransition}
                 onDraftFieldChange={updateSceneTransitionDraftField}
                 onDraftFlagChange={updateSceneTransitionDraftFlag}
+                onDraftPresetSelect={applySceneTransitionPreset}
                 onEditFieldChange={updateSceneTransitionEditDraftField}
                 onEditFlagChange={updateSceneTransitionEditDraftFlag}
                 onSelectTransition={selectSceneTransitionNode}
@@ -4079,6 +4090,7 @@ export function RuntimeCockpit() {
                 selectedCell={selectedCell}
                 selectedTransition={selectedTransition}
                 selectedTransitionId={selectedTransitionId}
+                transitionPresets={sceneTransitionPresets}
                 transitions={transitionSceneEntities}
                 updateDisabledReason={updateTransitionReason}
               />
@@ -5454,6 +5466,7 @@ function SceneTransitionPanel({
   onDelete,
   onDraftFieldChange,
   onDraftFlagChange,
+  onDraftPresetSelect,
   onEditFieldChange,
   onEditFlagChange,
   onSelectTransition,
@@ -5462,6 +5475,7 @@ function SceneTransitionPanel({
   selectedCell,
   selectedTransition,
   selectedTransitionId,
+  transitionPresets,
   transitions,
   updateDisabledReason,
 }: {
@@ -5490,6 +5504,7 @@ function SceneTransitionPanel({
     field: 'blocksMovement' | 'blocksVision' | 'hidden',
     value: boolean,
   ) => void;
+  onDraftPresetSelect: (presetId: SceneTransitionPresetId) => void;
   onEditFieldChange: (
     field:
       | 'footprintHeight'
@@ -5511,6 +5526,7 @@ function SceneTransitionPanel({
   selectedCell: Cell;
   selectedTransition?: Scene['entities'][number];
   selectedTransitionId: string;
+  transitionPresets: readonly SceneTransitionPreset[];
   transitions: Scene['entities'];
   updateDisabledReason: string | null;
 }) {
@@ -5541,6 +5557,30 @@ function SceneTransitionPanel({
               {draftErrors.slice(0, 3).join(' ')}
             </p>
           ) : null}
+          <div className="grid gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
+              Transition presets
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {transitionPresets.map((preset) => (
+                <button
+                  className="min-h-16 rounded-xl border border-violet-200/15 bg-[#22162a] px-3 py-2 text-left transition hover:border-violet-200/45 hover:bg-[#2f1e3b] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                  key={preset.id}
+                  onClick={() => onDraftPresetSelect(preset.id)}
+                  title={preset.description}
+                  type="button"
+                >
+                  <span className="block text-sm font-bold text-amber-50">
+                    {preset.label}
+                  </span>
+                  <span className="mt-1 block text-xs capitalize text-amber-100/55">
+                    {preset.draft.kind} · {preset.draft.footprintWidth}x
+                    {preset.draft.footprintHeight}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <SelectField
               label="Kind"

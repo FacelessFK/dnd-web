@@ -28,6 +28,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - compact DM scene entity palette that fills the existing placement draft with
   wall, cover, marker, hidden prop, player spawn, and monster spawn presets;
 - transition node create/update/delete/activation;
+- compact DM transition preset palette that fills the existing transition draft
+  with door, stairs, portal, gate, and other exit presets;
 - character placement and movement;
 - local tactical board camera controls for zoom, bounded pan, and reset view;
 - tactical board badges for selected movement cell, selected token,

@@ -45,6 +45,8 @@ Already implemented:
 - passive scene entities and transition nodes;
 - compact DM scene entity palette for wall, cover, marker, hidden prop, player
   spawn, and monster spawn presets;
+- compact DM transition preset palette for door, stairs, portal, gate, and
+  other exits;
 - character assignment, placement, movement, HP, conditions, and DM overrides;
 - mixed player/combatant encounters;
 - narrow melee attacks and turn usage;
@@ -135,8 +137,8 @@ Suggested first implementation slice:
 
 Suggested next implementation slice:
 
-- Add compact transition-node presets/guidance for door, stairs, portal, gate,
-  and other scene exits without changing scene command semantics.
+- Implemented: compact transition-node presets/guidance for door, stairs,
+  portal, gate, and other scene exits without changing scene command semantics.
 
 ### Phase 3: Table Setup And Ready Flow
 
@@ -256,17 +258,17 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement Phase 2 Slice 2:
+Implement Phase 4 Slice 1:
 
-> Add compact transition-node presets/guidance for common scene exits.
+> Add a compact current-turn rail with actor, remaining movement, and used
+> action/bonus/reaction state.
 
 Non-goals for that task:
 
 - no new server protocol;
-- no persisted camera or board selection state;
-- no full drag-and-drop map editor or asset marketplace;
-- no fog of war, line of sight, or lighting;
-- no refactor of scene transition command semantics;
+- no new combat rules automation;
+- no full spell, inventory, opportunity attack, or reaction-window system;
+- no refactor of encounter command semantics;
 - no new auth or DB requirements.
 
 Validation for that task should include:

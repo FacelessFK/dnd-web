@@ -17,12 +17,12 @@ DND-web is a TypeScript pnpm monorepo:
 `/runtime` is the live tabletop cockpit. It supports DM and Player modes,
 session create/join/reconnect, SSE subscription, read-model recovery after
 refresh, scene create/activate, passive scene entity editing, transition nodes,
-compact scene entity presets, character placement/movement, local tactical
-board camera controls, tactical board state badges, tactical board keyboard
-navigation, mixed player/combatant encounters, turn usage, narrow melee attack
-handling, readable event feed, a DM-facing Table Setup checklist, and DM
-controls for HP, conditions, repositioning, combatants, current turn, turn
-usage, and encounter end.
+compact scene entity presets, compact transition presets, character
+placement/movement, local tactical board camera controls, tactical board state
+badges, tactical board keyboard navigation, mixed player/combatant encounters,
+turn usage, narrow melee attack handling, readable event feed, a DM-facing
+Table Setup checklist, and DM controls for HP, conditions, repositioning,
+combatants, current turn, turn usage, and encounter end.
 
 The browser submits commands and renders server responses. It is not
 authoritative.

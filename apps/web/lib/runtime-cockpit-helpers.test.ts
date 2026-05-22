@@ -15,6 +15,7 @@ import {
   createDefaultSceneTransitionDraftForm,
   createSceneEntityDraftFormFromPreset,
   createSceneEntityDraftFormFromEntity,
+  createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
   describeSessionStreamEvent,
   formatRuntimeFailure,
@@ -48,6 +49,7 @@ import {
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   sceneEntityPresets,
+  sceneTransitionPresets,
   isCombatantEntityDefeated,
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
@@ -1411,6 +1413,47 @@ describe('runtime cockpit helpers', () => {
       targetLabel: 'Lower Crypt',
       targetSceneId: 'scene_22222222-2222-4222-8222-222222222222',
     });
+  });
+
+  it('creates scene transition drafts from common DM transition presets', () => {
+    assert.deepEqual(
+      sceneTransitionPresets.map((preset) => preset.id),
+      ['door', 'stairs', 'portal', 'gate', 'other'],
+    );
+
+    const portal = createSceneTransitionDraftFormFromPreset('portal', {
+      ...createDefaultSceneTransitionDraftForm(),
+      targetLabel: '  Astral Gate  ',
+      targetSceneId: 'scene_33333333-3333-4333-8333-333333333333',
+    });
+
+    assert.deepEqual(portal, {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      kind: 'portal',
+      name: 'Portal',
+      notes: 'Arcane transition marker.',
+      targetLabel: '  Astral Gate  ',
+      targetSceneId: 'scene_33333333-3333-4333-8333-333333333333',
+    });
+    assert.deepEqual(
+      validateSceneTransitionDraftForm({
+        form: portal,
+        grid: {
+          cellSizeFeet: 5,
+          height: 8,
+          width: 8,
+        },
+        position: {
+          x: 1,
+          y: 1,
+        },
+      }),
+      [],
+    );
   });
 
   it('derives transition markers separately from passive entities and respects simple visibility', () => {

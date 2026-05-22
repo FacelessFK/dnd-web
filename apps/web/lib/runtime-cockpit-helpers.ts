@@ -124,6 +124,20 @@ export type SceneTransitionDraftForm = {
   targetSceneId: string;
 };
 
+export type SceneTransitionPresetId =
+  | 'door'
+  | 'gate'
+  | 'other'
+  | 'portal'
+  | 'stairs';
+
+export type SceneTransitionPreset = {
+  description: string;
+  draft: SceneTransitionDraftForm;
+  id: SceneTransitionPresetId;
+  label: string;
+};
+
 export type CombatantDraftForm = {
   abilities: Record<AbilityKey, string>;
   armorClass: string;
@@ -243,6 +257,94 @@ export const sampleCharacters: Record<string, CharacterInput> = {
 
 export const sceneEntityTypeOptions = sceneEntityTypeSchema.options;
 export const sceneTransitionKindOptions = sceneTransitionKindSchema.options;
+
+export const sceneTransitionPresets: readonly SceneTransitionPreset[] = [
+  {
+    description: 'Linked doorway between nearby rooms or chambers.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      kind: 'door',
+      name: 'Doorway',
+      notes: 'Door transition marker.',
+      targetLabel: '',
+      targetSceneId: '',
+    },
+    id: 'door',
+    label: 'Door',
+  },
+  {
+    description: 'Vertical route to another level or elevation.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      kind: 'stairs',
+      name: 'Stairs',
+      notes: 'Stairs transition marker.',
+      targetLabel: '',
+      targetSceneId: '',
+    },
+    id: 'stairs',
+    label: 'Stairs',
+  },
+  {
+    description: 'Arcane or unusual linked scene transition.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      kind: 'portal',
+      name: 'Portal',
+      notes: 'Arcane transition marker.',
+      targetLabel: '',
+      targetSceneId: '',
+    },
+    id: 'portal',
+    label: 'Portal',
+  },
+  {
+    description: 'Large threshold, portcullis, or exterior scene exit.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '2',
+      hidden: false,
+      kind: 'gate',
+      name: 'Gate',
+      notes: 'Gate transition marker.',
+      targetLabel: '',
+      targetSceneId: '',
+    },
+    id: 'gate',
+    label: 'Gate',
+  },
+  {
+    description: 'Custom exit or DM-defined scene link.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      kind: 'other',
+      name: 'Scene Exit',
+      notes: 'Custom transition marker.',
+      targetLabel: '',
+      targetSceneId: '',
+    },
+    id: 'other',
+    label: 'Other',
+  },
+] as const;
 
 export const sceneEntityPresets: readonly SceneEntityPreset[] = [
   {
@@ -620,6 +722,21 @@ export function createDefaultSceneTransitionDraftForm(): SceneTransitionDraftFor
     notes: '',
     targetLabel: '',
     targetSceneId: '',
+  };
+}
+
+export function createSceneTransitionDraftFormFromPreset(
+  presetId: SceneTransitionPresetId,
+  current?: SceneTransitionDraftForm,
+): SceneTransitionDraftForm {
+  const preset =
+    sceneTransitionPresets.find((candidate) => candidate.id === presetId) ??
+    sceneTransitionPresets[0]!;
+
+  return {
+    ...preset.draft,
+    targetLabel: current?.targetLabel ?? preset.draft.targetLabel,
+    targetSceneId: current?.targetSceneId ?? preset.draft.targetSceneId,
   };
 }
 
