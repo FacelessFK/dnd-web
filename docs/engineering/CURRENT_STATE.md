@@ -39,6 +39,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - DM-facing Table Setup checklist derived from session, player assignment,
   scene, token placement, and encounter read state;
 - mixed player/combatant encounters;
+- compact current-turn rail that shows the current actor, remaining movement,
+  and used action/bonus/reaction state from loaded read models;
 - turn usage;
 - narrow melee attack handling;
 - readable combat/event feed;

@@ -74,6 +74,7 @@ import {
   getCurrentTurnCombatantId,
   getCurrentTurnLabel,
   getCurrentTurnParticipantId,
+  getCurrentTurnRailSummary,
   getDmCombatantActionDisabledReason,
   getDmTableSetupChecklist,
   getFinalizedLibraryEntriesForRuntime,
@@ -121,6 +122,7 @@ import {
   type AbilityKey,
   type CharacterDraftForm,
   type CombatantDraftForm,
+  type CurrentTurnRailSummary,
   type DmTableSetupChecklist,
   type LibraryEntrySubmissionBlocker,
   type OutboxStatusView,
@@ -3445,6 +3447,12 @@ export function RuntimeCockpit() {
     participants,
     scene,
   });
+  const currentTurnRailSummary = getCurrentTurnRailSummary({
+    charactersByParticipant,
+    encounter,
+    participants,
+    scene,
+  });
   const disabledReasons = getRuntimeDisabledReasons({
     actingParticipantId,
     activeSceneKnown: Boolean(activeScene || sceneId),
@@ -3786,6 +3794,7 @@ export function RuntimeCockpit() {
               title="Tactical Grid"
               tone={mode}
             >
+              <CurrentTurnRail summary={currentTurnRailSummary} t={t} />
               <TacticalGrid
                 activeScene={activeScene}
                 actingParticipantId={actingParticipantId}
@@ -4991,6 +5000,87 @@ function StatusBadge({
     >
       {label}
     </span>
+  );
+}
+
+function CurrentTurnRail({
+  summary,
+  t,
+}: {
+  summary: CurrentTurnRailSummary | null;
+  t: RuntimeTranslator;
+}) {
+  if (!summary) {
+    return null;
+  }
+
+  const movementLabel =
+    summary.movementSpeedFeet === null || summary.movementRemainingFeet === null
+      ? t('runtime.turnRail.movementUnknown', {
+          used: String(summary.movementUsedFeet),
+        })
+      : t('runtime.turnRail.movementRemaining', {
+          remaining: String(summary.movementRemainingFeet),
+          speed: String(summary.movementSpeedFeet),
+          used: String(summary.movementUsedFeet),
+        });
+  const actorKindLabel =
+    summary.actorKind === 'combatant'
+      ? t('runtime.turnRail.actorKind.combatant')
+      : t('runtime.turnRail.actorKind.character');
+
+  return (
+    <div className="mb-4 grid gap-3 rounded-2xl border border-amber-300/20 bg-amber-950/20 p-3 shadow-lg shadow-black/20 lg:grid-cols-[minmax(180px,1.2fr)_minmax(180px,1fr)_auto] lg:items-center">
+      <div className="min-w-0">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-300/80">
+          {t('runtime.turnRail.title')}
+        </p>
+        <p className="mt-1 truncate text-base font-black text-amber-50">
+          {summary.actorLabel}
+        </p>
+        <p className="mt-1 text-xs text-amber-100/60">
+          {t('runtime.turnRail.roundInitiative', {
+            initiative: String(summary.initiative),
+            round: String(summary.roundNumber),
+          })}
+        </p>
+      </div>
+      <div className="grid gap-1 rounded-xl border border-sky-200/15 bg-sky-950/20 px-3 py-2">
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-sky-200/80">
+          {t('runtime.turnRail.movement')}
+        </span>
+        <span className="text-sm font-semibold text-sky-50">
+          {movementLabel}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge label={actorKindLabel} tone="info" />
+        <StatusBadge
+          label={t('runtime.turnRail.action', {
+            state: summary.actionUsed
+              ? t('runtime.turnRail.used')
+              : t('runtime.turnRail.available'),
+          })}
+          tone={summary.actionUsed ? 'warning' : 'success'}
+        />
+        <StatusBadge
+          label={t('runtime.turnRail.bonus', {
+            state: summary.bonusActionUsed
+              ? t('runtime.turnRail.used')
+              : t('runtime.turnRail.available'),
+          })}
+          tone={summary.bonusActionUsed ? 'warning' : 'success'}
+        />
+        <StatusBadge
+          label={t('runtime.turnRail.reaction', {
+            state: summary.reactionUsed
+              ? t('runtime.turnRail.used')
+              : t('runtime.turnRail.available'),
+          })}
+          tone={summary.reactionUsed ? 'warning' : 'success'}
+        />
+      </div>
+    </div>
   );
 }
 

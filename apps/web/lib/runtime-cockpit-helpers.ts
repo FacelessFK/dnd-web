@@ -58,6 +58,20 @@ export type TacticalBoardPanDirection = 'down' | 'left' | 'right' | 'up';
 
 export type RuntimeMode = 'dm' | 'player';
 
+export type CurrentTurnRailSummary = {
+  actionUsed: boolean;
+  actorId: string;
+  actorKind: 'character' | 'combatant';
+  actorLabel: string;
+  bonusActionUsed: boolean;
+  initiative: number;
+  movementRemainingFeet: number | null;
+  movementSpeedFeet: number | null;
+  movementUsedFeet: number;
+  reactionUsed: boolean;
+  roundNumber: number;
+};
+
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 
 export type AbilityKey = (typeof abilityKeys)[number];
@@ -1276,6 +1290,68 @@ export function getCurrentTurnCombatantId(
   const current = encounter?.participants[encounter.currentTurnIndex];
 
   return current && 'combatantId' in current ? current.combatantId : null;
+}
+
+export function getCurrentTurnRailSummary({
+  charactersByParticipant,
+  encounter,
+  participants,
+  scene,
+}: {
+  charactersByParticipant: Record<string, CharacterResource | undefined>;
+  encounter: Encounter | null;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+}): CurrentTurnRailSummary | null {
+  const current = encounter?.participants[encounter.currentTurnIndex];
+
+  if (!encounter || !current) {
+    return null;
+  }
+
+  const movementUsedFeet = encounter.currentTurnUsage.movementUsed;
+  const base = {
+    actionUsed: encounter.currentTurnUsage.actionUsed,
+    bonusActionUsed: encounter.currentTurnUsage.bonusActionUsed,
+    initiative: current.initiative,
+    movementUsedFeet,
+    reactionUsed: encounter.currentTurnUsage.reactionUsed,
+    roundNumber: encounter.roundNumber,
+  };
+
+  if ('combatantId' in current) {
+    const combatant = getCombatantEntities(scene).find(
+      (entity) => entity.id === current.combatantId,
+    );
+    const movementSpeedFeet = combatant?.combatant.speed ?? null;
+
+    return {
+      ...base,
+      actorId: current.combatantId,
+      actorKind: 'combatant',
+      actorLabel: `${combatant?.name ?? current.combatantId} (${current.combatantId})`,
+      movementRemainingFeet:
+        movementSpeedFeet === null
+          ? null
+          : Math.max(0, movementSpeedFeet - movementUsedFeet),
+      movementSpeedFeet,
+    };
+  }
+
+  const character = charactersByParticipant[current.participantId];
+  const movementSpeedFeet = character?.character.speed ?? null;
+
+  return {
+    ...base,
+    actorId: current.participantId,
+    actorKind: 'character',
+    actorLabel: getParticipantName(participants, current.participantId),
+    movementRemainingFeet:
+      movementSpeedFeet === null
+        ? null
+        : Math.max(0, movementSpeedFeet - movementUsedFeet),
+    movementSpeedFeet,
+  };
 }
 
 export function getDmCombatantActionDisabledReason({

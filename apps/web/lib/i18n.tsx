@@ -126,6 +126,20 @@ const messages = {
     'runtime.summary':
       'A role-aware browser surface for the existing backend. The server still owns truth; SSE is live-only, and recovery rebuilds state from read models.',
     'runtime.title': 'Runtime War Table',
+    'runtime.turnRail.action': 'Action {state}',
+    'runtime.turnRail.actorKind.character': 'Character',
+    'runtime.turnRail.actorKind.combatant': 'Monster/NPC',
+    'runtime.turnRail.available': 'available',
+    'runtime.turnRail.bonus': 'Bonus {state}',
+    'runtime.turnRail.movement': 'Movement',
+    'runtime.turnRail.movementRemaining':
+      '{remaining} ft left of {speed} ft ({used} used)',
+    'runtime.turnRail.movementUnknown': '{used} ft used',
+    'runtime.turnRail.reaction': 'Reaction {state}',
+    'runtime.turnRail.roundInitiative':
+      'Round {round} · initiative {initiative}',
+    'runtime.turnRail.title': 'Current turn',
+    'runtime.turnRail.used': 'used',
     'shell.builderMvp.body':
       'Persisted character library entries with DB-mode development ownership. Production account security is intentionally pending.',
     'shell.builderMvp.title': 'Builder MVP',
@@ -241,6 +255,20 @@ const messages = {
     'runtime.summary':
       'یک سطح مرورگری متناسب با نقش کاربر برای بک‌اند فعلی. وضعیت نهایی همچنان دست سرور است؛ SSE فقط رویدادهای زنده را می‌رساند و بازیابی، وضعیت را از مدل‌های خواندنی بازسازی می‌کند.',
     'runtime.title': 'میز نبرد زنده',
+    'runtime.turnRail.action': 'اکشن {state}',
+    'runtime.turnRail.actorKind.character': 'کاراکتر',
+    'runtime.turnRail.actorKind.combatant': 'هیولا/NPC',
+    'runtime.turnRail.available': 'آماده',
+    'runtime.turnRail.bonus': 'بونس {state}',
+    'runtime.turnRail.movement': 'حرکت',
+    'runtime.turnRail.movementRemaining':
+      '{remaining} فوت مانده از {speed} فوت ({used} مصرف شده)',
+    'runtime.turnRail.movementUnknown': '{used} فوت مصرف شده',
+    'runtime.turnRail.reaction': 'ری‌اکشن {state}',
+    'runtime.turnRail.roundInitiative':
+      'راند {round} · initiative {initiative}',
+    'runtime.turnRail.title': 'نوبت فعلی',
+    'runtime.turnRail.used': 'مصرف‌شده',
     'shell.builderMvp.body':
       'ورودی‌های کتابخانه کاراکتر با مالکیت توسعه‌ای در حالت DB ذخیره می‌شوند. امنیت حساب تولیدی عمدا برای مراحل بعدی مانده است.',
     'shell.builderMvp.title': 'نسخه اولیه سازنده',

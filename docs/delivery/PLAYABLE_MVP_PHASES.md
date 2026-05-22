@@ -49,6 +49,8 @@ Already implemented:
   other exits;
 - character assignment, placement, movement, HP, conditions, and DM overrides;
 - mixed player/combatant encounters;
+- compact current-turn rail with actor, remaining movement, and used
+  action/bonus/reaction state;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -191,8 +193,8 @@ Acceptance:
 
 Suggested first implementation slice:
 
-- Add a compact current-turn rail with actor, remaining movement, and used
-  action/bonus/reaction state.
+- Implemented: compact current-turn rail with actor, remaining movement, and
+  used action/bonus/reaction state.
 
 ### Phase 5: Recovery And Local Playtest Reliability
 
@@ -258,7 +260,7 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement Phase 4 Slice 1:
+Implemented Phase 4 Slice 1:
 
 > Add a compact current-turn rail with actor, remaining movement, and used
 > action/bonus/reaction state.

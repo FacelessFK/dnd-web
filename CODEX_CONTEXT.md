@@ -49,8 +49,8 @@ that scope.
   transition nodes, compact transition presets, placement/movement, local
   tactical board camera controls, tactical board state badges, tactical board
   keyboard navigation, DM-facing Table Setup checklist, mixed
-  player/combatant encounters, narrow melee attacks, turn usage, readable event
-  feed, and explicit DM controls.
+  player/combatant encounters, compact current-turn rail, narrow melee attacks,
+  turn usage, readable event feed, and explicit DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -101,19 +101,21 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 4 Slice 1: compact current-turn rail for the encounter loop.
+Playable MVP Phase 4 follow-up: continue play-loop polish around action,
+target, and movement feedback.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
-transition preset palette are in place. The next work should make the active
-encounter loop easier to read without adding broader D&D automation.
+transition preset palette are in place. Phase 4 Slice 1 now adds a compact
+current-turn rail. The next work should keep making the active encounter loop
+easier to read without adding broader D&D automation.
 
 Break this into small Codex tasks:
 
 1. inspect current encounter state helpers, turn controls, and tactical board
    current-turn affordances;
-2. derive a compact current-turn summary from loaded encounter/session/scene
-   read models;
-3. render the rail without changing encounter command semantics;
+2. tighten selected target and action-result feedback around the existing
+   current-turn rail;
+3. avoid changing encounter command semantics or adding broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.
 

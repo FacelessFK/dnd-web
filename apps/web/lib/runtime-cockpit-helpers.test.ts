@@ -29,6 +29,7 @@ import {
   getCombatantEntities,
   getCurrentTurnCombatantId,
   getCurrentTurnLabel,
+  getCurrentTurnRailSummary,
   getDmTableSetupChecklist,
   getDmCombatantActionDisabledReason,
   getKnownCharacterIds,
@@ -1819,6 +1820,215 @@ describe('runtime cockpit helpers', () => {
         scene,
       }),
       'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+    );
+  });
+
+  it('derives current turn rail summary for character and combatant actors', () => {
+    const character = {
+      character: {
+        abilities: {
+          cha: 10,
+          con: 12,
+          dex: 14,
+          int: 10,
+          str: 10,
+          wis: 12,
+        },
+        armorClass: 13,
+        background: 'Sage',
+        className: 'Wizard',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hp: {
+          current: 8,
+          max: 10,
+          temp: 0,
+        },
+        id: 'CHAR-001',
+        level: 1,
+        meta: {},
+        name: 'Aria',
+        notes: null,
+        ownerParticipantId: 'player-001',
+        rulesProfileId: 'dnd5e-2024-core',
+        speed: 30,
+        speciesOrRace: 'Elf',
+        status: 'ready',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      derived: {
+        abilityModifiers: {
+          cha: 0,
+          con: 1,
+          dex: 2,
+          int: 0,
+          str: 0,
+          wis: 1,
+        },
+        initiativeModifier: 2,
+        passivePerception: 11,
+        proficiencyBonus: 2,
+        spellSaveDc: null,
+      },
+      overlay: {
+        activeConditions: [],
+        characterId: 'CHAR-001',
+        concentration: null,
+        currentVisibility: 'visible',
+        footprint: {
+          height: 1,
+          width: 1,
+        },
+        position: {
+          sceneId: 'SCENE-001',
+          x: 0,
+          y: 0,
+        },
+      },
+      rulesProfile: {
+        allowedSources: ['SRD'],
+        baseRuleset: 'dnd5e-2024',
+        houseRules: {},
+        id: 'dnd5e-2024-core',
+        optionalRules: [],
+        strictness: 'dm_led',
+      },
+    } satisfies CharacterResource;
+    const scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: true,
+          blocksVision: false,
+          combatant: {
+            abilities: {
+              cha: 8,
+              con: 12,
+              dex: 12,
+              int: 8,
+              str: 14,
+              wis: 10,
+            },
+            armorClass: 12,
+            hp: {
+              current: 8,
+              max: 8,
+              temp: 0,
+            },
+            kind: 'monster' as const,
+            speed: 25,
+          },
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          hidden: false,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          meta: {},
+          name: 'Ash Goblin',
+          position: {
+            x: 3,
+            y: 4,
+          },
+          type: 'monster' as const,
+          transition: null,
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const encounter = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      currentTurnIndex: 0,
+      currentTurnUsage: {
+        actionUsed: true,
+        bonusActionUsed: false,
+        movementUsed: 10,
+        reactionUsed: true,
+      },
+      id: 'encounter_11111111-1111-4111-8111-111111111111',
+      participants: [
+        {
+          characterId: 'CHAR-001',
+          initiative: 14,
+          participantId: 'player-001',
+        },
+        {
+          combatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          initiative: 12,
+          kind: 'combatant' as const,
+          participantId: 'dm-001',
+        },
+      ],
+      roundNumber: 2,
+      sceneId: 'SCENE-001',
+      sessionId: 'SESSION-001',
+      status: 'active' as const,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    assert.deepEqual(
+      getCurrentTurnRailSummary({
+        charactersByParticipant: {
+          'player-001': character,
+        },
+        encounter,
+        participants: sessionState.participants,
+        scene,
+      }),
+      {
+        actionUsed: true,
+        actorId: 'player-001',
+        actorKind: 'character',
+        actorLabel: 'Player One',
+        bonusActionUsed: false,
+        initiative: 14,
+        movementRemainingFeet: 20,
+        movementSpeedFeet: 30,
+        movementUsedFeet: 10,
+        reactionUsed: true,
+        roundNumber: 2,
+      },
+    );
+
+    assert.deepEqual(
+      getCurrentTurnRailSummary({
+        charactersByParticipant: {
+          'player-001': character,
+        },
+        encounter: {
+          ...encounter,
+          currentTurnIndex: 1,
+          currentTurnUsage: {
+            actionUsed: false,
+            bonusActionUsed: true,
+            movementUsed: 30,
+            reactionUsed: false,
+          },
+        },
+        participants: sessionState.participants,
+        scene,
+      }),
+      {
+        actionUsed: false,
+        actorId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        actorKind: 'combatant',
+        actorLabel:
+          'Ash Goblin (scene_entity_11111111-1111-4111-8111-111111111111)',
+        bonusActionUsed: true,
+        initiative: 12,
+        movementRemainingFeet: 0,
+        movementSpeedFeet: 25,
+        movementUsedFeet: 30,
+        reactionUsed: false,
+        roundNumber: 2,
+      },
     );
   });
 
