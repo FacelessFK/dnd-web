@@ -318,6 +318,11 @@ Implemented Phase 5 Slice 3:
 > Add a smoke assertion that Local Reset clears stale recovered table content
 > from the visible runtime surface after a recovered playable session.
 
+Implemented Phase 5 Slice 4:
+
+> Add a smoke assertion that the same backend runtime session can be recovered
+> again after Local Reset clears the browser-local cockpit state.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -342,7 +347,7 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 5 Slice 4:
+Phase 5 Slice 5:
 
 > Continue local playtest reliability with one narrow manual or smoke hardening
 > slice that does not add replay, cursor, catch-up, broader combat automation,

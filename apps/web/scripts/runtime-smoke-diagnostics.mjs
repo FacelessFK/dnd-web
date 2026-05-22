@@ -59,6 +59,49 @@ export function getAbsentVisibleTextsExpression(texts) {
   })()`;
 }
 
+export function getStoredCockpitSessionIdExpression(storageKey) {
+  return `(() => {
+    const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+
+    if (!raw) {
+      return '';
+    }
+
+    const state = JSON.parse(raw);
+    return typeof state?.sessionId === 'string' ? state.sessionId : '';
+  })()`;
+}
+
+export function getSessionInputAssignmentExpression(sessionId) {
+  return `(() => {
+    const input = [...document.querySelectorAll('input')].find(
+      (candidate) => candidate.getAttribute('placeholder')?.includes('Paste an existing session ID'),
+    );
+
+    if (!input) {
+      return false;
+    }
+
+    const value = ${JSON.stringify(sessionId)};
+    const valueSetter =
+      Object.getOwnPropertyDescriptor(input.constructor.prototype, 'value')?.set ??
+      (typeof HTMLInputElement === 'function'
+        ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+        : undefined);
+
+    if (valueSetter) {
+      valueSetter.call(input, value);
+    } else {
+      input.value = value;
+    }
+
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    return input.value === value;
+  })()`;
+}
+
 export function normalizePageDiagnostics(rawDiagnostics) {
   return {
     cockpitState: summarizeCockpitState(rawDiagnostics?.rawCockpitState),

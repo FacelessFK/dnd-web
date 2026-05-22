@@ -11,6 +11,8 @@ import {
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
   getPageDiagnosticsExpression,
+  getSessionInputAssignmentExpression,
+  getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
 
@@ -229,6 +231,7 @@ async function main() {
     await expectVisibleButton(page, 'Run Fresh Demo Setup', false);
     await expectVisibleText(page, 'Scene Builder', false);
     await expectVisibleText(page, 'Monsters & NPCs', false);
+    const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
 
     logSmokeStep('validating local reset stays local');
     await clickButton(page, 'Local Reset');
@@ -249,6 +252,28 @@ async function main() {
         'Aria',
         'Borin',
       ]),
+    });
+    await setSessionInputValue(page, sessionIdBeforeLocalReset);
+    await clickButton(page, 'Recover');
+    await waitForText(
+      page,
+      'Training Room',
+      'recovered scene after local reset',
+    );
+    await waitForText(page, 'Aria', 'recovered character after local reset');
+    await waitFor(page, {
+      label: 'recovered cockpit state after local reset',
+      predicate: `(() => {
+        const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+
+        if (!raw) {
+          return false;
+        }
+
+        const state = JSON.parse(raw);
+        return state.sessionId === ${JSON.stringify(sessionIdBeforeLocalReset)} &&
+          Boolean(state.sceneId);
+      })()`,
     });
 
     console.log('[runtime-smoke] passed');
@@ -658,6 +683,30 @@ async function waitForNoStoredSession(page) {
       return !JSON.parse(raw).sessionId;
     })()`,
   });
+}
+
+async function getStoredCockpitSessionId(page) {
+  const storedSessionId = await page.evaluate(
+    getStoredCockpitSessionIdExpression(storageKey),
+  );
+
+  if (!storedSessionId) {
+    throw new Error('Expected a stored cockpit session ID before Local Reset.');
+  }
+
+  return storedSessionId;
+}
+
+async function setSessionInputValue(page, sessionId) {
+  const assigned = await page.evaluate(
+    getSessionInputAssignmentExpression(sessionId),
+  );
+
+  if (!assigned) {
+    throw new Error(
+      'Unable to restore the session ID input after Local Reset.',
+    );
+  }
 }
 
 async function waitFor(page, { label, predicate, timeoutMs = smokeTimeoutMs }) {

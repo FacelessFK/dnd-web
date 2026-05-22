@@ -57,6 +57,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   process output when local runtime smoke waits fail;
 - browser smoke coverage that verifies Local Reset removes stale recovered demo
   table text from the visible runtime surface;
+- browser smoke coverage that restores the same session ID after Local Reset
+  and recovers the backend runtime session again;
 - action economy feedback that shows current action, bonus action, and
   reaction readiness plus per-resource blockers around the existing turn
   controls;

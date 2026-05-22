@@ -6,6 +6,8 @@ import {
   formatSmokeStep,
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
+  getSessionInputAssignmentExpression,
+  getStoredCockpitSessionIdExpression,
   summarizeCockpitState,
 } from '../apps/web/scripts/runtime-smoke-diagnostics.mjs';
 
@@ -105,4 +107,55 @@ test('runtime smoke diagnostics can assert stale visible text is gone', () => {
     evaluate({ body: { innerText: 'Runtime War Table\nTraining Room' } }),
     false,
   );
+});
+
+test('runtime smoke diagnostics read and restore the recover session input', () => {
+  const storedSessionIdExpression = getStoredCockpitSessionIdExpression(
+    'dnd-runtime-cockpit',
+  );
+  const evaluateStoredSessionId = Function(
+    'localStorage',
+    `return ${storedSessionIdExpression};`,
+  );
+
+  assert.equal(
+    evaluateStoredSessionId({
+      getItem: () => JSON.stringify({ sessionId: 'session-restore-123' }),
+    }),
+    'session-restore-123',
+  );
+
+  const dispatchedEvents = [];
+  const input = {
+    dispatchEvent: (event) => {
+      dispatchedEvents.push(event.type);
+    },
+    getAttribute: (name) =>
+      name === 'placeholder' ? 'Paste an existing session ID to recover' : '',
+    value: '',
+  };
+  const assignmentExpression = getSessionInputAssignmentExpression(
+    'session-restore-123',
+  );
+  const evaluateAssignment = Function(
+    'document',
+    'Event',
+    `return ${assignmentExpression};`,
+  );
+
+  assert.equal(
+    evaluateAssignment(
+      {
+        querySelectorAll: () => [input],
+      },
+      class TestEvent {
+        constructor(type) {
+          this.type = type;
+        }
+      },
+    ),
+    true,
+  );
+  assert.equal(input.value, 'session-restore-123');
+  assert.deepEqual(dispatchedEvents, ['input', 'change']);
 });

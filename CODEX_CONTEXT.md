@@ -58,6 +58,8 @@ that scope.
   buttons, visible page text, and recent child-process output.
 - Runtime smoke also verifies Local Reset clears stale recovered demo table text
   from the visible runtime surface after a recovered playable session.
+- Runtime smoke then restores the same session ID and recovers the backend
+  runtime session again to verify Local Reset stays browser-local.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -122,9 +124,11 @@ actor, latest encounter update, and latest combat result feedback. Slice 6 adds
 player-facing readiness and turn-ready feedback. Phase 5 Slice 1 adds Recovery
 Status feedback, Slice 2 adds playable-session script tightening plus
 actionable smoke wait diagnostics, and Slice 3 verifies Local Reset clears
-stale recovered demo table text from the visible runtime surface. The next work
-should keep making refresh/recover and local smoke coverage easier to trust
-without adding replay, cursor, catch-up, or broader D&D automation.
+stale recovered demo table text from the visible runtime surface. Slice 4
+verifies the same backend runtime session can be recovered again after Local
+Reset. The next work should keep making refresh/recover and local smoke
+coverage easier to trust without adding replay, cursor, catch-up, or broader
+D&D automation.
 
 Break this into small Codex tasks:
 
