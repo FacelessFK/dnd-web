@@ -60,6 +60,8 @@ Already implemented:
 - encounter status feedback beside the existing turn controls, with current
   status, round/turn progress, next actor, latest encounter update, and latest
   combat result;
+- player-facing readiness feedback with joined, character, assignment,
+  placement, and turn-ready states;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -176,7 +178,7 @@ Suggested first implementation slice:
 
 Suggested next implementation slice:
 
-- Add a Player-facing readiness summary that mirrors joined, character
+- Implemented: Player-facing readiness summary that mirrors joined, character
   submitted, assigned, placed, and turn-ready states.
 
 ### Phase 4: Play Loop Polish
@@ -229,6 +231,12 @@ Suggested slice 5:
 - Implemented: encounter status and round-result feedback beside the existing
   turn controls, derived from loaded encounter state plus live encounter/combat
   event log entries, without changing server-owned turn or combat semantics.
+
+Suggested slice 6:
+
+- Implemented: Player-facing readiness and turn-ready summary in Player mode,
+  derived from existing session, character, placement, encounter, movement,
+  target, and action-economy read models, without changing command semantics.
 
 ### Phase 5: Recovery And Local Playtest Reliability
 
@@ -294,10 +302,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 5:
+Implemented Phase 4 Slice 6:
 
-> Add encounter status, round progress, next-actor, latest encounter update,
-> and latest combat-result feedback around the existing turn controls.
+> Add Player-facing readiness and turn-ready feedback around the existing
+> Player readiness panel.
 
 Non-goals for that task:
 

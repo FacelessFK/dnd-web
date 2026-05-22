@@ -39,6 +39,7 @@ import {
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
   getPassiveSceneEntities,
+  getPlayerReadinessSummary,
   getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
@@ -1003,6 +1004,116 @@ describe('runtime cockpit helpers', () => {
           'Your finalized character is submitted in session state. Waiting for the DM to assign it.',
         title: 'Waiting for DM assignment',
         tone: 'warning',
+      },
+    );
+  });
+
+  it('summarizes player readiness and current-turn affordances', () => {
+    assert.deepEqual(
+      getPlayerReadinessSummary({
+        attackReady: false,
+        currentActorLabel: 'Ash Goblin',
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: true,
+        isCharacterAssigned: true,
+        isCharacterReady: true,
+        isCharacterSubmitted: false,
+        isCurrentTurn: false,
+        isJoined: true,
+        isPlaced: true,
+        moveReady: false,
+        playerDisplayName: 'Player One',
+        playerParticipantId: 'player-001',
+        readyActionCount: 0,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        completedCount: 6,
+        items: [
+          {
+            detail: 'Session SESSION-001 is loaded.',
+            id: 'session',
+            status: 'done',
+            title: 'Session loaded',
+          },
+          {
+            detail: 'Player One is joined as player-001.',
+            id: 'joined',
+            status: 'done',
+            title: 'Joined table',
+          },
+          {
+            detail: 'A ready character is available for this player.',
+            id: 'character',
+            status: 'done',
+            title: 'Character ready',
+          },
+          {
+            detail: 'The DM assigned this character to the table.',
+            id: 'assignment',
+            status: 'done',
+            title: 'Character assigned',
+          },
+          {
+            detail: 'An active scene is loaded.',
+            id: 'scene',
+            status: 'done',
+            title: 'Scene active',
+          },
+          {
+            detail: 'Your token is placed in the active scene.',
+            id: 'placement',
+            status: 'done',
+            title: 'Token placed',
+          },
+          {
+            detail: 'Current actor: Ash Goblin. Watch the board and prepare.',
+            id: 'turn',
+            status: 'waiting',
+            title: 'Waiting for turn',
+          },
+        ],
+        nextAction: 'Current actor: Ash Goblin. Watch the board and prepare.',
+        readyCount: 0,
+        status: 'waiting',
+        title: 'Waiting for your turn',
+        totalCount: 7,
+        turn: {
+          attackReady: false,
+          currentActorLabel: 'Ash Goblin',
+          isCurrentTurn: false,
+          moveReady: false,
+          readyActionCount: 0,
+        },
+        waitingCount: 1,
+      },
+    );
+
+    assert.deepEqual(
+      getPlayerReadinessSummary({
+        attackReady: true,
+        currentActorLabel: 'Player One',
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: true,
+        isCharacterAssigned: true,
+        isCharacterReady: true,
+        isCharacterSubmitted: false,
+        isCurrentTurn: true,
+        isJoined: true,
+        isPlaced: true,
+        moveReady: true,
+        playerDisplayName: 'Player One',
+        playerParticipantId: 'player-001',
+        readyActionCount: 2,
+        sessionId: 'SESSION-001',
+      }).items.at(-1),
+      {
+        detail: 'Move, attack, and spend 2 turn resource options.',
+        id: 'turn',
+        status: 'ready',
+        title: 'Turn ready',
       },
     );
   });

@@ -180,6 +180,20 @@ async function main() {
     await clickButton(page, 'Recover');
     await waitForText(page, 'Aria', 'player assigned character');
     await waitForText(page, 'Tactical Grid', 'player tactical grid');
+    await waitFor(page, {
+      label: 'player readiness summary',
+      predicate: `(() => {
+        const text = document.body?.innerText ?? '';
+        const normalizedText = text.toLocaleLowerCase('en-US');
+        const hasReadinessSummary =
+          normalizedText.includes('readiness summary') ||
+          text.includes('خلاصه آمادگی');
+        const hasTokenStatus =
+          normalizedText.includes('token') ||
+          text.includes('توکن');
+        return hasReadinessSummary && hasTokenStatus;
+      })()`,
+    });
     await expectVisibleButton(page, 'Run Fresh Demo Setup', false);
     await expectVisibleText(page, 'Scene Builder', false);
     await expectVisibleText(page, 'Monsters & NPCs', false);

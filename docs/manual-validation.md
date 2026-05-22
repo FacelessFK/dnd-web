@@ -48,6 +48,10 @@ or no-encounter status, round/turn progress, current actor, next actor, latest
 encounter update, and latest combat result after a hit or miss. Choose a target
 and confirm the target feedback block shows target HP/AC, attack readiness or
 the disabled reason, and the latest attack result after a hit or miss. In the
+Player readiness panel, confirm the readiness summary shows session, joined,
+character, assignment, scene, placement, and turn readiness states, plus current
+actor, token position, selected target, movement readiness, attack readiness,
+and available action-option count. In the
 same panel, confirm the action economy feedback shows the current actor, latest
 encounter update, and action/bonus/reaction resources as available, used, or
 blocked. After spending one of those resources, confirm only that resource's
@@ -155,6 +159,8 @@ For the rule-aware builder slice, also check:
   reaction readiness around the existing turn controls.
 - Browser encounter status feedback for round/turn progress, next actor, latest
   encounter update, and latest combat result.
+- Browser player readiness feedback for joined, character, assignment,
+  placement, and turn-ready states.
 - Downed actor gating using a 1 HP target.
 - Backend DM controls for HP, condition tags, active-scene reposition, turn
   usage, current turn actor, combatants, and active encounter end.

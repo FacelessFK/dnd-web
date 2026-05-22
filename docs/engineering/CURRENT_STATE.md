@@ -48,6 +48,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - encounter status feedback that shows loaded encounter status, round/turn
   progress, current and next actors, latest encounter update, and latest combat
   result from read models and the live event log;
+- player readiness feedback that shows session, joined, character, assignment,
+  scene, placement, and turn-ready states plus move/attack/action readiness;
 - action economy feedback that shows current action, bonus action, and
   reaction readiness plus per-resource blockers around the existing turn
   controls;

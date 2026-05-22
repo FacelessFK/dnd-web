@@ -92,6 +92,7 @@ import {
   getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
+  getPlayerReadinessSummary,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
@@ -135,6 +136,7 @@ import {
   type LibraryEntrySubmissionBlocker,
   type MovementFeedbackSummary,
   type OutboxStatusView,
+  type PlayerReadinessSummary,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -3548,6 +3550,9 @@ export function RuntimeCockpit() {
     'reaction',
     t('runtime.actionEconomy.unavailable'),
   );
+  const playerReadyActionCount = actionEconomyFeedbackSummary.resources.filter(
+    (resource) => resource.ready,
+  ).length;
   const selectedActorAssignedCharacterId =
     sessionState?.participants.find(
       (participant) => participant.id === selectedActor,
@@ -3605,6 +3610,24 @@ export function RuntimeCockpit() {
     isCurrentTurn: currentTurnParticipantId === playerParticipantId,
     isJoined: isPlayerJoined,
     isPlaced: Boolean(playerPlacement),
+    sessionId,
+  });
+  const playerReadinessSummary = getPlayerReadinessSummary({
+    attackReady: actionTargetFeedbackSummary.attackReady,
+    currentActorLabel: currentTurnName,
+    hasActiveScene: Boolean(activeScene),
+    hasCharacter: Boolean(playerCharacter),
+    hasEncounter: Boolean(encounter),
+    isCharacterAssigned: isPlayerCharacterAssigned,
+    isCharacterReady: playerCharacter?.character.status === 'ready',
+    isCharacterSubmitted: isPlayerCharacterSubmitted,
+    isCurrentTurn: currentTurnParticipantId === playerParticipantId,
+    isJoined: isPlayerJoined,
+    isPlaced: Boolean(playerPlacement),
+    moveReady: movementFeedbackSummary.moveReady,
+    playerDisplayName,
+    playerParticipantId,
+    readyActionCount: playerReadyActionCount,
     sessionId,
   });
   const feedEntries = eventLog
@@ -4083,10 +4106,6 @@ export function RuntimeCockpit() {
                 tone="player"
               >
                 <div className="grid gap-3">
-                  <StatusBadge
-                    label={playerNextStep.title}
-                    tone={playerNextStep.tone}
-                  />
                   <CharacterSummary
                     currentTurnParticipantId={currentTurnParticipantId}
                     participantId={playerParticipantId}
@@ -4094,21 +4113,16 @@ export function RuntimeCockpit() {
                     title={`${playerDisplayName} (you)`}
                     variant="hero"
                   />
-                  <dl className="grid gap-2 text-sm">
-                    <StatusRow
-                      label="Placement"
-                      value={
-                        playerPlacement
-                          ? `${playerPlacement.position.x},${playerPlacement.position.y}`
-                          : 'not placed'
-                      }
-                    />
-                    <StatusRow label="Current actor" value={currentTurnName} />
-                    <StatusRow
-                      label="Selected target"
-                      value={selectedTarget || 'none'}
-                    />
-                  </dl>
+                  <PlayerReadinessPanel
+                    selectedTargetLabel={selectedTarget || 'none'}
+                    summary={playerReadinessSummary}
+                    tokenPositionLabel={
+                      playerPlacement
+                        ? `${playerPlacement.position.x},${playerPlacement.position.y}`
+                        : 'not placed'
+                    }
+                    t={t}
+                  />
                 </div>
               </Panel>
             )}
@@ -4854,6 +4868,162 @@ function getDmTableSetupItemTone(
   };
 
   return tones[status];
+}
+
+function PlayerReadinessPanel({
+  selectedTargetLabel,
+  summary,
+  tokenPositionLabel,
+  t,
+}: {
+  selectedTargetLabel: string;
+  summary: PlayerReadinessSummary;
+  tokenPositionLabel: string;
+  t: RuntimeTranslator;
+}) {
+  const statusTone = getPlayerReadinessStatusTone(summary.status);
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-2 rounded-2xl border border-sky-300/15 bg-sky-950/15 p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-200/80">
+              {t('runtime.playerReadiness.title')}
+            </p>
+            <p className="mt-1 font-black text-white">{summary.title}</p>
+          </div>
+          <StatusBadge
+            label={t('runtime.playerReadiness.progress', {
+              completed: String(summary.completedCount),
+              total: String(summary.totalCount),
+            })}
+            tone={statusTone}
+          />
+        </div>
+        <p className="text-xs leading-5 text-sky-100/70">
+          {summary.nextAction}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge
+            label={t('runtime.playerReadiness.readyCount', {
+              count: String(summary.readyCount),
+            })}
+            tone={summary.readyCount > 0 ? 'warning' : 'info'}
+          />
+          <StatusBadge
+            label={t('runtime.playerReadiness.waitingCount', {
+              count: String(summary.waitingCount),
+            })}
+            tone={summary.waitingCount > 0 ? 'info' : 'success'}
+          />
+        </div>
+      </div>
+
+      <ol className="grid gap-2">
+        {summary.items.map((item) => (
+          <li
+            className="grid grid-cols-[auto_1fr] gap-3 rounded-xl border border-sky-300/15 bg-black/20 p-3"
+            key={item.id}
+          >
+            <StatusBadge
+              label={getPlayerReadinessItemLabel(item.status, t)}
+              tone={getPlayerReadinessItemTone(item.status)}
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-amber-50">{item.title}</p>
+              <p className="mt-1 text-xs leading-5 text-amber-100/60">
+                {item.detail}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <div className="grid gap-2 rounded-xl border border-sky-300/15 bg-black/20 p-3 text-sm">
+        <StatusRow
+          label={t('runtime.playerReadiness.currentActor')}
+          value={summary.turn.currentActorLabel}
+        />
+        <StatusRow
+          label={t('runtime.playerReadiness.tokenPosition')}
+          value={tokenPositionLabel}
+        />
+        <StatusRow
+          label={t('runtime.playerReadiness.selectedTarget')}
+          value={selectedTargetLabel}
+        />
+        <div className="flex flex-wrap gap-2 pt-1">
+          <StatusBadge
+            label={t('runtime.playerReadiness.move', {
+              state: summary.turn.moveReady
+                ? t('runtime.playerReadiness.ready')
+                : t('runtime.playerReadiness.blocked'),
+            })}
+            tone={summary.turn.moveReady ? 'success' : 'info'}
+          />
+          <StatusBadge
+            label={t('runtime.playerReadiness.attack', {
+              state: summary.turn.attackReady
+                ? t('runtime.playerReadiness.ready')
+                : t('runtime.playerReadiness.blocked'),
+            })}
+            tone={summary.turn.attackReady ? 'success' : 'info'}
+          />
+          <StatusBadge
+            label={t('runtime.playerReadiness.actions', {
+              count: String(summary.turn.readyActionCount),
+            })}
+            tone={summary.turn.readyActionCount > 0 ? 'success' : 'info'}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getPlayerReadinessItemLabel(
+  status: PlayerReadinessSummary['items'][number]['status'],
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'blocked':
+      return t('runtime.playerReadiness.blocked');
+    case 'done':
+      return t('runtime.playerReadiness.done');
+    case 'ready':
+      return t('runtime.playerReadiness.next');
+    case 'waiting':
+      return t('runtime.playerReadiness.waiting');
+  }
+}
+
+function getPlayerReadinessItemTone(
+  status: PlayerReadinessSummary['items'][number]['status'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'blocked':
+      return 'info';
+    case 'done':
+      return 'success';
+    case 'ready':
+      return 'warning';
+    case 'waiting':
+      return 'info';
+  }
+}
+
+function getPlayerReadinessStatusTone(
+  status: PlayerReadinessSummary['status'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'blocked':
+      return 'info';
+    case 'ready':
+      return 'warning';
+    case 'waiting':
+      return 'info';
+  }
 }
 
 function ActionButton({

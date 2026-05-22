@@ -2419,6 +2419,46 @@ export type PlayerNextStep = {
   tone: RuntimeNoticeTone;
 };
 
+export type PlayerReadinessItemStatus =
+  | 'blocked'
+  | 'done'
+  | 'ready'
+  | 'waiting';
+
+export type PlayerReadinessItemId =
+  | 'assignment'
+  | 'character'
+  | 'joined'
+  | 'placement'
+  | 'scene'
+  | 'session'
+  | 'turn';
+
+export type PlayerReadinessItem = {
+  detail: string;
+  id: PlayerReadinessItemId;
+  status: PlayerReadinessItemStatus;
+  title: string;
+};
+
+export type PlayerReadinessSummary = {
+  completedCount: number;
+  items: PlayerReadinessItem[];
+  nextAction: string;
+  readyCount: number;
+  status: 'blocked' | 'ready' | 'waiting';
+  title: string;
+  totalCount: number;
+  turn: {
+    attackReady: boolean;
+    currentActorLabel: string;
+    isCurrentTurn: boolean;
+    moveReady: boolean;
+    readyActionCount: number;
+  };
+  waitingCount: number;
+};
+
 export type DmTableSetupChecklistItemStatus = 'blocked' | 'done' | 'ready';
 
 export type DmTableSetupChecklistItemId =
@@ -2791,6 +2831,222 @@ export function getPlayerNextStep({
     title: 'Your turn',
     tone: 'success',
   };
+}
+
+export function getPlayerReadinessSummary({
+  attackReady,
+  currentActorLabel,
+  hasActiveScene,
+  hasCharacter,
+  hasEncounter,
+  isCharacterAssigned,
+  isCharacterReady,
+  isCharacterSubmitted,
+  isCurrentTurn,
+  isJoined,
+  isPlaced,
+  moveReady,
+  playerDisplayName,
+  playerParticipantId,
+  readyActionCount,
+  sessionId,
+}: {
+  attackReady: boolean;
+  currentActorLabel: string;
+  hasActiveScene: boolean;
+  hasCharacter: boolean;
+  hasEncounter: boolean;
+  isCharacterAssigned: boolean;
+  isCharacterReady: boolean;
+  isCharacterSubmitted: boolean;
+  isCurrentTurn: boolean;
+  isJoined: boolean;
+  isPlaced: boolean;
+  moveReady: boolean;
+  playerDisplayName: string;
+  playerParticipantId: string;
+  readyActionCount: number;
+  sessionId: string;
+}): PlayerReadinessSummary {
+  const readyTurnOptions = [
+    moveReady ? 'move' : null,
+    attackReady ? 'attack' : null,
+    readyActionCount > 0
+      ? `spend ${readyActionCount} turn resource option${readyActionCount === 1 ? '' : 's'}`
+      : null,
+  ].filter((option): option is string => Boolean(option));
+  const turnReadyDetail =
+    readyTurnOptions.length > 0
+      ? `${capitalizeFirst(joinReadableList(readyTurnOptions))}.`
+      : 'Your turn is active, but every visible action is blocked.';
+
+  const items: PlayerReadinessItem[] = [
+    {
+      detail: sessionId
+        ? `Session ${sessionId} is loaded.`
+        : 'Paste a session ID from the DM, then join or recover.',
+      id: 'session',
+      status: sessionId ? 'done' : 'ready',
+      title: sessionId ? 'Session loaded' : 'Choose session',
+    },
+    {
+      detail: isJoined
+        ? `${playerDisplayName} is joined as ${playerParticipantId}.`
+        : sessionId
+          ? 'Join the table with your participant ID and display name.'
+          : 'A session is required before joining.',
+      id: 'joined',
+      status: isJoined ? 'done' : sessionId ? 'ready' : 'blocked',
+      title: isJoined ? 'Joined table' : 'Join table',
+    },
+    {
+      detail: hasCharacter
+        ? isCharacterReady
+          ? 'A ready character is available for this player.'
+          : 'Finalize the character before asking the DM to assign it.'
+        : isJoined
+          ? 'Create or recover a character for this player.'
+          : 'Join before character setup matters.',
+      id: 'character',
+      status:
+        hasCharacter && isCharacterReady
+          ? 'done'
+          : isJoined
+            ? 'ready'
+            : 'blocked',
+      title:
+        hasCharacter && isCharacterReady
+          ? 'Character ready'
+          : 'Prepare character',
+    },
+    {
+      detail: isCharacterAssigned
+        ? 'The DM assigned this character to the table.'
+        : isCharacterSubmitted
+          ? 'Your character is submitted. Waiting for the DM to assign it.'
+          : isCharacterReady
+            ? 'Submit the finalized character for DM assignment.'
+            : 'A finalized character is required before assignment.',
+      id: 'assignment',
+      status: isCharacterAssigned
+        ? 'done'
+        : isCharacterSubmitted
+          ? 'waiting'
+          : isCharacterReady
+            ? 'ready'
+            : 'blocked',
+      title: isCharacterAssigned
+        ? 'Character assigned'
+        : isCharacterSubmitted
+          ? 'Waiting for assignment'
+          : 'Submit for assignment',
+    },
+    {
+      detail: hasActiveScene
+        ? 'An active scene is loaded.'
+        : 'Waiting for the DM to activate a scene.',
+      id: 'scene',
+      status: hasActiveScene ? 'done' : 'waiting',
+      title: hasActiveScene ? 'Scene active' : 'Waiting for scene',
+    },
+    {
+      detail: isPlaced
+        ? 'Your token is placed in the active scene.'
+        : hasActiveScene && isCharacterAssigned
+          ? 'Waiting for the DM to place your token.'
+          : 'Scene and assignment are required before placement.',
+      id: 'placement',
+      status: isPlaced
+        ? 'done'
+        : hasActiveScene && isCharacterAssigned
+          ? 'waiting'
+          : 'blocked',
+      title: isPlaced ? 'Token placed' : 'Waiting for placement',
+    },
+    {
+      detail: !hasEncounter
+        ? isPlaced
+          ? 'Exploration is available; turn resources unlock after encounter start.'
+          : 'Placement is required before turn readiness matters.'
+        : isCurrentTurn
+          ? turnReadyDetail
+          : `Current actor: ${currentActorLabel}. Watch the board and prepare.`,
+      id: 'turn',
+      status: !hasEncounter
+        ? isPlaced
+          ? 'ready'
+          : 'blocked'
+        : isCurrentTurn
+          ? readyTurnOptions.length > 0
+            ? 'ready'
+            : 'blocked'
+          : 'waiting',
+      title: !hasEncounter
+        ? 'Exploration ready'
+        : isCurrentTurn
+          ? readyTurnOptions.length > 0
+            ? 'Turn ready'
+            : 'Turn blocked'
+          : 'Waiting for turn',
+    },
+  ];
+  const completedCount = items.filter((item) => item.status === 'done').length;
+  const readyCount = items.filter((item) => item.status === 'ready').length;
+  const waitingCount = items.filter((item) => item.status === 'waiting').length;
+  const blockingItem = items.find((item) => item.status === 'blocked');
+  const readyItem = items.find((item) => item.status === 'ready');
+  const waitingItem = items.find((item) => item.status === 'waiting');
+  const status =
+    blockingItem && !readyItem ? 'blocked' : readyItem ? 'ready' : 'waiting';
+  const title = isCurrentTurn
+    ? readyItem
+      ? 'Your turn is ready'
+      : 'Your turn needs attention'
+    : hasEncounter && waitingItem?.id === 'turn'
+      ? 'Waiting for your turn'
+      : waitingItem
+        ? 'Waiting for the table'
+        : readyItem
+          ? 'Ready for next step'
+          : 'Player setup blocked';
+
+  return {
+    completedCount,
+    items,
+    nextAction:
+      blockingItem?.detail ??
+      readyItem?.detail ??
+      waitingItem?.detail ??
+      'Player setup is ready.',
+    readyCount,
+    status,
+    title,
+    totalCount: items.length,
+    turn: {
+      attackReady,
+      currentActorLabel,
+      isCurrentTurn,
+      moveReady,
+      readyActionCount,
+    },
+    waitingCount,
+  };
+}
+
+function joinReadableList(items: string[]): string {
+  if (items.length <= 1) {
+    return items[0] ?? '';
+  }
+
+  if (items.length === 2) {
+    return `${items[0]} and ${items[1]}`;
+  }
+
+  return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+}
+
+function capitalizeFirst(value: string): string {
+  return value ? `${value.slice(0, 1).toUpperCase()}${value.slice(1)}` : value;
 }
 
 export function isSessionStreamEvent(

@@ -50,8 +50,8 @@ that scope.
   tactical board camera controls, tactical board state badges, tactical board
   keyboard navigation, DM-facing Table Setup checklist, mixed
   player/combatant encounters, compact current-turn rail, encounter status
-  feedback, action economy feedback, narrow melee attacks, turn usage, readable
-  event feed, and explicit DM controls.
+  feedback, player readiness feedback, action economy feedback, narrow melee
+  attacks, turn usage, readable event feed, and explicit DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -103,7 +103,7 @@ that scope.
 
 Recommended next milestone:
 Playable MVP Phase 4 follow-up: continue play-loop polish around action,
-target, movement, and encounter status feedback.
+target, movement, encounter status, and player readiness feedback.
 
 The bridge hardening slice, Table Setup checklist, scene entity palette, and
 transition preset palette are in place. Phase 4 Slice 1 now adds a compact
@@ -111,17 +111,18 @@ current-turn rail, Slice 2 adds selected target/action-result feedback from
 loaded read models, Slice 3 adds selected movement destination and turn-budget
 feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
 existing turn controls. Slice 5 adds encounter status, round progress, next
-actor, latest encounter update, and latest combat result feedback. The next
-work should keep making the active encounter loop easier to read without adding
-broader D&D automation.
+actor, latest encounter update, and latest combat result feedback. Slice 6 adds
+player-facing readiness and turn-ready feedback. The next work should keep
+making the active encounter loop easier to read without adding broader D&D
+automation.
 
 Break this into small Codex tasks:
 
 1. inspect current encounter state helpers, turn controls, and tactical board
    current-turn affordances;
-2. continue readiness and table-flow polish around the existing current-turn
-   rail, target feedback, movement preview, action economy feedback, and
-   encounter status feedback;
+2. continue table-flow polish around the existing current-turn rail, target
+   feedback, movement preview, action economy feedback, encounter status
+   feedback, and player readiness feedback;
 3. avoid changing encounter command semantics or adding broader D&D automation;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.
