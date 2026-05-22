@@ -32,6 +32,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   current-turn actor, and attack target affordances;
 - tactical board keyboard affordances for roving selected-cell focus and
   arrow/Home/End navigation;
+- DM-facing Table Setup checklist derived from session, player assignment,
+  scene, token placement, and encounter read state;
 - mixed player/combatant encounters;
 - turn usage;
 - narrow melee attack handling;

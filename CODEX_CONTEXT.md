@@ -47,8 +47,9 @@ that scope.
   create/join/reconnect, SSE subscription, read-model recovery, scene creation
   and activation, passive scene entities, transition nodes, placement/movement,
   local tactical board camera controls, tactical board state badges, tactical
-  board keyboard navigation, mixed player/combatant encounters, narrow melee
-  attacks, turn usage, readable event feed, and explicit DM controls.
+  board keyboard navigation, DM-facing Table Setup checklist, mixed
+  player/combatant encounters, narrow melee attacks, turn usage, readable event
+  feed, and explicit DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -99,20 +100,20 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-DB transaction/outbox hardening for the Character Library -> Runtime
-Assignment Bridge.
+Playable MVP Phase 2 Slice 1: compact scene entity palette for common DM scene
+presets.
 
-The server-side foundation and first Player-mode UI affordance now exist. The
-next work should make the bridge's DB-mode multi-store behavior more robust
-without claiming replay or exactly-once delivery.
+The bridge hardening slice and the first Table Setup checklist are in place.
+The next work should make DM scene authoring faster without changing the
+server protocol or broadening into a full map editor.
 
 Break this into small Codex tasks:
 
-1. inspect current library, runtime character, session assignment, and i18n
-   paths;
-2. define the protocol/data bridge shape;
-3. design a narrow DB transaction/outbox boundary for bridge submission;
-4. validate DB mode, in-memory behavior, and runtime recovery honestly;
+1. inspect existing scene/entity form helpers and DM runtime panels;
+2. define a small preset list for wall/blocker, cover/object, marker, hidden
+   prop, transition node, and combatant spawn-adjacent authoring;
+3. wire preset selection into existing draft state without new command types;
+4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.
 
 ## Coding Rules For Future Codex Tasks

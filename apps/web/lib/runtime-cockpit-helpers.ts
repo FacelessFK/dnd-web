@@ -1610,6 +1610,31 @@ export type PlayerNextStep = {
   tone: RuntimeNoticeTone;
 };
 
+export type DmTableSetupChecklistItemStatus = 'blocked' | 'done' | 'ready';
+
+export type DmTableSetupChecklistItemId =
+  | 'characters'
+  | 'encounter'
+  | 'placement'
+  | 'players'
+  | 'scene'
+  | 'session';
+
+export type DmTableSetupChecklistItem = {
+  detail: string;
+  id: DmTableSetupChecklistItemId;
+  status: DmTableSetupChecklistItemStatus;
+  title: string;
+};
+
+export type DmTableSetupChecklist = {
+  completedCount: number;
+  items: DmTableSetupChecklistItem[];
+  nextAction: string;
+  readyCount: number;
+  totalCount: number;
+};
+
 export function getRuntimeDisabledReasons({
   actingParticipantId,
   activeSceneKnown,
@@ -1722,6 +1747,123 @@ export function getRuntimeDisabledReasons({
       (activeScenePlacementCount
         ? null
         : 'Place at least one character in the active scene first.'),
+  };
+}
+
+export function getDmTableSetupChecklist({
+  activeSceneLoaded,
+  assignedCharacterCount,
+  encounterLoaded,
+  pendingAssignmentCount,
+  placedCharacterCount,
+  playerCount,
+  sessionId,
+}: {
+  activeSceneLoaded: boolean;
+  assignedCharacterCount: number;
+  encounterLoaded: boolean;
+  pendingAssignmentCount: number;
+  placedCharacterCount: number;
+  playerCount: number;
+  sessionId: string;
+}): DmTableSetupChecklist {
+  const hasSession = Boolean(sessionId);
+  const hasPlayers = playerCount > 0;
+  const hasAssignedCharacters = assignedCharacterCount > 0;
+  const hasPlacedCharacters = placedCharacterCount > 0;
+  const hasPendingAssignments = pendingAssignmentCount > 0;
+
+  const items: DmTableSetupChecklistItem[] = [
+    {
+      detail: hasSession
+        ? `Session ${sessionId} is loaded.`
+        : 'Create or recover a session before the table can load.',
+      id: 'session',
+      status: hasSession ? 'done' : 'ready',
+      title: hasSession ? 'Session loaded' : 'Create session',
+    },
+    {
+      detail: hasPlayers
+        ? `${playerCount} player${playerCount === 1 ? '' : 's'} joined the table.`
+        : hasSession
+          ? 'Join at least one player before assigning characters.'
+          : 'Session state is required before players can join.',
+      id: 'players',
+      status: hasPlayers ? 'done' : hasSession ? 'ready' : 'blocked',
+      title: hasPlayers ? 'Players seated' : 'Seat players',
+    },
+    {
+      detail: hasPendingAssignments
+        ? `Resolve ${pendingAssignmentCount} pending character assignment${pendingAssignmentCount === 1 ? '' : 's'}.`
+        : hasAssignedCharacters
+          ? `${assignedCharacterCount} character${assignedCharacterCount === 1 ? '' : 's'} assigned to joined players.`
+          : hasPlayers
+            ? 'Assign at least one finalized player character.'
+            : 'Players need to join before character assignment matters.',
+      id: 'characters',
+      status:
+        hasAssignedCharacters && !hasPendingAssignments
+          ? 'done'
+          : hasPlayers
+            ? 'ready'
+            : 'blocked',
+      title:
+        hasAssignedCharacters && !hasPendingAssignments
+          ? 'Characters assigned'
+          : 'Assign characters',
+    },
+    {
+      detail: activeSceneLoaded
+        ? 'An active scene is loaded for the table.'
+        : hasSession
+          ? 'Create or recover an active scene for the table.'
+          : 'Create and activate a scene after the session exists.',
+      id: 'scene',
+      status: activeSceneLoaded ? 'done' : hasSession ? 'ready' : 'blocked',
+      title: activeSceneLoaded ? 'Scene active' : 'Activate scene',
+    },
+    {
+      detail: hasPlacedCharacters
+        ? `${placedCharacterCount} token${placedCharacterCount === 1 ? '' : 's'} placed in the active scene.`
+        : activeSceneLoaded && hasAssignedCharacters
+          ? 'Place assigned player characters into the active scene.'
+          : 'Characters need assignments and an active scene first.',
+      id: 'placement',
+      status: hasPlacedCharacters
+        ? 'done'
+        : activeSceneLoaded && hasAssignedCharacters
+          ? 'ready'
+          : 'blocked',
+      title: hasPlacedCharacters ? 'Tokens placed' : 'Place tokens',
+    },
+    {
+      detail: encounterLoaded
+        ? 'An encounter is active and turn controls are available.'
+        : hasPlacedCharacters
+          ? 'Start an encounter when the table is ready for initiative.'
+          : 'Place at least one token before encounter start.',
+      id: 'encounter',
+      status: encounterLoaded
+        ? 'done'
+        : hasPlacedCharacters
+          ? 'ready'
+          : 'blocked',
+      title: encounterLoaded ? 'Encounter active' : 'Start encounter',
+    },
+  ];
+
+  const completedCount = items.filter((item) => item.status === 'done').length;
+  const readyCount = items.filter((item) => item.status === 'ready').length;
+  const nextAction =
+    items.find((item) => item.status !== 'done')?.detail ??
+    'The table is ready for play.';
+
+  return {
+    completedCount,
+    items,
+    nextAction,
+    readyCount,
+    totalCount: items.length,
   };
 }
 

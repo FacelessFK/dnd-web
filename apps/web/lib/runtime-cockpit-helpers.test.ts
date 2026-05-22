@@ -27,6 +27,7 @@ import {
   getCombatantEntities,
   getCurrentTurnCombatantId,
   getCurrentTurnLabel,
+  getDmTableSetupChecklist,
   getDmCombatantActionDisabledReason,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
@@ -788,6 +789,95 @@ describe('runtime cockpit helpers', () => {
         sessionId: 'SESSION-001',
       }).title,
       'Join the table',
+    );
+  });
+
+  it('builds a DM table setup checklist for a missing session', () => {
+    assert.deepEqual(
+      getDmTableSetupChecklist({
+        activeSceneLoaded: false,
+        assignedCharacterCount: 0,
+        encounterLoaded: false,
+        pendingAssignmentCount: 0,
+        placedCharacterCount: 0,
+        playerCount: 0,
+        sessionId: '',
+      }),
+      {
+        completedCount: 0,
+        items: [
+          {
+            detail: 'Create or recover a session before the table can load.',
+            id: 'session',
+            status: 'ready',
+            title: 'Create session',
+          },
+          {
+            detail: 'Session state is required before players can join.',
+            id: 'players',
+            status: 'blocked',
+            title: 'Seat players',
+          },
+          {
+            detail: 'Players need to join before character assignment matters.',
+            id: 'characters',
+            status: 'blocked',
+            title: 'Assign characters',
+          },
+          {
+            detail: 'Create and activate a scene after the session exists.',
+            id: 'scene',
+            status: 'blocked',
+            title: 'Activate scene',
+          },
+          {
+            detail: 'Characters need assignments and an active scene first.',
+            id: 'placement',
+            status: 'blocked',
+            title: 'Place tokens',
+          },
+          {
+            detail: 'Place at least one token before encounter start.',
+            id: 'encounter',
+            status: 'blocked',
+            title: 'Start encounter',
+          },
+        ],
+        nextAction: 'Create or recover a session before the table can load.',
+        readyCount: 1,
+        totalCount: 6,
+      },
+    );
+  });
+
+  it('builds a DM table setup checklist from loaded table state', () => {
+    const checklist = getDmTableSetupChecklist({
+      activeSceneLoaded: true,
+      assignedCharacterCount: 1,
+      encounterLoaded: false,
+      pendingAssignmentCount: 1,
+      placedCharacterCount: 1,
+      playerCount: 2,
+      sessionId: 'SESSION-001',
+    });
+
+    assert.equal(checklist.completedCount, 4);
+    assert.equal(checklist.readyCount, 2);
+    assert.equal(checklist.totalCount, 6);
+    assert.equal(
+      checklist.nextAction,
+      'Resolve 1 pending character assignment.',
+    );
+    assert.deepEqual(
+      checklist.items.map(({ id, status }) => ({ id, status })),
+      [
+        { id: 'session', status: 'done' },
+        { id: 'players', status: 'done' },
+        { id: 'characters', status: 'ready' },
+        { id: 'scene', status: 'done' },
+        { id: 'placement', status: 'done' },
+        { id: 'encounter', status: 'ready' },
+      ],
     );
   });
 

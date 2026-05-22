@@ -73,6 +73,7 @@ import {
   getCurrentTurnLabel,
   getCurrentTurnParticipantId,
   getDmCombatantActionDisabledReason,
+  getDmTableSetupChecklist,
   getFinalizedLibraryEntriesForRuntime,
   getKnownCharacterIds,
   getLibraryEntrySubmissionBlocker,
@@ -116,6 +117,7 @@ import {
   type AbilityKey,
   type CharacterDraftForm,
   type CombatantDraftForm,
+  type DmTableSetupChecklist,
   type LibraryEntrySubmissionBlocker,
   type OutboxStatusView,
   type RuntimeEventSummary,
@@ -3484,6 +3486,18 @@ export function RuntimeCockpit() {
     charactersByParticipant,
     sessionState,
   });
+  const assignedPlayerCharacterCount = playerParticipants.filter(
+    (participant) => Boolean(participant.characterId),
+  ).length;
+  const dmTableSetupChecklist = getDmTableSetupChecklist({
+    activeSceneLoaded: Boolean(activeScene),
+    assignedCharacterCount: assignedPlayerCharacterCount,
+    encounterLoaded: Boolean(encounter),
+    pendingAssignmentCount: pendingAssignmentRequests.length,
+    placedCharacterCount: activeScene?.placedCharacters.length ?? 0,
+    playerCount: playerParticipants.length,
+    sessionId,
+  });
   const playerNextStep = getPlayerNextStep({
     hasActiveScene: Boolean(activeScene),
     hasCharacter: Boolean(playerCharacter),
@@ -3883,6 +3897,10 @@ export function RuntimeCockpit() {
           </div>
 
           <aside className="grid content-start gap-5">
+            {mode === 'dm' ? (
+              <DmTableSetupPanel checklist={dmTableSetupChecklist} />
+            ) : null}
+
             {mode === 'dm' ? (
               <Panel
                 description="Creates a fresh local playtest session and stops on the first failed command."
@@ -4657,6 +4675,73 @@ function Panel({
       {children}
     </section>
   );
+}
+
+function DmTableSetupPanel({
+  checklist,
+}: {
+  checklist: DmTableSetupChecklist;
+}) {
+  return (
+    <Panel
+      description={`${checklist.completedCount}/${checklist.totalCount} complete. ${checklist.nextAction}`}
+      eyebrow="DM readiness"
+      title="Table Setup"
+      tone="dm"
+    >
+      <ol className="grid gap-2">
+        {checklist.items.map((item) => {
+          const tone = getDmTableSetupItemTone(item.status);
+          const label = getDmTableSetupItemLabel(item.status);
+
+          return (
+            <li
+              className="grid grid-cols-[auto_1fr] gap-3 rounded-xl border border-amber-500/15 bg-black/20 p-3"
+              key={item.id}
+            >
+              <StatusBadge label={label} tone={tone} />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-amber-50">{item.title}</p>
+                <p className="mt-1 text-xs leading-5 text-amber-100/60">
+                  {item.detail}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </Panel>
+  );
+}
+
+function getDmTableSetupItemLabel(
+  status: DmTableSetupChecklist['items'][number]['status'],
+): string {
+  const labels: Record<
+    DmTableSetupChecklist['items'][number]['status'],
+    string
+  > = {
+    blocked: 'Wait',
+    done: 'Done',
+    ready: 'Next',
+  };
+
+  return labels[status];
+}
+
+function getDmTableSetupItemTone(
+  status: DmTableSetupChecklist['items'][number]['status'],
+): RuntimeNoticeTone {
+  const tones: Record<
+    DmTableSetupChecklist['items'][number]['status'],
+    RuntimeNoticeTone
+  > = {
+    blocked: 'info',
+    done: 'success',
+    ready: 'warning',
+  };
+
+  return tones[status];
 }
 
 function ActionButton({

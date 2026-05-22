@@ -20,8 +20,9 @@ refresh, scene create/activate, passive scene entity editing, transition nodes,
 character placement/movement, local tactical board camera controls, tactical
 board state badges, tactical board keyboard navigation, mixed
 player/combatant encounters, turn usage, narrow melee attack handling, readable
-event feed, and DM controls for HP, conditions, repositioning, combatants,
-current turn, turn usage, and encounter end.
+event feed, a DM-facing Table Setup checklist, and DM controls for HP,
+conditions, repositioning, combatants, current turn, turn usage, and encounter
+end.
 
 The browser submits commands and renders server responses. It is not
 authoritative.

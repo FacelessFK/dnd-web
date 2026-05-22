@@ -51,6 +51,8 @@ Already implemented:
 - DB-backed transaction/outbox coverage for covered bridge/runtime paths;
 - manual outbox status badge;
 - assignment-request previews and post-assignment source provenance;
+- DM-facing Table Setup checklist derived from loaded session, player,
+  assignment, scene, placement, and encounter state;
 - Phase 1 Slice 1 tactical board camera controls: local zoom levels, bounded
   pan offsets, reset view, and helper tests for viewport math;
 - Phase 1 Slice 2 tactical board affordances: selected movement cell,
@@ -148,7 +150,13 @@ Acceptance:
 
 Suggested first implementation slice:
 
-- Add a DM-facing "Table Setup" checklist derived from session state.
+- Implemented: DM-facing "Table Setup" checklist derived from session state,
+  with done/next/wait statuses and the next required action.
+
+Suggested next implementation slice:
+
+- Add a Player-facing readiness summary that mirrors joined, character
+  submitted, assigned, placed, and turn-ready states.
 
 ### Phase 4: Play Loop Polish
 
@@ -240,17 +248,17 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement Phase 3 Slice 1:
+Implement Phase 2 Slice 1:
 
-> Add a DM-facing "Table Setup" checklist derived from session state.
+> Add a compact scene entity palette for common entity presets.
 
 Non-goals for that task:
 
 - no new server protocol;
 - no persisted camera or board selection state;
-- no full drag-and-drop map editor;
+- no full drag-and-drop map editor or asset marketplace;
 - no fog of war, line of sight, or lighting;
-- no refactor of scene/encounter command semantics;
+- no refactor of scene command semantics;
 - no new auth or DB requirements.
 
 Validation for that task should include:
