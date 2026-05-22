@@ -53,6 +53,8 @@ Already implemented:
   action/bonus/reaction state;
 - selected target and latest combat-result feedback beside the existing turn
   controls;
+- selected movement destination and turn-budget feedback beside the tactical
+  grid;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -204,6 +206,12 @@ Suggested next implementation slice:
   the existing turn controls, derived from loaded read models and live event log
   entries.
 
+Suggested follow-up slice:
+
+- Implemented: selected movement destination and turn-budget feedback beside
+  the tactical grid, derived from loaded character, scene, active-scene, and
+  encounter read models.
+
 ### Phase 5: Recovery And Local Playtest Reliability
 
 Goal: make the playable MVP resilient enough for local playtesting.
@@ -268,10 +276,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 2:
+Implemented Phase 4 Slice 3:
 
-> Add selected attack target and latest combat-result feedback around the
-> existing turn controls.
+> Add selected movement destination and turn-budget feedback around the tactical
+> grid movement controls.
 
 Non-goals for that task:
 
@@ -282,6 +290,8 @@ Non-goals for that task:
 - no new auth or DB requirements.
 - no target legality changes beyond existing command validation and disabled
   reasons.
+- no pathfinding, diagonal policy expansion, opportunity attacks, or movement
+  automation beyond previewing the current Manhattan-distance baseline.
 
 Validation for that task should include:
 

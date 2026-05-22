@@ -1,4 +1,5 @@
 import type {
+  ActiveSceneState,
   CharacterInput,
   CharacterLibraryEntry,
   CharacterResource,
@@ -100,6 +101,20 @@ export type ActionTargetFeedbackSummary = {
   attackReady: boolean;
   lastCombatResult: ActionTargetFeedbackResult | null;
   selectedTarget: ActionTargetFeedbackTarget | null;
+};
+
+export type MovementFeedbackSummary = {
+  actorLabel: string;
+  currentPosition: Cell | null;
+  destination: Cell;
+  distanceFeet: number | null;
+  moveBlockedReason: string | null;
+  moveReady: boolean;
+  movementAfterMoveFeet: number | null;
+  movementRemainingAfterMoveFeet: number | null;
+  movementRemainingFeet: number | null;
+  movementSpeedFeet: number | null;
+  movementUsedFeet: number | null;
 };
 
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
@@ -1436,6 +1451,108 @@ export function getActionTargetFeedbackSummary({
       : null,
     selectedTarget,
   };
+}
+
+export function getMovementFeedbackSummary({
+  actingParticipantId,
+  activeScene,
+  charactersByParticipant,
+  encounter,
+  grid,
+  moveDisabledReason,
+  participants,
+  selectedCell,
+}: {
+  actingParticipantId: string;
+  activeScene: ActiveSceneState | null;
+  charactersByParticipant: Record<string, CharacterResource | undefined>;
+  encounter: Encounter | null;
+  grid: Pick<GridDefinition, 'cellSizeFeet'> | null;
+  moveDisabledReason: string | null;
+  participants: SessionSnapshot['participants'];
+  selectedCell: Cell;
+}): MovementFeedbackSummary {
+  const character = charactersByParticipant[actingParticipantId];
+  const placement =
+    activeScene?.placedCharacters.find(
+      (placedCharacter) =>
+        placedCharacter.participantId === actingParticipantId,
+    ) ?? null;
+  const currentPosition = placement
+    ? {
+        x: placement.position.x,
+        y: placement.position.y,
+      }
+    : null;
+  const movementSpeedFeet = character?.character.speed ?? null;
+  const movementUsedFeet = encounter?.currentTurnUsage.movementUsed ?? null;
+  const distanceFeet =
+    currentPosition && grid
+      ? calculateManhattanDistanceFeet(
+          currentPosition,
+          selectedCell,
+          grid.cellSizeFeet,
+        )
+      : null;
+  const movementRemainingFeet =
+    movementSpeedFeet !== null && movementUsedFeet !== null
+      ? Math.max(0, movementSpeedFeet - movementUsedFeet)
+      : null;
+  const movementAfterMoveFeet =
+    movementUsedFeet !== null && distanceFeet !== null
+      ? movementUsedFeet + distanceFeet
+      : null;
+  const movementRemainingAfterMoveFeet =
+    movementSpeedFeet !== null && movementAfterMoveFeet !== null
+      ? Math.max(0, movementSpeedFeet - movementAfterMoveFeet)
+      : null;
+  const currentTurnParticipantId = getCurrentTurnParticipantId(encounter);
+  const currentTurnCombatantId = getCurrentTurnCombatantId(encounter);
+  const moveBlockedReason =
+    moveDisabledReason ??
+    (character ? null : 'Load or assign this character first.') ??
+    (currentPosition
+      ? null
+      : 'Selected actor has no token placement in the active scene.') ??
+    (encounter && currentTurnCombatantId
+      ? 'Current turn belongs to a monster/NPC.'
+      : null) ??
+    (encounter &&
+    currentTurnParticipantId &&
+    currentTurnParticipantId !== actingParticipantId
+      ? 'Wait for this actor turn before encounter movement.'
+      : null) ??
+    (encounter &&
+    movementAfterMoveFeet !== null &&
+    movementSpeedFeet !== null &&
+    movementAfterMoveFeet > movementSpeedFeet
+      ? 'Selected move exceeds remaining movement.'
+      : null);
+
+  return {
+    actorLabel: getParticipantName(participants, actingParticipantId),
+    currentPosition,
+    destination: selectedCell,
+    distanceFeet,
+    moveBlockedReason,
+    moveReady: !moveBlockedReason,
+    movementAfterMoveFeet,
+    movementRemainingAfterMoveFeet,
+    movementRemainingFeet,
+    movementSpeedFeet,
+    movementUsedFeet,
+  };
+}
+
+function calculateManhattanDistanceFeet(
+  origin: Cell,
+  destination: Cell,
+  cellSizeFeet: number,
+): number {
+  return (
+    (Math.abs(destination.x - origin.x) + Math.abs(destination.y - origin.y)) *
+    cellSizeFeet
+  );
 }
 
 function getSelectedAttackTargetFeedback({

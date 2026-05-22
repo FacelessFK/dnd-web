@@ -43,6 +43,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   and used action/bonus/reaction state from loaded read models;
 - selected target and latest combat-result feedback derived from loaded read
   models and live event log entries;
+- selected movement destination and turn-budget feedback derived from loaded
+  character, scene, active-scene, and encounter read models;
 - turn usage;
 - narrow melee attack handling;
 - readable combat/event feed;

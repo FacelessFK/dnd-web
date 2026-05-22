@@ -47,6 +47,7 @@ import {
   getKnownSceneOptions,
   getFinalizedLibraryEntriesForRuntime,
   getLibraryEntrySubmissionBlocker,
+  getMovementFeedbackSummary,
   getOutboxStatusView,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
@@ -2259,6 +2260,179 @@ describe('runtime cockpit helpers', () => {
           status: 'active',
         },
       },
+    );
+  });
+
+  it('summarizes selected movement destination and turn movement budget', () => {
+    const character = {
+      character: {
+        abilities: {
+          cha: 10,
+          con: 12,
+          dex: 14,
+          int: 10,
+          str: 10,
+          wis: 12,
+        },
+        armorClass: 13,
+        background: 'Sage',
+        className: 'Wizard',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hp: {
+          current: 8,
+          max: 10,
+          temp: 0,
+        },
+        id: 'CHAR-001',
+        level: 1,
+        meta: {},
+        name: 'Aria',
+        notes: null,
+        ownerParticipantId: 'player-001',
+        rulesProfileId: 'dnd5e-2024-core',
+        speed: 30,
+        speciesOrRace: 'Elf',
+        status: 'ready' as const,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      derived: {
+        abilityModifiers: {
+          cha: 0,
+          con: 1,
+          dex: 2,
+          int: 0,
+          str: 0,
+          wis: 1,
+        },
+        initiativeModifier: 2,
+        passivePerception: 11,
+        proficiencyBonus: 2,
+        spellSaveDc: null,
+      },
+      overlay: {
+        activeConditions: [],
+        characterId: 'CHAR-001',
+        concentration: null,
+        currentVisibility: 'visible',
+        footprint: {
+          height: 1,
+          width: 1,
+        },
+        position: {
+          sceneId: 'SCENE-001',
+          x: 0,
+          y: 0,
+        },
+      },
+      rulesProfile: {
+        allowedSources: ['SRD'],
+        baseRuleset: 'dnd5e-2024',
+        houseRules: {},
+        id: 'dnd5e-2024-core',
+        optionalRules: [],
+        strictness: 'dm_led',
+      },
+    } satisfies CharacterResource;
+    const encounter = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      currentTurnIndex: 0,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: false,
+        movementUsed: 10,
+        reactionUsed: false,
+      },
+      id: 'encounter_11111111-1111-4111-8111-111111111111',
+      participants: [
+        {
+          characterId: 'CHAR-001',
+          initiative: 14,
+          participantId: 'player-001',
+        },
+      ],
+      roundNumber: 2,
+      sceneId: 'SCENE-001',
+      sessionId: 'SESSION-001',
+      status: 'active' as const,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const activeScene = {
+      activeSceneId: 'SCENE-001',
+      placedCharacters: [
+        {
+          characterId: 'CHAR-001',
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          participantId: 'player-001',
+          position: {
+            x: 0,
+            y: 0,
+          },
+        },
+      ],
+      sessionId: 'SESSION-001',
+    };
+
+    assert.deepEqual(
+      getMovementFeedbackSummary({
+        actingParticipantId: 'player-001',
+        activeScene,
+        charactersByParticipant: {
+          'player-001': character,
+        },
+        encounter,
+        grid: {
+          cellSizeFeet: 5,
+        },
+        moveDisabledReason: null,
+        participants: sessionState.participants,
+        selectedCell: {
+          x: 2,
+          y: 1,
+        },
+      }),
+      {
+        actorLabel: 'Player One',
+        currentPosition: {
+          x: 0,
+          y: 0,
+        },
+        destination: {
+          x: 2,
+          y: 1,
+        },
+        distanceFeet: 15,
+        moveBlockedReason: null,
+        moveReady: true,
+        movementAfterMoveFeet: 25,
+        movementRemainingAfterMoveFeet: 5,
+        movementRemainingFeet: 20,
+        movementSpeedFeet: 30,
+        movementUsedFeet: 10,
+      },
+    );
+
+    assert.deepEqual(
+      getMovementFeedbackSummary({
+        actingParticipantId: 'player-001',
+        activeScene,
+        charactersByParticipant: {
+          'player-001': character,
+        },
+        encounter,
+        grid: {
+          cellSizeFeet: 5,
+        },
+        moveDisabledReason: null,
+        participants: sessionState.participants,
+        selectedCell: {
+          x: 6,
+          y: 0,
+        },
+      }).moveBlockedReason,
+      'Selected move exceeds remaining movement.',
     );
   });
 

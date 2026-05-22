@@ -45,8 +45,10 @@ encounter, confirm the compact current-turn rail above the grid shows the
 current actor, remaining movement, and action/bonus/reaction usage. In the
 Turn & Target panel, choose a target and confirm the feedback block shows target
 HP/AC, attack readiness or the disabled reason, and the latest attack result
-after a hit or miss. When a
-board cell is focused, use arrow keys to move the selected cell, Home to jump to
+after a hit or miss. Select a destination cell and confirm the movement preview
+shows the acting token, current cell, destination cell, distance, current turn
+movement budget, and any blocked reason before submitting movement. When a board
+cell is focused, use arrow keys to move the selected cell, Home to jump to
 the first cell, and End to jump to the last cell. Local Reset clears browser
 runtime state only; it does not delete backend sessions or runtime state.
 

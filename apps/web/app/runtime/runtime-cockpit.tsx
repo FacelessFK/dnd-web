@@ -83,6 +83,7 @@ import {
   getKnownCharacterIds,
   getLibraryEntrySubmissionBlocker,
   getKnownSceneOptions,
+  getMovementFeedbackSummary,
   getOutboxStatusView,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
@@ -128,6 +129,7 @@ import {
   type CurrentTurnRailSummary,
   type DmTableSetupChecklist,
   type LibraryEntrySubmissionBlocker,
+  type MovementFeedbackSummary,
   type OutboxStatusView,
   type RuntimeEventSummary,
   type RuntimeMode,
@@ -3475,6 +3477,16 @@ export function RuntimeCockpit() {
     hasValidAttackTarget,
     targetParticipantId: selectedTarget,
   });
+  const movementFeedbackSummary = getMovementFeedbackSummary({
+    actingParticipantId,
+    activeScene,
+    charactersByParticipant,
+    encounter,
+    grid,
+    moveDisabledReason: disabledReasons.move,
+    participants,
+    selectedCell,
+  });
   const playerAttackDisabledReason =
     disabledReasons.attack ??
     (currentTurnCombatantId
@@ -3813,6 +3825,7 @@ export function RuntimeCockpit() {
               tone={mode}
             >
               <CurrentTurnRail summary={currentTurnRailSummary} t={t} />
+              <MovementFeedback summary={movementFeedbackSummary} t={t} />
               <TacticalGrid
                 activeScene={activeScene}
                 actingParticipantId={actingParticipantId}
@@ -3821,7 +3834,7 @@ export function RuntimeCockpit() {
                 currentTurnParticipantId={currentTurnParticipantId}
                 grid={grid}
                 mode={mode}
-                moveDisabledReason={disabledReasons.move}
+                moveDisabledReason={movementFeedbackSummary.moveBlockedReason}
                 onPanBoard={panTacticalBoard}
                 onResetBoardView={resetTacticalBoardView}
                 onSelectCell={setSelectedCell}
@@ -3880,8 +3893,12 @@ export function RuntimeCockpit() {
                 />
                 <div className="grid gap-2 sm:grid-cols-2 md:min-w-[260px]">
                   <ActionButton
-                    disabled={Boolean(disabledReasons.move)}
-                    disabledReason={disabledReasons.move ?? undefined}
+                    disabled={Boolean(
+                      movementFeedbackSummary.moveBlockedReason,
+                    )}
+                    disabledReason={
+                      movementFeedbackSummary.moveBlockedReason ?? undefined
+                    }
                     label={mode === 'dm' ? 'Move Actor' : 'Move Token'}
                     onClick={moveSelectedActor}
                     variant="secondary"
@@ -5022,6 +5039,83 @@ function StatusBadge({
     >
       {label}
     </span>
+  );
+}
+
+function MovementFeedback({
+  summary,
+  t,
+}: {
+  summary: MovementFeedbackSummary;
+  t: RuntimeTranslator;
+}) {
+  const currentPositionLabel = summary.currentPosition
+    ? `${summary.currentPosition.x},${summary.currentPosition.y}`
+    : t('runtime.movementFeedback.noPosition');
+  const distanceLabel =
+    summary.distanceFeet === null
+      ? t('runtime.movementFeedback.distanceUnknown')
+      : t('runtime.movementFeedback.distance', {
+          distance: String(summary.distanceFeet),
+        });
+  const budgetLabel =
+    summary.movementUsedFeet === null ||
+    summary.movementSpeedFeet === null ||
+    summary.movementRemainingFeet === null
+      ? t('runtime.movementFeedback.explorationBudget')
+      : t('runtime.movementFeedback.budget', {
+          remaining: String(summary.movementRemainingFeet),
+          speed: String(summary.movementSpeedFeet),
+          used: String(summary.movementUsedFeet),
+        });
+  const afterMoveLabel =
+    summary.movementAfterMoveFeet === null ||
+    summary.movementRemainingAfterMoveFeet === null
+      ? t('runtime.movementFeedback.afterUnknown')
+      : t('runtime.movementFeedback.after', {
+          after: String(summary.movementAfterMoveFeet),
+          remaining: String(summary.movementRemainingAfterMoveFeet),
+        });
+
+  return (
+    <div className="mb-4 grid gap-2 rounded-2xl border border-emerald-300/15 bg-emerald-950/15 p-3 text-xs text-emerald-50 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,1.2fr)] lg:items-center">
+      <div className="min-w-0">
+        <p className="font-black uppercase text-emerald-200/80">
+          {t('runtime.movementFeedback.title')}
+        </p>
+        <p className="mt-1 truncate text-sm font-black text-white">
+          {summary.actorLabel}
+        </p>
+        {summary.moveBlockedReason ? (
+          <p className="mt-1 text-amber-100/80">{summary.moveBlockedReason}</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge
+          label={
+            summary.moveReady
+              ? t('runtime.movementFeedback.ready')
+              : t('runtime.movementFeedback.blocked')
+          }
+          tone={summary.moveReady ? 'success' : 'warning'}
+        />
+        <StatusBadge
+          label={t('runtime.movementFeedback.current', {
+            cell: currentPositionLabel,
+          })}
+          tone="info"
+        />
+        <StatusBadge
+          label={t('runtime.movementFeedback.destination', {
+            cell: `${summary.destination.x},${summary.destination.y}`,
+          })}
+          tone="info"
+        />
+        <StatusBadge label={distanceLabel} tone="info" />
+        <StatusBadge label={budgetLabel} tone="warning" />
+        <StatusBadge label={afterMoveLabel} tone="info" />
+      </div>
+    </div>
   );
 }
 
