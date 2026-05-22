@@ -110,6 +110,25 @@ const messages = {
     'runtime.characterLibrary.submit': 'Submit Saved Character',
     'runtime.characterLibrary.title': 'Saved Character Library',
     'runtime.eyebrow': 'Authoritative table surface',
+    'runtime.encounterStatus.active': 'Active',
+    'runtime.encounterStatus.ended': 'Ended',
+    'runtime.encounterStatus.hit': 'hit',
+    'runtime.encounterStatus.id': 'ID {id}',
+    'runtime.encounterStatus.latestCombat':
+      '{attacker} {result} {target} for {damage} damage.',
+    'runtime.encounterStatus.latestEncounter':
+      '{reason} - round {round}, turn {turn}',
+    'runtime.encounterStatus.miss': 'missed',
+    'runtime.encounterStatus.nextActor': 'Next {actor}',
+    'runtime.encounterStatus.noCombatResult': 'No combat result yet.',
+    'runtime.encounterStatus.noCurrentActor': 'No active encounter loaded',
+    'runtime.encounterStatus.noEncounterUpdate':
+      'No encounter update received yet.',
+    'runtime.encounterStatus.noProgress': 'No round progress',
+    'runtime.encounterStatus.notLoaded': 'No encounter',
+    'runtime.encounterStatus.progress':
+      'Round {round} - turn {turn}/{turnCount}',
+    'runtime.encounterStatus.title': 'Encounter status',
     'runtime.actionEconomy.action': 'Action',
     'runtime.actionEconomy.available': 'available',
     'runtime.actionEconomy.blocked': 'blocked',
@@ -288,6 +307,25 @@ const messages = {
     'runtime.characterLibrary.submit': 'Submit کاراکتر ذخیره‌شده',
     'runtime.characterLibrary.title': 'کتابخانه کاراکترهای ذخیره‌شده',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
+    'runtime.encounterStatus.active': 'فعال',
+    'runtime.encounterStatus.ended': 'تمام شده',
+    'runtime.encounterStatus.hit': 'برخورد کرد',
+    'runtime.encounterStatus.id': 'ID {id}',
+    'runtime.encounterStatus.latestCombat':
+      '{attacker} به {target} {result} و {damage} آسیب زد.',
+    'runtime.encounterStatus.latestEncounter':
+      '{reason} - راند {round}، نوبت {turn}',
+    'runtime.encounterStatus.miss': 'خطا رفت',
+    'runtime.encounterStatus.nextActor': 'بعدی {actor}',
+    'runtime.encounterStatus.noCombatResult': 'هنوز نتیجه combat ثبت نشده.',
+    'runtime.encounterStatus.noCurrentActor': 'encounter فعالی بارگذاری نشده',
+    'runtime.encounterStatus.noEncounterUpdate':
+      'هنوز به‌روزرسانی encounter دریافت نشده.',
+    'runtime.encounterStatus.noProgress': 'پیشرفت راندی نیست',
+    'runtime.encounterStatus.notLoaded': 'بدون encounter',
+    'runtime.encounterStatus.progress':
+      'راند {round} - نوبت {turn}/{turnCount}',
+    'runtime.encounterStatus.title': 'وضعیت encounter',
     'runtime.actionEconomy.action': 'Action',
     'runtime.actionEconomy.available': 'آزاد',
     'runtime.actionEconomy.blocked': 'مسدود',

@@ -45,6 +45,9 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   models and live event log entries;
 - selected movement destination and turn-budget feedback derived from loaded
   character, scene, active-scene, and encounter read models;
+- encounter status feedback that shows loaded encounter status, round/turn
+  progress, current and next actors, latest encounter update, and latest combat
+  result from read models and the live event log;
 - action economy feedback that shows current action, bonus action, and
   reaction readiness plus per-resource blockers around the existing turn
   controls;

@@ -132,9 +132,16 @@ async function main() {
       label: 'encounter summary',
       predicate: `(() => {
         const text = document.body?.innerText ?? '';
-        return text.includes('Round') &&
-          text.includes('Usage') &&
-          !text.includes('No active encounter loaded');
+        const normalizedText = text.toLocaleLowerCase('en-US');
+        const hasEncounterStatus =
+          normalizedText.includes('encounter status') ||
+          normalizedText.includes('وضعیت encounter');
+        const hasRoundProgress =
+          normalizedText.includes('round') ||
+          text.includes('راند');
+        return hasEncounterStatus &&
+          hasRoundProgress &&
+          !normalizedText.includes('no active encounter loaded');
       })()`,
     });
     await waitForText(page, 'Combat & Event Feed', 'event feed panel');
@@ -156,7 +163,14 @@ async function main() {
       label: 'recovered encounter summary',
       predicate: `(() => {
         const text = document.body?.innerText ?? '';
-        return text.includes('Round') && text.includes('Usage');
+        const normalizedText = text.toLocaleLowerCase('en-US');
+        const hasEncounterStatus =
+          normalizedText.includes('encounter status') ||
+          normalizedText.includes('وضعیت encounter');
+        const hasRoundProgress =
+          normalizedText.includes('round') ||
+          text.includes('راند');
+        return hasEncounterStatus && hasRoundProgress;
       })()`,
     });
 

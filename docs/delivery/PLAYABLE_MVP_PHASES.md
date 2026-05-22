@@ -57,6 +57,9 @@ Already implemented:
   grid;
 - action economy feedback beside the existing turn controls, with per-resource
   readiness and blockers for action, bonus action, and reaction usage;
+- encounter status feedback beside the existing turn controls, with current
+  status, round/turn progress, next actor, latest encounter update, and latest
+  combat result;
 - narrow melee attacks and turn usage;
 - Character Library, Builder, auth MVP, PDF export;
 - Character Library to runtime assignment bridge;
@@ -221,6 +224,12 @@ Suggested slice 4:
   per-resource blockers for used or globally disabled action, bonus action, and
   reaction commands.
 
+Suggested slice 5:
+
+- Implemented: encounter status and round-result feedback beside the existing
+  turn controls, derived from loaded encounter state plus live encounter/combat
+  event log entries, without changing server-owned turn or combat semantics.
+
 ### Phase 5: Recovery And Local Playtest Reliability
 
 Goal: make the playable MVP resilient enough for local playtesting.
@@ -285,10 +294,10 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implemented Phase 4 Slice 4:
+Implemented Phase 4 Slice 5:
 
-> Add action economy feedback around the existing Use Action, Use Bonus, and
-> Use Reaction controls.
+> Add encounter status, round progress, next-actor, latest encounter update,
+> and latest combat-result feedback around the existing turn controls.
 
 Non-goals for that task:
 
@@ -296,14 +305,13 @@ Non-goals for that task:
 - no new combat rules automation;
 - no full spell, inventory, opportunity attack, or reaction-window system;
 - no refactor of encounter command semantics;
-- no new auth or DB requirements.
+- no new auth or DB requirements;
 - no target legality changes beyond existing command validation and disabled
-  reasons.
-- no pathfinding, diagonal policy expansion, opportunity attacks, or movement
-  automation beyond previewing the current Manhattan-distance baseline.
-- no action selection menu, spell system, inventory action system, or reaction
-  trigger window;
-- no change to server-owned turn usage validation.
+  reasons;
+- no change to server-owned turn usage validation;
+- no replay, cursor, catch-up, or event history semantics;
+- no new attack resolution or damage automation beyond displaying existing
+  combat events.
 
 Validation for that task should include:
 

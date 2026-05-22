@@ -32,8 +32,9 @@ import {
   getCurrentTurnCombatantId,
   getCurrentTurnLabel,
   getCurrentTurnRailSummary,
-  getDmTableSetupChecklist,
   getDmCombatantActionDisabledReason,
+  getDmTableSetupChecklist,
+  getEncounterStatusSummary,
   getKnownCharacterIds,
   getPendingAssignmentRequests,
   getPendingCharacterRefs,
@@ -2031,6 +2032,193 @@ describe('runtime cockpit helpers', () => {
         movementUsedFeet: 30,
         reactionUsed: false,
         roundNumber: 2,
+      },
+    );
+  });
+
+  it('summarizes encounter status, round progress, and latest combat result', () => {
+    const scene = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      entities: [
+        {
+          blocksMovement: true,
+          blocksVision: false,
+          combatant: {
+            abilities: {
+              cha: 8,
+              con: 12,
+              dex: 12,
+              int: 8,
+              str: 14,
+              wis: 10,
+            },
+            armorClass: 12,
+            hp: {
+              current: 4,
+              max: 8,
+              temp: 0,
+            },
+            kind: 'monster' as const,
+            speed: 30,
+          },
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          hidden: false,
+          id: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          meta: {},
+          name: 'Training Construct',
+          position: {
+            x: 3,
+            y: 4,
+          },
+          type: 'monster' as const,
+          transition: null,
+        },
+      ],
+      grid: {
+        cellSizeFeet: 5,
+        height: 8,
+        width: 8,
+      },
+      id: 'SCENE-001',
+      name: 'Training Room',
+      sessionId: 'SESSION-001',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const encounter = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      currentTurnIndex: 1,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: true,
+        movementUsed: 5,
+        reactionUsed: false,
+      },
+      id: 'encounter_11111111-1111-4111-8111-111111111111',
+      participants: [
+        {
+          characterId: 'CHAR-001',
+          initiative: 18,
+          participantId: 'player-001',
+        },
+        {
+          combatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+          initiative: 12,
+          kind: 'combatant' as const,
+          participantId: 'dm-001',
+        },
+        {
+          characterId: 'CHAR-002',
+          initiative: 8,
+          participantId: 'player-002',
+        },
+      ],
+      roundNumber: 3,
+      sceneId: 'SCENE-001',
+      sessionId: 'SESSION-001',
+      status: 'active' as const,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const participants = [
+      ...sessionState.participants,
+      {
+        characterId: 'CHAR-002',
+        connectionStatus: 'connected' as const,
+        displayName: 'Player Two',
+        id: 'player-002',
+        joinedAt: '2026-01-01T00:00:00.000Z',
+        lastSeenAt: '2026-01-01T00:00:00.000Z',
+        pendingCharacterId: null,
+        role: 'player' as const,
+      },
+    ];
+    const lastEncounterEvent = {
+      encounter,
+      reason: 'turn_advanced' as const,
+      sessionId: 'SESSION-001',
+      type: 'encounter_state' as const,
+    };
+
+    assert.deepEqual(
+      getEncounterStatusSummary({
+        encounter,
+        lastCombatEvent: {
+          attackerCharacterId: 'CHAR-001',
+          attackerKind: 'character',
+          attackerParticipantId: 'player-001',
+          damage: 4,
+          encounterId: 'encounter_11111111-1111-4111-8111-111111111111',
+          hit: true,
+          reason: 'attack_resolved',
+          roll: {
+            d20: 15,
+            modifier: 5,
+            total: 20,
+          },
+          sessionId: 'SESSION-001',
+          targetArmorClass: 12,
+          targetCombatantId:
+            'scene_entity_11111111-1111-4111-8111-111111111111',
+          targetHp: {
+            current: 4,
+            previous: 8,
+          },
+          targetKind: 'combatant',
+          targetParticipantId: 'dm-001',
+          type: 'combat_event',
+        },
+        lastEncounterEvent,
+        participants,
+        scene,
+      }),
+      {
+        currentActorLabel:
+          'Training Construct (scene_entity_11111111-1111-4111-8111-111111111111)',
+        encounterId: 'encounter_11111111-1111-4111-8111-111111111111',
+        latestCombatResult: {
+          attackerLabel: 'Player One',
+          damage: 4,
+          hit: true,
+          rollTotal: 20,
+          targetArmorClass: 12,
+          targetHpCurrent: 4,
+          targetHpPrevious: 8,
+          targetLabel:
+            'Training Construct (scene_entity_11111111-1111-4111-8111-111111111111)',
+        },
+        latestEncounterUpdate: {
+          reason: 'turn_advanced',
+          roundNumber: 3,
+          turnNumber: 2,
+        },
+        nextActorLabel: 'Player Two',
+        roundNumber: 3,
+        status: 'active',
+        turnCount: 3,
+        turnNumber: 2,
+      },
+    );
+
+    assert.deepEqual(
+      getEncounterStatusSummary({
+        encounter: null,
+        lastCombatEvent: null,
+        lastEncounterEvent: null,
+        participants,
+        scene,
+      }),
+      {
+        currentActorLabel: null,
+        encounterId: null,
+        latestCombatResult: null,
+        latestEncounterUpdate: null,
+        nextActorLabel: null,
+        roundNumber: null,
+        status: 'not_loaded',
+        turnCount: 0,
+        turnNumber: null,
       },
     );
   });

@@ -144,6 +144,22 @@ export type ActionEconomyFeedbackSummary = {
   resources: ActionEconomyResourceSummary[];
 };
 
+export type EncounterStatusSummary = {
+  currentActorLabel: string | null;
+  encounterId: string | null;
+  latestCombatResult: ActionTargetFeedbackResult | null;
+  latestEncounterUpdate: {
+    reason: string;
+    roundNumber: number;
+    turnNumber: number;
+  } | null;
+  nextActorLabel: string | null;
+  roundNumber: number | null;
+  status: Encounter['status'] | 'not_loaded';
+  turnCount: number;
+  turnNumber: number | null;
+};
+
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 
 export type AbilityKey = (typeof abilityKeys)[number];
@@ -1423,6 +1439,90 @@ export function getCurrentTurnRailSummary({
         ? null
         : Math.max(0, movementSpeedFeet - movementUsedFeet),
     movementSpeedFeet,
+  };
+}
+
+export function getEncounterStatusSummary({
+  encounter,
+  lastCombatEvent,
+  lastEncounterEvent,
+  participants,
+  scene,
+}: {
+  encounter: Encounter | null;
+  lastCombatEvent: CombatEvent | null;
+  lastEncounterEvent: Extract<
+    SessionStreamEvent,
+    { type: 'encounter_state' }
+  > | null;
+  participants: SessionSnapshot['participants'];
+  scene: Scene | null;
+}): EncounterStatusSummary {
+  const sourceEncounter = encounter ?? lastEncounterEvent?.encounter ?? null;
+  const turnCount = sourceEncounter?.participants.length ?? 0;
+  const turnNumber =
+    sourceEncounter && turnCount > 0
+      ? sourceEncounter.currentTurnIndex + 1
+      : null;
+  const nextTurnIndex =
+    encounter && turnCount > 1
+      ? (encounter.currentTurnIndex + 1) % turnCount
+      : null;
+  const latestCombatResult = lastCombatEvent
+    ? {
+        attackerLabel: getCombatEventActorLabel({
+          combatantId: lastCombatEvent.attackerCombatantId,
+          participantId: lastCombatEvent.attackerParticipantId,
+          participants,
+          scene,
+        }),
+        damage: lastCombatEvent.damage,
+        hit: lastCombatEvent.hit,
+        rollTotal: lastCombatEvent.roll.total,
+        targetArmorClass: lastCombatEvent.targetArmorClass,
+        targetHpCurrent: lastCombatEvent.targetHp.current,
+        targetHpPrevious: lastCombatEvent.targetHp.previous,
+        targetLabel: getCombatEventActorLabel({
+          combatantId: lastCombatEvent.targetCombatantId,
+          participantId: lastCombatEvent.targetParticipantId,
+          participants,
+          scene,
+        }),
+      }
+    : null;
+
+  return {
+    currentActorLabel: encounter
+      ? getCurrentTurnLabel({
+          encounter,
+          participants,
+          scene,
+        })
+      : null,
+    encounterId: sourceEncounter?.id ?? null,
+    latestCombatResult,
+    latestEncounterUpdate: lastEncounterEvent
+      ? {
+          reason: lastEncounterEvent.reason,
+          roundNumber: lastEncounterEvent.encounter.roundNumber,
+          turnNumber: lastEncounterEvent.encounter.currentTurnIndex + 1,
+        }
+      : null,
+    nextActorLabel:
+      encounter && nextTurnIndex !== null
+        ? getCurrentTurnLabel({
+            encounter: {
+              ...encounter,
+              currentTurnIndex: nextTurnIndex,
+            },
+            participants,
+            scene,
+          })
+        : null,
+    roundNumber: sourceEncounter?.roundNumber ?? null,
+    status: sourceEncounter?.status ?? 'not_loaded',
+    turnCount,
+    turnNumber,
   };
 }
 

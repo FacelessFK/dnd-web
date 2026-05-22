@@ -80,6 +80,7 @@ import {
   getCurrentTurnRailSummary,
   getDmCombatantActionDisabledReason,
   getDmTableSetupChecklist,
+  getEncounterStatusSummary,
   getFinalizedLibraryEntriesForRuntime,
   getKnownCharacterIds,
   getLibraryEntrySubmissionBlocker,
@@ -130,6 +131,7 @@ import {
   type CombatantDraftForm,
   type CurrentTurnRailSummary,
   type DmTableSetupChecklist,
+  type EncounterStatusSummary,
   type LibraryEntrySubmissionBlocker,
   type MovementFeedbackSummary,
   type OutboxStatusView,
@@ -3519,6 +3521,13 @@ export function RuntimeCockpit() {
     selectedTargetCombatantId,
     selectedTargetParticipantId: selectedTarget,
   });
+  const encounterStatusSummary = getEncounterStatusSummary({
+    encounter,
+    lastCombatEvent,
+    lastEncounterEvent,
+    participants,
+    scene,
+  });
   const actionEconomyFeedbackSummary = getActionEconomyFeedbackSummary({
     actorTurnActionDisabledReason: disabledReasons.actorTurnAction,
     currentTurn: currentTurnRailSummary,
@@ -4240,16 +4249,12 @@ export function RuntimeCockpit() {
               title="Turn & Target"
             >
               <div className="grid gap-3">
+                <EncounterStatusFeedback
+                  summary={encounterStatusSummary}
+                  t={t}
+                />
                 {encounter ? (
                   <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
-                    <StatusRow
-                      label="Encounter"
-                      value={`${encounter.id} (${encounter.status})`}
-                    />
-                    <StatusRow
-                      label="Round"
-                      value={String(encounter.roundNumber)}
-                    />
                     <StatusRow
                       label="Usage"
                       value={`${encounter.currentTurnUsage.movementUsed} ft, action ${flag(encounter.currentTurnUsage.actionUsed)}, bonus ${flag(encounter.currentTurnUsage.bonusActionUsed)}, reaction ${flag(encounter.currentTurnUsage.reactionUsed)}`}
@@ -4299,12 +4304,7 @@ export function RuntimeCockpit() {
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <EmptyState
-                    detail="Start an encounter as DM or recover one from the server."
-                    title="No active encounter loaded"
-                  />
-                )}
+                ) : null}
                 <SelectField
                   label="Target"
                   onChange={(value) => {
@@ -5159,6 +5159,111 @@ function MovementFeedback({
       </div>
     </div>
   );
+}
+
+function EncounterStatusFeedback({
+  summary,
+  t,
+}: {
+  summary: EncounterStatusSummary;
+  t: RuntimeTranslator;
+}) {
+  const statusLabel = getEncounterStatusLabel(summary.status, t);
+  const progressLabel =
+    summary.roundNumber === null || summary.turnNumber === null
+      ? t('runtime.encounterStatus.noProgress')
+      : t('runtime.encounterStatus.progress', {
+          round: String(summary.roundNumber),
+          turn: String(summary.turnNumber),
+          turnCount: String(summary.turnCount),
+        });
+  const latestEncounterLabel = summary.latestEncounterUpdate
+    ? t('runtime.encounterStatus.latestEncounter', {
+        reason: summary.latestEncounterUpdate.reason,
+        round: String(summary.latestEncounterUpdate.roundNumber),
+        turn: String(summary.latestEncounterUpdate.turnNumber),
+      })
+    : t('runtime.encounterStatus.noEncounterUpdate');
+  const latestCombatLabel = summary.latestCombatResult
+    ? t('runtime.encounterStatus.latestCombat', {
+        attacker: summary.latestCombatResult.attackerLabel,
+        damage: String(summary.latestCombatResult.damage),
+        result: summary.latestCombatResult.hit
+          ? t('runtime.encounterStatus.hit')
+          : t('runtime.encounterStatus.miss'),
+        target: summary.latestCombatResult.targetLabel,
+      })
+    : t('runtime.encounterStatus.noCombatResult');
+
+  return (
+    <div className="grid gap-2 rounded-2xl border border-sky-300/15 bg-sky-950/10 p-3 text-xs text-sky-50">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-black uppercase tracking-[0.14em] text-sky-200/80">
+            {t('runtime.encounterStatus.title')}
+          </p>
+          <p className="mt-1 truncate text-sm font-black text-white">
+            {summary.currentActorLabel ??
+              t('runtime.encounterStatus.noCurrentActor')}
+          </p>
+        </div>
+        <StatusBadge
+          label={statusLabel}
+          tone={getEncounterStatusTone(summary.status)}
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge label={progressLabel} tone="info" />
+        {summary.encounterId ? (
+          <StatusBadge
+            label={t('runtime.encounterStatus.id', {
+              id: summary.encounterId,
+            })}
+            tone="info"
+          />
+        ) : null}
+        {summary.nextActorLabel ? (
+          <StatusBadge
+            label={t('runtime.encounterStatus.nextActor', {
+              actor: summary.nextActorLabel,
+            })}
+            tone="warning"
+          />
+        ) : null}
+      </div>
+      <div className="grid gap-1 text-sky-100/75">
+        <p>{latestEncounterLabel}</p>
+        <p>{latestCombatLabel}</p>
+      </div>
+    </div>
+  );
+}
+
+function getEncounterStatusLabel(
+  status: EncounterStatusSummary['status'],
+  t: RuntimeTranslator,
+) {
+  switch (status) {
+    case 'active':
+      return t('runtime.encounterStatus.active');
+    case 'ended':
+      return t('runtime.encounterStatus.ended');
+    case 'not_loaded':
+      return t('runtime.encounterStatus.notLoaded');
+  }
+}
+
+function getEncounterStatusTone(
+  status: EncounterStatusSummary['status'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'active':
+      return 'success';
+    case 'ended':
+      return 'warning';
+    case 'not_loaded':
+      return 'info';
+  }
 }
 
 function ActionTargetFeedback({
