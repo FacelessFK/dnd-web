@@ -52,6 +52,7 @@ import {
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
   createDefaultSceneTransitionDraftForm,
+  createSceneEntityDraftFormFromPreset,
   createSceneEntityDraftFormFromEntity,
   createSceneDraftFormFromScene,
   createSceneTransitionDraftFormFromEntity,
@@ -100,6 +101,7 @@ import {
   sampleCharacters,
   samplePlayers,
   sanitizeSessionIdInput,
+  sceneEntityPresets,
   sceneEntityInputFromDraft,
   sceneEntityUpdateInputFromDraft,
   sceneEntityTypeOptions,
@@ -125,6 +127,8 @@ import {
   type RuntimeNoticeTone,
   type SceneDraftForm,
   type SceneEntityDraftForm,
+  type SceneEntityPreset,
+  type SceneEntityPresetId,
   type SceneTransitionDraftForm,
   type SessionSnapshot,
   type StoredCockpitState,
@@ -2956,6 +2960,10 @@ export function RuntimeCockpit() {
     }));
   }
 
+  function applySceneEntityPreset(presetId: SceneEntityPresetId): void {
+    setSceneEntityDraft(createSceneEntityDraftFormFromPreset(presetId));
+  }
+
   function updateSceneEntityEditDraftField(
     field: 'footprintHeight' | 'footprintWidth' | 'name' | 'type',
     value: string,
@@ -4028,12 +4036,14 @@ export function RuntimeCockpit() {
                 onEditEntityFlagChange={updateSceneEntityEditDraftFlag}
                 onEntityFieldChange={updateSceneEntityDraftField}
                 onEntityFlagChange={updateSceneEntityDraftFlag}
+                onEntityPresetSelect={applySceneEntityPreset}
                 onPlaceEntity={placeSceneEntity}
                 onRepositionEntity={repositionSceneEntity}
                 onSceneFieldChange={updateSceneDraftField}
                 onSelectEntity={selectPassiveSceneEntity}
                 onUpdateEntity={updateSceneEntity}
                 deleteEntityDisabledReason={deleteSceneEntityReason}
+                entityPresets={sceneEntityPresets}
                 placeEntityDisabledReason={placeSceneEntityReason}
                 repositionEntityDisabledReason={repositionSceneEntityReason}
                 scene={scene}
@@ -5057,6 +5067,7 @@ function SceneBuilderPanel({
   entityDraftErrors,
   entityEditDraft,
   entityEditDraftErrors,
+  entityPresets,
   passiveEntities,
   onActivateScene,
   onActivationSceneIdChange,
@@ -5066,6 +5077,7 @@ function SceneBuilderPanel({
   onEditEntityFlagChange,
   onEntityFieldChange,
   onEntityFlagChange,
+  onEntityPresetSelect,
   onPlaceEntity,
   onRepositionEntity,
   onSceneFieldChange,
@@ -5090,6 +5102,7 @@ function SceneBuilderPanel({
   entityDraftErrors: string[];
   entityEditDraft: SceneEntityDraftForm;
   entityEditDraftErrors: string[];
+  entityPresets: readonly SceneEntityPreset[];
   passiveEntities: Scene['entities'];
   onActivateScene: () => void | Promise<void>;
   onActivationSceneIdChange: (value: string) => void;
@@ -5111,6 +5124,7 @@ function SceneBuilderPanel({
     field: 'blocksMovement' | 'blocksVision' | 'hidden',
     value: boolean,
   ) => void;
+  onEntityPresetSelect: (presetId: SceneEntityPresetId) => void;
   onPlaceEntity: () => void | Promise<void>;
   onRepositionEntity: () => void | Promise<void>;
   onSceneFieldChange: (field: keyof SceneDraftForm, value: string) => void;
@@ -5208,6 +5222,30 @@ function SceneBuilderPanel({
               {entityDraftErrors.slice(0, 3).join(' ')}
             </p>
           ) : null}
+          <div className="grid gap-2">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
+              Entity palette
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {entityPresets.map((preset) => (
+                <button
+                  className="min-h-16 rounded-xl border border-amber-300/15 bg-[#241a12] px-3 py-2 text-left transition hover:border-amber-200/45 hover:bg-[#322318] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                  key={preset.id}
+                  onClick={() => onEntityPresetSelect(preset.id)}
+                  title={preset.description}
+                  type="button"
+                >
+                  <span className="block text-sm font-bold text-amber-50">
+                    {preset.label}
+                  </span>
+                  <span className="mt-1 block text-xs capitalize text-amber-100/55">
+                    {preset.draft.type.replaceAll('_', ' ')} ·{' '}
+                    {preset.draft.footprintWidth}x{preset.draft.footprintHeight}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
           <SelectField
             label="Entity type"
             onChange={(value) => onEntityFieldChange('type', value)}

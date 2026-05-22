@@ -25,6 +25,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - read-model recovery after refresh;
 - scene create/activate/read;
 - passive scene entity create/update/reposition/delete;
+- compact DM scene entity palette that fills the existing placement draft with
+  wall, cover, marker, hidden prop, player spawn, and monster spawn presets;
 - transition node create/update/delete/activation;
 - character placement and movement;
 - local tactical board camera controls for zoom, bounded pan, and reset view;

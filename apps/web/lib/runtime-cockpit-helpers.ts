@@ -96,6 +96,21 @@ export type SceneEntityDraftForm = {
   type: SceneEntityInput['type'];
 };
 
+export type SceneEntityPresetId =
+  | 'cover'
+  | 'hidden_prop'
+  | 'marker'
+  | 'monster_spawn'
+  | 'player_spawn'
+  | 'wall';
+
+export type SceneEntityPreset = {
+  description: string;
+  draft: SceneEntityDraftForm;
+  id: SceneEntityPresetId;
+  label: string;
+};
+
 export type SceneTransitionDraftForm = {
   blocksMovement: boolean;
   blocksVision: boolean;
@@ -228,6 +243,94 @@ export const sampleCharacters: Record<string, CharacterInput> = {
 
 export const sceneEntityTypeOptions = sceneEntityTypeSchema.options;
 export const sceneTransitionKindOptions = sceneTransitionKindSchema.options;
+
+export const sceneEntityPresets: readonly SceneEntityPreset[] = [
+  {
+    description: 'Long blocker for walls, doors, or chokepoints.',
+    draft: {
+      blocksMovement: true,
+      blocksVision: true,
+      footprintHeight: '1',
+      footprintWidth: '3',
+      hidden: false,
+      name: 'Wall Segment',
+      type: 'terrain',
+    },
+    id: 'wall',
+    label: 'Wall',
+  },
+  {
+    description:
+      'Small object that blocks movement but keeps sight lines open.',
+    draft: {
+      blocksMovement: true,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      name: 'Cover Crate',
+      type: 'object',
+    },
+    id: 'cover',
+    label: 'Cover',
+  },
+  {
+    description: 'Visible note marker that does not block the board.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      name: 'Scene Marker',
+      type: 'terrain',
+    },
+    id: 'marker',
+    label: 'Marker',
+  },
+  {
+    description: 'DM-side hidden prop for traps, clues, or reveals.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: true,
+      name: 'Hidden Prop',
+      type: 'object',
+    },
+    id: 'hidden_prop',
+    label: 'Hidden Prop',
+  },
+  {
+    description: 'Non-blocking marker for planned player token entry.',
+    draft: {
+      blocksMovement: false,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      name: 'Player Spawn',
+      type: 'player_spawn',
+    },
+    id: 'player_spawn',
+    label: 'Player Spawn',
+  },
+  {
+    description: 'Marker for planned monster or NPC placement.',
+    draft: {
+      blocksMovement: true,
+      blocksVision: false,
+      footprintHeight: '1',
+      footprintWidth: '1',
+      hidden: false,
+      name: 'Monster Spawn',
+      type: 'monster',
+    },
+    id: 'monster_spawn',
+    label: 'Monster Spawn',
+  },
+] as const;
 
 export function createDefaultCharacterDraftForm(
   displayName = 'New Adventurer',
@@ -493,6 +596,16 @@ export function createDefaultSceneEntityDraftForm(): SceneEntityDraftForm {
     name: 'Stone Pillar',
     type: 'object',
   };
+}
+
+export function createSceneEntityDraftFormFromPreset(
+  presetId: SceneEntityPresetId,
+): SceneEntityDraftForm {
+  const preset =
+    sceneEntityPresets.find((candidate) => candidate.id === presetId) ??
+    sceneEntityPresets[0]!;
+
+  return { ...preset.draft };
 }
 
 export function createDefaultSceneTransitionDraftForm(): SceneTransitionDraftForm {

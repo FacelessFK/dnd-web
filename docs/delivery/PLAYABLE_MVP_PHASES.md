@@ -43,6 +43,8 @@ Already implemented:
 - live SSE delivery plus read-model recovery;
 - scene create/activate/read;
 - passive scene entities and transition nodes;
+- compact DM scene entity palette for wall, cover, marker, hidden prop, player
+  spawn, and monster spawn presets;
 - character assignment, placement, movement, HP, conditions, and DM overrides;
 - mixed player/combatant encounters;
 - narrow melee attacks and turn usage;
@@ -128,7 +130,13 @@ Acceptance:
 
 Suggested first implementation slice:
 
-- Add a compact scene entity palette for common entity presets.
+- Implemented: compact scene entity palette for common wall, cover, marker,
+  hidden prop, player spawn, and monster spawn presets.
+
+Suggested next implementation slice:
+
+- Add compact transition-node presets/guidance for door, stairs, portal, gate,
+  and other scene exits without changing scene command semantics.
 
 ### Phase 3: Table Setup And Ready Flow
 
@@ -248,9 +256,9 @@ the existing runtime controls into a real playable session loop.
 
 ## First Next Task
 
-Implement Phase 2 Slice 1:
+Implement Phase 2 Slice 2:
 
-> Add a compact scene entity palette for common entity presets.
+> Add compact transition-node presets/guidance for common scene exits.
 
 Non-goals for that task:
 
@@ -258,7 +266,7 @@ Non-goals for that task:
 - no persisted camera or board selection state;
 - no full drag-and-drop map editor or asset marketplace;
 - no fog of war, line of sight, or lighting;
-- no refactor of scene command semantics;
+- no refactor of scene transition command semantics;
 - no new auth or DB requirements.
 
 Validation for that task should include:

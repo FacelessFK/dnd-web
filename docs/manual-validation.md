@@ -51,6 +51,12 @@ players join it should advance toward character assignment; after assignment,
 scene activation, and token placement it should mark those steps done; after at
 least one token is placed it should show encounter start as available.
 
+In the DM Scene Builder panel, confirm the Entity palette buttons fill the
+existing Place entity draft for wall, cover, marker, hidden prop, player spawn,
+and monster spawn presets. Confirm selecting a preset does not persist anything
+until **Place Entity** succeeds, and that the footprint, blocking, vision, and
+hidden fields remain editable before submission.
+
 A lightweight automated browser smoke for the same surface is available with
 `pnpm --filter @dnd/web test:smoke`. It starts local server/web dev processes,
 runs the DM fresh demo setup through headless Chrome, validates read-model

@@ -13,6 +13,7 @@ import {
   createDefaultSceneDraftForm,
   createDefaultSceneEntityDraftForm,
   createDefaultSceneTransitionDraftForm,
+  createSceneEntityDraftFormFromPreset,
   createSceneEntityDraftFormFromEntity,
   createSceneTransitionDraftFormFromEntity,
   describeSessionStreamEvent,
@@ -46,6 +47,7 @@ import {
   getOutboxStatusView,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
+  sceneEntityPresets,
   isCombatantEntityDefeated,
   isSessionStreamEvent,
   isExpectedRecoveryMiss,
@@ -1189,6 +1191,51 @@ describe('runtime cockpit helpers', () => {
       }).join('\n'),
       /fit within the scene grid/,
     );
+  });
+
+  it('creates scene entity drafts from common DM palette presets', () => {
+    assert.deepEqual(
+      sceneEntityPresets.map((preset) => preset.id),
+      [
+        'wall',
+        'cover',
+        'marker',
+        'hidden_prop',
+        'player_spawn',
+        'monster_spawn',
+      ],
+    );
+
+    const wall = createSceneEntityDraftFormFromPreset('wall');
+    assert.deepEqual(wall, {
+      blocksMovement: true,
+      blocksVision: true,
+      footprintHeight: '1',
+      footprintWidth: '3',
+      hidden: false,
+      name: 'Wall Segment',
+      type: 'terrain',
+    });
+    assert.deepEqual(
+      validateSceneEntityDraftForm({
+        form: wall,
+        grid: {
+          cellSizeFeet: 5,
+          height: 8,
+          width: 8,
+        },
+        position: {
+          x: 1,
+          y: 1,
+        },
+      }),
+      [],
+    );
+
+    const hiddenProp = createSceneEntityDraftFormFromPreset('hidden_prop');
+    assert.equal(hiddenProp.hidden, true);
+    assert.equal(hiddenProp.blocksMovement, false);
+    assert.equal(hiddenProp.type, 'object');
   });
 
   it('creates passive scene entity edit drafts and excludes combatants', () => {

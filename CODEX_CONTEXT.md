@@ -45,11 +45,11 @@ that scope.
 
 - `/runtime` is a live tactical cockpit with DM and Player modes, session
   create/join/reconnect, SSE subscription, read-model recovery, scene creation
-  and activation, passive scene entities, transition nodes, placement/movement,
-  local tactical board camera controls, tactical board state badges, tactical
-  board keyboard navigation, DM-facing Table Setup checklist, mixed
-  player/combatant encounters, narrow melee attacks, turn usage, readable event
-  feed, and explicit DM controls.
+  and activation, passive scene entities, compact scene entity presets,
+  transition nodes, placement/movement, local tactical board camera controls,
+  tactical board state badges, tactical board keyboard navigation, DM-facing
+  Table Setup checklist, mixed player/combatant encounters, narrow melee
+  attacks, turn usage, readable event feed, and explicit DM controls.
 - `/characters` is a Character Library and Builder surface for reusable
   build/identity records.
 - `/login` is the auth surface for the DB-backed Character Library session MVP.
@@ -100,19 +100,21 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 2 Slice 1: compact scene entity palette for common DM scene
-presets.
+Playable MVP Phase 2 Slice 2: compact transition-node presets/guidance for
+common scene exits.
 
-The bridge hardening slice and the first Table Setup checklist are in place.
-The next work should make DM scene authoring faster without changing the
-server protocol or broadening into a full map editor.
+The bridge hardening slice, Table Setup checklist, and first scene entity
+palette are in place. The next work should make transition-node authoring
+faster without changing the server protocol or broadening into a full map
+editor.
 
 Break this into small Codex tasks:
 
-1. inspect existing scene/entity form helpers and DM runtime panels;
-2. define a small preset list for wall/blocker, cover/object, marker, hidden
-   prop, transition node, and combatant spawn-adjacent authoring;
-3. wire preset selection into existing draft state without new command types;
+1. inspect existing scene transition helpers and `SceneTransitionPanel`;
+2. define a small preset/guidance list for door, stairs, portal, gate, and
+   other exits;
+3. wire preset selection into existing transition draft state without new
+   command types;
 4. validate helper tests, web typecheck, build, and runtime smoke honestly;
 5. update docs after each slice.
 
