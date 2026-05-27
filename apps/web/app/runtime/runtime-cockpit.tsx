@@ -4499,11 +4499,10 @@ export function RuntimeCockpit() {
                     <div className="grid gap-3 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
                       <div>
                         <p className="text-sm font-bold text-amber-50">
-                          Assignment Requests
+                          {t('runtime.assignmentRequests.title')}
                         </p>
                         <p className="mt-1 text-xs leading-5 text-amber-100/60">
-                          Pending requests come from authoritative session
-                          state, not this browser&apos;s local character cache.
+                          {t('runtime.assignmentRequests.description')}
                         </p>
                       </div>
                       {pendingAssignmentRequests.length ? (
@@ -4529,8 +4528,12 @@ export function RuntimeCockpit() {
                                 <StatusBadge
                                   label={
                                     request.assignedCharacterId
-                                      ? 'Replacement pending'
-                                      : 'Needs assignment'
+                                      ? t(
+                                          'runtime.assignmentRequests.replacementPending',
+                                        )
+                                      : t(
+                                          'runtime.assignmentRequests.needsAssignment',
+                                        )
                                   }
                                   tone="warning"
                                 />
@@ -4591,13 +4594,13 @@ export function RuntimeCockpit() {
                                 </Notice>
                               )}
                               <StatusRow
-                                label="Assigned"
+                                label={t('runtime.assignmentRequests.assigned')}
                                 value={request.assignedCharacterId ?? 'none'}
                               />
                               <ActionButton
                                 disabled={Boolean(busyReason)}
                                 disabledReason={busyReason ?? undefined}
-                                label="Assign Pending Character"
+                                label={t('runtime.assignmentRequests.submit')}
                                 onClick={() =>
                                   dmAssignPendingCharacter(
                                     request.participantId,
@@ -4611,8 +4614,8 @@ export function RuntimeCockpit() {
                         })
                       ) : (
                         <EmptyState
-                          detail="Players can submit finalized characters from Player mode."
-                          title="No pending character requests"
+                          detail={t('runtime.assignmentRequests.emptyDetail')}
+                          title={t('runtime.assignmentRequests.emptyTitle')}
                         />
                       )}
                     </div>
@@ -7063,11 +7066,11 @@ function CharacterOnboardingPanel({
     : 'info';
   const statusLabel = playerCharacter
     ? isAssigned
-      ? 'Assigned'
+      ? t('runtime.characterLibrary.status.assigned')
       : pendingCharacterId === playerCharacter.character.id
-        ? 'Submitted'
-        : 'Ready for submission'
-    : 'No character yet';
+        ? t('runtime.characterLibrary.status.submitted')
+        : t('runtime.characterLibrary.status.ready')
+    : t('runtime.characterLibrary.status.none');
   const libraryEntryOptions = libraryEntries.map((entry) => ({
     label: t('runtime.characterLibrary.optionLabel', {
       className: entry.className,
@@ -7111,10 +7114,19 @@ function CharacterOnboardingPanel({
         ) : null}
 
         {!isAssigned && playerCharacter?.character.status === 'ready' ? (
-          <Notice title="Waiting on DM assignment" tone="warning">
+          <Notice
+            title={
+              pendingCharacterId === playerCharacter.character.id
+                ? t('runtime.characterLibrary.waitingTitle')
+                : t('runtime.characterLibrary.submitReadyTitle')
+            }
+            tone="warning"
+          >
             {pendingCharacterId === playerCharacter.character.id
-              ? 'Your finalized character is submitted in authoritative session state. A DM can now see and assign it from their roster.'
-              : 'This character is finalized but not submitted yet. Submit it so a DM in another browser can assign it.'}
+              ? t('runtime.characterLibrary.waitingDetail', {
+                  characterId: pendingCharacterId,
+                })
+              : t('runtime.characterLibrary.submitReadyDetail')}
           </Notice>
         ) : null}
 
@@ -7146,20 +7158,30 @@ function CharacterOnboardingPanel({
                 value={selectedLibraryEntryId}
               />
               {selectedLibraryEntry ? (
-                <dl className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3 text-sm">
-                  <StatusRow
-                    label={t('runtime.characterLibrary.entryStatus')}
-                    value={selectedLibraryEntry.status}
-                  />
-                  <StatusRow
-                    label={t('runtime.characterLibrary.entryClass')}
-                    value={`${selectedLibraryEntry.className} ${selectedLibraryEntry.level}`}
-                  />
-                  <StatusRow
-                    label={t('runtime.characterLibrary.entryId')}
-                    value={selectedLibraryEntry.id}
-                  />
-                </dl>
+                <>
+                  <dl className="grid gap-2 rounded-2xl border border-sky-300/15 bg-black/25 p-3 text-sm">
+                    <StatusRow
+                      label={t('runtime.characterLibrary.entryStatus')}
+                      value={selectedLibraryEntry.status}
+                    />
+                    <StatusRow
+                      label={t('runtime.characterLibrary.entryClass')}
+                      value={`${selectedLibraryEntry.className} ${selectedLibraryEntry.level}`}
+                    />
+                    <StatusRow
+                      label={t('runtime.characterLibrary.entryId')}
+                      value={selectedLibraryEntry.id}
+                    />
+                  </dl>
+                  <Notice
+                    title={t('runtime.characterLibrary.selectedTitle')}
+                    tone="info"
+                  >
+                    {t('runtime.characterLibrary.selectedDetail', {
+                      name: selectedLibraryEntry.name,
+                    })}
+                  </Notice>
+                </>
               ) : null}
             </>
           ) : (

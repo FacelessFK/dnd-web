@@ -933,6 +933,27 @@ describe('runtime cockpit helpers', () => {
       }).title,
       'Join the table',
     );
+
+    assert.deepEqual(
+      getPlayerNextStep({
+        hasActiveScene: true,
+        hasCharacter: false,
+        hasEncounter: false,
+        isCharacterReady: false,
+        isCharacterAssigned: false,
+        isCharacterSubmitted: false,
+        isCurrentTurn: false,
+        isJoined: true,
+        isPlaced: false,
+        sessionId: 'SESSION-001',
+      }),
+      {
+        detail:
+          'Create a draft here or submit a saved Character Library entry, then wait for DM assignment.',
+        title: 'Create your character',
+        tone: 'warning',
+      },
+    );
   });
 
   it('builds a DM table setup checklist for a missing session', () => {
@@ -1134,9 +1155,36 @@ describe('runtime cockpit helpers', () => {
       }),
       {
         detail:
-          'Your finalized character is submitted in session state. Waiting for the DM to assign it.',
+          'A submitted runtime copy is waiting in session state for the DM to assign it.',
         title: 'Waiting for DM assignment',
         tone: 'warning',
+      },
+    );
+
+    assert.deepEqual(
+      getPlayerReadinessSummary({
+        attackReady: false,
+        currentActorLabel: 'none',
+        hasActiveScene: false,
+        hasCharacter: true,
+        hasEncounter: false,
+        isCharacterAssigned: false,
+        isCharacterReady: true,
+        isCharacterSubmitted: true,
+        isCurrentTurn: false,
+        isJoined: true,
+        isPlaced: false,
+        moveReady: false,
+        playerDisplayName: 'Player One',
+        playerParticipantId: 'player-001',
+        readyActionCount: 0,
+        sessionId: 'SESSION-001',
+      }).items.find((item) => item.id === 'assignment'),
+      {
+        detail: 'A runtime copy is submitted. Waiting for the DM to assign it.',
+        id: 'assignment',
+        status: 'waiting',
+        title: 'Waiting for assignment',
       },
     );
   });
@@ -1177,13 +1225,13 @@ describe('runtime cockpit helpers', () => {
             title: 'Joined table',
           },
           {
-            detail: 'A ready character is available for this player.',
+            detail: 'A ready runtime character is available for this player.',
             id: 'character',
             status: 'done',
             title: 'Character ready',
           },
           {
-            detail: 'The DM assigned this character to the table.',
+            detail: 'The DM assigned this runtime character to the table.',
             id: 'assignment',
             status: 'done',
             title: 'Character assigned',

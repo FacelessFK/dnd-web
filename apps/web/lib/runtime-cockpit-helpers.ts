@@ -2851,7 +2851,7 @@ export function getPlayerNextStep({
   if (!hasCharacter) {
     return {
       detail:
-        'Create a draft character here, finalize it, then ask the DM to assign it.',
+        'Create a draft here or submit a saved Character Library entry, then wait for DM assignment.',
       title: 'Create your character',
       tone: 'warning',
     };
@@ -2878,7 +2878,7 @@ export function getPlayerNextStep({
 
     return {
       detail:
-        'Your finalized character is submitted in session state. Waiting for the DM to assign it.',
+        'A submitted runtime copy is waiting in session state for the DM to assign it.',
       title: 'Waiting for DM assignment',
       tone: 'warning',
     };
@@ -2994,10 +2994,10 @@ export function getPlayerReadinessSummary({
     {
       detail: hasCharacter
         ? isCharacterReady
-          ? 'A ready character is available for this player.'
+          ? 'A ready runtime character is available for this player.'
           : 'Finalize the character before asking the DM to assign it.'
         : isJoined
-          ? 'Create or recover a character for this player.'
+          ? 'Create a runtime draft or submit a saved Character Library entry.'
           : 'Join before character setup matters.',
       id: 'character',
       status:
@@ -3013,9 +3013,9 @@ export function getPlayerReadinessSummary({
     },
     {
       detail: isCharacterAssigned
-        ? 'The DM assigned this character to the table.'
+        ? 'The DM assigned this runtime character to the table.'
         : isCharacterSubmitted
-          ? 'Your character is submitted. Waiting for the DM to assign it.'
+          ? 'A runtime copy is submitted. Waiting for the DM to assign it.'
           : isCharacterReady
             ? 'Submit the finalized character for DM assignment.'
             : 'A finalized character is required before assignment.',

@@ -50,14 +50,24 @@ const messages = {
     'runtime.assignmentRequests.ac': 'AC',
     'runtime.assignmentRequests.build': 'Build',
     'runtime.assignmentRequests.character': 'Character',
+    'runtime.assignmentRequests.description':
+      "Pending requests are server-created runtime copies from player submissions. Assigning one makes it the participant's active runtime character; source library entries stay reusable.",
+    'runtime.assignmentRequests.emptyDetail':
+      'Players can submit finalized runtime drafts or saved Character Library entries from Player mode.',
+    'runtime.assignmentRequests.emptyTitle': 'No pending character requests',
     'runtime.assignmentRequests.hp': 'HP',
+    'runtime.assignmentRequests.needsAssignment': 'Runtime copy pending',
     'runtime.assignmentRequests.previewUnavailableDetail':
       'Recover table state or read the pending character to show the full request preview.',
     'runtime.assignmentRequests.previewUnavailableTitle':
       'Character preview unavailable',
+    'runtime.assignmentRequests.assigned': 'Active runtime character',
+    'runtime.assignmentRequests.replacementPending': 'Replacement copy pending',
     'runtime.assignmentRequests.runtimeCopy': 'Runtime copy',
     'runtime.assignmentRequests.sourceLibraryEntry': 'Source library entry',
     'runtime.assignmentRequests.speed': 'Speed',
+    'runtime.assignmentRequests.submit': 'Assign Runtime Copy',
+    'runtime.assignmentRequests.title': 'Assignment Requests',
     'runtime.board.badge.move': 'Movement target',
     'runtime.board.badge.selected': 'Selected token',
     'runtime.board.badge.target': 'Attack target',
@@ -105,10 +115,24 @@ const messages = {
     'runtime.characterLibrary.selectLabel': 'Saved character',
     'runtime.characterLibrary.selectRequired':
       'Choose a finalized saved character first.',
+    'runtime.characterLibrary.selectedDetail':
+      'Submitting {name} creates a separate runtime copy for this session. The saved library entry remains reusable.',
+    'runtime.characterLibrary.selectedTitle': 'Saved entry selected',
     'runtime.characterLibrary.signInRequired':
       'Sign in before loading saved Character Library entries.',
+    'runtime.characterLibrary.status.assigned': 'Active runtime character',
+    'runtime.characterLibrary.status.none': 'No character yet',
+    'runtime.characterLibrary.status.ready': 'Ready to submit',
+    'runtime.characterLibrary.status.submitted': 'Pending DM assignment',
     'runtime.characterLibrary.submit': 'Submit Saved Character',
+    'runtime.characterLibrary.submitReadyDetail':
+      'This finalized character is ready. Submit it so the server records a runtime copy for DM assignment.',
+    'runtime.characterLibrary.submitReadyTitle': 'Ready for runtime copy',
     'runtime.characterLibrary.title': 'Saved Character Library',
+    'runtime.characterLibrary.waitingDetail':
+      'Runtime copy {characterId} is waiting in authoritative session state. The DM must assign it before it becomes your active table character.',
+    'runtime.characterLibrary.waitingTitle':
+      'Runtime copy pending DM assignment',
     'runtime.eyebrow': 'Authoritative table surface',
     'runtime.encounterStatus.active': 'Active',
     'runtime.encounterStatus.ended': 'Ended',
@@ -272,14 +296,24 @@ const messages = {
     'runtime.assignmentRequests.ac': 'AC',
     'runtime.assignmentRequests.build': 'ساختار',
     'runtime.assignmentRequests.character': 'کاراکتر',
+    'runtime.assignmentRequests.description':
+      'درخواست‌های pending نسخه‌های runtime هستند که سرور از submission بازیکن ساخته است. Assign کردن یکی از آن‌ها، کاراکتر runtime فعال شرکت‌کننده را مشخص می‌کند؛ ورودی‌های کتابخانه همچنان قابل استفاده مجدد می‌مانند.',
+    'runtime.assignmentRequests.emptyDetail':
+      'بازیکن‌ها می‌توانند از حالت Player، draft نهایی‌شده runtime یا ورودی ذخیره‌شده کتابخانه کاراکتر را submit کنند.',
+    'runtime.assignmentRequests.emptyTitle': 'درخواست کاراکتر pending نیست',
     'runtime.assignmentRequests.hp': 'HP',
+    'runtime.assignmentRequests.needsAssignment': 'نسخه runtime pending',
     'runtime.assignmentRequests.previewUnavailableDetail':
       'برای نمایش preview کامل درخواست، وضعیت میز را recover کنید یا کاراکتر pending را دوباره بخوانید.',
     'runtime.assignmentRequests.previewUnavailableTitle':
       'Preview کاراکتر در دسترس نیست',
+    'runtime.assignmentRequests.assigned': 'کاراکتر runtime فعال',
+    'runtime.assignmentRequests.replacementPending': 'نسخه جایگزین pending',
     'runtime.assignmentRequests.runtimeCopy': 'نسخه runtime',
     'runtime.assignmentRequests.sourceLibraryEntry': 'ورودی کتابخانه منبع',
     'runtime.assignmentRequests.speed': 'سرعت',
+    'runtime.assignmentRequests.submit': 'Assign نسخه runtime',
+    'runtime.assignmentRequests.title': 'درخواست‌های assignment',
     'runtime.board.badge.move': 'مقصد حرکت',
     'runtime.board.badge.selected': 'توکن انتخاب‌شده',
     'runtime.board.badge.target': 'هدف حمله',
@@ -327,10 +361,24 @@ const messages = {
     'runtime.characterLibrary.selectLabel': 'کاراکتر ذخیره‌شده',
     'runtime.characterLibrary.selectRequired':
       'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
+    'runtime.characterLibrary.selectedDetail':
+      'Submit کردن {name} یک نسخه runtime جدا برای این session می‌سازد. ورودی ذخیره‌شده کتابخانه همچنان قابل استفاده مجدد می‌ماند.',
+    'runtime.characterLibrary.selectedTitle': 'ورودی ذخیره‌شده انتخاب شده',
     'runtime.characterLibrary.signInRequired':
       'برای بارگذاری کاراکترهای ذخیره‌شده وارد شوید.',
+    'runtime.characterLibrary.status.assigned': 'کاراکتر runtime فعال',
+    'runtime.characterLibrary.status.none': 'هنوز کاراکتری نیست',
+    'runtime.characterLibrary.status.ready': 'آماده submit',
+    'runtime.characterLibrary.status.submitted': 'در انتظار assignment توسط DM',
     'runtime.characterLibrary.submit': 'Submit کاراکتر ذخیره‌شده',
+    'runtime.characterLibrary.submitReadyDetail':
+      'این کاراکتر نهایی‌شده آماده است. آن را submit کنید تا سرور یک نسخه runtime برای assignment توسط DM ثبت کند.',
+    'runtime.characterLibrary.submitReadyTitle': 'آماده ساخت نسخه runtime',
     'runtime.characterLibrary.title': 'کتابخانه کاراکترهای ذخیره‌شده',
+    'runtime.characterLibrary.waitingDetail':
+      'نسخه runtime {characterId} در وضعیت مرجع session منتظر است. DM باید آن را assign کند تا کاراکتر فعال میز شما شود.',
+    'runtime.characterLibrary.waitingTitle':
+      'نسخه runtime در انتظار assignment توسط DM',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
     'runtime.encounterStatus.active': 'فعال',
     'runtime.encounterStatus.ended': 'تمام شده',
