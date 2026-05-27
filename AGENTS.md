@@ -143,6 +143,14 @@ Do not use stale docs as stronger truth than current state docs or code.
   code. It complements `dnd-runtime-boundary-review`: boundary review focuses
   on non-negotiable runtime/product guardrails, while PR review is the broader
   pre-merge review.
+- Use `dnd-feature-factory` to orchestrate a small Training Room Skirmish /
+  Phase 6-style polish slice, or a similarly narrow approved task, through
+  `dnd-task-intake`, human approval, optional pre-build
+  `dnd-runtime-boundary-review`, `dnd-build-with-tests`, optional post-diff
+  boundary review, `dnd-pr-reviewer`, and a human merge decision. This skill is
+  workflow-only: it must not skip human approval checkpoints, broaden scope
+  into CRPG/full automation/monster AI/full spell systems/fog of
+  war/production auth, or bypass DM/server-authoritative boundaries.
 - Future skills should stay small, focused, and instruction-only unless a human
   explicitly asks for scripts, assets, or references.
 
