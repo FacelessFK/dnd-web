@@ -2585,6 +2585,52 @@ export type RuntimeStatusOverview = {
   };
 };
 
+export type RuntimeReadinessRosterAssignmentStatus =
+  | 'assigned'
+  | 'needs_character'
+  | 'pending_assignment';
+
+export type RuntimeReadinessRosterPlacementStatus =
+  | 'needs_assignment'
+  | 'needs_placement'
+  | 'placed'
+  | 'waiting_for_scene';
+
+export type RuntimeReadinessRosterEncounterStatus =
+  | 'current_turn'
+  | 'no_encounter'
+  | 'not_in_encounter'
+  | 'waiting_turn';
+
+export type RuntimeReadinessRosterSetupStatus =
+  | 'needs_character'
+  | 'needs_placement'
+  | 'pending_assignment'
+  | 'ready'
+  | 'waiting_for_scene';
+
+export type RuntimeReadinessRosterPlayer = {
+  assignmentStatus: RuntimeReadinessRosterAssignmentStatus;
+  characterId: string | null;
+  connectionStatus: SessionSnapshot['participants'][number]['connectionStatus'];
+  displayName: string;
+  encounterStatus: RuntimeReadinessRosterEncounterStatus;
+  participantId: string;
+  pendingCharacterId: string | null;
+  placement: {
+    position: Cell | null;
+    status: RuntimeReadinessRosterPlacementStatus;
+  };
+  setupStatus: RuntimeReadinessRosterSetupStatus;
+};
+
+export type RuntimeReadinessRoster = {
+  currentTurnParticipantId: string | null;
+  players: RuntimeReadinessRosterPlayer[];
+  readyCount: number;
+  totalCount: number;
+};
+
 export type DmTableSetupChecklistItemStatus = 'blocked' | 'done' | 'ready';
 
 export type DmTableSetupChecklistItemId =
@@ -3325,6 +3371,70 @@ export function getRuntimeStatusOverview({
   };
 }
 
+export function getRuntimeReadinessRoster({
+  activeScene,
+  encounter,
+  sessionState,
+}: {
+  activeScene: ActiveSceneState | null;
+  encounter: Encounter | null;
+  sessionState: SessionSnapshot | null;
+}): RuntimeReadinessRoster {
+  const currentTurnParticipantId = getCurrentTurnParticipantId(encounter);
+  const playerParticipants = (sessionState?.participants ?? []).filter(
+    (participant) => participant.role === 'player',
+  );
+  const players = playerParticipants.map((participant) => {
+    const characterId = participant.characterId;
+    const pendingCharacterId = participant.pendingCharacterId;
+    const assignmentStatus: RuntimeReadinessRosterAssignmentStatus = characterId
+      ? 'assigned'
+      : pendingCharacterId
+        ? 'pending_assignment'
+        : 'needs_character';
+    const placement = activeScene?.placedCharacters.find(
+      (candidate) => candidate.participantId === participant.id,
+    );
+    const placementStatus = getRuntimeReadinessRosterPlacementStatus({
+      activeSceneLoaded: Boolean(activeScene),
+      assigned: Boolean(characterId),
+      placed: Boolean(placement),
+    });
+    const encounterStatus = getRuntimeReadinessRosterEncounterStatus({
+      currentTurnParticipantId,
+      encounter,
+      participantId: participant.id,
+    });
+    const setupStatus = getRuntimeReadinessRosterSetupStatus({
+      assignmentStatus,
+      placementStatus,
+    });
+
+    return {
+      assignmentStatus,
+      characterId,
+      connectionStatus: participant.connectionStatus,
+      displayName: participant.displayName,
+      encounterStatus,
+      participantId: participant.id,
+      pendingCharacterId,
+      placement: {
+        position: placement?.position ?? null,
+        status: placementStatus,
+      },
+      setupStatus,
+    };
+  });
+
+  return {
+    currentTurnParticipantId,
+    players,
+    readyCount: players.filter((player) => player.setupStatus === 'ready')
+      .length,
+    totalCount: players.length,
+  };
+}
+
 function getDmRuntimeStatusNextAction(
   checklist: DmTableSetupChecklist,
 ): RuntimeStatusOverview['nextAction'] {
@@ -3376,6 +3486,79 @@ function getPlayerRuntimeStatusActionOwner(
   }
 
   return 'table';
+}
+
+function getRuntimeReadinessRosterPlacementStatus({
+  activeSceneLoaded,
+  assigned,
+  placed,
+}: {
+  activeSceneLoaded: boolean;
+  assigned: boolean;
+  placed: boolean;
+}): RuntimeReadinessRosterPlacementStatus {
+  if (!assigned) {
+    return 'needs_assignment';
+  }
+
+  if (!activeSceneLoaded) {
+    return 'waiting_for_scene';
+  }
+
+  return placed ? 'placed' : 'needs_placement';
+}
+
+function getRuntimeReadinessRosterEncounterStatus({
+  currentTurnParticipantId,
+  encounter,
+  participantId,
+}: {
+  currentTurnParticipantId: string | null;
+  encounter: Encounter | null;
+  participantId: string;
+}): RuntimeReadinessRosterEncounterStatus {
+  if (!encounter) {
+    return 'no_encounter';
+  }
+
+  if (currentTurnParticipantId === participantId) {
+    return 'current_turn';
+  }
+
+  return encounter.participants.some((participant) => {
+    return (
+      'participantId' in participant &&
+      participant.participantId === participantId
+    );
+  })
+    ? 'waiting_turn'
+    : 'not_in_encounter';
+}
+
+function getRuntimeReadinessRosterSetupStatus({
+  assignmentStatus,
+  placementStatus,
+}: {
+  assignmentStatus: RuntimeReadinessRosterAssignmentStatus;
+  placementStatus: RuntimeReadinessRosterPlacementStatus;
+}): RuntimeReadinessRosterSetupStatus {
+  if (assignmentStatus === 'needs_character') {
+    return 'needs_character';
+  }
+
+  if (assignmentStatus === 'pending_assignment') {
+    return 'pending_assignment';
+  }
+
+  if (placementStatus === 'waiting_for_scene') {
+    return 'waiting_for_scene';
+  }
+
+  if (placementStatus === 'needs_placement') {
+    return 'needs_placement';
+  }
+
+  return 'ready';
 }
 
 function joinReadableList(items: string[]): string {

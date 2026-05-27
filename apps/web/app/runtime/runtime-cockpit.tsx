@@ -98,6 +98,7 @@ import {
   getPlayerParticipantIds,
   getPlayerReadinessSummary,
   getRecoveryReliabilitySummary,
+  getRuntimeReadinessRoster,
   getRuntimeStatusOverview,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
@@ -147,6 +148,7 @@ import {
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
+  type RuntimeReadinessRoster,
   type RuntimeStatusOverview,
   type SceneDraftForm,
   type SceneEntityDraftForm,
@@ -3665,6 +3667,11 @@ export function RuntimeCockpit() {
     playerReadinessSummary,
     recoveryReliabilitySummary,
   });
+  const runtimeReadinessRoster = getRuntimeReadinessRoster({
+    activeScene,
+    encounter,
+    sessionState,
+  });
   const feedEntries = eventLog
     .flatMap((entry) =>
       isSessionStreamEvent(entry.payload)
@@ -4066,6 +4073,7 @@ export function RuntimeCockpit() {
               overview={runtimeStatusOverview}
               t={t}
             />
+            <PlayerReadinessRosterPanel roster={runtimeReadinessRoster} t={t} />
 
             {mode === 'dm' ? (
               <DmTableSetupPanel checklist={dmTableSetupChecklist} />
@@ -5193,6 +5201,220 @@ function getRuntimeStatusOverviewOwnerDetail(
       return t('runtime.statusOverview.nextAction.playerDetail');
     case 'table':
       return t('runtime.statusOverview.nextAction.tableDetail');
+  }
+}
+
+function PlayerReadinessRosterPanel({
+  roster,
+  t,
+}: {
+  roster: RuntimeReadinessRoster;
+  t: RuntimeTranslator;
+}) {
+  const currentTurnPlayer = roster.players.find((player) => {
+    return player.participantId === roster.currentTurnParticipantId;
+  });
+
+  return (
+    <Panel
+      description={t('runtime.roster.description')}
+      eyebrow={t('runtime.roster.eyebrow')}
+      title={t('runtime.roster.title')}
+    >
+      <div className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge
+            label={t('runtime.roster.readySummary', {
+              ready: String(roster.readyCount),
+              total: String(roster.totalCount),
+            })}
+            tone={
+              roster.totalCount > 0 && roster.readyCount === roster.totalCount
+                ? 'success'
+                : 'info'
+            }
+          />
+          {roster.currentTurnParticipantId ? (
+            <StatusBadge
+              label={
+                currentTurnPlayer
+                  ? t('runtime.roster.currentTurnPlayer', {
+                      name: currentTurnPlayer.displayName,
+                    })
+                  : t('runtime.roster.currentTurnId', {
+                      participantId: roster.currentTurnParticipantId,
+                    })
+              }
+              tone="warning"
+            />
+          ) : null}
+        </div>
+
+        {roster.players.length ? (
+          <ol className="grid gap-2">
+            {roster.players.map((player) => (
+              <li
+                className="grid gap-3 rounded-xl border border-amber-500/15 bg-black/20 p-3"
+                key={player.participantId}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-amber-50">
+                      {player.displayName}
+                    </p>
+                    <p className="mt-1 break-all text-xs text-amber-100/55">
+                      {player.participantId}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <StatusBadge
+                      label={getPlayerReadinessRosterSetupLabel(
+                        player.setupStatus,
+                        t,
+                      )}
+                      tone={getPlayerReadinessRosterSetupTone(
+                        player.setupStatus,
+                      )}
+                    />
+                    <StatusBadge
+                      label={getPlayerReadinessRosterConnectionLabel(
+                        player.connectionStatus,
+                        t,
+                      )}
+                      tone={
+                        player.connectionStatus === 'connected'
+                          ? 'success'
+                          : 'info'
+                      }
+                    />
+                  </div>
+                </div>
+
+                <dl className="grid gap-2 text-sm">
+                  <StatusRow
+                    label={t('runtime.roster.assignment')}
+                    value={getPlayerReadinessRosterAssignmentLabel(player, t)}
+                  />
+                  <StatusRow
+                    label={t('runtime.roster.placement')}
+                    value={getPlayerReadinessRosterPlacementLabel(player, t)}
+                  />
+                  <StatusRow
+                    label={t('runtime.roster.encounter')}
+                    value={getPlayerReadinessRosterEncounterLabel(player, t)}
+                  />
+                </dl>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <EmptyState
+            detail={t('runtime.roster.emptyDetail')}
+            title={t('runtime.roster.emptyTitle')}
+          />
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function getPlayerReadinessRosterSetupLabel(
+  status: RuntimeReadinessRoster['players'][number]['setupStatus'],
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'needs_character':
+      return t('runtime.roster.setup.needsCharacter');
+    case 'needs_placement':
+      return t('runtime.roster.setup.needsPlacement');
+    case 'pending_assignment':
+      return t('runtime.roster.setup.pendingAssignment');
+    case 'ready':
+      return t('runtime.roster.setup.ready');
+    case 'waiting_for_scene':
+      return t('runtime.roster.setup.waitingScene');
+  }
+}
+
+function getPlayerReadinessRosterSetupTone(
+  status: RuntimeReadinessRoster['players'][number]['setupStatus'],
+): RuntimeNoticeTone {
+  switch (status) {
+    case 'ready':
+      return 'success';
+    case 'needs_placement':
+    case 'pending_assignment':
+      return 'warning';
+    case 'needs_character':
+    case 'waiting_for_scene':
+      return 'info';
+  }
+}
+
+function getPlayerReadinessRosterConnectionLabel(
+  status: RuntimeReadinessRoster['players'][number]['connectionStatus'],
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'connected':
+      return t('runtime.roster.connection.connected');
+    case 'disconnected':
+      return t('runtime.roster.connection.disconnected');
+  }
+}
+
+function getPlayerReadinessRosterAssignmentLabel(
+  player: RuntimeReadinessRoster['players'][number],
+  t: RuntimeTranslator,
+): string {
+  switch (player.assignmentStatus) {
+    case 'assigned':
+      return t('runtime.roster.assignment.assigned', {
+        characterId: player.characterId ?? 'none',
+      });
+    case 'needs_character':
+      return t('runtime.roster.assignment.needsCharacter');
+    case 'pending_assignment':
+      return t('runtime.roster.assignment.pendingAssignment', {
+        characterId: player.pendingCharacterId ?? 'none',
+      });
+  }
+}
+
+function getPlayerReadinessRosterPlacementLabel(
+  player: RuntimeReadinessRoster['players'][number],
+  t: RuntimeTranslator,
+): string {
+  switch (player.placement.status) {
+    case 'needs_assignment':
+      return t('runtime.roster.placement.needsAssignment');
+    case 'needs_placement':
+      return t('runtime.roster.placement.needsPlacement');
+    case 'placed':
+      return player.placement.position
+        ? t('runtime.roster.placement.placedAt', {
+            x: String(player.placement.position.x),
+            y: String(player.placement.position.y),
+          })
+        : t('runtime.roster.placement.placed');
+    case 'waiting_for_scene':
+      return t('runtime.roster.placement.waitingScene');
+  }
+}
+
+function getPlayerReadinessRosterEncounterLabel(
+  player: RuntimeReadinessRoster['players'][number],
+  t: RuntimeTranslator,
+): string {
+  switch (player.encounterStatus) {
+    case 'current_turn':
+      return t('runtime.roster.encounter.currentTurn');
+    case 'no_encounter':
+      return t('runtime.roster.encounter.noEncounter');
+    case 'not_in_encounter':
+      return t('runtime.roster.encounter.notInEncounter');
+    case 'waiting_turn':
+      return t('runtime.roster.encounter.waitingTurn');
   }
 }
 

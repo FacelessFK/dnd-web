@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { CharacterResource, Scene } from '@dnd/protocol';
+import type {
+  ActiveSceneState,
+  CharacterResource,
+  Encounter,
+  Scene,
+} from '@dnd/protocol';
 
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
 import {
@@ -44,6 +49,7 @@ import {
   getPassiveSceneEntities,
   getPlayerReadinessSummary,
   getRecoveryReliabilitySummary,
+  getRuntimeReadinessRoster,
   getRuntimeStatusOverview,
   getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
@@ -1440,6 +1446,176 @@ describe('runtime cockpit helpers', () => {
     assert.equal(dmOverview.nextAction.sourceItemId, 'characters');
     assert.equal(dmOverview.readiness.source, 'dm_table_setup');
     assert.equal(dmOverview.recovery.loadedCount, 2);
+  });
+
+  it('summarizes per-player readiness roster from session, scene, and encounter read models', () => {
+    const activeScene: ActiveSceneState = {
+      activeSceneId: 'SCENE-001',
+      placedCharacters: [
+        {
+          characterId: 'CHAR-001',
+          footprint: {
+            height: 1,
+            width: 1,
+          },
+          participantId: 'player-001',
+          position: {
+            x: 2,
+            y: 3,
+          },
+        },
+      ],
+      sessionId: 'SESSION-001',
+    };
+    const encounter: Encounter = {
+      createdAt: '2026-01-01T00:00:00.000Z',
+      currentTurnIndex: 0,
+      currentTurnUsage: {
+        actionUsed: false,
+        bonusActionUsed: false,
+        movementUsed: 0,
+        reactionUsed: false,
+      },
+      id: 'ENCOUNTER-001',
+      participants: [
+        {
+          characterId: 'CHAR-001',
+          initiative: 18,
+          kind: 'character',
+          participantId: 'player-001',
+        },
+      ],
+      roundNumber: 1,
+      sceneId: 'SCENE-001',
+      sessionId: 'SESSION-001',
+      status: 'active',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const rosterState: SessionSnapshot = {
+      ...sessionState,
+      participants: [
+        sessionState.participants[0]!,
+        {
+          characterId: 'CHAR-001',
+          connectionStatus: 'connected',
+          displayName: 'Aria',
+          id: 'player-001',
+          joinedAt: '2026-01-01T00:00:00.000Z',
+          lastSeenAt: '2026-01-01T00:00:00.000Z',
+          pendingCharacterId: null,
+          role: 'player',
+        },
+        {
+          characterId: null,
+          connectionStatus: 'connected',
+          displayName: 'Borin',
+          id: 'player-002',
+          joinedAt: '2026-01-01T00:00:00.000Z',
+          lastSeenAt: '2026-01-01T00:00:00.000Z',
+          pendingCharacterId: 'CHAR-PENDING',
+          role: 'player',
+        },
+        {
+          characterId: 'CHAR-003',
+          connectionStatus: 'disconnected',
+          displayName: 'Cora',
+          id: 'player-003',
+          joinedAt: '2026-01-01T00:00:00.000Z',
+          lastSeenAt: '2026-01-01T00:00:00.000Z',
+          pendingCharacterId: null,
+          role: 'player',
+        },
+      ],
+    };
+
+    assert.deepEqual(
+      getRuntimeReadinessRoster({
+        activeScene,
+        encounter,
+        sessionState: rosterState,
+      }),
+      {
+        currentTurnParticipantId: 'player-001',
+        players: [
+          {
+            assignmentStatus: 'assigned',
+            characterId: 'CHAR-001',
+            connectionStatus: 'connected',
+            displayName: 'Aria',
+            encounterStatus: 'current_turn',
+            participantId: 'player-001',
+            pendingCharacterId: null,
+            placement: {
+              position: {
+                x: 2,
+                y: 3,
+              },
+              status: 'placed',
+            },
+            setupStatus: 'ready',
+          },
+          {
+            assignmentStatus: 'pending_assignment',
+            characterId: null,
+            connectionStatus: 'connected',
+            displayName: 'Borin',
+            encounterStatus: 'not_in_encounter',
+            participantId: 'player-002',
+            pendingCharacterId: 'CHAR-PENDING',
+            placement: {
+              position: null,
+              status: 'needs_assignment',
+            },
+            setupStatus: 'pending_assignment',
+          },
+          {
+            assignmentStatus: 'assigned',
+            characterId: 'CHAR-003',
+            connectionStatus: 'disconnected',
+            displayName: 'Cora',
+            encounterStatus: 'not_in_encounter',
+            participantId: 'player-003',
+            pendingCharacterId: null,
+            placement: {
+              position: null,
+              status: 'needs_placement',
+            },
+            setupStatus: 'needs_placement',
+          },
+        ],
+        readyCount: 1,
+        totalCount: 3,
+      },
+    );
+
+    assert.deepEqual(
+      getRuntimeReadinessRoster({
+        activeScene: null,
+        encounter: null,
+        sessionState: rosterState,
+      }).players.map((player) => ({
+        encounterStatus: player.encounterStatus,
+        participantId: player.participantId,
+        placementStatus: player.placement.status,
+      })),
+      [
+        {
+          encounterStatus: 'no_encounter',
+          participantId: 'player-001',
+          placementStatus: 'waiting_for_scene',
+        },
+        {
+          encounterStatus: 'no_encounter',
+          participantId: 'player-002',
+          placementStatus: 'needs_assignment',
+        },
+        {
+          encounterStatus: 'no_encounter',
+          participantId: 'player-003',
+          placementStatus: 'waiting_for_scene',
+        },
+      ],
+    );
   });
 
   it('filters finalized library entries for runtime submission', () => {
