@@ -4860,14 +4860,37 @@ function Panel({
     neutral: 'border-amber-500/20 from-stone-950/30',
     player: 'border-sky-300/25 from-sky-950/25',
   }[tone];
+  const accentLine = {
+    danger: 'from-red-300/70 via-red-300/20',
+    dm: 'from-amber-300/80 via-amber-300/20',
+    neutral: 'from-amber-300/70 via-amber-300/20',
+    player: 'from-sky-200/70 via-sky-200/20',
+  }[tone];
+  const eyebrowColor = {
+    danger: 'text-red-200/80',
+    dm: 'text-amber-300/75',
+    neutral: 'text-amber-300/70',
+    player: 'text-sky-200/75',
+  }[tone];
+  const headerDivider = {
+    danger: 'border-red-300/10',
+    dm: 'border-amber-300/10',
+    neutral: 'border-amber-500/10',
+    player: 'border-sky-300/10',
+  }[tone];
 
   return (
     <section
-      className={`rounded-3xl border bg-gradient-to-br ${accents} to-[#1c130d]/90 p-4 shadow-xl shadow-black/25 backdrop-blur`}
+      className={`relative overflow-hidden rounded-3xl border bg-gradient-to-br ${accents} to-[#1c130d]/90 p-4 shadow-xl shadow-black/25 ring-1 ring-white/5 backdrop-blur`}
     >
-      <div className="mb-4">
+      <div
+        className={`pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r ${accentLine} to-transparent`}
+      />
+      <div className={`mb-4 border-b ${headerDivider} pb-3`}>
         {eyebrow ? (
-          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-300/70">
+          <p
+            className={`text-[11px] font-bold uppercase tracking-[0.2em] ${eyebrowColor}`}
+          >
             {eyebrow}
           </p>
         ) : null}
