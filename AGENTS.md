@@ -107,6 +107,18 @@ Do not use stale docs as stronger truth than current state docs or code.
 - Portrait uploads are MVP data URLs. Do not claim production asset storage.
 - PDF export uses local project assets/templates and a simple fallback.
 
+## Repo-Local Codex Skills
+
+- Repo-local Codex skills live under `.agents/skills/<skill-name>/SKILL.md`
+  unless a future repo convention replaces this location.
+- Use `dnd-task-intake` before implementation when a user request is rough,
+  broad, ambiguous, risky, or needs to become a safe Codex implementation
+  prompt.
+- When `dnd-task-intake` is invoked, do not implement immediately. Produce a
+  structured prompt and wait for human approval before changing files.
+- Future skills should stay small, focused, and instruction-only unless a human
+  explicitly asks for scripts, assets, or references.
+
 ## Model Effort Guidance
 
 - `medium`: docs-only tasks, UI polish, small helper changes, small tests.
