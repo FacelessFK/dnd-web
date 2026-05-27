@@ -2551,6 +2551,40 @@ export type RecoveryReliabilitySummary = {
   totalCount: number;
 };
 
+export type RuntimeStatusOverviewActionOwner = 'dm' | 'player' | 'table';
+
+export type RuntimeStatusOverview = {
+  mode: RuntimeMode;
+  nextAction: {
+    detail: string;
+    owner: RuntimeStatusOverviewActionOwner;
+    sourceItemId: DmTableSetupChecklistItemId | PlayerReadinessItemId | null;
+    sourceStatus:
+      | DmTableSetupChecklistItemStatus
+      | PlayerReadinessItemStatus
+      | null;
+  };
+  readiness: {
+    completedCount: number;
+    readyCount: number;
+    source: 'dm_table_setup' | 'player_readiness';
+    totalCount: number;
+    waitingCount: number | null;
+  };
+  recovery: {
+    loadedCount: number;
+    status: RecoveryReliabilitySummary['status'];
+    totalCount: number;
+  };
+  turn: {
+    actorLabel: string | null;
+    roundNumber: number | null;
+    status: EncounterStatusSummary['status'];
+    turnCount: number;
+    turnNumber: number | null;
+  };
+};
+
 export type DmTableSetupChecklistItemStatus = 'blocked' | 'done' | 'ready';
 
 export type DmTableSetupChecklistItemId =
@@ -3237,6 +3271,111 @@ export function getRecoveryReliabilitySummary({
           : 'Recovery empty',
     totalCount,
   };
+}
+
+export function getRuntimeStatusOverview({
+  dmTableSetupChecklist,
+  encounterStatusSummary,
+  mode,
+  playerReadinessSummary,
+  recoveryReliabilitySummary,
+}: {
+  dmTableSetupChecklist: DmTableSetupChecklist;
+  encounterStatusSummary: EncounterStatusSummary;
+  mode: RuntimeMode;
+  playerReadinessSummary: PlayerReadinessSummary;
+  recoveryReliabilitySummary: RecoveryReliabilitySummary;
+}): RuntimeStatusOverview {
+  const nextAction =
+    mode === 'dm'
+      ? getDmRuntimeStatusNextAction(dmTableSetupChecklist)
+      : getPlayerRuntimeStatusNextAction(playerReadinessSummary);
+
+  return {
+    mode,
+    nextAction,
+    readiness:
+      mode === 'dm'
+        ? {
+            completedCount: dmTableSetupChecklist.completedCount,
+            readyCount: dmTableSetupChecklist.readyCount,
+            source: 'dm_table_setup',
+            totalCount: dmTableSetupChecklist.totalCount,
+            waitingCount: null,
+          }
+        : {
+            completedCount: playerReadinessSummary.completedCount,
+            readyCount: playerReadinessSummary.readyCount,
+            source: 'player_readiness',
+            totalCount: playerReadinessSummary.totalCount,
+            waitingCount: playerReadinessSummary.waitingCount,
+          },
+    recovery: {
+      loadedCount: recoveryReliabilitySummary.loadedCount,
+      status: recoveryReliabilitySummary.status,
+      totalCount: recoveryReliabilitySummary.totalCount,
+    },
+    turn: {
+      actorLabel: encounterStatusSummary.currentActorLabel,
+      roundNumber: encounterStatusSummary.roundNumber,
+      status: encounterStatusSummary.status,
+      turnCount: encounterStatusSummary.turnCount,
+      turnNumber: encounterStatusSummary.turnNumber,
+    },
+  };
+}
+
+function getDmRuntimeStatusNextAction(
+  checklist: DmTableSetupChecklist,
+): RuntimeStatusOverview['nextAction'] {
+  const item = checklist.items.find((checklistItem) => {
+    return checklistItem.status !== 'done';
+  });
+
+  return {
+    detail: item?.detail ?? checklist.nextAction,
+    owner: item?.status === 'ready' ? 'dm' : 'table',
+    sourceItemId: item?.id ?? null,
+    sourceStatus: item?.status ?? null,
+  };
+}
+
+function getPlayerRuntimeStatusNextAction(
+  summary: PlayerReadinessSummary,
+): RuntimeStatusOverview['nextAction'] {
+  const item =
+    summary.items.find((summaryItem) => summaryItem.status === 'ready') ??
+    summary.items.find((summaryItem) => summaryItem.status === 'waiting') ??
+    summary.items.find((summaryItem) => summaryItem.status === 'blocked') ??
+    null;
+
+  return {
+    detail: item?.detail ?? summary.nextAction,
+    owner: getPlayerRuntimeStatusActionOwner(item),
+    sourceItemId: item?.id ?? null,
+    sourceStatus: item?.status ?? null,
+  };
+}
+
+function getPlayerRuntimeStatusActionOwner(
+  item: PlayerReadinessItem | null,
+): RuntimeStatusOverviewActionOwner {
+  if (!item) {
+    return 'table';
+  }
+
+  if (item.status === 'ready') {
+    return 'player';
+  }
+
+  if (
+    item.status === 'waiting' &&
+    (item.id === 'assignment' || item.id === 'placement' || item.id === 'scene')
+  ) {
+    return 'dm';
+  }
+
+  return 'table';
 }
 
 function joinReadableList(items: string[]): string {

@@ -98,6 +98,7 @@ import {
   getPlayerParticipantIds,
   getPlayerReadinessSummary,
   getRecoveryReliabilitySummary,
+  getRuntimeStatusOverview,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
   getSceneEntityLabel,
@@ -146,6 +147,7 @@ import {
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
+  type RuntimeStatusOverview,
   type SceneDraftForm,
   type SceneEntityDraftForm,
   type SceneEntityPreset,
@@ -3656,6 +3658,13 @@ export function RuntimeCockpit() {
     sceneLoaded: Boolean(scene),
     sessionId,
   });
+  const runtimeStatusOverview = getRuntimeStatusOverview({
+    dmTableSetupChecklist,
+    encounterStatusSummary,
+    mode,
+    playerReadinessSummary,
+    recoveryReliabilitySummary,
+  });
   const feedEntries = eventLog
     .flatMap((entry) =>
       isSessionStreamEvent(entry.payload)
@@ -4051,6 +4060,10 @@ export function RuntimeCockpit() {
           <aside className="grid content-start gap-5">
             <RecoveryReliabilityPanel
               summary={recoveryReliabilitySummary}
+              t={t}
+            />
+            <RuntimeStatusOverviewPanel
+              overview={runtimeStatusOverview}
               t={t}
             />
 
@@ -5045,6 +5058,141 @@ function getRecoveryReliabilityItemTone(
       return 'info';
     case 'recovered':
       return 'success';
+  }
+}
+
+function RuntimeStatusOverviewPanel({
+  overview,
+  t,
+}: {
+  overview: RuntimeStatusOverview;
+  t: RuntimeTranslator;
+}) {
+  const readinessLabel =
+    overview.mode === 'dm'
+      ? t('runtime.statusOverview.dmReadiness')
+      : t('runtime.statusOverview.playerReadiness');
+  const turnLabel = overview.turn.actorLabel
+    ? t('runtime.statusOverview.turnActive', {
+        actor: overview.turn.actorLabel,
+      })
+    : t('runtime.statusOverview.turnInactive');
+  const turnProgress =
+    overview.turn.roundNumber !== null && overview.turn.turnNumber !== null
+      ? t('runtime.encounterStatus.progress', {
+          round: String(overview.turn.roundNumber),
+          total: String(overview.turn.turnCount),
+          turn: String(overview.turn.turnNumber),
+        })
+      : t('runtime.encounterStatus.noProgress');
+
+  return (
+    <Panel
+      description={t('runtime.statusOverview.description')}
+      eyebrow={t('runtime.statusOverview.eyebrow')}
+      title={t('runtime.statusOverview.title')}
+    >
+      <div className="grid gap-3">
+        <div className="flex flex-wrap gap-2">
+          <StatusBadge
+            label={t('runtime.statusOverview.readinessProgress', {
+              completed: String(overview.readiness.completedCount),
+              total: String(overview.readiness.totalCount),
+            })}
+            tone={
+              overview.readiness.completedCount ===
+              overview.readiness.totalCount
+                ? 'success'
+                : overview.readiness.readyCount > 0
+                  ? 'warning'
+                  : 'info'
+            }
+          />
+          {overview.readiness.waitingCount !== null ? (
+            <StatusBadge
+              label={t('runtime.statusOverview.waitingProgress', {
+                count: String(overview.readiness.waitingCount),
+              })}
+              tone={overview.readiness.waitingCount > 0 ? 'info' : 'success'}
+            />
+          ) : null}
+          <StatusBadge
+            label={getRuntimeStatusOverviewOwnerLabel(
+              overview.nextAction.owner,
+              t,
+            )}
+            tone={getRuntimeStatusOverviewOwnerTone(overview.nextAction.owner)}
+          />
+        </div>
+
+        <dl className="grid gap-2 text-sm">
+          <StatusRow
+            label={t('runtime.statusOverview.readiness')}
+            value={`${readinessLabel} · ${overview.readiness.completedCount}/${overview.readiness.totalCount}`}
+          />
+          <StatusRow
+            label={t('runtime.statusOverview.turn')}
+            value={`${turnLabel} · ${turnProgress}`}
+          />
+          <StatusRow
+            label={t('runtime.statusOverview.recovery')}
+            value={t('runtime.statusOverview.recoveryModels', {
+              loaded: String(overview.recovery.loadedCount),
+              total: String(overview.recovery.totalCount),
+            })}
+          />
+        </dl>
+
+        <div className="rounded-xl border border-amber-300/15 bg-black/20 p-3">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-amber-200/80">
+            {t('runtime.statusOverview.nextAction')}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-amber-50">
+            {getRuntimeStatusOverviewOwnerDetail(overview.nextAction.owner, t)}
+          </p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function getRuntimeStatusOverviewOwnerLabel(
+  owner: RuntimeStatusOverview['nextAction']['owner'],
+  t: RuntimeTranslator,
+): string {
+  switch (owner) {
+    case 'dm':
+      return t('runtime.statusOverview.waiting.dm');
+    case 'player':
+      return t('runtime.statusOverview.waiting.player');
+    case 'table':
+      return t('runtime.statusOverview.waiting.table');
+  }
+}
+
+function getRuntimeStatusOverviewOwnerTone(
+  owner: RuntimeStatusOverview['nextAction']['owner'],
+): RuntimeNoticeTone {
+  switch (owner) {
+    case 'dm':
+    case 'player':
+      return 'warning';
+    case 'table':
+      return 'info';
+  }
+}
+
+function getRuntimeStatusOverviewOwnerDetail(
+  owner: RuntimeStatusOverview['nextAction']['owner'],
+  t: RuntimeTranslator,
+): string {
+  switch (owner) {
+    case 'dm':
+      return t('runtime.statusOverview.nextAction.dmDetail');
+    case 'player':
+      return t('runtime.statusOverview.nextAction.playerDetail');
+    case 'table':
+      return t('runtime.statusOverview.nextAction.tableDetail');
   }
 }
 

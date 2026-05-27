@@ -44,6 +44,7 @@ import {
   getPassiveSceneEntities,
   getPlayerReadinessSummary,
   getRecoveryReliabilitySummary,
+  getRuntimeStatusOverview,
   getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
@@ -1297,6 +1298,148 @@ describe('runtime cockpit helpers', () => {
         title: 'Turn ready',
       },
     );
+  });
+
+  it('summarizes runtime status overview from existing readiness, turn, and recovery helpers', () => {
+    const dmChecklist = getDmTableSetupChecklist({
+      activeSceneLoaded: false,
+      assignedCharacterCount: 0,
+      encounterLoaded: false,
+      pendingAssignmentCount: 1,
+      placedCharacterCount: 0,
+      playerCount: 1,
+      sessionId: 'SESSION-001',
+    });
+    const pendingPlayerReadiness = getPlayerReadinessSummary({
+      attackReady: false,
+      currentActorLabel: 'none',
+      hasActiveScene: false,
+      hasCharacter: true,
+      hasEncounter: false,
+      isCharacterAssigned: false,
+      isCharacterReady: true,
+      isCharacterSubmitted: true,
+      isCurrentTurn: false,
+      isJoined: true,
+      isPlaced: false,
+      moveReady: false,
+      playerDisplayName: 'Player One',
+      playerParticipantId: 'player-001',
+      readyActionCount: 0,
+      sessionId: 'SESSION-001',
+    });
+    const recoverySummary = getRecoveryReliabilitySummary({
+      activeSceneId: null,
+      activeSceneLoaded: false,
+      characterCount: 1,
+      encounterLoaded: false,
+      recoveryNotes: [],
+      sceneLoaded: false,
+      sessionId: 'SESSION-001',
+    });
+    const encounterSummary = {
+      currentActorLabel: null,
+      encounterId: null,
+      latestCombatResult: null,
+      latestEncounterUpdate: null,
+      nextActorLabel: null,
+      roundNumber: null,
+      status: 'not_loaded' as const,
+      turnCount: 0,
+      turnNumber: null,
+    };
+
+    assert.deepEqual(
+      getRuntimeStatusOverview({
+        dmTableSetupChecklist: dmChecklist,
+        encounterStatusSummary: encounterSummary,
+        mode: 'player',
+        playerReadinessSummary: pendingPlayerReadiness,
+        recoveryReliabilitySummary: recoverySummary,
+      }),
+      {
+        mode: 'player',
+        nextAction: {
+          detail:
+            'A runtime copy is submitted. Waiting for the DM to assign it.',
+          owner: 'dm',
+          sourceItemId: 'assignment',
+          sourceStatus: 'waiting',
+        },
+        readiness: {
+          completedCount: 3,
+          readyCount: 0,
+          source: 'player_readiness',
+          totalCount: 7,
+          waitingCount: 2,
+        },
+        recovery: {
+          loadedCount: 2,
+          status: 'partial',
+          totalCount: 5,
+        },
+        turn: {
+          actorLabel: null,
+          roundNumber: null,
+          status: 'not_loaded',
+          turnCount: 0,
+          turnNumber: null,
+        },
+      },
+    );
+
+    const readyTurnOverview = getRuntimeStatusOverview({
+      dmTableSetupChecklist: dmChecklist,
+      encounterStatusSummary: {
+        currentActorLabel: 'Player One',
+        encounterId: 'ENCOUNTER-001',
+        latestCombatResult: null,
+        latestEncounterUpdate: null,
+        nextActorLabel: 'Player Two',
+        roundNumber: 2,
+        status: 'active',
+        turnCount: 2,
+        turnNumber: 1,
+      },
+      mode: 'player',
+      playerReadinessSummary: getPlayerReadinessSummary({
+        attackReady: true,
+        currentActorLabel: 'Player One',
+        hasActiveScene: true,
+        hasCharacter: true,
+        hasEncounter: true,
+        isCharacterAssigned: true,
+        isCharacterReady: true,
+        isCharacterSubmitted: false,
+        isCurrentTurn: true,
+        isJoined: true,
+        isPlaced: true,
+        moveReady: true,
+        playerDisplayName: 'Player One',
+        playerParticipantId: 'player-001',
+        readyActionCount: 1,
+        sessionId: 'SESSION-001',
+      }),
+      recoveryReliabilitySummary: recoverySummary,
+    });
+
+    assert.equal(readyTurnOverview.nextAction.owner, 'player');
+    assert.equal(readyTurnOverview.nextAction.sourceItemId, 'turn');
+    assert.equal(readyTurnOverview.turn.actorLabel, 'Player One');
+    assert.equal(readyTurnOverview.turn.roundNumber, 2);
+
+    const dmOverview = getRuntimeStatusOverview({
+      dmTableSetupChecklist: dmChecklist,
+      encounterStatusSummary: encounterSummary,
+      mode: 'dm',
+      playerReadinessSummary: pendingPlayerReadiness,
+      recoveryReliabilitySummary: recoverySummary,
+    });
+
+    assert.equal(dmOverview.nextAction.owner, 'dm');
+    assert.equal(dmOverview.nextAction.sourceItemId, 'characters');
+    assert.equal(dmOverview.readiness.source, 'dm_table_setup');
+    assert.equal(dmOverview.recovery.loadedCount, 2);
   });
 
   it('filters finalized library entries for runtime submission', () => {
