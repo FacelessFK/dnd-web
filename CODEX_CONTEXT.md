@@ -1,19 +1,25 @@
 # Codex Context
 
-This is the short execution context for future AI/Codex work in DND-web. It is
-intended to be read before implementation prompts.
+This is the short execution context for future AI/Codex work in DND-web. Read
+it after `AGENTS.md`, which is the durable Codex-native instruction file.
 
 ## Source Of Truth Order
 
-Use current implementation and current operational docs before raw context:
+Use current implementation and current operational docs before raw context.
+When docs conflict with code, current code and `packages/protocol` schemas are
+final truth.
 
-1. `docs/project-handoff.md`
-2. `docs/engineering/CURRENT_STATE.md`
+1. `docs/engineering/CURRENT_STATE.md`
+2. `docs/project-handoff.md`
 3. `docs/api-surface.md`
 4. `docs/persistence-boundaries.md`
 5. `docs/product/PRODUCT_BRIEF.md`
-6. `docs/domain/DOMAIN_MODEL.md`
+6. `docs/product/USER_FLOWS.md`
 7. `docs/product/I18N_POLICY.md`
+8. `docs/domain/DOMAIN_MODEL.md`
+9. `docs/delivery/PLAYABLE_MVP_PHASES.md`
+10. `docs/delivery/NEXT_MILESTONE.md` when it remains consistent with the
+    current-state docs above.
 
 `docs/context/brainstorm-source.md` and
 `docs/context/current-project-handoff.md` are archive/input material. They are
@@ -48,7 +54,8 @@ that scope.
   and activation, passive scene entities, compact scene entity presets,
   transition nodes, compact transition presets, placement/movement, local
   tactical board camera controls, tactical board state badges, tactical board
-  keyboard navigation, DM-facing Table Setup checklist, mixed
+  keyboard navigation, a named Training Room Skirmish demo setup, DM-facing
+  Table Setup checklist, mixed
   player/combatant encounters, compact current-turn rail, encounter status
   feedback, player readiness feedback, action economy feedback, narrow melee
   attacks, turn usage, readable event feed, recovery status feedback, and
@@ -112,27 +119,18 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 6: polish the first named demo scenario presentation using
-existing runtime commands and current local data.
+Playable MVP Phase 6: polish the Training Room Skirmish DM-player product flow
+using existing runtime commands and current local sample data.
 
-The bridge hardening slice, Table Setup checklist, scene entity palette, and
-transition preset palette are in place. Phase 4 Slice 1 now adds a compact
-current-turn rail, Slice 2 adds selected target/action-result feedback from
-loaded read models, Slice 3 adds selected movement destination and turn-budget
-feedback, and Slice 4 adds action/bonus/reaction economy feedback around the
-existing turn controls. Slice 5 adds encounter status, round progress, next
-actor, latest encounter update, and latest combat result feedback. Slice 6 adds
-player-facing readiness and turn-ready feedback. Phase 5 Slice 1 adds Recovery
-Status feedback, Slice 2 adds playable-session script tightening plus
-actionable smoke wait diagnostics, and Slice 3 verifies Local Reset clears
-stale recovered demo table text from the visible runtime surface. Slice 4
-verifies the same backend runtime session can be recovered again after Local
-Reset. Slice 5 adds a final post-reset recovery assertion for the table,
-Recovery Status, and Encounter Status summaries. Phase 6 Slice 1 adds a named
-Training Room Skirmish demo scenario option that reuses existing runtime
-commands and current local sample data. The next work should polish that
-scenario's presentation and playtest script without adding replay, cursor,
-catch-up, or broader D&D automation.
+The Character Library -> runtime bridge already has a server-side command,
+Player-mode saved-character submit UI, DM pending-assignment preview, separate
+runtime character copies, and narrow DB transaction/outbox coverage on covered
+paths. Treat bridge hardening as historical/current infrastructure, not the
+immediate next product milestone.
+
+The next work should tighten the named Training Room Skirmish presentation and
+manual playtest script without adding new runtime protocol, combat automation,
+replay, cursor, catch-up, production auth, or broader D&D systems.
 
 Break this into small Codex tasks:
 

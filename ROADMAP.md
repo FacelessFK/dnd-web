@@ -51,8 +51,8 @@ Already implemented:
 
 Still missing before a stronger MVP:
 
-- DB transaction/outbox hardening for the bridge path if multi-store atomicity
-  becomes required;
+- tighter Training Room Skirmish presentation and manual playtest guidance for
+  the first playable DM-player flow;
 - fuller product UX around session setup and assignment;
 - full adventure/content authoring;
 - production-grade visibility filtering;
@@ -61,27 +61,26 @@ Still missing before a stronger MVP:
 - multi-process coordination;
 - broader D&D rules systems.
 
-## Immediate Next Milestone: Bridge DB Transaction/Outbox Hardening
+## Immediate Next Milestone: Training Room Skirmish Presentation Polish
 
 ### Goal
 
-Harden the existing bridge so finalized Character Library entries can continue
-to be submitted from the product UI while DB-mode character copy, pending
-assignment, idempotency, and stream/outbox behavior are handled through an
-honest narrow boundary.
+Make the first named demo scenario feel like a coherent playable tabletop
+slice. Polish the Training Room Skirmish presentation and manual playtest script
+using existing runtime commands, current local sample data, and the current
+read-model recovery contract.
 
 ### Exit Criteria
 
-- Finalized library entries can still be submitted to a session from the UI.
-- Unauthorized or non-finalized entries are rejected.
-- DM remains the authoritative assignment actor.
-- Runtime character/session overlay state is created or linked from the library
-  entry.
-- Live HP, movement, conditions, encounter state, and DM overrides do not mutate
-  the reusable entry.
-- New UI copy is localization-aware for English/Persian.
-- DB-mode bridge behavior is covered by a transaction/outbox boundary or the
-  remaining limitation is documented explicitly.
+- A DM can run the named Training Room Skirmish scenario without protocol
+  inspection.
+- The scenario clearly communicates session setup, scene state, player
+  readiness, current turn, encounter status, and recovery status.
+- Player and DM copy remains localization-aware for English/Persian.
+- No new runtime protocol, combat automation, replay/cursor/catch-up semantics,
+  or production auth scope is introduced.
+- Character Library entries remain reusable records; live HP, movement,
+  conditions, encounter membership, and DM overrides stay in runtime state.
 
 See `docs/delivery/NEXT_MILESTONE.md`.
 

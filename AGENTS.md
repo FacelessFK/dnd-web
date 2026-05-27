@@ -1,81 +1,129 @@
 # DND-web Codex Instructions
 
+This is the durable Codex-native instruction file for this repository. Do not
+create `CLAUDE.md`.
+
 ## Communication
 
 - Report to the user in Persian.
 - Keep code, file names, command names, commit messages, and implementation
   prompts in English.
-- Read `docs/codex-workflow.md` before multi-file work.
+- Inspect relevant files before editing. For multi-file or code work, read
+  `docs/codex-workflow.md`.
 - Do not ask for the whole codebase; request the smallest specific files only
   when local inspection is not enough.
 
-## Product Identity
+## Project Identity
 
-DND-web is a DM-first, top-down tactical D&D tabletop runtime and character
-product surface. The server owns authoritative runtime state. Players submit
-structured intent. DM-only actions must remain role-gated server-side.
+DND-web is a browser-based D&D tabletop runtime and character product. It should
+be visually rich, tactical, and eventually presentation-inspired by
+Diablo/Hades, while staying DM-first and tabletop-oriented.
 
-Do not turn this into a CRPG, monster AI system, full D&D automation engine, or
-production auth/deployment project unless explicitly asked.
+The server owns runtime truth. Players submit structured intent. The DM remains
+the final authority through explicit server-side controls.
 
-## Stack
+This is not a CRPG, monster AI system, full D&D automation engine, or production
+auth/deployment project unless a human explicitly changes that scope.
+
+## Non-Negotiable Boundaries
+
+- Browser state is never authoritative.
+- The server owns runtime/session state and validates commands.
+- DM-only actions must remain role-gated server-side.
+- Character Library entries are reusable records and must stay separate from
+  live runtime/session overlays.
+- Runtime HP, position, conditions, movement usage, active encounter
+  membership, scene placement, and DM overrides must never mutate reusable
+  Character Library entries.
+- Preserve English/Persian i18n and LTR/RTL behavior.
+- Do not claim durable replay, stream cursors, catch-up, exactly-once delivery,
+  or multi-process SSE semantics unless they are implemented.
+- Do not broaden scope into full spell automation, monster AI, CRPG systems, fog
+  of war, broad inventory/ranged/death-save systems, or production auth.
+- Keep the current priority focused on polishing the playable Training Room
+  Skirmish / Phase 6-style DM-player product flow unless a human explicitly
+  changes the milestone.
+
+## Stack And Surfaces
 
 - TypeScript pnpm monorepo.
-- `apps/web`: Next.js / React / Tailwind.
-- `apps/server`: Node/TypeScript authoritative runtime.
+- `apps/web`: Next.js / React / Tailwind surfaces for `/runtime`,
+  `/characters`, and `/login`.
+- `apps/server`: Node/TypeScript authoritative HTTP/SSE runtime.
 - `packages/protocol`: Zod protocol schemas.
 - `packages/shared`: shared domain models.
 - `packages/rules`: deterministic rules helpers.
-- `packages/db`: Drizzle/Postgres schema, adapters, and migrations.
+- `packages/db`: Drizzle/Postgres schema, adapters, migrations, and unit of
+  work boundaries.
 
-## Current Surfaces
+## Source Of Truth Order
 
-- `/runtime`: live tactical tabletop cockpit with DM and Player modes.
-- `/characters`: Character Library / Builder surface.
-- `/login`: auth surface for the DB-backed Character Library session MVP.
+Trust current implementation and current-state docs over older planning docs.
+When docs conflict with code, code and protocol schemas are final truth.
 
-Character Library entries are reusable build/identity records. Runtime HP,
-position, conditions, active encounters, and scene overlays are live-session
-state and must stay separate from reusable library entries.
+1. `CODEX_CONTEXT.md`
+2. `docs/engineering/CURRENT_STATE.md`
+3. `docs/project-handoff.md`
+4. `docs/api-surface.md`
+5. `docs/persistence-boundaries.md`
+6. `docs/product/PRODUCT_BRIEF.md`
+7. `docs/product/USER_FLOWS.md`
+8. `docs/product/I18N_POLICY.md`
+9. `docs/domain/DOMAIN_MODEL.md`
+10. `docs/delivery/PLAYABLE_MVP_PHASES.md`
+11. `docs/delivery/TASK_TEMPLATE.md`
+12. `docs/decisions/*`
+13. Code, tests, and `packages/protocol` schemas as final truth when docs drift.
 
-## Persistence And Auth
+Treat these as stale, drift-prone, historical, or lower-priority unless a human
+explicitly asks to update them:
 
-- Default local startup may be in-memory.
-- DB mode uses `SERVER_PERSISTENCE_MODE=db` and `DATABASE_URL`.
-- Apply `packages/db/migrations/` before DB-mode verification.
-- Character Library auth currently requires DB mode. It uses opaque HttpOnly
-  cookie sessions and user-owned library rows, but do not describe it as full
-  production account security.
-- Do not add fake durability or overclaim replay, cursor, catch-up,
-  exactly-once delivery, or multi-process coordination.
-- Never copy or print `.env` secrets.
+- `PRD.md`
+- `ROADMAP.md`
+- `README.md` references to `docs/delivery/NEXT_MILESTONE.md`
+- `docs/delivery/NEXT_MILESTONE.md`
+- `docs/context/*`
+- broad brainstorm material
 
-## Character Builder
+Do not use stale docs as stronger truth than current state docs or code.
 
-- Keep Character Builder separate from `/runtime`.
-- English is `ltr`; Persian is `rtl`.
-- Do not store localized labels as canonical IDs.
-- Keep canonical IDs stable: `rulesProfileId`, class/species/background/spell
-  IDs, and ability keys.
-- User-entered character data must not be auto-translated.
-- Portrait uploads are MVP data URLs; do not claim production asset storage.
+## Codex Working Rules
+
+- Make small, safe, repo-native diffs.
+- Avoid broad rewrites, file moves, or documentation cleanups outside the
+  requested scope.
+- Do not change runtime code during docs-only tasks.
+- Do not create Codex skills, orchestrators, or subagents unless explicitly
+  requested.
+- Preserve server-side role gates for all DM-only behavior.
+- Keep Character Library/runtime separation intact.
+- Preserve i18n patterns, English/Persian copy expectations, and RTL/LTR
+  behavior.
+- Never print `.env` contents, credentials, cookies, tokens, or secrets.
+- For DB mode, use `SERVER_PERSISTENCE_MODE=db` and `DATABASE_URL`, and apply
+  `packages/db/migrations/` before DB-mode verification.
+- Character Library auth is an MVP using opaque HttpOnly-cookie sessions and
+  user-owned DB rows. Do not describe it as full production account security.
+- Portrait uploads are MVP data URLs. Do not claim production asset storage.
 - PDF export uses local project assets/templates and a simple fallback.
 
-## OpenAI Docs / Prompt Guidance
+## Model Effort Guidance
 
-If suggesting a Codex prompt, first recommend model effort:
-
-- `medium` for small UI/docs/helper changes.
-- `high` for normal multi-file frontend/backend tasks.
-- `extra high` for sensitive DB, schema, transaction, idempotency, security, or
-  data-model work.
-
-Use the OpenAI developer documentation MCP server for OpenAI API, ChatGPT Apps
-SDK, Codex, MCP, image generation, or related OpenAI documentation work.
+- `medium`: docs-only tasks, UI polish, small helper changes, small tests.
+- `high`: DB schema, migrations, transactions, idempotency, outbox,
+  auth/security, runtime data-model boundaries, and normal multi-file
+  frontend/backend work.
+- `extra high`: only when one task combines several high-risk areas such as DB
+  schema plus transactions plus auth/security or data-model changes.
 
 ## Validation
 
-Before reporting success, run as much as practical:
+For docs-only changes, run:
+
+- `git diff --check`
+
+For code changes, use the practical validation list from `CODEX_CONTEXT.md` and
+`docs/codex-workflow.md`, including as much as is relevant:
 
 - `git diff --check`
 - `corepack pnpm format:check`
@@ -87,29 +135,17 @@ Before reporting success, run as much as practical:
 - `corepack pnpm --filter @dnd/web build`
 - `corepack pnpm --filter @dnd/web test:smoke`
 
-If a command is blocked, report the exact command, exact blocker, closest
+If validation is blocked, report the exact command, exact blocker, closest
 equivalent run, and whether touched files were validated.
 
-## Report Format
+## Response Format
 
-For task completion, include:
+For task completion, report:
 
-1. Commit-worthy status
-2. Suggested commit message
-3. Summary
-4. Files changed
-5. Behavior added
-6. Tests added/updated
-7. Docs updated
-8. Validation results
-9. Known limitations
-10. Anything needed from the user
-11. Next recommended step and model effort
+1. Summary
+2. Files changed
+3. Validation run
+4. Risks / follow-ups
+5. Any docs drift noticed
 
-Always end task-completion reports with a concrete next step and the
-recommended Codex model effort for that step. Use:
-
-- `medium` for small UI/docs/helper changes.
-- `high` for normal multi-file frontend/backend tasks.
-- `extra high` for sensitive DB, schema, transaction, idempotency, security, or
-  data-model work.
+Also mention when runtime tests were not run because the task was docs-only.

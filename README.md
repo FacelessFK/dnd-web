@@ -158,8 +158,10 @@ actionable.
   concepts and boundaries.
 - [docs/engineering/CURRENT_STATE.md](docs/engineering/CURRENT_STATE.md):
   current implementation reality and known limits.
-- [docs/delivery/NEXT_MILESTONE.md](docs/delivery/NEXT_MILESTONE.md): proposed
-  Character Library -> Runtime Assignment Bridge milestone.
+- [docs/delivery/PLAYABLE_MVP_PHASES.md](docs/delivery/PLAYABLE_MVP_PHASES.md):
+  playable MVP phase plan and current Training Room Skirmish next task.
+- [docs/delivery/NEXT_MILESTONE.md](docs/delivery/NEXT_MILESTONE.md): current
+  Training Room Skirmish / Phase 6 milestone guidance.
 - [docs/delivery/TASK_TEMPLATE.md](docs/delivery/TASK_TEMPLATE.md): reusable
   Codex implementation prompt template.
 - [docs/api-surface.md](docs/api-surface.md): command endpoints, SSE, and

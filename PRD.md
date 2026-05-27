@@ -62,8 +62,11 @@ and non-goals.
     resolution, downed-state handling, and DM corrections.
 
 Current gap: the bridge from reusable Character Library entries into live
-pending assignment now has a server-side path and Player-mode UI. The remaining
-near-term gap is DB transaction/outbox hardening for the bridge path.
+pending assignment has a server-side path, Player-mode UI, DM preview, and
+narrow DB transaction/outbox coverage. The remaining near-term gap is product
+polish around the playable Training Room Skirmish flow: clearer presentation,
+manual playtest guidance, and DM/player flow confidence without broadening
+runtime rules or realtime guarantees.
 
 ## Domain Shape
 
@@ -142,9 +145,10 @@ Still limited:
 - no replay, cursor, catch-up API, exactly-once delivery, production auth, or
   multi-process coordination;
 - Character Library entries can be submitted through the bridge from the
-  Player-mode runtime UI;
-- the bridge is not yet covered by a dedicated multi-store DB
-  transaction/outbox boundary;
+  Player-mode runtime UI, and the bridge has narrow DB transaction/outbox
+  coverage on the injected DB path;
+- the first named Training Room Skirmish scenario exists, but its presentation
+  and playtest script still need Phase 6 polish;
 - player-specific visibility is not complete;
 - broader D&D rules remain intentionally narrow.
 
@@ -187,7 +191,7 @@ The product is moving in the right direction when:
 
 ## Recommended Next Milestone
 
-DB transaction/outbox hardening for the Character Library -> Runtime
-Assignment Bridge.
+Playable MVP Phase 6: polish the Training Room Skirmish DM-player product flow
+using existing runtime commands and current local sample data.
 
 See `docs/delivery/NEXT_MILESTONE.md`.

@@ -68,10 +68,11 @@ Current implementation:
 5. DM assigns that runtime character to the participant.
 6. Session state emits assignment updates.
 
-Remaining product gap:
+Remaining product gaps:
 
-- Harden DB-mode bridge behavior if multi-store atomicity is required.
-- Continue improving pending/assigned state clarity for Player and DM surfaces.
+- Keep improving pending/assigned state clarity for Player and DM surfaces.
+- Keep the first playable Training Room Skirmish flow clear enough for manual
+  DM-player playtesting.
 - Keep reusable library entries unmutated by live session play.
 
 ## Exploration Flow

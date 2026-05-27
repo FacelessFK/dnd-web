@@ -2,86 +2,119 @@
 
 ## Recommendation
 
-Read-Model Recovery Audit And Realtime Delivery Boundaries.
+Training Room Skirmish / Phase 6 playable flow polish.
 
-The Character Library -> runtime bridge now has narrow DB transaction/outbox
-coverage. The next useful milestone is to make missed realtime delivery easier
-to detect and recover from without claiming durable replay, stream cursors,
-exactly-once delivery, or multi-process subscriber coordination.
+The Character Library -> runtime assignment bridge already has a server-side
+path, Player-mode submit UI, DM preview/assignment flow, and narrow DB
+transaction/outbox coverage on the injected DB path. The next useful milestone
+is to make the first named demo scenario feel coherent for a real DM-player
+playtest without adding new protocol, combat automation, replay, or production
+auth scope.
 
 ## Goal
 
-Keep the product honest and operable when post-commit SSE delivery is missed:
-surface unpublished outbox backlog, preserve current read-model recovery
-paths, and document where clients must reread authoritative state rather than
-expect event replay.
+Polish the Training Room Skirmish presentation and manual playtest script so a
+reviewer can run the named scenario, understand the product direction, and see
+the current DM-first tabletop loop through existing runtime commands and current
+local sample data.
 
 ## Scope
 
-- Preserve the current no-auto-drain cold-boot behavior.
-- Expose a read-only unpublished outbox backlog summary.
-- Keep status responses free of row IDs, command IDs, payloads, or secrets.
-- Confirm status reads do not publish events or mark outbox rows as published.
-- Keep existing recovery through `reconnect_session`, `get_character`,
-  `get_scene`, `get_active_scene_state`, and `get_encounter_state`.
-- Update API and engineering docs without overclaiming replay/catch-up.
+- Keep the named Training Room Skirmish scenario as the first playable demo
+  path.
+- Clarify DM setup, scene state, player readiness, assignment, turn state,
+  encounter status, recovery status, and action feedback where the current UI
+  already exposes those concepts.
+- Tighten English/Persian copy and preserve LTR/RTL behavior.
+- Improve manual playtest guidance around the existing scenario.
+- Keep existing read-model recovery through `reconnect_session`, `get_scene`,
+  `get_active_scene_state`, `get_encounter_state`, and `get_character`.
+- Document current limitations directly and honestly.
 
 ## Non-Goals
 
-- Durable replay or stream cursors.
-- Exactly-once delivery.
-- Multi-process subscriber coordination.
-- Startup auto-redelivery.
-- Admin auth, production monitoring, alerting, or deployment work.
-- Replacing existing SSE with another transport.
+- New runtime protocol or command semantics.
+- New combat rules automation, full spell automation, ranged/inventory/death
+  save systems, opportunity attacks, or monster AI.
+- Fog of war, line of sight, lighting, traps, locks, scripts, or automatic
+  transition automation.
+- Durable replay, stream cursors, catch-up API, exactly-once delivery, startup
+  auto-redelivery, or multi-process subscriber coordination.
+- Production auth, account security expansion, deployment, monitoring, or
+  alerting.
+- Mutating reusable Character Library entries with live HP, placement,
+  conditions, movement usage, encounter membership, or DM overrides.
 
 ## Risks
 
-- Accidentally marking unpublished rows as published from a status/read path.
-- Exposing command payloads, row IDs, session IDs, or user data in an
-  operational endpoint.
-- Suggesting that backlog visibility means clients can replay events.
-- Breaking the targeted post-commit outbox drains used by covered commands.
+- Accidentally turning a presentation polish slice into protocol or combat-rule
+  work.
+- Adding English-only copy or breaking Persian RTL layout.
+- Making the browser appear authoritative instead of rendering server responses
+  and read models.
+- Suggesting that outbox visibility or read-model recovery is replay/catch-up.
+- Hiding known MVP limits behind demo-only copy.
 
 ## Acceptance Criteria
 
-- `GET /api/outbox/status` returns whether outbox dispatch is configured.
-- The response includes total unpublished row count, event-type counts, and
-  oldest unpublished creation time.
-- Status reads do not publish events or mutate outbox rows.
-- In-memory/no-dispatcher startup reports `configured: false` with zero counts.
-- Docs explain that this is observability only, not replay/catch-up.
-- Existing transaction/outbox tests continue to pass.
+- The named Training Room Skirmish path remains runnable with existing runtime
+  commands and current local sample data.
+- The DM can understand the next setup/play action without reading protocol
+  JSON.
+- Player and DM surfaces keep assignment, readiness, turn, encounter, and
+  recovery state clear enough for a manual playtest.
+- New or changed user-facing copy is localization-aware and preserves
+  English/Persian direction.
+- Docs continue to state that SSE is live delivery only and clients recover
+  current truth through read models.
+- No new claims are made for replay, stream cursors, catch-up, exactly-once
+  delivery, multi-process coordination, production auth, or broader D&D
+  automation.
 
 ## Suggested Small Slices For Codex
 
-### Slice 1: Outbox Status Endpoint
+### Slice 1: Scenario Presentation Audit
 
-Implemented: `GET /api/outbox/status` reports unpublished backlog counts
-without draining rows or exposing row details.
+Inspect the current named demo scenario setup, runtime sample data, manual
+validation script, and smoke path. Identify only the UI/docs wording needed to
+make the existing flow easier to run.
 
-### Slice 2: Recovery Audit
+### Slice 2: Training Room Skirmish Presentation Polish
 
-Implemented: a DB-backed missed-live-delivery test proves the current
-browser/server recovery contract. Clients can recover current truth by
-rereading session, scene, active-scene, encounter, and character read models
-after reconnect or refresh, while late SSE subscribers do not receive
-historical event replay.
+Tighten the scenario-facing runtime copy and state presentation without changing
+runtime protocol, combat semantics, auth, DB requirements, or read-model
+recovery behavior.
 
-### Slice 3: UI Or Operator Surface
+### Slice 3: Manual Playtest Script Pass
 
-Implemented: `/runtime` DM mode now has a compact manual outbox status badge
-and "Check Outbox" control backed by `GET /api/outbox/status`. It stays
-localization-aware and remains a non-blocking visibility aid, not production
-monitoring, alerting, replay, or recovery control.
+Update the manual validation path so a reviewer can run the Training Room
+Skirmish flow, recover after refresh, confirm Player-mode guardrails, and see
+known limitations without internal implementation context.
 
-### Slice 4: Future Replay Design
+## Historical Note
 
-Only if explicitly requested, design replay/cursor semantics as a separate
-milestone with schema, auth, retention, ordering, and multi-process boundaries.
+The previous read-model recovery and realtime delivery-boundary milestone is
+implemented as a narrow observability/recovery slice:
+
+- `GET /api/outbox/status` reports unpublished backlog counts without draining
+  rows or exposing row details.
+- A DB-backed missed-live-delivery test proves clients can recover current truth
+  through read models while late SSE subscribers do not receive historical event
+  replay.
+- `/runtime` DM mode includes a compact manual outbox status badge as a
+  development/operator visibility aid, not production monitoring, replay, or
+  recovery automation.
+
+Keep these as current limitations and supporting infrastructure, not the next
+product milestone.
 
 ## Recommended Prompt Effort
 
-Use Codex model effort `high` for recovery docs/tests or small UI surfacing.
-Use `extra high` for any replay, cursor, retention, auth, or multi-process
-delivery work.
+Use Codex model effort `medium` for docs-only cleanup, small UI polish, and
+small helper/test updates around the Training Room flow.
+
+Use `high` for normal multi-file frontend/backend implementation or any DB,
+transaction, idempotency, outbox, auth/security, or runtime data-model boundary
+work.
+
+Use `extra high` only if a task combines several high-risk areas.
