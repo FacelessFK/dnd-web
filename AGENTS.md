@@ -124,6 +124,16 @@ Do not use stale docs as stronger truth than current state docs or code.
   systems/fog of war/production auth.
 - `dnd-runtime-boundary-review` is review-only. Do not use it to directly fix
   code unless a human explicitly approves a follow-up implementation task.
+- Use `dnd-build-with-tests` only after a task has been scoped and approved.
+  It is for narrow DND-web implementation work with inspect-before-edit, small
+  repo-native diffs, existing patterns, relevant tests, relevant validation,
+  and a clear final report.
+- Do not use `dnd-build-with-tests` to broaden scope beyond the approved task.
+  If the request is rough, broad, ambiguous, or risky, use `dnd-task-intake`
+  first; if the plan or diff touches server authority, DM role gates,
+  Character Library/runtime separation, realtime/outbox claims, auth/security,
+  i18n, or product scope boundaries, use `dnd-runtime-boundary-review` before
+  and/or after implementation.
 - Future skills should stay small, focused, and instruction-only unless a human
   explicitly asks for scripts, assets, or references.
 
