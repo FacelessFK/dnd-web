@@ -116,6 +116,14 @@ Do not use stale docs as stronger truth than current state docs or code.
   prompt.
 - When `dnd-task-intake` is invoked, do not implement immediately. Produce a
   structured prompt and wait for human approval before changing files.
+- Use `dnd-runtime-boundary-review` before implementation for risky plans and
+  after implementation for risky diffs or PR summaries that may touch server
+  authority, DM role gates, Character Library/runtime separation,
+  realtime/outbox claims, auth/security claims, English/Persian i18n, LTR/RTL
+  behavior, or scope creep toward CRPG/full automation/monster AI/full spell
+  systems/fog of war/production auth.
+- `dnd-runtime-boundary-review` is review-only. Do not use it to directly fix
+  code unless a human explicitly approves a follow-up implementation task.
 - Future skills should stay small, focused, and instruction-only unless a human
   explicitly asks for scripts, assets, or references.
 
