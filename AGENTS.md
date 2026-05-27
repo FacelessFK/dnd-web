@@ -134,6 +134,15 @@ Do not use stale docs as stronger truth than current state docs or code.
   Character Library/runtime separation, realtime/outbox claims, auth/security,
   i18n, or product scope boundaries, use `dnd-runtime-boundary-review` before
   and/or after implementation.
+- Use `dnd-pr-reviewer` before merge to review DND-web diffs, PR summaries, or
+  implementation reports against the broader project checklist: scope and scope
+  creep, product north star and DM-first tabletop direction, server authority
+  and DM role gates, Character Library/runtime separation, realtime/outbox/auth
+  claims, English/Persian i18n, RTL/LTR, accessibility, tests and validation
+  honesty, and docs drift. This skill is review-only and must not directly edit
+  code. It complements `dnd-runtime-boundary-review`: boundary review focuses
+  on non-negotiable runtime/product guardrails, while PR review is the broader
+  pre-merge review.
 - Future skills should stay small, focused, and instruction-only unless a human
   explicitly asks for scripts, assets, or references.
 
