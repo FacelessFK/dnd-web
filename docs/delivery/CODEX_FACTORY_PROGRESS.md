@@ -30,6 +30,10 @@ also supports an all-changed mode through
 `node scripts/guards/check-sensitive-files.mjs --all-changed`. It is not yet
 installed as a git hook or CI step.
 
+`guard:docs-only` also exists to verify docs-only and skill-only tasks did not
+touch runtime or source paths. It is manually runnable and is not yet installed
+as a git hook or CI step.
+
 ## Validated Workflow
 
 The working factory loop is:

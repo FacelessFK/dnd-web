@@ -105,6 +105,13 @@ Do not use stale docs as stronger truth than current state docs or code.
   `node scripts/guards/check-sensitive-files.mjs --all-changed` when checking
   all changed files. This deterministic guard is part of the repo safety gates,
   but it is not a substitute for never printing secrets.
+- Use `corepack pnpm guard:docs-only` for docs-only or skill-only tasks before
+  final reporting when staged files should be docs/config/instruction-only. Use
+  `node scripts/guards/check-docs-only.mjs --all-changed` to inspect all
+  changed files; it will intentionally fail for tooling or code tasks that
+  touch `package.json`, `scripts/**`, `apps/**`, or `packages/**`. This
+  deterministic guard helps verify docs-only scope, but it does not replace
+  human review.
 - For DB mode, use `SERVER_PERSISTENCE_MODE=db` and `DATABASE_URL`, and apply
   `packages/db/migrations/` before DB-mode verification.
 - Character Library auth is an MVP using opaque HttpOnly-cookie sessions and

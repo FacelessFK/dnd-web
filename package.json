@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --stream --filter @dnd/server --filter @dnd/web run dev",
+    "guard:docs-only": "node scripts/guards/check-docs-only.mjs",
     "guard:sensitive-files": "node scripts/guards/check-sensitive-files.mjs",
     "lint": "eslint . --ext .js,.mjs,.cjs,.ts,.tsx",
     "format": "prettier --write .",
