@@ -8,6 +8,10 @@ exists today.
 This is a docs-only playtest guide. It is not a request to change runtime code,
 protocol, server authority, persistence, auth, outbox behavior, or combat rules.
 
+For recording one actual run, use
+`docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_RUN_TEMPLATE.md` alongside this
+checklist.
+
 ## Playtest Setup
 
 - [ ] Record branch/commit, date, persistence mode, browser(s), viewport(s), and
