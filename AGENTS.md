@@ -111,6 +111,19 @@ Do not use stale docs as stronger truth than current state docs or code.
 
 - Repo-local Codex skills live under `.agents/skills/<skill-name>/SKILL.md`
   unless a future repo convention replaces this location.
+- Use `dnd-codebase-researcher` for read-only exploration before planning or
+  implementation, especially when a task area is unfamiliar or implementation
+  risk depends on existing patterns. It must not edit files, implement fixes,
+  or run destructive commands. It maps relevant files, existing patterns,
+  authoritative read models, risks, likely tests, unknowns, and the recommended
+  next skill before `dnd-task-intake` or `dnd-build-with-tests`.
+- Use `dnd-story-writer` before technical planning when product behavior or
+  acceptance criteria are unclear. It turns rough DND-web feature ideas or
+  `dnd-codebase-researcher` findings into a user story, acceptance criteria,
+  edge cases, out-of-scope items, and open questions. It is product/story-only:
+  do not use it to implement code, write technical design, or create file-level
+  implementation plans. If business or product intent is unclear, it should
+  produce open questions instead of inventing rules.
 - Use `dnd-task-intake` before implementation when a user request is rough,
   broad, ambiguous, risky, or needs to become a safe Codex implementation
   prompt.

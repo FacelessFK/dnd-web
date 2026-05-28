@@ -7,11 +7,18 @@ DND-web now uses a repo-local Codex-native software-factory workflow.
 - `AGENTS.md` is the durable Codex instruction file for this repository.
 - Repo-local Codex skills live under `.agents/skills/<skill-name>/SKILL.md`.
 - Current skills:
+  - `dnd-codebase-researcher`
+  - `dnd-story-writer`
   - `dnd-task-intake`
   - `dnd-build-with-tests`
   - `dnd-runtime-boundary-review`
   - `dnd-pr-reviewer`
   - `dnd-feature-factory`
+
+The factory is now starting to add agent-layer role skills, beginning with
+read-only codebase research before planning or implementation.
+The agent-layer sequence now includes read-only research followed by product
+story shaping before implementation planning.
 
 ## Validated Workflow
 
