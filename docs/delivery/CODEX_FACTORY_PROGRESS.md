@@ -24,6 +24,12 @@ The agent-layer sequence now supports read-only research, product story
 shaping, technical brief writing, guarded implementation, test verification,
 implementation validation, and PR review.
 
+The first deterministic repository guard is available as
+`guard:sensitive-files`. It blocks staged likely-secret paths by default and
+also supports an all-changed mode through
+`node scripts/guards/check-sensitive-files.mjs --all-changed`. It is not yet
+installed as a git hook or CI step.
+
 ## Validated Workflow
 
 The working factory loop is:

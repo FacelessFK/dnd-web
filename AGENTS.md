@@ -100,6 +100,11 @@ Do not use stale docs as stronger truth than current state docs or code.
 - Preserve i18n patterns, English/Persian copy expectations, and RTL/LTR
   behavior.
 - Never print `.env` contents, credentials, cookies, tokens, or secrets.
+- Use `corepack pnpm guard:sensitive-files` before committing when staged
+  changes may include env or credential-like paths. Use
+  `node scripts/guards/check-sensitive-files.mjs --all-changed` when checking
+  all changed files. This deterministic guard is part of the repo safety gates,
+  but it is not a substitute for never printing secrets.
 - For DB mode, use `SERVER_PERSISTENCE_MODE=db` and `DATABASE_URL`, and apply
   `packages/db/migrations/` before DB-mode verification.
 - Character Library auth is an MVP using opaque HttpOnly-cookie sessions and
