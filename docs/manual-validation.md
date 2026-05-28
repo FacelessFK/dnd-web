@@ -64,6 +64,13 @@ selected cell, Home to jump to the first cell, and End to jump to the last cell.
 Local Reset clears browser runtime state only; it does not delete backend
 sessions or runtime state.
 
+For a human DM plus human Player Training Room Skirmish pass, use
+`docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_CHECKLIST.md`. It focuses on
+login/session start, saved-character submission, pending assignment, DM
+assignment, placement, readiness/status overview, roster, turn clarity,
+read-model honesty, English/Persian direction, visual hierarchy, and UX gaps to
+triage next.
+
 In DM mode, confirm the Table Setup checklist changes as the table advances:
 with no session it should show session creation as the next action; after
 players join it should advance toward character assignment; after assignment,
