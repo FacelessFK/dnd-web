@@ -1,6 +1,6 @@
 ---
 name: dnd-feature-factory
-description: Use to orchestrate a small DND-web feature or polish slice through task intake, human approval, guarded implementation, validation, PR review, and human merge decision.
+description: Use to orchestrate a small DND-web feature or polish slice through research, story/spec approval, guarded implementation, validation, review, and human merge decision.
 ---
 
 # DND-web Feature Factory
@@ -26,21 +26,41 @@ Trigger examples:
 ### 1. Intake
 
 - If the request is rough, broad, ambiguous, risky, or not already approved,
-  use `dnd-task-intake`.
-- Produce a structured implementation prompt.
-- Stop and ask for human approval before implementation.
+  use `dnd-task-intake` to produce a structured implementation prompt.
+- For tiny docs-only or simple UI polish tasks, this lightweight path may skip
+  story/spec only when the human explicitly approves a narrow implementation
+  prompt.
+- Never skip human approval before implementation.
 
-### 2. Scope Confirmation
+### 2. Optional Read-Only Research
+
+- Use `dnd-codebase-researcher` when the task area is unfamiliar, risky, or
+  depends on existing patterns.
+- Research must stay read-only.
+
+### 3. Product Story Shaping
+
+- Use `dnd-story-writer` when product behavior, acceptance criteria, edge
+  cases, or out-of-scope boundaries are unclear.
+- Stop for human story approval before technical planning.
+
+### 4. Technical Brief
+
+- Use `dnd-spec-writer` after an approved story when implementation needs a
+  technical plan.
+- Stop for human spec approval before implementation.
+
+### 5. Scope Confirmation
 
 - Restate the approved scope in one or two sentences.
 - Classify the task: docs-only, UI-only, frontend, backend, protocol,
   DB/persistence, runtime, auth/security, i18n, or mixed.
 - If the task is too broad, stop and ask for a narrower approved scope.
 
-### 3. Pre-Implementation Boundary Review
+### 6. Pre-Implementation Boundary Review
 
 Use or recommend `dnd-runtime-boundary-review` before implementation if the
-plan touches:
+story, spec, or plan touches:
 
 - server authority;
 - DM role gates;
@@ -53,7 +73,7 @@ plan touches:
 If the boundary review blocks the plan, stop and ask for a narrower or revised
 human-approved task.
 
-### 4. Implementation
+### 7. Guarded Implementation
 
 - Use `dnd-build-with-tests`.
 - Inspect relevant files before editing.
@@ -63,14 +83,28 @@ human-approved task.
 - Run relevant validation.
 - Do not broaden scope beyond the approved task.
 
-### 5. Post-Implementation Boundary Review
+### 8. Test Verification
+
+- Use `dnd-test-verifier` after implementation when acceptance criteria
+  coverage is non-trivial.
+- If missing coverage is found, recommend or request approval for a focused
+  test-only follow-up task.
+
+### 9. Implementation Validation
+
+- Use `dnd-implementation-validator` to compare the completed implementation
+  against the approved story, acceptance criteria, and technical brief.
+- If Critical or Important findings appear, stop and ask for human approval
+  before creating a fix task.
+
+### 10. Post-Implementation Boundary Review
 
 - Use `dnd-runtime-boundary-review` after implementation for risky diffs or
   any task touching non-negotiable boundaries.
-- If Critical findings appear, stop and ask for human approval before creating
-  a fix task.
+- If Critical or Important findings appear, stop and ask for human approval
+  before creating a fix task.
 
-### 6. PR Review
+### 11. PR Review
 
 - Use `dnd-pr-reviewer` on the diff, commit, or implementation report before
   merge.
@@ -78,7 +112,7 @@ human-approved task.
 - If the verdict is Approve or Approve with cautions, present the final merge
   recommendation.
 
-### 7. Human Merge Decision
+### 12. Human Merge Decision
 
 - Never claim merge is complete unless a human performs or explicitly requests
   the merge.

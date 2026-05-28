@@ -38,13 +38,16 @@ as a git hook or CI step.
 
 The working factory loop is:
 
-1. intake;
-2. human approval;
-3. pre-implementation boundary review when risky;
-4. build with tests;
-5. post-implementation boundary review when needed;
-6. PR review;
-7. human merge decision.
+1. optional read-only research;
+2. product story shaping and human story approval when needed;
+3. technical brief and human spec approval when needed;
+4. pre-implementation boundary review when risky;
+5. guarded implementation with tests;
+6. test verification when acceptance coverage is non-trivial;
+7. implementation validation;
+8. post-implementation boundary review when needed;
+9. PR review;
+10. human merge decision.
 
 This workflow has been used on real Training Room Skirmish / Phase 6 polish
 slices.
