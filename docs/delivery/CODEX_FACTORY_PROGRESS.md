@@ -9,16 +9,20 @@ DND-web now uses a repo-local Codex-native software-factory workflow.
 - Current skills:
   - `dnd-codebase-researcher`
   - `dnd-story-writer`
+  - `dnd-spec-writer`
   - `dnd-task-intake`
   - `dnd-build-with-tests`
+  - `dnd-test-verifier`
+  - `dnd-implementation-validator`
   - `dnd-runtime-boundary-review`
   - `dnd-pr-reviewer`
   - `dnd-feature-factory`
 
 The factory is now starting to add agent-layer role skills, beginning with
 read-only codebase research before planning or implementation.
-The agent-layer sequence now includes read-only research followed by product
-story shaping before implementation planning.
+The agent-layer sequence now supports read-only research, product story
+shaping, technical brief writing, guarded implementation, test verification,
+implementation validation, and PR review.
 
 ## Validated Workflow
 

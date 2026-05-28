@@ -124,6 +124,16 @@ Do not use stale docs as stronger truth than current state docs or code.
   do not use it to implement code, write technical design, or create file-level
   implementation plans. If business or product intent is unclear, it should
   produce open questions instead of inventing rules.
+- Use `dnd-spec-writer` to turn an approved user story and optional
+  `dnd-codebase-researcher` findings into a short technical brief before
+  implementation. It must not edit files, implement code, or create broad
+  architecture rewrites. It defines scope, existing patterns to reuse,
+  data/read-model assumptions, UI/API/runtime implications, tests, risks,
+  validation plan, open questions, and the recommended next skill. It requires
+  human approval before implementation begins, and should recommend
+  `dnd-runtime-boundary-review` first when the spec touches runtime authority,
+  DM gates, Character Library/runtime separation, i18n, realtime/outbox claims,
+  auth/security, or product scope boundaries.
 - Use `dnd-task-intake` before implementation when a user request is rough,
   broad, ambiguous, risky, or needs to become a safe Codex implementation
   prompt.
@@ -147,6 +157,19 @@ Do not use stale docs as stronger truth than current state docs or code.
   Character Library/runtime separation, realtime/outbox claims, auth/security,
   i18n, or product scope boundaries, use `dnd-runtime-boundary-review` before
   and/or after implementation.
+- Use `dnd-test-verifier` after implementation to verify that approved user
+  story acceptance criteria are covered by tests and validation. It must not
+  edit production code or silently fix implementation. It maps each criterion
+  to existing, new, missing, or unclear test coverage, and may recommend
+  missing tests or a follow-up test-only prompt. Use it before
+  `dnd-pr-reviewer` when acceptance-criteria coverage is non-trivial.
+- Use `dnd-implementation-validator` after implementation to compare the
+  completed change against the approved user story, acceptance criteria, and
+  technical brief. It must not edit files or fix code directly. It reports
+  missing behavior, wrong behavior, out-of-scope behavior, missing tests,
+  boundary risks, docs drift, and validation evidence grouped by severity. Use
+  it after `dnd-test-verifier` when a story/spec exists, and before
+  `dnd-pr-reviewer`.
 - Use `dnd-pr-reviewer` before merge to review DND-web diffs, PR summaries, or
   implementation reports against the broader project checklist: scope and scope
   creep, product north star and DM-first tabletop direction, server authority
