@@ -64,7 +64,6 @@ import {
   defaultPlayer,
   demoScenarios,
   describeSessionStreamEvent,
-  flag,
   formatRuntimeFailure,
   getActingParticipantId,
   getActionEconomyFeedbackSummary,
@@ -311,6 +310,64 @@ function localizeRuntimeDisabledReasons(
       localizeRuntimeDisabledReason(reason, t),
     ]),
   ) as ReturnType<typeof getRuntimeDisabledReasons>;
+}
+
+function getLocalizedPlayerNextStepTitle(
+  nextStep: ReturnType<typeof getPlayerNextStep>,
+  t: RuntimeTranslator,
+): string {
+  const labels: Record<string, string> = {
+    'Choose a session': t('runtime.playerNextStep.chooseSession.title'),
+    'Create your character': t('runtime.playerNextStep.createCharacter.title'),
+    'Exploration mode': t('runtime.playerNextStep.exploration.title'),
+    'Finalize your character': t('runtime.playerNextStep.finalize.title'),
+    'Join the table': t('runtime.playerNextStep.join.title'),
+    'No active scene': t('runtime.playerNextStep.noScene.title'),
+    'Submit for assignment': t('runtime.playerNextStep.submit.title'),
+    'Token not placed': t('runtime.playerNextStep.placement.title'),
+    'Waiting for DM assignment': t('runtime.playerNextStep.waitingDm.title'),
+    'Waiting for your turn': t('runtime.playerNextStep.waitingTurn.title'),
+    'Your turn': t('runtime.playerNextStep.yourTurn.title'),
+  };
+
+  return labels[nextStep.title] ?? nextStep.title;
+}
+
+function getLocalizedPlayerNextStepDetail(
+  nextStep: ReturnType<typeof getPlayerNextStep>,
+  t: RuntimeTranslator,
+): string {
+  const labels: Record<string, string> = {
+    'A submitted runtime copy is waiting in session state for the DM to assign it.':
+      t('runtime.playerNextStep.waitingDm.detail'),
+    'Create a draft here or submit a saved Character Library entry, then wait for DM assignment.':
+      t('runtime.playerNextStep.createCharacter.detail'),
+    'Finish editing and finalize your character before sending it to the DM.':
+      t('runtime.playerNextStep.finalize.detail'),
+    'Join the session as this participant before reading table state.': t(
+      'runtime.playerNextStep.join.detail',
+    ),
+    'Move, attack, or spend your action economy. The server validates legality.':
+      t('runtime.playerNextStep.yourTurn.detail'),
+    'Paste a session ID from the DM, then join or recover.': t(
+      'runtime.playerNextStep.chooseSession.detail',
+    ),
+    'Submit your finalized character for DM assignment so the table can see it.':
+      t('runtime.playerNextStep.submit.detail'),
+    'The DM has not activated a scene yet, or you need to recover.': t(
+      'runtime.playerNextStep.noScene.detail',
+    ),
+    'Watch the current actor and prepare your target or movement.': t(
+      'runtime.playerNextStep.waitingTurn.detail',
+    ),
+    'You can move outside combat; turn resources unlock after encounter start.':
+      t('runtime.playerNextStep.exploration.detail'),
+    'Your character has no token placement in the active scene.': t(
+      'runtime.playerNextStep.placement.detail',
+    ),
+  };
+
+  return labels[nextStep.detail] ?? nextStep.detail;
 }
 
 function formatOutboxStatusLabel(
@@ -3930,12 +3987,12 @@ export function RuntimeCockpit() {
         </header>
 
         {commandError ? (
-          <Notice title="Command failed" tone="danger">
+          <Notice title={t('runtime.notice.commandFailed')} tone="danger">
             {commandError}
           </Notice>
         ) : null}
         {recoveryNotes.length ? (
-          <Notice title="Recovery completed with notes" tone="warning">
+          <Notice title={t('runtime.notice.recoveryWithNotes')} tone="warning">
             <ul className="list-disc space-y-1 pl-5">
               {recoveryNotes.map((note) => (
                 <li key={note}>{note}</li>
@@ -3944,8 +4001,11 @@ export function RuntimeCockpit() {
           </Notice>
         ) : null}
         {mode === 'player' ? (
-          <Notice title={playerNextStep.title} tone={playerNextStep.tone}>
-            {playerNextStep.detail}
+          <Notice
+            title={getLocalizedPlayerNextStepTitle(playerNextStep, t)}
+            tone={playerNextStep.tone}
+          >
+            {getLocalizedPlayerNextStepDetail(playerNextStep, t)}
           </Notice>
         ) : null}
         <Notice
@@ -4504,9 +4564,9 @@ export function RuntimeCockpit() {
             ) : null}
 
             <Panel
-              description="Turn controls submit actor-scoped commands; disabled buttons explain missing prerequisites."
-              eyebrow="Encounter"
-              title="Turn & Target"
+              description={t('runtime.turnTarget.description')}
+              eyebrow={t('runtime.turnTarget.eyebrow')}
+              title={t('runtime.turnTarget.title')}
             >
               <div className="grid gap-3">
                 <EncounterStatusFeedback
@@ -4516,12 +4576,31 @@ export function RuntimeCockpit() {
                 {encounter ? (
                   <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
                     <StatusRow
-                      label="Usage"
-                      value={`${encounter.currentTurnUsage.movementUsed} ft, action ${flag(encounter.currentTurnUsage.actionUsed)}, bonus ${flag(encounter.currentTurnUsage.bonusActionUsed)}, reaction ${flag(encounter.currentTurnUsage.reactionUsed)}`}
+                      label={t('runtime.turnTarget.usage')}
+                      value={t('runtime.turnTarget.usageValue', {
+                        action: t(
+                          encounter.currentTurnUsage.actionUsed
+                            ? 'common.yes'
+                            : 'common.no',
+                        ),
+                        bonus: t(
+                          encounter.currentTurnUsage.bonusActionUsed
+                            ? 'common.yes'
+                            : 'common.no',
+                        ),
+                        movement: String(
+                          encounter.currentTurnUsage.movementUsed,
+                        ),
+                        reaction: t(
+                          encounter.currentTurnUsage.reactionUsed
+                            ? 'common.yes'
+                            : 'common.no',
+                        ),
+                      })}
                     />
                     <div className="pt-2">
                       <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
-                        Turn order
+                        {t('runtime.turnTarget.turnOrder')}
                       </p>
                       <div className="mt-2 grid gap-1">
                         {encounter.participants.map((participant, index) => {
@@ -4557,7 +4636,9 @@ export function RuntimeCockpit() {
                                     participants,
                                     scene,
                                   })}{' '}
-                              · init {participant.initiative}
+                              {t('runtime.turnTarget.initiative', {
+                                initiative: String(participant.initiative),
+                              })}
                             </div>
                           );
                         })}
@@ -4566,7 +4647,7 @@ export function RuntimeCockpit() {
                   </div>
                 ) : null}
                 <SelectField
-                  label="Target"
+                  label={t('runtime.turnTarget.target')}
                   onChange={(value) => {
                     if (mode !== 'player') {
                       setSelectedTarget(value);
@@ -4602,7 +4683,7 @@ export function RuntimeCockpit() {
                     disabledReason={
                       actionEconomyAction.blockedReason ?? undefined
                     }
-                    label="Use Action"
+                    label={t('runtime.turnTarget.useAction')}
                     onClick={() =>
                       runEncounterCommand(actionEconomyAction.commandType)
                     }
@@ -4613,7 +4694,7 @@ export function RuntimeCockpit() {
                     disabledReason={
                       actionEconomyBonusAction.blockedReason ?? undefined
                     }
-                    label="Use Bonus"
+                    label={t('runtime.turnTarget.useBonus')}
                     onClick={() =>
                       runEncounterCommand(actionEconomyBonusAction.commandType)
                     }
@@ -4624,7 +4705,7 @@ export function RuntimeCockpit() {
                     disabledReason={
                       actionEconomyReaction.blockedReason ?? undefined
                     }
-                    label="Use Reaction"
+                    label={t('runtime.turnTarget.useReaction')}
                     onClick={() =>
                       runEncounterCommand(actionEconomyReaction.commandType)
                     }
@@ -4634,7 +4715,7 @@ export function RuntimeCockpit() {
                     <ActionButton
                       disabled={Boolean(disabledReasons.dmEncounter)}
                       disabledReason={disabledReasons.dmEncounter ?? undefined}
-                      label="Advance Turn"
+                      label={t('runtime.turnTarget.advanceTurn')}
                       onClick={() => runEncounterCommand('advance_turn')}
                       variant="secondary"
                     />
@@ -4643,7 +4724,7 @@ export function RuntimeCockpit() {
                 <ActionButton
                   disabled={Boolean(playerAttackDisabledReason)}
                   disabledReason={playerAttackDisabledReason ?? undefined}
-                  label="Attack Target"
+                  label={t('runtime.turnTarget.attackTarget')}
                   onClick={attackTarget}
                 />
               </div>
@@ -4847,14 +4928,14 @@ export function RuntimeCockpit() {
 
             {mode === 'dm' ? (
               <Panel
-                description="Administrative overrides. These are intentionally separate from normal encounter flow."
-                eyebrow="DM-only"
-                title="Overrides"
+                description={t('runtime.overrides.description')}
+                eyebrow={t('runtime.overrides.eyebrow')}
+                title={t('runtime.overrides.title')}
                 tone="danger"
               >
                 <div className="grid gap-3">
                   <SelectField
-                    label="Controlled participant"
+                    label={t('runtime.overrides.controlledParticipant')}
                     onChange={setSelectedActor}
                     options={playerParticipants.map((participant) => ({
                       label: `${participant.displayName} (${participant.id})`,
@@ -4864,7 +4945,7 @@ export function RuntimeCockpit() {
                   />
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     <LabeledInput
-                      label="Current HP"
+                      label={t('runtime.overrides.currentHp')}
                       onChange={setHpDraft}
                       value={hpDraft}
                     />
@@ -4874,28 +4955,28 @@ export function RuntimeCockpit() {
                         disabledReason={
                           disabledReasons.dmCharacter ?? undefined
                         }
-                        label="Set HP"
+                        label={t('runtime.overrides.setHp')}
                         onClick={dmSetCurrentHp}
                       />
                     </div>
                   </div>
                   <div className="grid gap-2">
                     <LabeledInput
-                      label="Condition tags"
+                      label={t('runtime.overrides.conditionTags')}
                       onChange={setConditionsDraft}
                       value={conditionsDraft}
                     />
                     <ActionButton
                       disabled={Boolean(disabledReasons.dmCharacter)}
                       disabledReason={disabledReasons.dmCharacter ?? undefined}
-                      label="Set Conditions"
+                      label={t('runtime.overrides.setConditions')}
                       onClick={dmSetConditions}
                       variant="secondary"
                     />
                   </div>
                   <div className="grid gap-2 rounded-2xl border border-red-300/20 bg-red-950/15 p-3">
                     <p className="text-sm font-semibold text-red-100">
-                      Turn override
+                      {t('runtime.overrides.turnOverride')}
                     </p>
                     <label className="flex items-center gap-2 text-sm text-amber-100/85">
                       <input
@@ -4909,7 +4990,7 @@ export function RuntimeCockpit() {
                         }
                         type="checkbox"
                       />
-                      Action used
+                      {t('runtime.overrides.actionUsed')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-amber-100/85">
                       <input
@@ -4923,7 +5004,7 @@ export function RuntimeCockpit() {
                         }
                         type="checkbox"
                       />
-                      Bonus action used
+                      {t('runtime.overrides.bonusActionUsed')}
                     </label>
                     <label className="flex items-center gap-2 text-sm text-amber-100/85">
                       <input
@@ -4937,10 +5018,10 @@ export function RuntimeCockpit() {
                         }
                         type="checkbox"
                       />
-                      Reaction used
+                      {t('runtime.overrides.reactionUsed')}
                     </label>
                     <NumberInput
-                      label="Movement used"
+                      label={t('runtime.overrides.movementUsed')}
                       onChange={(movementUsed) =>
                         setTurnUsageDraft((draft) => ({
                           ...draft,
@@ -4955,7 +5036,7 @@ export function RuntimeCockpit() {
                         disabledReason={
                           disabledReasons.dmEncounter ?? undefined
                         }
-                        label="Set Turn Actor"
+                        label={t('runtime.overrides.setTurnActor')}
                         onClick={dmSetTurnParticipant}
                         variant="secondary"
                       />
@@ -4964,7 +5045,7 @@ export function RuntimeCockpit() {
                         disabledReason={
                           disabledReasons.dmEncounter ?? undefined
                         }
-                        label="Set Usage"
+                        label={t('runtime.overrides.setUsage')}
                         onClick={dmSetTurnUsage}
                         variant="secondary"
                       />
@@ -4973,7 +5054,7 @@ export function RuntimeCockpit() {
                   <ActionButton
                     disabled={Boolean(disabledReasons.dmEncounter)}
                     disabledReason={disabledReasons.dmEncounter ?? undefined}
-                    label="End Encounter"
+                    label={t('runtime.overrides.endEncounter')}
                     onClick={dmEndEncounter}
                     variant="danger"
                   />
@@ -5266,7 +5347,7 @@ function RecoveryReliabilityPanel({
 }) {
   return (
     <Panel
-      description={summary.detail}
+      description={getRecoveryReliabilitySummaryDetail(summary, t)}
       eyebrow={t('runtime.recovery.eyebrow')}
       title={t('runtime.recovery.title')}
     >
@@ -5295,9 +5376,11 @@ function RecoveryReliabilityPanel({
                 tone={getRecoveryReliabilityItemTone(item.status)}
               />
               <div className="min-w-0">
-                <p className="text-sm font-bold text-amber-50">{item.title}</p>
+                <p className="text-sm font-bold text-amber-50">
+                  {getRecoveryReliabilityItemTitle(item, t)}
+                </p>
                 <p className="mt-1 text-xs leading-5 text-amber-100/60">
-                  {item.detail}
+                  {getRecoveryReliabilityItemDetail(item, t)}
                 </p>
               </div>
             </li>
@@ -5334,6 +5417,33 @@ function getRecoveryReliabilityStatusLabel(
   }
 }
 
+function getRecoveryReliabilitySummaryDetail(
+  summary: RecoveryReliabilitySummary,
+  t: RuntimeTranslator,
+): string {
+  const noteText = summary.notes.length
+    ? ` ${t('runtime.recovery.detail.notes', {
+        count: String(summary.notes.length),
+      })}`
+    : '';
+
+  if (summary.status === 'empty') {
+    return t('runtime.recovery.detail.empty');
+  }
+
+  if (summary.status === 'recovered') {
+    return `${t('runtime.recovery.detail.recovered', {
+      loaded: String(summary.loadedCount),
+      total: String(summary.totalCount),
+    })}${noteText}`;
+  }
+
+  return `${t('runtime.recovery.detail.partial', {
+    loaded: String(summary.loadedCount),
+    total: String(summary.totalCount),
+  })}${noteText}`;
+}
+
 function getRecoveryReliabilityStatusTone(
   status: RecoveryReliabilitySummary['status'],
 ): RuntimeNoticeTone {
@@ -5359,6 +5469,24 @@ function getRecoveryReliabilityItemLabel(
     case 'recovered':
       return t('runtime.recovery.loaded');
   }
+}
+
+function getRecoveryReliabilityItemTitle(
+  item: RecoveryReliabilitySummary['items'][number],
+  t: RuntimeTranslator,
+): string {
+  return t(
+    `runtime.recovery.item.${item.id}.title` as Parameters<RuntimeTranslator>[0],
+  );
+}
+
+function getRecoveryReliabilityItemDetail(
+  item: RecoveryReliabilitySummary['items'][number],
+  t: RuntimeTranslator,
+): string {
+  return t(
+    `runtime.recovery.item.${item.id}.${item.status}` as Parameters<RuntimeTranslator>[0],
+  );
 }
 
 function getRecoveryReliabilityItemTone(
@@ -5461,7 +5589,7 @@ function RuntimeStatusOverviewPanel({
             {t('runtime.statusOverview.nextAction')}
           </p>
           <p className="mt-1 text-sm leading-6 text-amber-50">
-            {overview.nextAction.detail}
+            {getRuntimeStatusOverviewNextActionDetail(overview, t)}
           </p>
           <StatusRow
             label={t('runtime.statusOverview.nextAction.ownerDetail')}
@@ -5517,6 +5645,59 @@ function getRuntimeStatusOverviewOwnerDetail(
     case 'table':
       return t('runtime.statusOverview.nextAction.tableDetail');
   }
+}
+
+function getRuntimeStatusOverviewNextActionDetail(
+  overview: RuntimeStatusOverview,
+  t: RuntimeTranslator,
+): string {
+  const { sourceItemId, sourceStatus } = overview.nextAction;
+
+  if (!sourceItemId || !sourceStatus) {
+    return overview.mode === 'dm'
+      ? t('runtime.tableSetup.readyForPlay')
+      : t('runtime.playerReadiness.detail.ready');
+  }
+
+  if (overview.mode === 'dm') {
+    return getDmTableSetupItemDetail(
+      {
+        detail: '',
+        id: sourceItemId as DmTableSetupChecklist['items'][number]['id'],
+        status:
+          sourceStatus as DmTableSetupChecklist['items'][number]['status'],
+        title: '',
+      },
+      t,
+    );
+  }
+
+  return getPlayerReadinessItemDetail(
+    {
+      detail: '',
+      id: sourceItemId as PlayerReadinessSummary['items'][number]['id'],
+      status: sourceStatus as PlayerReadinessSummary['items'][number]['status'],
+      title: '',
+    },
+    {
+      completedCount: 0,
+      items: [],
+      nextAction: '',
+      readyCount: 0,
+      status: 'waiting',
+      title: '',
+      totalCount: 0,
+      turn: {
+        attackReady: false,
+        currentActorLabel: overview.turn.actorLabel ?? t('common.none'),
+        isCurrentTurn: false,
+        moveReady: false,
+        readyActionCount: 0,
+      },
+      waitingCount: 0,
+    },
+    t,
+  );
 }
 
 function PlayerReadinessRosterPanel({
@@ -5733,6 +5914,83 @@ function getPlayerReadinessRosterEncounterLabel(
   }
 }
 
+function getPlayerReadinessSummaryTitle(
+  summary: PlayerReadinessSummary,
+  t: RuntimeTranslator,
+): string {
+  if (summary.turn.isCurrentTurn) {
+    return summary.readyCount > 0
+      ? t('runtime.playerReadiness.summary.yourTurnReady')
+      : t('runtime.playerReadiness.summary.yourTurnNeedsAttention');
+  }
+
+  const hasTurnWaiting = summary.items.some(
+    (item) => item.id === 'turn' && item.status === 'waiting',
+  );
+
+  if (hasTurnWaiting) {
+    return t('runtime.playerReadiness.summary.waitingTurn');
+  }
+
+  const hasWaiting = summary.items.some((item) => item.status === 'waiting');
+
+  if (hasWaiting) {
+    return t('runtime.playerReadiness.summary.waitingTable');
+  }
+
+  if (summary.readyCount > 0) {
+    return t('runtime.playerReadiness.summary.readyNext');
+  }
+
+  return t('runtime.playerReadiness.summary.blocked');
+}
+
+function getPlayerReadinessNextAction(
+  summary: PlayerReadinessSummary,
+  t: RuntimeTranslator,
+): string {
+  const item =
+    summary.items.find((candidate) => candidate.status === 'blocked') ??
+    summary.items.find((candidate) => candidate.status === 'ready') ??
+    summary.items.find((candidate) => candidate.status === 'waiting') ??
+    null;
+
+  return item
+    ? getPlayerReadinessItemDetail(item, summary, t)
+    : t('runtime.playerReadiness.detail.ready');
+}
+
+function getPlayerReadinessItemTitle(
+  item: PlayerReadinessSummary['items'][number],
+  t: RuntimeTranslator,
+): string {
+  return t(
+    `runtime.playerReadiness.item.${item.id}.${item.status}.title` as Parameters<RuntimeTranslator>[0],
+  );
+}
+
+function getPlayerReadinessItemDetail(
+  item: PlayerReadinessSummary['items'][number],
+  summary: PlayerReadinessSummary,
+  t: RuntimeTranslator,
+): string {
+  if (item.id === 'turn' && item.status === 'waiting') {
+    return t('runtime.playerReadiness.item.turn.waiting.detail', {
+      actor: summary.turn.currentActorLabel,
+    });
+  }
+
+  if (item.id === 'turn' && item.status === 'ready') {
+    return t('runtime.playerReadiness.item.turn.ready.detail', {
+      count: String(summary.turn.readyActionCount),
+    });
+  }
+
+  return t(
+    `runtime.playerReadiness.item.${item.id}.${item.status}.detail` as Parameters<RuntimeTranslator>[0],
+  );
+}
+
 function PlayerReadinessPanel({
   selectedTargetLabel,
   summary,
@@ -5754,7 +6012,9 @@ function PlayerReadinessPanel({
             <p className="text-xs font-black uppercase tracking-[0.14em] text-sky-200/80">
               {t('runtime.playerReadiness.title')}
             </p>
-            <p className="mt-1 font-black text-white">{summary.title}</p>
+            <p className="mt-1 font-black text-white">
+              {getPlayerReadinessSummaryTitle(summary, t)}
+            </p>
           </div>
           <StatusBadge
             label={t('runtime.playerReadiness.progress', {
@@ -5765,7 +6025,7 @@ function PlayerReadinessPanel({
           />
         </div>
         <p className="text-xs leading-5 text-sky-100/70">
-          {summary.nextAction}
+          {getPlayerReadinessNextAction(summary, t)}
         </p>
         <div className="flex flex-wrap gap-2">
           <StatusBadge
@@ -5794,9 +6054,11 @@ function PlayerReadinessPanel({
               tone={getPlayerReadinessItemTone(item.status)}
             />
             <div className="min-w-0">
-              <p className="text-sm font-bold text-amber-50">{item.title}</p>
+              <p className="text-sm font-bold text-amber-50">
+                {getPlayerReadinessItemTitle(item, t)}
+              </p>
               <p className="mt-1 text-xs leading-5 text-amber-100/60">
-                {item.detail}
+                {getPlayerReadinessItemDetail(item, summary, t)}
               </p>
             </div>
           </li>
@@ -8468,7 +8730,9 @@ function TacticalGrid({
                     )}
                   </span>
                 ) : (
-                  <span className="sr-only">no character token</span>
+                  <span className="sr-only">
+                    {t('runtime.board.noCharacterToken')}
+                  </span>
                 )}
               </button>
             );

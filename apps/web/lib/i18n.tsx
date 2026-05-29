@@ -22,10 +22,13 @@ const messages = {
     'common.characters': 'Characters',
     'common.dashboard': 'Dashboard',
     'common.language': 'Language',
+    'common.no': 'No',
+    'common.none': 'None',
     'common.ready': 'Ready',
     'common.server': 'Server',
     'common.switchToEnglish': 'English',
     'common.switchToPersian': 'فارسی',
+    'common.yes': 'Yes',
     'home.card.characters.description':
       'Browse saved heroes and export sheets.',
     'home.card.characters.title': 'Character Library',
@@ -75,6 +78,7 @@ const messages = {
     'runtime.board.camera': 'Camera',
     'runtime.board.gridLabel':
       'Tactical grid. Use arrow keys to move the selected cell, Home for the first cell, and End for the last cell.',
+    'runtime.board.noCharacterToken': 'No character token',
     'runtime.board.panDown': 'Pan down',
     'runtime.board.panLeft': 'Pan left',
     'runtime.board.panRight': 'Pan right',
@@ -221,6 +225,8 @@ const messages = {
     'runtime.disabled.selectedAlreadyAssigned':
       'Selected participant already has this character assigned.',
     'runtime.eyebrow': 'Authoritative table surface',
+    'runtime.notice.commandFailed': 'Command failed',
+    'runtime.notice.recoveryWithNotes': 'Recovery completed with notes',
     'runtime.encounterStatus.active': 'Active',
     'runtime.encounterStatus.ended': 'Ended',
     'runtime.encounterStatus.hit': 'hit',
@@ -260,20 +266,167 @@ const messages = {
     'runtime.playerReadiness.attack': 'Attack {state}',
     'runtime.playerReadiness.blocked': 'Blocked',
     'runtime.playerReadiness.currentActor': 'Current actor',
+    'runtime.playerReadiness.detail.ready': 'Player setup is ready.',
     'runtime.playerReadiness.done': 'Done',
     'runtime.playerReadiness.eyebrow': 'Player readiness',
+    'runtime.playerReadiness.item.assignment.blocked.detail':
+      'A finalized character is required before assignment.',
+    'runtime.playerReadiness.item.assignment.blocked.title':
+      'Submit for assignment',
+    'runtime.playerReadiness.item.assignment.done.detail':
+      'The DM assigned this runtime character to the table.',
+    'runtime.playerReadiness.item.assignment.done.title': 'Character assigned',
+    'runtime.playerReadiness.item.assignment.ready.detail':
+      'Submit the finalized character for DM assignment.',
+    'runtime.playerReadiness.item.assignment.ready.title':
+      'Submit for assignment',
+    'runtime.playerReadiness.item.assignment.waiting.detail':
+      'A runtime copy is submitted. Waiting for the DM to assign it.',
+    'runtime.playerReadiness.item.assignment.waiting.title':
+      'Waiting for assignment',
+    'runtime.playerReadiness.item.character.blocked.detail':
+      'Join before character setup matters.',
+    'runtime.playerReadiness.item.character.blocked.title': 'Prepare character',
+    'runtime.playerReadiness.item.character.done.detail':
+      'A ready runtime character is available for this player.',
+    'runtime.playerReadiness.item.character.done.title': 'Character ready',
+    'runtime.playerReadiness.item.character.ready.detail':
+      'Create a runtime draft or submit a saved Character Library entry.',
+    'runtime.playerReadiness.item.character.ready.title': 'Prepare character',
+    'runtime.playerReadiness.item.joined.blocked.detail':
+      'A session is required before joining.',
+    'runtime.playerReadiness.item.joined.blocked.title': 'Join table',
+    'runtime.playerReadiness.item.joined.done.detail':
+      'This player is joined at the table.',
+    'runtime.playerReadiness.item.joined.done.title': 'Joined table',
+    'runtime.playerReadiness.item.joined.ready.detail':
+      'Join the table with your participant ID and display name.',
+    'runtime.playerReadiness.item.joined.ready.title': 'Join table',
+    'runtime.playerReadiness.item.placement.blocked.detail':
+      'Scene and assignment are required before placement.',
+    'runtime.playerReadiness.item.placement.blocked.title':
+      'Waiting for placement',
+    'runtime.playerReadiness.item.placement.done.detail':
+      'Your token is placed in the active scene.',
+    'runtime.playerReadiness.item.placement.done.title': 'Token placed',
+    'runtime.playerReadiness.item.placement.waiting.detail':
+      'Waiting for the DM to place your token.',
+    'runtime.playerReadiness.item.placement.waiting.title':
+      'Waiting for placement',
+    'runtime.playerReadiness.item.scene.done.detail':
+      'An active scene is loaded.',
+    'runtime.playerReadiness.item.scene.done.title': 'Scene active',
+    'runtime.playerReadiness.item.scene.waiting.detail':
+      'Waiting for the DM to activate a scene.',
+    'runtime.playerReadiness.item.scene.waiting.title': 'Waiting for scene',
+    'runtime.playerReadiness.item.session.done.detail': 'A session is loaded.',
+    'runtime.playerReadiness.item.session.done.title': 'Session loaded',
+    'runtime.playerReadiness.item.session.ready.detail':
+      'Paste a session ID from the DM, then join or recover.',
+    'runtime.playerReadiness.item.session.ready.title': 'Choose session',
+    'runtime.playerReadiness.item.turn.blocked.detail':
+      'Placement is required before turn readiness matters.',
+    'runtime.playerReadiness.item.turn.blocked.title': 'Waiting for turn',
+    'runtime.playerReadiness.item.turn.ready.detail':
+      '{count} turn option(s) are available.',
+    'runtime.playerReadiness.item.turn.ready.title': 'Turn ready',
+    'runtime.playerReadiness.item.turn.waiting.detail':
+      'Current actor: {actor}. Watch the board and prepare.',
+    'runtime.playerReadiness.item.turn.waiting.title': 'Waiting for turn',
     'runtime.playerReadiness.move': 'Move {state}',
     'runtime.playerReadiness.next': 'Next',
     'runtime.playerReadiness.progress': '{completed}/{total} ready',
     'runtime.playerReadiness.ready': 'ready',
     'runtime.playerReadiness.readyCount': '{count} next steps',
     'runtime.playerReadiness.selectedTarget': 'Selected target',
+    'runtime.playerReadiness.summary.blocked': 'Player setup blocked',
+    'runtime.playerReadiness.summary.readyNext': 'Ready for next step',
+    'runtime.playerReadiness.summary.waitingTable': 'Waiting for the table',
+    'runtime.playerReadiness.summary.waitingTurn': 'Waiting for your turn',
+    'runtime.playerReadiness.summary.yourTurnNeedsAttention':
+      'Your turn needs attention',
+    'runtime.playerReadiness.summary.yourTurnReady': 'Your turn is ready',
     'runtime.playerReadiness.title': 'Readiness summary',
     'runtime.playerReadiness.tokenPosition': 'Token',
     'runtime.playerReadiness.waiting': 'Waiting',
     'runtime.playerReadiness.waitingCount': '{count} waiting',
+    'runtime.playerNextStep.chooseSession.detail':
+      'Paste a session ID from the DM, then join or recover.',
+    'runtime.playerNextStep.chooseSession.title': 'Choose a session',
+    'runtime.playerNextStep.createCharacter.detail':
+      'Create a draft here or submit a saved Character Library entry, then wait for DM assignment.',
+    'runtime.playerNextStep.createCharacter.title': 'Create your character',
+    'runtime.playerNextStep.exploration.detail':
+      'You can move outside combat; turn resources unlock after encounter start.',
+    'runtime.playerNextStep.exploration.title': 'Exploration mode',
+    'runtime.playerNextStep.finalize.detail':
+      'Finish editing and finalize your character before sending it to the DM.',
+    'runtime.playerNextStep.finalize.title': 'Finalize your character',
+    'runtime.playerNextStep.join.detail':
+      'Join the session as this participant before reading table state.',
+    'runtime.playerNextStep.join.title': 'Join the table',
+    'runtime.playerNextStep.noScene.detail':
+      'The DM has not activated a scene yet, or you need to recover.',
+    'runtime.playerNextStep.noScene.title': 'No active scene',
+    'runtime.playerNextStep.placement.detail':
+      'Your character has no token placement in the active scene.',
+    'runtime.playerNextStep.placement.title': 'Token not placed',
+    'runtime.playerNextStep.submit.detail':
+      'Submit your finalized character for DM assignment so the table can see it.',
+    'runtime.playerNextStep.submit.title': 'Submit for assignment',
+    'runtime.playerNextStep.waitingDm.detail':
+      'A submitted runtime copy is waiting in session state for the DM to assign it.',
+    'runtime.playerNextStep.waitingDm.title': 'Waiting for DM assignment',
+    'runtime.playerNextStep.waitingTurn.detail':
+      'Watch the current actor and prepare your target or movement.',
+    'runtime.playerNextStep.waitingTurn.title': 'Waiting for your turn',
+    'runtime.playerNextStep.yourTurn.detail':
+      'Move, attack, or spend your action economy. The server validates legality.',
+    'runtime.playerNextStep.yourTurn.title': 'Your turn',
     'runtime.recovery.empty': 'No session',
+    'runtime.recovery.detail.empty':
+      'No recoverable runtime session is loaded in this browser yet.',
+    'runtime.recovery.detail.notes': '{count} recovery note(s) were recorded.',
+    'runtime.recovery.detail.partial':
+      '{loaded}/{total} recovery read models are loaded.',
+    'runtime.recovery.detail.recovered':
+      '{loaded}/{total} recovery read models are loaded: session, scene, active-scene placement, characters, and encounter.',
     'runtime.recovery.eyebrow': 'Recovery',
+    'runtime.recovery.item.activeScene.missing':
+      'The active-scene placement read model is not loaded.',
+    'runtime.recovery.item.activeScene.optional_missing':
+      'No active-scene placement read model is currently expected.',
+    'runtime.recovery.item.activeScene.recovered':
+      'The active-scene placement read model is loaded.',
+    'runtime.recovery.item.activeScene.title': 'Placement read model',
+    'runtime.recovery.item.characters.missing':
+      'No character read models are loaded yet.',
+    'runtime.recovery.item.characters.optional_missing':
+      'Character read models are optional until table characters exist.',
+    'runtime.recovery.item.characters.recovered':
+      'Character read models are loaded.',
+    'runtime.recovery.item.characters.title': 'Characters',
+    'runtime.recovery.item.encounter.missing':
+      'The active encounter read model is not loaded.',
+    'runtime.recovery.item.encounter.optional_missing':
+      'No active encounter read model is loaded.',
+    'runtime.recovery.item.encounter.recovered':
+      'The active encounter read model is loaded.',
+    'runtime.recovery.item.encounter.title': 'Encounter',
+    'runtime.recovery.item.scene.missing':
+      'An active scene is expected but the scene read model is not loaded.',
+    'runtime.recovery.item.scene.optional_missing':
+      'No active scene is currently expected.',
+    'runtime.recovery.item.scene.recovered':
+      'The active scene read model is loaded.',
+    'runtime.recovery.item.scene.title': 'Scene',
+    'runtime.recovery.item.session.missing':
+      'No session is loaded in local runtime state.',
+    'runtime.recovery.item.session.optional_missing':
+      'Session recovery is optional until a session is chosen.',
+    'runtime.recovery.item.session.recovered':
+      'The session read model is present in local runtime state.',
+    'runtime.recovery.item.session.title': 'Session',
     'runtime.recovery.loaded': 'Loaded',
     'runtime.recovery.missing': 'Missing',
     'runtime.recovery.notes': 'Recovery notes',
@@ -306,6 +459,38 @@ const messages = {
     'runtime.statePanel.sceneName': 'Scene name',
     'runtime.statePanel.session': 'Session',
     'runtime.statePanel.title': 'State',
+    'runtime.turnTarget.advanceTurn': 'Advance Turn',
+    'runtime.turnTarget.attackTarget': 'Attack Target',
+    'runtime.turnTarget.description':
+      'Turn controls submit actor-scoped commands; disabled buttons explain missing prerequisites.',
+    'runtime.turnTarget.eyebrow': 'Encounter',
+    'runtime.turnTarget.initiative': '· init {initiative}',
+    'runtime.turnTarget.target': 'Target',
+    'runtime.turnTarget.title': 'Turn & Target',
+    'runtime.turnTarget.turnOrder': 'Turn order',
+    'runtime.turnTarget.usage': 'Usage',
+    'runtime.turnTarget.usageValue':
+      '{movement} ft, action {action}, bonus {bonus}, reaction {reaction}',
+    'runtime.turnTarget.useAction': 'Use Action',
+    'runtime.turnTarget.useBonus': 'Use Bonus',
+    'runtime.turnTarget.useReaction': 'Use Reaction',
+    'runtime.overrides.actionUsed': 'Action used',
+    'runtime.overrides.bonusActionUsed': 'Bonus action used',
+    'runtime.overrides.conditionTags': 'Condition tags',
+    'runtime.overrides.controlledParticipant': 'Controlled participant',
+    'runtime.overrides.currentHp': 'Current HP',
+    'runtime.overrides.description':
+      'Administrative overrides. These are intentionally separate from normal encounter flow.',
+    'runtime.overrides.endEncounter': 'End Encounter',
+    'runtime.overrides.eyebrow': 'DM-only',
+    'runtime.overrides.movementUsed': 'Movement used',
+    'runtime.overrides.reactionUsed': 'Reaction used',
+    'runtime.overrides.setConditions': 'Set Conditions',
+    'runtime.overrides.setHp': 'Set HP',
+    'runtime.overrides.setTurnActor': 'Set Turn Actor',
+    'runtime.overrides.setUsage': 'Set Usage',
+    'runtime.overrides.title': 'Overrides',
+    'runtime.overrides.turnOverride': 'Turn override',
     'runtime.statusOverview.description':
       'Derived from current read models only; commands still validate on the server.',
     'runtime.statusOverview.dmReadiness': 'DM setup',
@@ -530,10 +715,13 @@ const messages = {
     'common.characters': 'کاراکترها',
     'common.dashboard': 'داشبورد',
     'common.language': 'زبان',
+    'common.no': 'خیر',
+    'common.none': 'هیچ',
     'common.ready': 'آماده',
     'common.server': 'سرور',
     'common.switchToEnglish': 'English',
     'common.switchToPersian': 'فارسی',
+    'common.yes': 'بله',
     'home.card.characters.description':
       'قهرمان‌های ذخیره‌شده را ببینید و شیت خروجی بگیرید.',
     'home.card.characters.title': 'کتابخانه کاراکترها',
@@ -574,8 +762,8 @@ const messages = {
     'runtime.assignmentRequests.runtimeCopy': 'نسخه runtime',
     'runtime.assignmentRequests.sourceLibraryEntry': 'ورودی کتابخانه منبع',
     'runtime.assignmentRequests.speed': 'سرعت',
-    'runtime.assignmentRequests.submit': 'Assign نسخه runtime',
-    'runtime.assignmentRequests.title': 'درخواست‌های assignment',
+    'runtime.assignmentRequests.submit': 'تخصیص نسخه runtime',
+    'runtime.assignmentRequests.title': 'درخواست‌های تخصیص',
     'runtime.board.badge.move': 'مقصد حرکت',
     'runtime.board.badge.selected': 'توکن انتخاب‌شده',
     'runtime.board.badge.target': 'هدف حمله',
@@ -583,6 +771,7 @@ const messages = {
     'runtime.board.camera': 'دوربین',
     'runtime.board.gridLabel':
       'گرید تاکتیکی. با کلیدهای جهت‌دار سلول انتخاب‌شده را حرکت دهید، Home برای اولین سلول و End برای آخرین سلول.',
+    'runtime.board.noCharacterToken': 'توکن کاراکتری نیست',
     'runtime.board.panDown': 'حرکت دوربین به پایین',
     'runtime.board.panLeft': 'حرکت دوربین به چپ',
     'runtime.board.panRight': 'حرکت دوربین به راست',
@@ -619,33 +808,33 @@ const messages = {
     'runtime.characterLibrary.errorTitle': 'کتابخانه کاراکتر در دسترس نیست',
     'runtime.characterLibrary.loading': 'در حال بارگذاری کتابخانه',
     'runtime.characterLibrary.optionLabel': '{name} - {className} سطح {level}',
-    'runtime.characterLibrary.refresh': 'Refresh کتابخانه',
+    'runtime.characterLibrary.refresh': 'به‌روزرسانی کتابخانه',
     'runtime.characterLibrary.selectLabel': 'کاراکتر ذخیره‌شده',
     'runtime.characterLibrary.selectRequired':
       'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
     'runtime.characterLibrary.selectedDetail':
-      'Submit کردن {name} یک نسخه runtime جدا برای این session می‌سازد. ورودی ذخیره‌شده کتابخانه همچنان قابل استفاده مجدد می‌ماند.',
+      'ارسال {name} یک نسخه runtime جدا برای این session می‌سازد. ورودی ذخیره‌شده کتابخانه همچنان قابل استفاده مجدد می‌ماند.',
     'runtime.characterLibrary.selectedTitle': 'ورودی ذخیره‌شده انتخاب شده',
     'runtime.characterLibrary.signInRequired':
       'برای بارگذاری کاراکترهای ذخیره‌شده وارد شوید.',
     'runtime.characterLibrary.status.assigned': 'کاراکتر runtime فعال',
     'runtime.characterLibrary.status.none': 'هنوز کاراکتری نیست',
-    'runtime.characterLibrary.status.ready': 'آماده submit',
-    'runtime.characterLibrary.status.submitted': 'در انتظار assignment توسط DM',
-    'runtime.characterLibrary.submit': 'Submit کاراکتر ذخیره‌شده',
+    'runtime.characterLibrary.status.ready': 'آماده ارسال',
+    'runtime.characterLibrary.status.submitted': 'در انتظار تخصیص توسط DM',
+    'runtime.characterLibrary.submit': 'ارسال کاراکتر ذخیره‌شده',
     'runtime.characterLibrary.submitReadyDetail':
-      'این کاراکتر نهایی‌شده آماده است. آن را submit کنید تا سرور یک نسخه runtime برای assignment توسط DM ثبت کند.',
+      'این کاراکتر نهایی‌شده آماده است. آن را ارسال کنید تا سرور یک نسخه runtime برای تخصیص توسط DM ثبت کند.',
     'runtime.characterLibrary.submitReadyTitle': 'آماده ساخت نسخه runtime',
     'runtime.characterLibrary.title': 'کتابخانه کاراکترهای ذخیره‌شده',
     'runtime.characterLibrary.waitingDetail':
       'نسخه runtime {characterId} در وضعیت مرجع session منتظر است. DM باید آن را assign کند تا کاراکتر فعال میز شما شود.',
     'runtime.characterLibrary.waitingTitle':
-      'نسخه runtime در انتظار assignment توسط DM',
+      'نسخه runtime در انتظار تخصیص توسط DM',
     'runtime.activeScene.buildDetail':
       'قبل از قرار دادن توکن‌ها، entityها یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
     'runtime.activeScene.buildTitle': 'ساخت صحنه',
     'runtime.activeScene.idKnownDetail':
-      'session یک active scene ID دارد، اما سند کامل صحنه هنوز recover نشده است.',
+      'session یک شناسه صحنه فعال دارد، اما سند کامل صحنه هنوز recover نشده است.',
     'runtime.activeScene.idKnownTitle': 'شناسه صحنه مشخص است',
     'runtime.activeScene.loadedDetail':
       '{sceneName} با گرید {width}x{height} و {entityCount} entity صحنه بارگذاری شده است.',
@@ -660,7 +849,7 @@ const messages = {
     'runtime.demoSetup.eyebrow': 'مسیر playtest برای DM',
     'runtime.demoSetup.flow': 'جریان',
     'runtime.demoSetup.flowValue':
-      'ساخت میز، نشاندن بازیکن‌ها، assignment کاراکترها، فعال‌سازی صحنه',
+      'ساخت میز، نشاندن بازیکن‌ها، تخصیص کاراکترها، فعال‌سازی صحنه',
     'runtime.demoSetup.guardrail': 'مرجعیت',
     'runtime.demoSetup.guardrailValue':
       'DM بازی را شروع می‌کند؛ سرور همه فرمان‌ها را اعتبارسنجی می‌کند',
@@ -670,7 +859,7 @@ const messages = {
     'runtime.demoSetup.scene': 'صحنه',
     'runtime.demoSetup.setup': 'وضعیت آماده‌شده',
     'runtime.demoSetup.setupValue':
-      'Session، بازیکن‌ها، کاراکترها، صحنه، placement توکن‌ها',
+      'Session، بازیکن‌ها، کاراکترها، صحنه، جای‌گذاری توکن‌ها',
     'runtime.demoSetup.title': 'Setup اتاق تمرین',
     'runtime.demoSetup.action.assignPcs': 'تخصیص PCها',
     'runtime.demoSetup.action.createPcs': 'ساخت PCها',
@@ -688,7 +877,7 @@ const messages = {
     'runtime.debug.title': 'دفترچه Debug',
     'runtime.disabled.busy': 'در انتظار {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
-      'ابتدا یک active scene بسازید یا recover کنید.',
+      'ابتدا یک صحنه فعال بسازید یا recover کنید.',
     'runtime.disabled.createActivateRecoverScene':
       'ابتدا یک صحنه بسازید، فعال کنید، یا recover کنید.',
     'runtime.disabled.combatantDefeated':
@@ -710,15 +899,15 @@ const messages = {
     'runtime.disabled.loadOrAssignCharacter':
       'ابتدا این کاراکتر را بارگذاری یا assign کنید.',
     'runtime.disabled.missingActiveScene':
-      'قبل از حرکت یا شروع combat یک active scene بسازید یا recover کنید.',
+      'قبل از حرکت یا شروع combat یک صحنه فعال بسازید یا recover کنید.',
     'runtime.disabled.missingEncounter':
-      'ابتدا encounter را شروع یا recover کنید.',
+      'ابتدا برخورد را شروع یا recover کنید.',
     'runtime.disabled.missingPlayerIdentity':
       'شناسه participant و نام نمایشی بازیکن را وارد کنید.',
     'runtime.disabled.missingSession':
       'ابتدا یک session بسازید، paste کنید، یا recover کنید.',
     'runtime.disabled.placeCharacter':
-      'ابتدا حداقل یک کاراکتر را در active scene قرار دهید.',
+      'ابتدا حداقل یک کاراکتر را در صحنه فعال قرار دهید.',
     'runtime.disabled.playerTarget': 'یک هدف از کاراکترهای بازیکن انتخاب کنید.',
     'runtime.disabled.playerJoinMode':
       'برای join شدن با بازیکن تنظیم‌شده به حالت بازیکن بروید.',
@@ -729,6 +918,8 @@ const messages = {
     'runtime.disabled.selectedAlreadyAssigned':
       'این participant همین کاراکتر را قبلا assign کرده است.',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
+    'runtime.notice.commandFailed': 'Command ناموفق بود',
+    'runtime.notice.recoveryWithNotes': 'بازیابی با یادداشت تکمیل شد',
     'runtime.encounterStatus.active': 'فعال',
     'runtime.encounterStatus.ended': 'تمام شده',
     'runtime.encounterStatus.hit': 'برخورد کرد',
@@ -740,14 +931,14 @@ const messages = {
     'runtime.encounterStatus.miss': 'خطا رفت',
     'runtime.encounterStatus.nextActor': 'بعدی {actor}',
     'runtime.encounterStatus.noCombatResult': 'هنوز نتیجه combat ثبت نشده.',
-    'runtime.encounterStatus.noCurrentActor': 'encounter فعالی بارگذاری نشده',
+    'runtime.encounterStatus.noCurrentActor': 'برخورد فعالی بارگذاری نشده',
     'runtime.encounterStatus.noEncounterUpdate':
-      'هنوز به‌روزرسانی encounter دریافت نشده.',
+      'هنوز به‌روزرسانی برخورد دریافت نشده.',
     'runtime.encounterStatus.noProgress': 'پیشرفت راندی نیست',
-    'runtime.encounterStatus.notLoaded': 'بدون encounter',
+    'runtime.encounterStatus.notLoaded': 'بدون برخورد',
     'runtime.encounterStatus.progress':
       'راند {round} - نوبت {turn}/{turnCount}',
-    'runtime.encounterStatus.title': 'وضعیت encounter',
+    'runtime.encounterStatus.title': 'وضعیت برخورد',
     'runtime.eventFeed.description':
       'خلاصه‌های خوانای updateهای زنده SSE. این هنوز replay نیست.',
     'runtime.eventFeed.emptyDetail':
@@ -768,20 +959,166 @@ const messages = {
     'runtime.playerReadiness.attack': 'حمله {state}',
     'runtime.playerReadiness.blocked': 'مسدود',
     'runtime.playerReadiness.currentActor': 'نوبت فعلی',
+    'runtime.playerReadiness.detail.ready': 'setup بازیکن آماده است.',
     'runtime.playerReadiness.done': 'انجام شد',
     'runtime.playerReadiness.eyebrow': 'آمادگی بازیکن',
+    'runtime.playerReadiness.item.assignment.blocked.detail':
+      'قبل از تخصیص به یک کاراکتر نهایی‌شده نیاز است.',
+    'runtime.playerReadiness.item.assignment.blocked.title': 'ارسال برای تخصیص',
+    'runtime.playerReadiness.item.assignment.done.detail':
+      'DM این کاراکتر runtime را به میز assign کرده است.',
+    'runtime.playerReadiness.item.assignment.done.title': 'کاراکتر assign شد',
+    'runtime.playerReadiness.item.assignment.ready.detail':
+      'کاراکتر نهایی‌شده را برای تخصیص توسط DM ارسال کنید.',
+    'runtime.playerReadiness.item.assignment.ready.title': 'ارسال برای تخصیص',
+    'runtime.playerReadiness.item.assignment.waiting.detail':
+      'یک نسخه runtime ارسال شده است و منتظر تخصیص توسط DM است.',
+    'runtime.playerReadiness.item.assignment.waiting.title': 'در انتظار تخصیص',
+    'runtime.playerReadiness.item.character.blocked.detail':
+      'قبل از join شدن، setup کاراکتر اهمیتی ندارد.',
+    'runtime.playerReadiness.item.character.blocked.title':
+      'آماده‌سازی کاراکتر',
+    'runtime.playerReadiness.item.character.done.detail':
+      'یک کاراکتر runtime آماده برای این بازیکن وجود دارد.',
+    'runtime.playerReadiness.item.character.done.title': 'کاراکتر آماده است',
+    'runtime.playerReadiness.item.character.ready.detail':
+      'یک draft runtime بسازید یا یک ورودی ذخیره‌شده Character Library را ارسال کنید.',
+    'runtime.playerReadiness.item.character.ready.title': 'آماده‌سازی کاراکتر',
+    'runtime.playerReadiness.item.joined.blocked.detail':
+      'قبل از join شدن به session نیاز است.',
+    'runtime.playerReadiness.item.joined.blocked.title': 'پیوستن به میز',
+    'runtime.playerReadiness.item.joined.done.detail':
+      'این بازیکن روی میز join شده است.',
+    'runtime.playerReadiness.item.joined.done.title': 'بازیکن روی میز است',
+    'runtime.playerReadiness.item.joined.ready.detail':
+      'با participant ID و نام نمایشی بازیکن به میز join شوید.',
+    'runtime.playerReadiness.item.joined.ready.title': 'پیوستن به میز',
+    'runtime.playerReadiness.item.placement.blocked.detail':
+      'قبل از جای‌گذاری به صحنه و تخصیص نیاز است.',
+    'runtime.playerReadiness.item.placement.blocked.title':
+      'در انتظار جای‌گذاری',
+    'runtime.playerReadiness.item.placement.done.detail':
+      'توکن شما در صحنه فعال قرار گرفته است.',
+    'runtime.playerReadiness.item.placement.done.title': 'توکن قرار گرفت',
+    'runtime.playerReadiness.item.placement.waiting.detail':
+      'در انتظار DM برای قرار دادن توکن شما.',
+    'runtime.playerReadiness.item.placement.waiting.title':
+      'در انتظار جای‌گذاری',
+    'runtime.playerReadiness.item.scene.done.detail':
+      'یک صحنه فعال بارگذاری شده است.',
+    'runtime.playerReadiness.item.scene.done.title': 'صحنه فعال است',
+    'runtime.playerReadiness.item.scene.waiting.detail':
+      'در انتظار DM برای فعال کردن صحنه.',
+    'runtime.playerReadiness.item.scene.waiting.title': 'در انتظار صحنه',
+    'runtime.playerReadiness.item.session.done.detail':
+      'یک session بارگذاری شده است.',
+    'runtime.playerReadiness.item.session.done.title': 'Session بارگذاری شد',
+    'runtime.playerReadiness.item.session.ready.detail':
+      'Session ID را از DM paste کنید، سپس join یا recover کنید.',
+    'runtime.playerReadiness.item.session.ready.title': 'انتخاب session',
+    'runtime.playerReadiness.item.turn.blocked.detail':
+      'قبل از آمادگی نوبت به جای‌گذاری نیاز است.',
+    'runtime.playerReadiness.item.turn.blocked.title': 'در انتظار نوبت',
+    'runtime.playerReadiness.item.turn.ready.detail':
+      '{count} گزینه نوبت در دسترس است.',
+    'runtime.playerReadiness.item.turn.ready.title': 'نوبت آماده است',
+    'runtime.playerReadiness.item.turn.waiting.detail':
+      'بازیگر فعلی: {actor}. board را نگاه کنید و آماده باشید.',
+    'runtime.playerReadiness.item.turn.waiting.title': 'در انتظار نوبت',
     'runtime.playerReadiness.move': 'حرکت {state}',
     'runtime.playerReadiness.next': 'بعدی',
     'runtime.playerReadiness.progress': '{completed}/{total} آماده',
     'runtime.playerReadiness.ready': 'آماده',
     'runtime.playerReadiness.readyCount': '{count} قدم بعدی',
     'runtime.playerReadiness.selectedTarget': 'هدف انتخاب‌شده',
+    'runtime.playerReadiness.summary.blocked': 'setup بازیکن مسدود است',
+    'runtime.playerReadiness.summary.readyNext': 'آماده قدم بعدی',
+    'runtime.playerReadiness.summary.waitingTable': 'در انتظار میز',
+    'runtime.playerReadiness.summary.waitingTurn': 'در انتظار نوبت شما',
+    'runtime.playerReadiness.summary.yourTurnNeedsAttention':
+      'نوبت شما نیاز به توجه دارد',
+    'runtime.playerReadiness.summary.yourTurnReady': 'نوبت شما آماده است',
     'runtime.playerReadiness.title': 'خلاصه آمادگی',
     'runtime.playerReadiness.tokenPosition': 'توکن',
     'runtime.playerReadiness.waiting': 'در انتظار',
     'runtime.playerReadiness.waitingCount': '{count} در انتظار',
+    'runtime.playerNextStep.chooseSession.detail':
+      'Session ID را از DM paste کنید، سپس join یا recover کنید.',
+    'runtime.playerNextStep.chooseSession.title': 'انتخاب session',
+    'runtime.playerNextStep.createCharacter.detail':
+      'اینجا یک draft بسازید یا یک ورودی ذخیره‌شده Character Library را ارسال کنید، سپس منتظر تخصیص DM بمانید.',
+    'runtime.playerNextStep.createCharacter.title': 'ساخت کاراکتر',
+    'runtime.playerNextStep.exploration.detail':
+      'خارج از combat می‌توانید حرکت کنید؛ منابع نوبت بعد از شروع برخورد فعال می‌شوند.',
+    'runtime.playerNextStep.exploration.title': 'حالت اکتشاف',
+    'runtime.playerNextStep.finalize.detail':
+      'قبل از ارسال کاراکتر به DM، ویرایش را تمام و کاراکتر را finalize کنید.',
+    'runtime.playerNextStep.finalize.title': 'نهایی‌سازی کاراکتر',
+    'runtime.playerNextStep.join.detail':
+      'قبل از خواندن وضعیت میز، با این participant به session join شوید.',
+    'runtime.playerNextStep.join.title': 'پیوستن به میز',
+    'runtime.playerNextStep.noScene.detail':
+      'DM هنوز صحنه‌ای را فعال نکرده، یا شما باید recover کنید.',
+    'runtime.playerNextStep.noScene.title': 'صحنه فعالی نیست',
+    'runtime.playerNextStep.placement.detail':
+      'کاراکتر شما در صحنه فعال placement توکن ندارد.',
+    'runtime.playerNextStep.placement.title': 'توکن قرار نگرفته',
+    'runtime.playerNextStep.submit.detail':
+      'کاراکتر نهایی‌شده را برای تخصیص DM ارسال کنید تا میز آن را ببیند.',
+    'runtime.playerNextStep.submit.title': 'ارسال برای تخصیص',
+    'runtime.playerNextStep.waitingDm.detail':
+      'یک نسخه runtime ارسال‌شده در وضعیت session منتظر تخصیص توسط DM است.',
+    'runtime.playerNextStep.waitingDm.title': 'در انتظار تخصیص DM',
+    'runtime.playerNextStep.waitingTurn.detail':
+      'بازیگر فعلی را دنبال کنید و هدف یا حرکت خود را آماده کنید.',
+    'runtime.playerNextStep.waitingTurn.title': 'در انتظار نوبت شما',
+    'runtime.playerNextStep.yourTurn.detail':
+      'حرکت کنید، حمله کنید، یا اقتصاد اکشن خود را مصرف کنید. سرور قانونی بودن را اعتبارسنجی می‌کند.',
+    'runtime.playerNextStep.yourTurn.title': 'نوبت شما',
     'runtime.recovery.empty': 'بدون session',
+    'runtime.recovery.detail.empty':
+      'هنوز session runtime قابل بازیابی در این مرورگر بارگذاری نشده است.',
+    'runtime.recovery.detail.notes': '{count} یادداشت بازیابی ثبت شد.',
+    'runtime.recovery.detail.partial':
+      '{loaded}/{total} مدل خواندنی بازیابی بارگذاری شده است.',
+    'runtime.recovery.detail.recovered':
+      '{loaded}/{total} مدل خواندنی بازیابی بارگذاری شده است: session، scene، جای‌گذاری صحنه فعال، characters، و encounter.',
     'runtime.recovery.eyebrow': 'بازیابی',
+    'runtime.recovery.item.activeScene.missing':
+      'مدل خواندنی جای‌گذاری صحنه فعال بارگذاری نشده است.',
+    'runtime.recovery.item.activeScene.optional_missing':
+      'فعلا مدل خواندنی جای‌گذاری صحنه فعال انتظار نمی‌رود.',
+    'runtime.recovery.item.activeScene.recovered':
+      'مدل خواندنی جای‌گذاری صحنه فعال بارگذاری شده است.',
+    'runtime.recovery.item.activeScene.title': 'مدل جای‌گذاری',
+    'runtime.recovery.item.characters.missing':
+      'هنوز مدل خواندنی کاراکتری بارگذاری نشده است.',
+    'runtime.recovery.item.characters.optional_missing':
+      'تا وقتی کاراکتر میز وجود ندارد، مدل‌های کاراکتر اختیاری‌اند.',
+    'runtime.recovery.item.characters.recovered':
+      'مدل‌های خواندنی کاراکتر بارگذاری شده‌اند.',
+    'runtime.recovery.item.characters.title': 'کاراکترها',
+    'runtime.recovery.item.encounter.missing':
+      'مدل خواندنی برخورد فعال بارگذاری نشده است.',
+    'runtime.recovery.item.encounter.optional_missing':
+      'مدل خواندنی برخورد فعالی بارگذاری نشده است.',
+    'runtime.recovery.item.encounter.recovered':
+      'مدل خواندنی برخورد فعال بارگذاری شده است.',
+    'runtime.recovery.item.encounter.title': 'برخورد',
+    'runtime.recovery.item.scene.missing':
+      'صحنه فعال انتظار می‌رود، اما مدل خواندنی صحنه بارگذاری نشده است.',
+    'runtime.recovery.item.scene.optional_missing':
+      'فعلا صحنه فعالی انتظار نمی‌رود.',
+    'runtime.recovery.item.scene.recovered':
+      'مدل خواندنی صحنه فعال بارگذاری شده است.',
+    'runtime.recovery.item.scene.title': 'صحنه',
+    'runtime.recovery.item.session.missing':
+      'هیچ sessionی در وضعیت runtime محلی بارگذاری نشده است.',
+    'runtime.recovery.item.session.optional_missing':
+      'تا وقتی session انتخاب نشده، بازیابی session اختیاری است.',
+    'runtime.recovery.item.session.recovered':
+      'مدل خواندنی session در وضعیت runtime محلی حاضر است.',
+    'runtime.recovery.item.session.title': 'Session',
     'runtime.recovery.loaded': 'بارگذاری شد',
     'runtime.recovery.missing': 'کم است',
     'runtime.recovery.notes': 'یادداشت‌های بازیابی',
@@ -809,11 +1146,43 @@ const messages = {
     'runtime.statePanel.currentTurn': 'نوبت فعلی',
     'runtime.statePanel.description':
       'IDها و read modelهای فعلی که در این مرورگر بارگذاری شده‌اند.',
-    'runtime.statePanel.encounter': 'Encounter',
+    'runtime.statePanel.encounter': 'برخورد',
     'runtime.statePanel.eyebrow': 'وضعیت میز',
     'runtime.statePanel.sceneName': 'نام صحنه',
     'runtime.statePanel.session': 'Session',
     'runtime.statePanel.title': 'State',
+    'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
+    'runtime.turnTarget.attackTarget': 'حمله به هدف',
+    'runtime.turnTarget.description':
+      'کنترل‌های نوبت commandهای actor-scoped می‌فرستند؛ دکمه‌های غیرفعال prerequisiteهای کم‌شده را توضیح می‌دهند.',
+    'runtime.turnTarget.eyebrow': 'برخورد',
+    'runtime.turnTarget.initiative': '· ابتکار {initiative}',
+    'runtime.turnTarget.target': 'هدف',
+    'runtime.turnTarget.title': 'نوبت و هدف',
+    'runtime.turnTarget.turnOrder': 'ترتیب نوبت',
+    'runtime.turnTarget.usage': 'مصرف نوبت',
+    'runtime.turnTarget.usageValue':
+      '{movement} فوت، اکشن {action}، بونس {bonus}، ری‌اکشن {reaction}',
+    'runtime.turnTarget.useAction': 'مصرف اکشن',
+    'runtime.turnTarget.useBonus': 'مصرف بونس',
+    'runtime.turnTarget.useReaction': 'مصرف ری‌اکشن',
+    'runtime.overrides.actionUsed': 'اکشن مصرف شده',
+    'runtime.overrides.bonusActionUsed': 'بونس اکشن مصرف شده',
+    'runtime.overrides.conditionTags': 'تگ‌های condition',
+    'runtime.overrides.controlledParticipant': 'participant تحت کنترل',
+    'runtime.overrides.currentHp': 'HP فعلی',
+    'runtime.overrides.description':
+      'overrideهای مدیریتی DM. این کنترل‌ها عمدا از جریان عادی برخورد جدا هستند.',
+    'runtime.overrides.endEncounter': 'پایان برخورد',
+    'runtime.overrides.eyebrow': 'فقط DM',
+    'runtime.overrides.movementUsed': 'حرکت مصرف‌شده',
+    'runtime.overrides.reactionUsed': 'ری‌اکشن مصرف شده',
+    'runtime.overrides.setConditions': 'ثبت conditionها',
+    'runtime.overrides.setHp': 'ثبت HP',
+    'runtime.overrides.setTurnActor': 'ثبت بازیگر نوبت',
+    'runtime.overrides.setUsage': 'ثبت مصرف نوبت',
+    'runtime.overrides.title': 'Overrideها',
+    'runtime.overrides.turnOverride': 'Override نوبت',
     'runtime.statusOverview.description':
       'فقط از read modelهای فعلی ساخته می‌شود؛ اعتبارسنجی فرمان‌ها همچنان روی سرور است.',
     'runtime.statusOverview.dmReadiness': 'آماده‌سازی DM',
@@ -829,7 +1198,7 @@ const messages = {
     'runtime.statusOverview.playerReadiness': 'آمادگی بازیکن',
     'runtime.statusOverview.readiness': 'آمادگی',
     'runtime.statusOverview.readinessProgress': '{completed}/{total} تکمیل',
-    'runtime.statusOverview.recovery': 'Read modelها',
+    'runtime.statusOverview.recovery': 'مدل‌های خواندنی',
     'runtime.statusOverview.recoveryModels': '{loaded}/{total} بارگذاری شده',
     'runtime.statusOverview.title': 'جریان میز',
     'runtime.statusOverview.turn': 'نوبت',
@@ -839,37 +1208,37 @@ const messages = {
     'runtime.statusOverview.waiting.player': 'اقدام بازیکن',
     'runtime.statusOverview.waiting.table': 'انتظار میز',
     'runtime.statusOverview.waitingProgress': '{count} در انتظار',
-    'runtime.roster.assignment': 'Assignment',
+    'runtime.roster.assignment': 'تخصیص',
     'runtime.roster.assignment.assigned':
       'کاراکتر runtime {characterId} assign شده',
     'runtime.roster.assignment.needsCharacter': 'به کاراکتر runtime نیاز دارد',
     'runtime.roster.assignment.pendingAssignment':
-      'نسخه runtime {characterId} در انتظار assignment توسط DM',
+      'نسخه runtime {characterId} در انتظار تخصیص توسط DM',
     'runtime.roster.connection.connected': 'متصل',
     'runtime.roster.connection.disconnected': 'قطع‌شده',
     'runtime.roster.currentTurnId': 'نوبت: {participantId}',
     'runtime.roster.currentTurnPlayer': 'نوبت: {name}',
     'runtime.roster.description':
-      'وضعیت setup هر بازیکن از read modelهای session، active-scene و encounter.',
+      'وضعیت setup هر بازیکن از مدل‌های خواندنی session، active-scene و برخورد.',
     'runtime.roster.emptyDetail':
       'بازیکن‌ها را join کنید تا roster آمادگی پر شود.',
     'runtime.roster.emptyTitle': 'بازیکنی روی میز نیست',
-    'runtime.roster.encounter': 'Encounter',
+    'runtime.roster.encounter': 'برخورد',
     'runtime.roster.encounter.currentTurn': 'نوبت فعلی',
-    'runtime.roster.encounter.noEncounter': 'encounter فعالی نیست',
+    'runtime.roster.encounter.noEncounter': 'برخورد فعالی نیست',
     'runtime.roster.encounter.notInEncounter': 'در ترتیب نوبت نیست',
     'runtime.roster.encounter.waitingTurn': 'در انتظار نوبت',
     'runtime.roster.eyebrow': 'Roster آمادگی',
-    'runtime.roster.placement': 'Placement',
+    'runtime.roster.placement': 'جای‌گذاری',
     'runtime.roster.placement.needsAssignment':
-      'قبل از placement به assignment نیاز دارد',
-    'runtime.roster.placement.needsPlacement': 'به placement توکن نیاز دارد',
+      'قبل از جای‌گذاری به تخصیص نیاز دارد',
+    'runtime.roster.placement.needsPlacement': 'به جای‌گذاری توکن نیاز دارد',
     'runtime.roster.placement.placed': 'قرار داده شده',
     'runtime.roster.placement.placedAt': 'قرارگرفته در {x},{y}',
-    'runtime.roster.placement.waitingScene': 'در انتظار active scene',
+    'runtime.roster.placement.waitingScene': 'در انتظار صحنه فعال',
     'runtime.roster.readySummary': '{ready}/{total} آماده روی board',
     'runtime.roster.setup.needsCharacter': 'نیازمند کاراکتر',
-    'runtime.roster.setup.needsPlacement': 'نیازمند placement',
+    'runtime.roster.setup.needsPlacement': 'نیازمند جای‌گذاری',
     'runtime.roster.setup.pendingAssignment': 'در انتظار DM',
     'runtime.roster.setup.ready': 'آماده روی board',
     'runtime.roster.setup.waitingScene': 'در انتظار scene',
@@ -888,7 +1257,7 @@ const messages = {
     'runtime.assignmentHelper.pending': 'در انتظار',
     'runtime.assignmentHelper.player': 'بازیکن',
     'runtime.assignmentHelper.submit': 'تخصیص کاراکتر بارگذاری‌شده',
-    'runtime.assignmentHelper.title': 'دستیار assignment',
+    'runtime.assignmentHelper.title': 'دستیار تخصیص',
     'runtime.tableSetup.eyebrow': 'آمادگی DM',
     'runtime.tableSetup.item.characters.blocked': 'تخصیص کاراکترها',
     'runtime.tableSetup.item.characters.done': 'کاراکترها تخصیص یافتند',
@@ -909,34 +1278,34 @@ const messages = {
     'runtime.tableSetup.item.session.done': 'session بارگذاری شد',
     'runtime.tableSetup.item.session.ready': 'ساخت session',
     'runtime.tableSetup.detail.characters.blocked':
-      'بازیکن‌ها باید قبل از assignment کاراکترها join شوند.',
+      'بازیکن‌ها باید قبل از تخصیص کاراکترها join شوند.',
     'runtime.tableSetup.detail.characters.done':
       'کاراکترهای تخصیص‌یافته برای میز آماده‌اند.',
     'runtime.tableSetup.detail.characters.ready':
       'حداقل یک کاراکتر نهایی‌شده بازیکن را تخصیص دهید.',
     'runtime.tableSetup.detail.encounter.blocked':
-      'قبل از شروع encounter حداقل یک توکن قرار دهید.',
+      'قبل از شروع برخورد حداقل یک توکن قرار دهید.',
     'runtime.tableSetup.detail.encounter.done':
-      'یک encounter فعال است و کنترل‌های نوبت آماده‌اند.',
+      'یک برخورد فعال است و کنترل‌های نوبت آماده‌اند.',
     'runtime.tableSetup.detail.encounter.ready':
-      'وقتی میز برای initiative آماده است encounter را شروع کنید.',
+      'وقتی میز برای initiative آماده است برخورد را شروع کنید.',
     'runtime.tableSetup.detail.placement.blocked':
-      'ابتدا به assignment کاراکترها و active scene نیاز است.',
+      'ابتدا به تخصیص کاراکترها و صحنه فعال نیاز است.',
     'runtime.tableSetup.detail.placement.done':
-      'توکن‌ها در active scene قرار گرفته‌اند.',
+      'توکن‌ها در صحنه فعال قرار گرفته‌اند.',
     'runtime.tableSetup.detail.placement.ready':
-      'کاراکترهای تخصیص‌یافته را در active scene قرار دهید.',
+      'کاراکترهای تخصیص‌یافته را در صحنه فعال قرار دهید.',
     'runtime.tableSetup.detail.players.blocked':
       'قبل از join شدن بازیکن‌ها به وضعیت session نیاز است.',
     'runtime.tableSetup.detail.players.done': 'بازیکن‌ها روی میز نشسته‌اند.',
     'runtime.tableSetup.detail.players.ready':
-      'قبل از assignment کاراکترها حداقل یک بازیکن را join کنید.',
+      'قبل از تخصیص کاراکترها حداقل یک بازیکن را join کنید.',
     'runtime.tableSetup.detail.scene.blocked':
       'بعد از ساخته شدن session یک صحنه بسازید و فعال کنید.',
     'runtime.tableSetup.detail.scene.done':
-      'یک active scene برای میز بارگذاری شده است.',
+      'یک صحنه فعال برای میز بارگذاری شده است.',
     'runtime.tableSetup.detail.scene.ready':
-      'یک active scene برای میز بسازید یا recover کنید.',
+      'یک صحنه فعال برای میز بسازید یا recover کنید.',
     'runtime.tableSetup.detail.session.blocked':
       'قبل از بارگذاری میز session را بسازید یا recover کنید.',
     'runtime.tableSetup.detail.session.done': 'وضعیت session بارگذاری شده است.',
@@ -947,20 +1316,20 @@ const messages = {
     'runtime.tableSetup.status.done': 'انجام شد',
     'runtime.tableSetup.status.ready': 'بعدی',
     'runtime.tableSetup.title': 'Setup میز',
-    'runtime.actionEconomy.action': 'Action',
+    'runtime.actionEconomy.action': 'اکشن',
     'runtime.actionEconomy.available': 'آزاد',
     'runtime.actionEconomy.blocked': 'مسدود',
-    'runtime.actionEconomy.bonusAction': 'Bonus',
+    'runtime.actionEconomy.bonusAction': 'بونس',
     'runtime.actionEconomy.latest': '{reason} - راند {round}، نوبت {turn}',
     'runtime.actionEconomy.noEncounter': 'نوبت فعالی نیست',
     'runtime.actionEconomy.noLatest':
       'هنوز به‌روزرسانی action economy ثبت نشده.',
-    'runtime.actionEconomy.reaction': 'Reaction',
+    'runtime.actionEconomy.reaction': 'ری‌اکشن',
     'runtime.actionEconomy.ready': 'آماده',
     'runtime.actionEconomy.resource': '{name}: {state}',
     'runtime.actionEconomy.spent': 'همه مصرف شده',
-    'runtime.actionEconomy.title': 'Action economy',
-    'runtime.actionEconomy.unavailable': 'Action economy در دسترس نیست.',
+    'runtime.actionEconomy.title': 'اقتصاد اکشن',
+    'runtime.actionEconomy.unavailable': 'اقتصاد اکشن در دسترس نیست.',
     'runtime.actionEconomy.used': 'مصرف شده',
     'runtime.actionFeedback.ac': 'AC {armorClass}',
     'runtime.actionFeedback.acUnknown': 'AC نامشخص',
@@ -1000,13 +1369,13 @@ const messages = {
     'runtime.movementFeedback.ready': 'حرکت آماده',
     'runtime.movementFeedback.title': 'پیش‌نمایش حرکت',
     'runtime.nav.characters': 'کاراکترها',
-    'runtime.outbox.refresh': 'بررسی Outbox',
-    'runtime.outbox.status.backlog': 'Outbox {count}',
-    'runtime.outbox.status.clear': 'Outbox پاک',
-    'runtime.outbox.status.error': 'Outbox در دسترس نیست',
-    'runtime.outbox.status.loading': 'Outbox ...',
-    'runtime.outbox.status.off': 'Outbox خاموش',
-    'runtime.outbox.status.unknown': 'Outbox -',
+    'runtime.outbox.refresh': 'بررسی صف خروجی',
+    'runtime.outbox.status.backlog': 'صف خروجی {count}',
+    'runtime.outbox.status.clear': 'صف خروجی پاک',
+    'runtime.outbox.status.error': 'صف خروجی در دسترس نیست',
+    'runtime.outbox.status.loading': 'صف خروجی ...',
+    'runtime.outbox.status.off': 'صف خروجی خاموش',
+    'runtime.outbox.status.unknown': 'صف خروجی -',
     'runtime.status.busy': 'درگیر: {label}',
     'runtime.status.stream': 'استریم {status}',
     'runtime.status.streamIdle': 'استریم غیرفعال',

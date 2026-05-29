@@ -91,3 +91,40 @@ Next narrow implementation slice:
 
 Recommended effort: `high`, because this touches runtime UI and i18n surfaces
 across several panels, even though it should remain frontend-only.
+
+## Follow-up Codex Browser QA After Persian / RTL Polish
+
+- Date: 2026-05-29
+- Branch/build: local working tree after Persian / RTL runtime polish
+- Persistence mode: in-memory
+- Browser/profile shape: Codex in-app browser, same profile; not a true
+  two-human or two-profile pass
+- Runtime code changed during run: yes, frontend-only runtime copy/i18n polish
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, and Character Library persistence changed or claimed: no
+
+Observed after implementation:
+
+- Persian DM mode could run **Training Room Skirmish** and start the encounter
+  with the existing demo path.
+- DM mode still showed **Training Room**, **Aria**, **Borin**, table flow,
+  recovery status, and turn/target surfaces.
+- Recovery status no longer exposed English helper details such as recovery
+  read-model sentences in the checked Persian surfaces.
+- The outbox badge/check action, Table flow read-model label, Turn & Target
+  panel, action economy title, board empty-token text, and DM override controls
+  used Persian-facing copy where checked.
+- Player mode notice copy for the pre-join state was localized and no longer
+  showed the English **Join the table** helper text in the checked Persian
+  surface.
+- Player-mode guardrail checks in same-profile browser use remain limited by
+  shared local storage; true two-profile DM/Player validation is still needed.
+
+Remaining cautions:
+
+- This was not a replacement for a real human DM plus human Player pass in
+  separate browser profiles.
+- Some canonical product/runtime nouns intentionally remain visible as stable
+  IDs or terms, such as `Session ID`, `runtime`, and server URLs.
+- DB-backed saved Character Library submission was still not tested in this
+  pass.
