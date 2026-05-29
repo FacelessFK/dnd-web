@@ -262,8 +262,8 @@ human-approved follow-up slice.
 
 ## Gap Log Template
 
-| Severity | Surface | Mode | Locale | Viewport | Observation | Why it matters | Suggested next slice |
-| --- | --- | --- | --- | --- | --- | --- | --- |
+| Severity                     | Surface            | Mode        | Locale            | Viewport          | Observation   | Why it matters                 | Suggested next slice                |
+| ---------------------------- | ------------------ | ----------- | ----------------- | ----------------- | ------------- | ------------------------------ | ----------------------------------- |
 | Blocking / Important / Minor | Panel or flow step | DM / Player | English / Persian | Desktop / compact | What happened | Table impact and boundary risk | Docs / copy / UI polish / test-only |
 
 Keep proposed follow-ups small. Do not broaden into new runtime protocol,

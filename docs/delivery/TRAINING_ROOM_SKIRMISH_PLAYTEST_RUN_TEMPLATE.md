@@ -57,9 +57,9 @@ Use this template to record one human DM/Player run of the
 
 ## Bugs
 
-| Severity | Surface | Steps | Expected | Actual |
-| --- | --- | --- | --- | --- |
-| Blocking / Important / Minor |  |  |  |  |
+| Severity                     | Surface | Steps | Expected | Actual |
+| ---------------------------- | ------- | ----- | -------- | ------ |
+| Blocking / Important / Minor |         |       |          |        |
 
 ## Polish Opportunities
 

@@ -643,26 +643,45 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function getInitialLocale(): Locale {
+  return defaultLocale;
+}
+
+function readStoredLocale(): Locale | null {
   if (typeof window === 'undefined') {
-    return defaultLocale;
+    return null;
   }
 
   const storedLocale = window.localStorage.getItem(localeStorageKey);
 
   return locales.includes(storedLocale as Locale)
     ? (storedLocale as Locale)
-    : defaultLocale;
+    : null;
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+  const [hasLoadedStoredLocale, setHasLoadedStoredLocale] = useState(false);
   const dir = locale === 'fa' ? 'rtl' : 'ltr';
 
   useEffect(() => {
+    const storedLocale = readStoredLocale();
+
+    if (storedLocale) {
+      setLocaleState(storedLocale);
+    }
+
+    setHasLoadedStoredLocale(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStoredLocale) {
+      return;
+    }
+
     window.localStorage.setItem(localeStorageKey, locale);
     document.documentElement.lang = locale;
     document.documentElement.dir = dir;
-  }, [dir, locale]);
+  }, [dir, hasLoadedStoredLocale, locale]);
 
   const value = useMemo<I18nContextValue>(
     () => ({
