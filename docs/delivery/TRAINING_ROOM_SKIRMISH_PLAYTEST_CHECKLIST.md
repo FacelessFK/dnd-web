@@ -18,6 +18,8 @@ checklist.
       locale.
 - [ ] Start the local web and server apps.
 - [ ] Use two browser profiles or windows: one DM, one Player.
+- [ ] Open `docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_RUN_TEMPLATE.md` and
+      record observations while the run is happening, not from memory afterward.
 - [ ] For the saved Character Library path, run the server in DB mode with the
       auth and Character Library migrations applied, then log the Player in at
       `/login`.
@@ -31,6 +33,12 @@ checklist.
 If DB mode or a finalized saved entry is unavailable, mark saved-character
 steps as blocked. Do not treat the default in-memory Training Room demo path as
 evidence that the logged-in saved-character path was tested.
+
+Run the default in-memory Training Room demo first when you only need the
+scenario, readiness, turn, recovery, and visual hierarchy pass. Run the DB-backed
+saved-character path separately when testing reusable Character Library entries
+and runtime-copy submission. Mixing those results hides whether a gap belongs to
+the demo scenario, auth/login setup, saved entries, or the runtime bridge.
 
 ## Pass Scale
 
@@ -54,6 +62,9 @@ realtime honesty.
       for production account security.
 - [ ] DM can create or recover a runtime session from `/runtime`.
 - [ ] DM can run **Training Room Skirmish** and identify the session ID to share.
+- [ ] **Training Room Setup** explains the prepared state, manual encounter
+      start, setup flow, and DM/server authority boundary before the DM starts
+      play.
 - [ ] Player can join or recover the same session.
 - [ ] Both browsers show state from the server response or read models, not from
       browser-local assumptions.
@@ -64,6 +75,8 @@ Capture likely UX gaps:
 - Is the difference between logging in, joining a runtime session, recovering a
   session, and clearing local browser state obvious?
 - Does the first visible action tell the DM and Player who should act next?
+- Does the Training Room setup copy feel like a playtest path, not a hidden
+  automation feature?
 
 ### 2. Player Saved-Character Selection And Submission
 
@@ -138,6 +151,8 @@ Capture likely UX gaps:
       assignment, scene, placement, and encounter readiness.
 - [ ] **Table flow** summarizes readiness, turn, read-model recovery, and next
       visible action without requiring internal implementation context.
+- [ ] **Table flow** uses the specific next-action detail from current table
+      state, not only a generic owner message.
 - [ ] Player readiness summarizes joined, character, assignment, scene,
       placement, movement, attack, and action-option readiness.
 - [ ] Status copy describes current state, not promised automation.
@@ -186,12 +201,14 @@ Capture likely UX gaps:
       active-scene placement, characters, and encounter state return.
 - [ ] Refresh Player, recover the same session, and confirm the assigned or
       pending character state returns.
+- [ ] After `Local Reset`, pasting the same session ID and recovering restores
+      the backend runtime session in that browser profile.
 - [ ] Recovery status reads as current read-model recovery, not event replay.
 - [ ] No copy implies durable replay, stream cursors, catch-up delivery,
       exactly-once delivery, startup auto-redelivery, or multi-process SSE
       coordination.
-- [ ] Local Reset clears browser-local runtime state only; pasting the same
-      session ID and recovering can still restore backend runtime truth.
+- [ ] Local Reset clears browser-local runtime state only and never reads as
+      backend session deletion.
 
 Capture likely UX gaps:
 

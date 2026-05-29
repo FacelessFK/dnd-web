@@ -69,7 +69,6 @@ import {
   getActingParticipantId,
   getActionEconomyFeedbackSummary,
   getActionTargetFeedbackSummary,
-  getActiveSceneGuidance,
   getAssignmentRequestCharacterPreview,
   getAssignedCharacterRefs,
   getAttackableCombatantEntities,
@@ -186,6 +185,133 @@ type LastResponse = {
 
 type TurnUsageDraft = Encounter['currentTurnUsage'];
 type RuntimeTranslator = ReturnType<typeof useI18n>['t'];
+
+function getLocalizedActiveSceneGuidance({
+  activeSceneId,
+  mode,
+  scene,
+  t,
+}: {
+  activeSceneId: string | null;
+  mode: RuntimeMode;
+  scene: Scene | null;
+  t: RuntimeTranslator;
+}): RuntimeEventSummary {
+  if (scene) {
+    return {
+      detail: t('runtime.activeScene.loadedDetail', {
+        entityCount: String(scene.entities.length),
+        height: String(scene.grid.height),
+        sceneName: scene.name,
+        width: String(scene.grid.width),
+      }),
+      title: t('runtime.activeScene.loadedTitle'),
+      tone: 'success',
+    };
+  }
+
+  if (activeSceneId) {
+    return {
+      detail: t('runtime.activeScene.idKnownDetail'),
+      title: t('runtime.activeScene.idKnownTitle'),
+      tone: 'warning',
+    };
+  }
+
+  return mode === 'dm'
+    ? {
+        detail: t('runtime.activeScene.buildDetail'),
+        title: t('runtime.activeScene.buildTitle'),
+        tone: 'warning',
+      }
+    : {
+        detail: t('runtime.activeScene.noneDetail'),
+        title: t('runtime.activeScene.noneTitle'),
+        tone: 'warning',
+      };
+}
+
+function localizeRuntimeDisabledReason(
+  reason: string | null,
+  t: RuntimeTranslator,
+): string | null {
+  if (!reason) {
+    return null;
+  }
+
+  if (reason.startsWith('Waiting on ') && reason.endsWith('.')) {
+    return t('runtime.disabled.busy', {
+      label: reason.slice('Waiting on '.length, -1),
+    });
+  }
+
+  const labels: Record<string, string> = {
+    'Choose a different target participant.': t(
+      'runtime.disabled.invalidTargetDifferent',
+    ),
+    'Choose a joined player participant as the acting character.': t(
+      'runtime.disabled.invalidActor',
+    ),
+    'Choose a joined player participant or active monster/NPC target.': t(
+      'runtime.disabled.invalidTarget',
+    ),
+    'Create or recover an active scene first.': t(
+      'runtime.disabled.createOrRecoverActiveScene',
+    ),
+    'Create, activate, or recover a scene first.': t(
+      'runtime.disabled.createActivateRecoverScene',
+    ),
+    'Create or select a monster/NPC combatant first.': t(
+      'runtime.disabled.selectCombatant',
+    ),
+    'Create, paste, or recover a session first.': t(
+      'runtime.disabled.missingSession',
+    ),
+    'Choose a player character target.': t('runtime.disabled.playerTarget'),
+    'Create/recover an active scene before moving or starting combat.': t(
+      'runtime.disabled.missingActiveScene',
+    ),
+    'Enter a player participant ID and display name.': t(
+      'runtime.disabled.missingPlayerIdentity',
+    ),
+    'Load or assign this character first.': t(
+      'runtime.disabled.loadOrAssignCharacter',
+    ),
+    'Place at least one character in the active scene first.': t(
+      'runtime.disabled.placeCharacter',
+    ),
+    'Start or recover an encounter first.': t(
+      'runtime.disabled.missingEncounter',
+    ),
+    'Switch to DM mode for this control.': t('runtime.disabled.dmOnlyControl'),
+    'Switch to DM mode for monster/NPC controls.': t(
+      'runtime.disabled.dmOnlyCombatant',
+    ),
+    'Switch to Player mode to join as the configured player.': t(
+      'runtime.disabled.playerJoinMode',
+    ),
+    'The selected combatant must be the current turn actor.': t(
+      'runtime.disabled.combatantTurn',
+    ),
+    'The selected monster/NPC is defeated and cannot act.': t(
+      'runtime.disabled.combatantDefeated',
+    ),
+  };
+
+  return labels[reason] ?? reason;
+}
+
+function localizeRuntimeDisabledReasons(
+  reasons: ReturnType<typeof getRuntimeDisabledReasons>,
+  t: RuntimeTranslator,
+): ReturnType<typeof getRuntimeDisabledReasons> {
+  return Object.fromEntries(
+    Object.entries(reasons).map(([key, reason]) => [
+      key,
+      localizeRuntimeDisabledReason(reason, t),
+    ]),
+  ) as ReturnType<typeof getRuntimeDisabledReasons>;
+}
 
 function formatOutboxStatusLabel(
   view: OutboxStatusView,
@@ -3225,17 +3351,20 @@ export function RuntimeCockpit() {
     setTacticalBoardViewport(defaultTacticalBoardViewport);
   }
 
-  const activeSceneGuidance = getActiveSceneGuidance({
+  const localizedActiveSceneGuidance = getLocalizedActiveSceneGuidance({
     activeSceneId: sceneId || sessionState?.session.activeSceneId || null,
     mode,
     scene,
+    t,
   });
-  const busyReason = busyLabel ? `Waiting on ${busyLabel}.` : null;
+  const busyReason = busyLabel
+    ? t('runtime.disabled.busy', { label: busyLabel })
+    : null;
   const missingSessionReason = !canUseSession
-    ? 'Create, paste, or recover a session first.'
+    ? t('runtime.disabled.missingSession')
     : null;
   const dmOnlySceneReason =
-    mode === 'dm' ? null : 'Switch to DM mode for scene building.';
+    mode === 'dm' ? null : t('runtime.disabled.dmOnlyScene');
   const sceneDraftErrors = validateSceneDraftForm(sceneDraft);
   const sceneEntityDraftErrors = validateSceneEntityDraftForm({
     form: sceneEntityDraft,
@@ -3353,15 +3482,18 @@ export function RuntimeCockpit() {
     dmOnlySceneReason ??
     (scene ? null : 'Create, activate, or recover a scene first.') ??
     (selectedCombatantId ? null : 'Create or select a monster/NPC first.');
-  const combatantAttackReason = getDmCombatantActionDisabledReason({
-    busyLabel,
-    currentTurnCombatantId,
-    mode,
-    scene,
-    selectedCombatantId,
-    sessionId,
-    targetParticipantId: selectedTarget,
-  });
+  const combatantAttackReason = localizeRuntimeDisabledReason(
+    getDmCombatantActionDisabledReason({
+      busyLabel,
+      currentTurnCombatantId,
+      mode,
+      scene,
+      selectedCombatantId,
+      sessionId,
+      targetParticipantId: selectedTarget,
+    }),
+    t,
+  );
   const playerCharacter = charactersByParticipant[playerParticipantId];
   const isPlayerJoined = Boolean(
     sessionState?.participants.some(
@@ -3485,25 +3617,28 @@ export function RuntimeCockpit() {
     participants,
     scene,
   });
-  const disabledReasons = getRuntimeDisabledReasons({
-    actingParticipantId,
-    activeSceneKnown: Boolean(activeScene || sceneId),
-    activeSceneLoaded: Boolean(activeScene),
-    activeScenePlacementCount: activeScene?.placedCharacters.length ?? 0,
-    busyLabel,
-    encounterLoaded: Boolean(encounter),
-    mode,
-    playerDisplayName,
-    playerParticipantId,
-    playerParticipantIds,
-    selectedActorHasCharacter: Boolean(
-      knownCharacterIds[actingParticipantId] ??
-      charactersByParticipant[actingParticipantId]?.character.id,
-    ),
-    sessionId,
-    hasValidAttackTarget,
-    targetParticipantId: selectedTarget,
-  });
+  const disabledReasons = localizeRuntimeDisabledReasons(
+    getRuntimeDisabledReasons({
+      actingParticipantId,
+      activeSceneKnown: Boolean(activeScene || sceneId),
+      activeSceneLoaded: Boolean(activeScene),
+      activeScenePlacementCount: activeScene?.placedCharacters.length ?? 0,
+      busyLabel,
+      encounterLoaded: Boolean(encounter),
+      mode,
+      playerDisplayName,
+      playerParticipantId,
+      playerParticipantIds,
+      selectedActorHasCharacter: Boolean(
+        knownCharacterIds[actingParticipantId] ??
+        charactersByParticipant[actingParticipantId]?.character.id,
+      ),
+      sessionId,
+      hasValidAttackTarget,
+      targetParticipantId: selectedTarget,
+    }),
+    t,
+  );
   const movementFeedbackSummary = getMovementFeedbackSummary({
     actingParticipantId,
     activeScene,
@@ -3517,7 +3652,7 @@ export function RuntimeCockpit() {
   const playerAttackDisabledReason =
     disabledReasons.attack ??
     (currentTurnCombatantId
-      ? 'Current turn is a monster/NPC; use the DM combatant attack control.'
+      ? t('runtime.disabled.currentTurnCombatant')
       : null);
   const lastCombatEvent =
     eventLog.find(
@@ -3593,12 +3728,12 @@ export function RuntimeCockpit() {
   const dmAssignSelectedReason =
     busyReason ??
     missingSessionReason ??
-    (mode === 'dm' ? null : 'Switch to DM mode for this control.') ??
+    (mode === 'dm' ? null : t('runtime.disabled.dmOnlyControl')) ??
     (selectedActorKnownCharacterId
       ? selectedActorNeedsAssignment
         ? null
-        : 'Selected participant already has this character assigned.'
-      : 'Load or recover a character for this participant first.');
+        : t('runtime.disabled.selectedAlreadyAssigned')
+      : t('runtime.disabled.recoverCharacter'));
   const activeSceneLabel = scene
     ? `${scene.name} (${scene.id})`
     : (activeScene?.activeSceneId ?? sceneId) || 'none';
@@ -3814,10 +3949,10 @@ export function RuntimeCockpit() {
           </Notice>
         ) : null}
         <Notice
-          title={activeSceneGuidance.title}
-          tone={activeSceneGuidance.tone}
+          title={localizedActiveSceneGuidance.title}
+          tone={localizedActiveSceneGuidance.tone}
         >
-          {activeSceneGuidance.detail}
+          {localizedActiveSceneGuidance.detail}
         </Notice>
 
         <section className="rounded-3xl border border-amber-500/25 bg-[#24160f]/90 p-4 shadow-xl shadow-black/30">
@@ -3825,32 +3960,32 @@ export function RuntimeCockpit() {
             <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
               <ModeButton
                 active={mode === 'dm'}
-                label="DM Mode"
+                label={t('runtime.mode.dm')}
                 onClick={() => switchMode('dm')}
                 tone="dm"
               />
               <ModeButton
                 active={mode === 'player'}
-                label="Player Mode"
+                label={t('runtime.mode.player')}
                 onClick={() => switchMode('player')}
                 tone="player"
               />
             </div>
             <LabeledInput
-              label="Session ID"
+              label={t('runtime.session.sessionId')}
               onChange={switchSessionId}
-              placeholder="Paste an existing session ID to recover"
+              placeholder={t('runtime.session.sessionIdPlaceholder')}
               value={sessionId}
             />
             {mode === 'dm' ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 <LabeledInput
-                  label="DM participant ID"
+                  label={t('runtime.session.dmParticipantId')}
                   onChange={switchDmParticipantId}
                   value={dmParticipantId}
                 />
                 <LabeledInput
-                  label="DM display name"
+                  label={t('runtime.session.dmDisplayName')}
                   onChange={setDmDisplayName}
                   value={dmDisplayName}
                 />
@@ -3858,12 +3993,12 @@ export function RuntimeCockpit() {
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 <LabeledInput
-                  label="Player participant ID"
+                  label={t('runtime.session.playerParticipantId')}
                   onChange={switchPlayerParticipantId}
                   value={playerParticipantId}
                 />
                 <LabeledInput
-                  label="Player display name"
+                  label={t('runtime.session.playerDisplayName')}
                   onChange={setPlayerDisplayName}
                   value={playerDisplayName}
                 />
@@ -3874,14 +4009,14 @@ export function RuntimeCockpit() {
                 <ActionButton
                   disabled={Boolean(busyLabel)}
                   disabledReason={busyReason ?? undefined}
-                  label="Create Session"
+                  label={t('runtime.session.create')}
                   onClick={createSession}
                 />
               ) : (
                 <ActionButton
                   disabled={Boolean(disabledReasons.joinPlayer)}
                   disabledReason={disabledReasons.joinPlayer ?? undefined}
-                  label="Join Session"
+                  label={t('runtime.session.join')}
                   onClick={joinCurrentPlayer}
                 />
               )}
@@ -3893,29 +4028,35 @@ export function RuntimeCockpit() {
                   busyReason ??
                   undefined
                 }
-                label="Recover"
+                label={t('runtime.session.recover')}
                 onClick={recoverReadModels}
                 variant="secondary"
               />
               <ActionButton
                 disabled={Boolean(missingSessionReason)}
                 disabledReason={missingSessionReason ?? undefined}
-                label={streamEnabled ? 'Disconnect SSE' : 'Subscribe SSE'}
+                label={
+                  streamEnabled
+                    ? t('runtime.session.disconnectSse')
+                    : t('runtime.session.subscribeSse')
+                }
                 onClick={() => setStreamEnabled((current) => !current)}
                 variant={streamEnabled ? 'danger' : 'secondary'}
               />
               <ActionButton
                 disabled={Boolean(busyLabel)}
                 disabledReason={busyReason ?? undefined}
-                label="Local Reset"
+                label={t('runtime.session.localReset')}
                 onClick={resetLocalCockpit}
                 variant="danger"
               />
             </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-amber-100/65">
-            Acting as {streamDisplayName} ({streamParticipantId}). Local Reset
-            clears only this browser; backend state remains untouched.{' '}
+            {t('runtime.roleNotice', {
+              name: streamDisplayName,
+              participantId: streamParticipantId,
+            })}{' '}
             {stream.error ? (
               <span className="font-semibold text-red-200">{stream.error}</span>
             ) : null}
@@ -3925,9 +4066,15 @@ export function RuntimeCockpit() {
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_420px]">
           <div className="grid content-start gap-5">
             <Panel
-              description={`Scene ${activeSceneLabel}. Click a cell or type coordinates; movement still goes through server commands.`}
-              eyebrow={mode === 'dm' ? 'DM war table' : 'Player view'}
-              title="Tactical Grid"
+              description={t('runtime.grid.description', {
+                scene: activeSceneLabel,
+              })}
+              eyebrow={
+                mode === 'dm'
+                  ? t('runtime.grid.dmEyebrow')
+                  : t('runtime.grid.playerEyebrow')
+              }
+              title={t('runtime.grid.title')}
               tone={mode}
             >
               <CurrentTurnRail summary={currentTurnRailSummary} t={t} />
@@ -3959,7 +4106,7 @@ export function RuntimeCockpit() {
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
                 {mode === 'dm' ? (
                   <SelectField
-                    label="Acting token"
+                    label={t('runtime.grid.actingToken')}
                     onChange={setSelectedActor}
                     options={playerParticipants.map((participant) => ({
                       label: `${participant.displayName} (${participant.id})`,
@@ -3970,7 +4117,7 @@ export function RuntimeCockpit() {
                 ) : (
                   <div className="rounded-2xl border border-sky-300/20 bg-sky-950/25 px-3 py-2 text-sm">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-200">
-                      Acting token
+                      {t('runtime.grid.actingToken')}
                     </p>
                     <p className="mt-1 break-all font-semibold text-amber-50">
                       {playerDisplayName} ({playerParticipantId})
@@ -4005,7 +4152,11 @@ export function RuntimeCockpit() {
                     disabledReason={
                       movementFeedbackSummary.moveBlockedReason ?? undefined
                     }
-                    label={mode === 'dm' ? 'Move Actor' : 'Move Token'}
+                    label={
+                      mode === 'dm'
+                        ? t('runtime.grid.moveActor')
+                        : t('runtime.grid.moveToken')
+                    }
                     onClick={moveSelectedActor}
                     variant="secondary"
                   />
@@ -4013,7 +4164,7 @@ export function RuntimeCockpit() {
                     <ActionButton
                       disabled={Boolean(disabledReasons.dmCharacter)}
                       disabledReason={disabledReasons.dmCharacter ?? undefined}
-                      label="DM Reposition"
+                      label={t('runtime.grid.dmReposition')}
                       onClick={dmRepositionSelected}
                     />
                   ) : null}
@@ -4021,16 +4172,16 @@ export function RuntimeCockpit() {
               </div>
             </Panel>
 
-            <LatestEventFeed entries={feedEntries} />
+            <LatestEventFeed entries={feedEntries} t={t} />
 
             <Panel
-              description="Raw protocol payloads stay here for debugging; the table view above is the primary surface."
-              eyebrow="Dev trace"
-              title="Debug Ledger"
+              description={t('runtime.debug.description')}
+              eyebrow={t('runtime.debug.eyebrow')}
+              title={t('runtime.debug.title')}
             >
               <details>
                 <summary className="cursor-pointer text-sm font-semibold text-amber-200 outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-amber-300">
-                  Last response, session snapshot, and raw event log
+                  {t('runtime.debug.summary')}
                 </summary>
                 <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   <JsonPreview
@@ -4054,8 +4205,8 @@ export function RuntimeCockpit() {
                       ))
                     ) : (
                       <EmptyState
-                        detail="Subscribe to SSE or run commands to populate the ledger."
-                        title="No events yet"
+                        detail={t('runtime.debug.emptyDetail')}
+                        title={t('runtime.debug.emptyTitle')}
                       />
                     )}
                   </div>
@@ -4076,19 +4227,19 @@ export function RuntimeCockpit() {
             <PlayerReadinessRosterPanel roster={runtimeReadinessRoster} t={t} />
 
             {mode === 'dm' ? (
-              <DmTableSetupPanel checklist={dmTableSetupChecklist} />
+              <DmTableSetupPanel checklist={dmTableSetupChecklist} t={t} />
             ) : null}
 
             {mode === 'dm' ? (
               <Panel
-                description="Creates a fresh local playtest session and stops on the first failed command."
-                eyebrow="DM orchestration"
-                title="Demo Setup"
+                description={t('runtime.demoSetup.description')}
+                eyebrow={t('runtime.demoSetup.eyebrow')}
+                title={t('runtime.demoSetup.title')}
                 tone="dm"
               >
                 <div className="grid gap-3" data-runtime-demo-scenario>
                   <SelectField
-                    label="Demo scenario"
+                    label={t('runtime.demoSetup.scenarioLabel')}
                     onChange={setSelectedDemoScenarioId}
                     options={demoScenarios.map((scenario) => ({
                       label: scenario.name,
@@ -4105,19 +4256,35 @@ export function RuntimeCockpit() {
                     </p>
                     <div className="mt-3 grid gap-2 text-xs text-amber-100/70 sm:grid-cols-2">
                       <StatusRow
-                        label="Scene"
+                        label={t('runtime.demoSetup.scene')}
                         value={selectedDemoScenarioSummary.sceneLabel}
                       />
                       <StatusRow
-                        label="Roster"
+                        label={t('runtime.demoSetup.roster')}
                         value={selectedDemoScenarioSummary.rosterLabel}
+                      />
+                      <StatusRow
+                        label={t('runtime.demoSetup.setup')}
+                        value={t('runtime.demoSetup.setupValue')}
+                      />
+                      <StatusRow
+                        label={t('runtime.demoSetup.encounter')}
+                        value={t('runtime.demoSetup.encounterValue')}
+                      />
+                      <StatusRow
+                        label={t('runtime.demoSetup.flow')}
+                        value={t('runtime.demoSetup.flowValue')}
+                      />
+                      <StatusRow
+                        label={t('runtime.demoSetup.guardrail')}
+                        value={t('runtime.demoSetup.guardrailValue')}
                       />
                     </div>
                   </div>
                   <ActionButton
                     disabled={Boolean(busyLabel)}
                     disabledReason={busyReason ?? undefined}
-                    label={selectedDemoScenario.actionLabel}
+                    label={t('runtime.demoSetup.runTrainingRoom')}
                     onClick={runFreshDemoSetup}
                   />
                   <div className="grid grid-cols-2 gap-2">
@@ -4126,7 +4293,7 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Join Players"
+                      label={t('runtime.demoSetup.action.joinPlayers')}
                       onClick={joinSamplePlayers}
                       variant="secondary"
                     />
@@ -4135,7 +4302,7 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Create PCs"
+                      label={t('runtime.demoSetup.action.createPcs')}
                       onClick={createSampleCharacters}
                       variant="secondary"
                     />
@@ -4144,7 +4311,7 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Assign PCs"
+                      label={t('runtime.demoSetup.action.assignPcs')}
                       onClick={finalizeAndAssignCharacters}
                       variant="secondary"
                     />
@@ -4153,7 +4320,7 @@ export function RuntimeCockpit() {
                       disabledReason={
                         missingSessionReason ?? busyReason ?? undefined
                       }
-                      label="Create Scene"
+                      label={t('runtime.demoSetup.action.createScene')}
                       onClick={createAndActivateScene}
                       variant="secondary"
                     />
@@ -4162,7 +4329,7 @@ export function RuntimeCockpit() {
                     <ActionButton
                       disabled={Boolean(disabledReasons.placeTokens)}
                       disabledReason={disabledReasons.placeTokens ?? undefined}
-                      label="Place Tokens"
+                      label={t('runtime.demoSetup.action.placeTokens')}
                       onClick={placeSampleCharacters}
                       variant="secondary"
                     />
@@ -4171,7 +4338,7 @@ export function RuntimeCockpit() {
                       disabledReason={
                         disabledReasons.startEncounter ?? undefined
                       }
-                      label="Start Encounter"
+                      label={t('runtime.demoSetup.action.startEncounter')}
                       onClick={startEncounter}
                     />
                   </div>
@@ -4180,7 +4347,7 @@ export function RuntimeCockpit() {
             ) : (
               <Panel
                 description={playerNextStep.detail}
-                eyebrow="Player readiness"
+                eyebrow={t('runtime.playerReadiness.eyebrow')}
                 title={playerNextStep.title}
                 tone="player"
               >
@@ -4208,7 +4375,7 @@ export function RuntimeCockpit() {
 
             {mode === 'dm' ? (
               <SceneBuilderPanel
-                activeSceneGuidance={activeSceneGuidance}
+                activeSceneGuidance={localizedActiveSceneGuidance}
                 activationSceneId={sceneActivationId}
                 createDisabledReason={createCustomSceneReason}
                 entityDraft={sceneEntityDraft}
@@ -4485,11 +4652,11 @@ export function RuntimeCockpit() {
             <Panel
               description={
                 mode === 'dm'
-                  ? 'All joined player characters at the table.'
-                  : 'Your loaded character resource from server reads/events.'
+                  ? t('runtime.rosterPanel.description.dm')
+                  : t('runtime.rosterPanel.description.player')
               }
-              eyebrow="Roster"
-              title="Characters"
+              eyebrow={t('runtime.rosterPanel.eyebrow')}
+              title={t('runtime.rosterPanel.title')}
             >
               <div className="grid gap-3">
                 {mode === 'player' ? (
@@ -4513,8 +4680,8 @@ export function RuntimeCockpit() {
                       ))
                     ) : (
                       <EmptyState
-                        detail="Join players or run a named demo scenario."
-                        title="No players loaded"
+                        detail={t('runtime.rosterPanel.emptyDetail')}
+                        title={t('runtime.rosterPanel.emptyTitle')}
                       />
                     )}
                     <div className="grid gap-3 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
@@ -4642,10 +4809,10 @@ export function RuntimeCockpit() {
                     </div>
                     <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
                       <p className="text-sm font-bold text-amber-50">
-                        Assignment helper
+                        {t('runtime.assignmentHelper.title')}
                       </p>
                       <SelectField
-                        label="Player"
+                        label={t('runtime.assignmentHelper.player')}
                         onChange={setSelectedActor}
                         options={playerParticipants.map((participant) => ({
                           label: `${participant.displayName} (${participant.id})`,
@@ -4654,21 +4821,21 @@ export function RuntimeCockpit() {
                         value={selectedActor}
                       />
                       <StatusRow
-                        label="Known character"
+                        label={t('runtime.assignmentHelper.knownCharacter')}
                         value={selectedActorKnownCharacterId ?? 'none'}
                       />
                       <StatusRow
-                        label="Pending"
+                        label={t('runtime.assignmentHelper.pending')}
                         value={selectedActorPendingCharacterId ?? 'none'}
                       />
                       <StatusRow
-                        label="Assigned"
+                        label={t('runtime.assignmentHelper.assigned')}
                         value={selectedActorAssignedCharacterId ?? 'none'}
                       />
                       <ActionButton
                         disabled={Boolean(dmAssignSelectedReason)}
                         disabledReason={dmAssignSelectedReason ?? undefined}
-                        label="Assign Loaded Character"
+                        label={t('runtime.assignmentHelper.submit')}
                         onClick={dmAssignSelectedLoadedCharacter}
                         variant="secondary"
                       />
@@ -4815,17 +4982,29 @@ export function RuntimeCockpit() {
             ) : null}
 
             <Panel
-              description="Current IDs and read models loaded into this browser."
-              eyebrow="Table status"
-              title="State"
+              description={t('runtime.statePanel.description')}
+              eyebrow={t('runtime.statePanel.eyebrow')}
+              title={t('runtime.statePanel.title')}
             >
               <dl className="grid gap-2 text-sm">
-                <StatusRow label="Session" value={sessionId || 'none'} />
-                <StatusRow label="Active scene" value={sceneId || 'none'} />
-                <StatusRow label="Scene name" value={scene?.name ?? 'none'} />
-                <StatusRow label="Current turn" value={currentTurnName} />
                 <StatusRow
-                  label="Encounter"
+                  label={t('runtime.statePanel.session')}
+                  value={sessionId || 'none'}
+                />
+                <StatusRow
+                  label={t('runtime.statePanel.activeScene')}
+                  value={sceneId || 'none'}
+                />
+                <StatusRow
+                  label={t('runtime.statePanel.sceneName')}
+                  value={scene?.name ?? 'none'}
+                />
+                <StatusRow
+                  label={t('runtime.statePanel.currentTurn')}
+                  value={currentTurnName}
+                />
+                <StatusRow
+                  label={t('runtime.statePanel.encounter')}
                   value={
                     encounter
                       ? `${encounter.status} round ${encounter.roundNumber}`
@@ -4910,20 +5089,32 @@ function Panel({
 
 function DmTableSetupPanel({
   checklist,
+  t,
 }: {
   checklist: DmTableSetupChecklist;
+  t: RuntimeTranslator;
 }) {
+  const nextAction =
+    checklist.items.find((item) => item.status !== 'done') ?? null;
+
   return (
     <Panel
-      description={`${checklist.completedCount}/${checklist.totalCount} complete. ${checklist.nextAction}`}
-      eyebrow="DM readiness"
-      title="Table Setup"
+      description={`${t('runtime.statusOverview.readinessProgress', {
+        completed: String(checklist.completedCount),
+        total: String(checklist.totalCount),
+      })}. ${
+        nextAction
+          ? getDmTableSetupItemDetail(nextAction, t)
+          : t('runtime.tableSetup.readyForPlay')
+      }`}
+      eyebrow={t('runtime.tableSetup.eyebrow')}
+      title={t('runtime.tableSetup.title')}
       tone="dm"
     >
       <ol className="grid gap-2">
         {checklist.items.map((item) => {
           const tone = getDmTableSetupItemTone(item.status);
-          const label = getDmTableSetupItemLabel(item.status);
+          const label = getDmTableSetupItemLabel(item.status, t);
 
           return (
             <li
@@ -4932,9 +5123,11 @@ function DmTableSetupPanel({
             >
               <StatusBadge label={label} tone={tone} />
               <div className="min-w-0">
-                <p className="text-sm font-bold text-amber-50">{item.title}</p>
+                <p className="text-sm font-bold text-amber-50">
+                  {getDmTableSetupItemTitle(item, t)}
+                </p>
                 <p className="mt-1 text-xs leading-5 text-amber-100/60">
-                  {item.detail}
+                  {getDmTableSetupItemDetail(item, t)}
                 </p>
               </div>
             </li>
@@ -4947,17 +5140,106 @@ function DmTableSetupPanel({
 
 function getDmTableSetupItemLabel(
   status: DmTableSetupChecklist['items'][number]['status'],
+  t: RuntimeTranslator,
 ): string {
   const labels: Record<
     DmTableSetupChecklist['items'][number]['status'],
     string
   > = {
-    blocked: 'Wait',
-    done: 'Done',
-    ready: 'Next',
+    blocked: t('runtime.tableSetup.status.blocked'),
+    done: t('runtime.tableSetup.status.done'),
+    ready: t('runtime.tableSetup.status.ready'),
   };
 
   return labels[status];
+}
+
+function getDmTableSetupItemTitle(
+  item: DmTableSetupChecklist['items'][number],
+  t: RuntimeTranslator,
+): string {
+  switch (item.id) {
+    case 'characters':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.characters.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.characters.ready')
+          : t('runtime.tableSetup.item.characters.blocked');
+    case 'encounter':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.encounter.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.encounter.ready')
+          : t('runtime.tableSetup.item.encounter.blocked');
+    case 'placement':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.placement.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.placement.ready')
+          : t('runtime.tableSetup.item.placement.blocked');
+    case 'players':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.players.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.players.ready')
+          : t('runtime.tableSetup.item.players.blocked');
+    case 'scene':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.scene.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.scene.ready')
+          : t('runtime.tableSetup.item.scene.blocked');
+    case 'session':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.item.session.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.item.session.ready')
+          : t('runtime.tableSetup.item.session.blocked');
+  }
+}
+
+function getDmTableSetupItemDetail(
+  item: DmTableSetupChecklist['items'][number],
+  t: RuntimeTranslator,
+): string {
+  switch (item.id) {
+    case 'characters':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.characters.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.characters.ready')
+          : t('runtime.tableSetup.detail.characters.blocked');
+    case 'encounter':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.encounter.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.encounter.ready')
+          : t('runtime.tableSetup.detail.encounter.blocked');
+    case 'placement':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.placement.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.placement.ready')
+          : t('runtime.tableSetup.detail.placement.blocked');
+    case 'players':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.players.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.players.ready')
+          : t('runtime.tableSetup.detail.players.blocked');
+    case 'scene':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.scene.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.scene.ready')
+          : t('runtime.tableSetup.detail.scene.blocked');
+    case 'session':
+      return item.status === 'done'
+        ? t('runtime.tableSetup.detail.session.done')
+        : item.status === 'ready'
+          ? t('runtime.tableSetup.detail.session.ready')
+          : t('runtime.tableSetup.detail.session.blocked');
+  }
 }
 
 function getDmTableSetupItemTone(
@@ -5112,7 +5394,7 @@ function RuntimeStatusOverviewPanel({
     overview.turn.roundNumber !== null && overview.turn.turnNumber !== null
       ? t('runtime.encounterStatus.progress', {
           round: String(overview.turn.roundNumber),
-          total: String(overview.turn.turnCount),
+          turnCount: String(overview.turn.turnCount),
           turn: String(overview.turn.turnNumber),
         })
       : t('runtime.encounterStatus.noProgress');
@@ -5179,6 +5461,16 @@ function RuntimeStatusOverviewPanel({
             {t('runtime.statusOverview.nextAction')}
           </p>
           <p className="mt-1 text-sm leading-6 text-amber-50">
+            {overview.nextAction.detail}
+          </p>
+          <StatusRow
+            label={t('runtime.statusOverview.nextAction.ownerDetail')}
+            value={getRuntimeStatusOverviewOwnerLabel(
+              overview.nextAction.owner,
+              t,
+            )}
+          />
+          <p className="mt-2 text-xs leading-5 text-amber-100/60">
             {getRuntimeStatusOverviewOwnerDetail(overview.nextAction.owner, t)}
           </p>
         </div>
@@ -5795,7 +6087,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <dt className="text-amber-100/55">{label}</dt>
-      <dd className="break-all text-right font-semibold text-amber-50">
+      <dd className="break-all text-end font-semibold text-amber-50" dir="auto">
         {value}
       </dd>
     </div>
@@ -6357,14 +6649,16 @@ function EmptyState({ detail, title }: { detail: string; title: string }) {
 
 function LatestEventFeed({
   entries,
+  t,
 }: {
   entries: Array<EventLogEntry & { summary: RuntimeEventSummary }>;
+  t: RuntimeTranslator;
 }) {
   return (
     <Panel
-      description="Readable summaries of live SSE updates. This is still not replay."
-      eyebrow="Live omens"
-      title="Combat & Event Feed"
+      description={t('runtime.eventFeed.description')}
+      eyebrow={t('runtime.eventFeed.eyebrow')}
+      title={t('runtime.eventFeed.title')}
     >
       <div className="grid gap-2">
         {entries.length ? (
@@ -6388,8 +6682,8 @@ function LatestEventFeed({
           ))
         ) : (
           <EmptyState
-            detail="Subscribe to the session stream, then move, attack, or recover to populate this feed."
-            title="No live events summarized"
+            detail={t('runtime.eventFeed.emptyDetail')}
+            title={t('runtime.eventFeed.emptyTitle')}
           />
         )}
       </div>

@@ -65,11 +65,13 @@ Local Reset clears browser runtime state only; it does not delete backend
 sessions or runtime state.
 
 For a human DM plus human Player Training Room Skirmish pass, use
-`docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_CHECKLIST.md`. It focuses on
-login/session start, saved-character submission, pending assignment, DM
-assignment, placement, readiness/status overview, roster, turn clarity,
-read-model honesty, English/Persian direction, visual hierarchy, and UX gaps to
-triage next.
+`docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_CHECKLIST.md` and record the run
+in `docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_RUN_TEMPLATE.md`. The
+checklist focuses on login/session start, saved-character submission, pending
+assignment, DM assignment, placement, readiness/status overview, roster, turn
+clarity, read-model honesty, English/Persian direction, visual hierarchy, and
+UX gaps to triage next. Treat the checklist as product evidence, not as a
+request to change runtime code during the run.
 
 In DM mode, confirm the Table Setup checklist changes as the table advances:
 with no session it should show session creation as the next action; after
@@ -105,36 +107,58 @@ process output.
 
 ## Browser Playable Session Script
 
-Use this script for the first local playable-session pass after startup:
+Use this script for the first local playable-session pass after startup. Keep a
+run template open while testing and mark every confusing or blocked moment with
+the mode, locale, viewport, expected result, actual result, and any boundary
+risk. This script validates current behavior only: do not infer durable event
+replay, stream cursors, catch-up delivery, exactly-once delivery, production
+auth, or broader D&D automation from any passing step.
 
-1. Open `/runtime`, wait for the runtime shell, and run **Local Reset** if the
-   browser still has a stored session.
+1. Open `/runtime` in a DM browser profile, wait for the runtime shell, and run
+   **Local Reset** if the browser still has a stored session. Confirm this reads
+   as browser-local cleanup, not backend deletion.
 2. Switch to **DM Mode**, confirm **Demo scenario** is set to **Training Room
    Skirmish**, and run **Run Training Room Skirmish**.
-3. Confirm the active scene is **Training Room**, the tactical grid is visible,
-   and the sample characters **Aria** and **Borin** appear.
-4. Confirm the **Recovery status** panel reports the session, scene,
-   active-scene placement, characters, and encounter read models. Before an
-   encounter starts, the missing encounter row is expected to be optional.
-5. Start the encounter from the DM controls.
-6. Confirm **Encounter status** shows round/turn progress and the current or
-   next actor.
-7. Confirm **Combat & Event Feed** and **Monsters & NPCs** are visible in DM
-   mode.
-8. Reload the browser, click **Recover**, and confirm **Training Room**,
-   **Aria**, **Borin**, **Recovery status**, and **Encounter status** return.
-9. Switch to **Player Mode**, click **Recover**, and confirm **PLAYER VIEW**,
-   the assigned character, tactical grid, and **Readiness summary** are visible.
-10. Confirm Player mode does not show **Run Training Room Skirmish**, **Scene
-    Builder**, or **Monsters & NPCs**.
-11. Click **Local Reset** and confirm the browser session input is blank, and
-    that stale demo table text such as **Training Room**, **Aria**, and
-    **Borin** is no longer visible. This reset is browser-local and does not
-    delete backend runtime state.
-12. Paste the same session ID back into the session input, click **Recover**,
-    and confirm **Training Room**, **Recovery status**, and **Encounter
-    status** return. This confirms Local Reset did not delete the backend
-    runtime session or leave the table only partially recovered.
+3. Record the session ID. Confirm the active scene is **Training Room**, the
+   tactical grid is visible, and the sample characters **Aria** and **Borin**
+   appear.
+4. Confirm **Training Room Setup** explains the prepared state, manual encounter
+   start, setup flow, and the DM/server authority boundary without implying new
+   automation.
+5. Confirm **Table Setup**, **Table flow**, **Player roster**, and **Recovery
+   status** agree about the next visible action, player readiness, placement,
+   and loaded read models. Before an encounter starts, the missing encounter row
+   is expected to be optional.
+6. Open a separate Player browser profile, switch to **Player Mode**, paste the
+   same session ID, click **Recover**, and confirm the assigned character,
+   tactical grid, and **Readiness summary** are visible.
+7. Confirm Player mode does not show **Run Training Room Skirmish**, **Scene
+   Builder**, or **Monsters & NPCs**. Player controls should describe blocked
+   or available movement, target, attack, and action options without suggesting
+   permission to move other participants.
+8. Start the encounter from the DM controls. Confirm **Encounter status**,
+   **Current turn**, **Turn & Target**, and Player readiness show round/turn
+   progress and the current or next actor.
+9. Select a movement destination and an attack target where possible. Confirm
+   movement, action economy, target, and latest combat-result feedback describe
+   server-owned state and blockers clearly enough for a table.
+10. Reload the DM browser, click **Recover**, and confirm **Training Room**,
+    **Aria**, **Borin**, **Recovery status**, and **Encounter status** return
+    from read models.
+11. Reload the Player browser, click **Recover**, and confirm the assigned or
+    pending character, tactical grid, readiness, and blocked/ready action states
+    return from read models.
+12. Switch between English and Persian in both profiles. Confirm RTL/LTR layout,
+    long IDs, coordinates, status badges, DM authority wording, runtime-copy
+    separation, and recovery limits remain understandable.
+13. Click **Local Reset** in one profile and confirm the session input is blank,
+    and stale demo table text such as **Training Room**, **Aria**, and
+    **Borin** is no longer visible in that browser. This reset is browser-local
+    and does not delete backend runtime state.
+14. Paste the same session ID back into that profile, click **Recover**, and
+    confirm **Training Room**, **Recovery status**, and **Encounter status**
+    return. This confirms Local Reset did not delete the backend runtime session
+    or leave the table only partially recovered.
 
 For the persisted character product MVP, run the server in DB mode with
 `0008_character_library_entries.sql`, `0009_auth_users_and_sessions.sql`, and

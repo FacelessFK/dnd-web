@@ -91,6 +91,28 @@ Update the manual validation path so a reviewer can run the Training Room
 Skirmish flow, recover after refresh, confirm Player-mode guardrails, and see
 known limitations without internal implementation context.
 
+Status: implemented.
+
+### Slice 4: Playtest Evidence Triage
+
+Use one completed Training Room Skirmish run template and checklist result to
+choose the next narrow UI polish slice. Keep this as triage only unless a human
+explicitly approves implementation. Do not broaden into protocol, combat
+automation, replay/catch-up, production auth, or broader D&D systems.
+
+Status: implemented from the Codex browser run recorded in
+`docs/delivery/TRAINING_ROOM_SKIRMISH_CODEX_BROWSER_RUN.md`.
+
+### Slice 5: Persian / RTL Runtime Status Polish
+
+Polish Persian/RTL scanability for the Training Room runtime status and setup
+panels by localizing remaining high-traffic demo/status labels and making mixed
+Persian plus canonical ID rows easier to scan. Keep this frontend-only and do
+not change runtime protocol, command semantics, combat automation, auth, DB
+requirements, or read-model recovery behavior.
+
+Recommended effort: `high`.
+
 ## Historical Note
 
 The previous read-model recovery and realtime delivery-boundary milestone is

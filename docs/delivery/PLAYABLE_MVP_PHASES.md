@@ -333,6 +333,25 @@ Implemented Phase 6 Slice 1:
 > Add a named Training Room Skirmish demo scenario option that uses existing
 > runtime commands and current local sample data.
 
+Implemented Phase 6 Slice 2:
+
+> Tighten Training Room Skirmish scenario-facing runtime copy and state
+> presentation without changing runtime protocol, combat semantics, auth, DB
+> requirements, or read-model recovery behavior.
+
+Implemented Phase 6 Slice 3:
+
+> Update the manual Training Room Skirmish playtest script, checklist, and run
+> template so a human DM and Player can run the flow, verify recovery and
+> i18n, and record UX gaps without adding runtime code or new product scope.
+
+Implemented Phase 6 Slice 4:
+
+> Record a Codex in-app browser Training Room Skirmish run, triage the observed
+> product evidence, and select the next narrow UI polish slice without changing
+> runtime protocol, combat automation, replay/catch-up, production auth, or
+> broader D&D systems.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -357,8 +376,12 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 2:
+Phase 6 Slice 5:
 
-> Tighten the named demo scenario presentation and manual playtest script around
-> Training Room Skirmish without adding new runtime protocol or combat
-> automation.
+> Polish Persian/RTL scanability for the Training Room runtime status and setup
+> panels by localizing remaining high-traffic demo/status labels and making
+> mixed Persian plus canonical ID rows easier to scan, without changing runtime
+> protocol, command semantics, combat automation, auth, DB requirements, or
+> read-model recovery behavior.
+
+Recommended effort: `high`.
