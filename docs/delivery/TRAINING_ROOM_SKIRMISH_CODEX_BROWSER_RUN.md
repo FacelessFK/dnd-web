@@ -432,3 +432,53 @@ Next narrow implementation slice:
 > recovery behavior.
 
 Recommended effort: `medium`.
+
+## Persian Debug / Scene Builder Helper Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 11 microcopy polish
+- Persistence mode: not applicable to copy-only source inspection
+- Runtime code changed during run: frontend/i18n copy and smoke guardrail only
+- Protocol, server commands, scene authority, DB/auth behavior,
+  replay/catch-up, combat automation, and read-model recovery behavior changed
+  or claimed: no
+
+Implemented polish:
+
+- Replaced mixed Persian/English Debug Ledger phrases using terms such as
+  `Payload`, `debug`, `command`, `ledger`, and `table view` with Persian-facing
+  debug copy while preserving canonical `protocol` and `SSE` where they remain
+  intentionally stable.
+- Moved Scene Builder and Scene Transition helper labels, empty states, preset
+  labels/descriptions, entity type labels, transition kind labels, and selected
+  entity position text behind runtime i18n keys so Persian mode no longer shows
+  English helper copy in those DM-only controls.
+- Kept canonical command IDs, scene IDs, protocol values, and server-owned
+  placement/transition wording intact; no client-side scene authority or fake
+  local map edits were added.
+
+Remaining product cautions:
+
+- Adjacent Persian Combatant, action, and DM override helper copy still mixes
+  terms such as `combatant`, `attack`, `target`, `damage`, `override`, `turn`,
+  `movement`, and `reaction` in high-traffic DM controls.
+- These remaining strings are outside the Debug / Scene Builder slice and
+  should be handled as the next small i18n pass rather than broadening this
+  change.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian Combatant, action, and DM override helper copy in
+> the Training Room flow by replacing mixed English/Persian helper terms such
+> as `combatant`, `attack`, `target`, `damage`, `override`, `turn`,
+> `movement`, `reaction`, and draft/prerequisite wording with
+> localization-aware Persian equivalents while preserving canonical command
+> IDs, `DM`, `HP`, `AC`, `monster/NPC`, dice notation, protocol/debug labels,
+> and server-owned combat authority where they are intentionally stable. Keep
+> this frontend/i18n-only and do not change runtime protocol, command
+> semantics, target legality, damage automation, turn validation, auth, DB
+> requirements, or read-model recovery behavior.
+
+Recommended effort: `medium`.

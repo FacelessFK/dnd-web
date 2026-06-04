@@ -183,6 +183,114 @@ const messages = {
     'runtime.debug.summary':
       'Last response, session snapshot, and raw event log',
     'runtime.debug.title': 'Debug Ledger',
+    'runtime.sceneBuilder.action.activateScene': 'Activate Scene',
+    'runtime.sceneBuilder.action.createScene': 'Create Custom Scene',
+    'runtime.sceneBuilder.action.delete': 'Delete',
+    'runtime.sceneBuilder.action.moveTo': 'Move to {cell}',
+    'runtime.sceneBuilder.action.placeEntity': 'Place Entity',
+    'runtime.sceneBuilder.action.update': 'Update',
+    'runtime.sceneBuilder.activateScene': 'Activate scene',
+    'runtime.sceneBuilder.chooseKnownScene': 'Choose a known scene...',
+    'runtime.sceneBuilder.description':
+      'Create custom tactical scenes and add simple authoritative scene entities. No fake local map edits are applied.',
+    'runtime.sceneBuilder.editEntity': 'Edit passive entity',
+    'runtime.sceneBuilder.editEntityDetail':
+      'Combatants are intentionally excluded; use the Monster/NPC panel for combatant HP, movement, and attacks.',
+    'runtime.sceneBuilder.entityAt': '{label} at {cell}',
+    'runtime.sceneBuilder.entityFlag.blocksMovement': 'blocks movement',
+    'runtime.sceneBuilder.entityFlag.blocksVision': 'blocks vision',
+    'runtime.sceneBuilder.entityFlag.hidden': 'hidden',
+    'runtime.sceneBuilder.entityFlag.transitionTo':
+      '{kind} transition to {target}',
+    'runtime.sceneBuilder.entityPalette': 'Entity palette',
+    'runtime.sceneBuilder.entityPreset.cover.description':
+      'Small object that blocks movement but keeps sight lines open.',
+    'runtime.sceneBuilder.entityPreset.cover.label': 'Cover',
+    'runtime.sceneBuilder.entityPreset.hiddenProp.description':
+      'DM-side hidden prop for traps, clues, or reveals.',
+    'runtime.sceneBuilder.entityPreset.hiddenProp.label': 'Hidden Prop',
+    'runtime.sceneBuilder.entityPreset.marker.description':
+      'Visible note marker that does not block the board.',
+    'runtime.sceneBuilder.entityPreset.marker.label': 'Marker',
+    'runtime.sceneBuilder.entityPreset.monsterSpawn.description':
+      'Marker for planned monster or NPC placement.',
+    'runtime.sceneBuilder.entityPreset.monsterSpawn.label': 'Monster Spawn',
+    'runtime.sceneBuilder.entityPreset.playerSpawn.description':
+      'Non-blocking marker for planned player token entry.',
+    'runtime.sceneBuilder.entityPreset.playerSpawn.label': 'Player Spawn',
+    'runtime.sceneBuilder.entityPreset.wall.description':
+      'Long blocker for walls, doors, or chokepoints.',
+    'runtime.sceneBuilder.entityPreset.wall.label': 'Wall',
+    'runtime.sceneBuilder.entityType.monster': 'Monster',
+    'runtime.sceneBuilder.entityType.object': 'Object',
+    'runtime.sceneBuilder.entityType.playerSpawn': 'Player spawn',
+    'runtime.sceneBuilder.entityType.terrain': 'Terrain',
+    'runtime.sceneBuilder.field.cellFeet': 'Cell ft',
+    'runtime.sceneBuilder.field.entityType': 'Entity type',
+    'runtime.sceneBuilder.field.footprintHeight': 'Footprint H',
+    'runtime.sceneBuilder.field.footprintWidth': 'Footprint W',
+    'runtime.sceneBuilder.field.height': 'Height',
+    'runtime.sceneBuilder.field.name': 'Name / label',
+    'runtime.sceneBuilder.field.notes': 'Notes',
+    'runtime.sceneBuilder.field.passiveEntity': 'Passive entity',
+    'runtime.sceneBuilder.field.sceneId': 'Scene ID',
+    'runtime.sceneBuilder.field.sceneName': 'Scene name',
+    'runtime.sceneBuilder.field.selected': 'Selected',
+    'runtime.sceneBuilder.field.transitionKind': 'Kind',
+    'runtime.sceneBuilder.field.transitionNode': 'Transition node',
+    'runtime.sceneBuilder.field.transitionTargetLabel': 'Target label',
+    'runtime.sceneBuilder.field.transitionTargetScene': 'Known target scene',
+    'runtime.sceneBuilder.field.transitionTargetSceneId': 'Target scene ID',
+    'runtime.sceneBuilder.field.width': 'Width',
+    'runtime.sceneBuilder.flag.blocksMovement': 'Blocks movement',
+    'runtime.sceneBuilder.flag.blocksVision': 'Blocks vision',
+    'runtime.sceneBuilder.flag.hiddenMap': 'Hidden from map styling',
+    'runtime.sceneBuilder.flag.hiddenPlayerMap':
+      'Hidden from player map styling',
+    'runtime.sceneBuilder.noPassiveEntities.detail':
+      'Place an object, terrain marker, or spawn marker before editing passive map entities.',
+    'runtime.sceneBuilder.noPassiveEntities.title': 'No passive entities',
+    'runtime.sceneBuilder.passiveEntities': 'Passive entities',
+    'runtime.sceneBuilder.placeEntity': 'Place entity',
+    'runtime.sceneBuilder.placeEntityDetail':
+      'Target cell {cell}. Placement is persisted only after `place_entity_in_scene` succeeds.',
+    'runtime.sceneBuilder.sceneDraft': 'Scene draft',
+    'runtime.sceneBuilder.title': 'Scene Builder',
+    'runtime.sceneBuilder.transitions.action.activate': 'Activate Link',
+    'runtime.sceneBuilder.transitions.action.create': 'Create Transition',
+    'runtime.sceneBuilder.transitions.create': 'Create transition',
+    'runtime.sceneBuilder.transitions.createDetail':
+      'Target cell {cell}. Linked activation changes the active scene only after the server accepts the command.',
+    'runtime.sceneBuilder.transitions.description':
+      'Author simple linked markers such as doors, stairs, portals, and gates. Only the DM can activate a transition.',
+    'runtime.sceneBuilder.transitions.edit': 'Edit linked transition',
+    'runtime.sceneBuilder.transitions.editDetail':
+      'Passive scene entities and combatants are intentionally separate. Transition activation remains DM-controlled.',
+    'runtime.sceneBuilder.transitions.kind.door': 'Door',
+    'runtime.sceneBuilder.transitions.kind.gate': 'Gate',
+    'runtime.sceneBuilder.transitions.kind.other': 'Other',
+    'runtime.sceneBuilder.transitions.kind.portal': 'Portal',
+    'runtime.sceneBuilder.transitions.kind.stairs': 'Stairs',
+    'runtime.sceneBuilder.transitions.noNodes.detail':
+      'Create a transition node before editing or activating linked scenes.',
+    'runtime.sceneBuilder.transitions.noNodes.title': 'No transition nodes',
+    'runtime.sceneBuilder.transitions.preset.door.description':
+      'Linked doorway between nearby rooms or chambers.',
+    'runtime.sceneBuilder.transitions.preset.door.label': 'Door',
+    'runtime.sceneBuilder.transitions.preset.gate.description':
+      'Large threshold, portcullis, or exterior scene exit.',
+    'runtime.sceneBuilder.transitions.preset.gate.label': 'Gate',
+    'runtime.sceneBuilder.transitions.preset.other.description':
+      'Custom exit or DM-defined scene link.',
+    'runtime.sceneBuilder.transitions.preset.other.label': 'Other',
+    'runtime.sceneBuilder.transitions.preset.portal.description':
+      'Arcane or unusual linked scene transition.',
+    'runtime.sceneBuilder.transitions.preset.portal.label': 'Portal',
+    'runtime.sceneBuilder.transitions.preset.stairs.description':
+      'Vertical route to another level or elevation.',
+    'runtime.sceneBuilder.transitions.preset.stairs.label': 'Stairs',
+    'runtime.sceneBuilder.transitions.presets': 'Transition presets',
+    'runtime.sceneBuilder.transitions.title': 'Scene Transitions',
     'runtime.disabled.busy': 'Waiting on {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
       'Create or recover an active scene first.',
@@ -868,13 +976,119 @@ const messages = {
     'runtime.demoSetup.action.placeTokens': 'قرار دادن توکن‌ها',
     'runtime.demoSetup.action.startEncounter': 'شروع برخورد',
     'runtime.debug.description':
-      'Payloadهای خام protocol برای debug اینجا می‌مانند؛ نمای اصلی همان table view بالاست.',
+      'داده‌های خام protocol برای عیب‌یابی اینجا می‌مانند؛ نمای اصلی همان میز بالاست.',
     'runtime.debug.emptyDetail':
-      'SSE را subscribe کنید یا command اجرا کنید تا ledger پر شود.',
+      'به SSE وصل شوید یا فرمان اجرا کنید تا دفترچه پر شود.',
     'runtime.debug.emptyTitle': 'هنوز رویدادی نیست',
     'runtime.debug.eyebrow': 'ردیابی توسعه',
-    'runtime.debug.summary': 'آخرین پاسخ، snapshot جلسه، و event log خام',
-    'runtime.debug.title': 'دفترچه Debug',
+    'runtime.debug.summary': 'آخرین پاسخ، snapshot نشست، و رخدادهای خام',
+    'runtime.debug.title': 'دفترچه عیب‌یابی',
+    'runtime.sceneBuilder.action.activateScene': 'فعال‌سازی صحنه',
+    'runtime.sceneBuilder.action.createScene': 'ساخت صحنه سفارشی',
+    'runtime.sceneBuilder.action.delete': 'حذف',
+    'runtime.sceneBuilder.action.moveTo': 'انتقال به {cell}',
+    'runtime.sceneBuilder.action.placeEntity': 'قرار دادن موجودیت',
+    'runtime.sceneBuilder.action.update': 'به‌روزرسانی',
+    'runtime.sceneBuilder.activateScene': 'فعال‌سازی صحنه',
+    'runtime.sceneBuilder.chooseKnownScene': 'انتخاب صحنه شناخته‌شده...',
+    'runtime.sceneBuilder.description':
+      'صحنه‌های تاکتیکی سفارشی بسازید و موجودیت‌های ساده و مرجع صحنه را اضافه کنید. هیچ ویرایش محلی جعلی روی نقشه اعمال نمی‌شود.',
+    'runtime.sceneBuilder.editEntity': 'ویرایش موجودیت منفعل',
+    'runtime.sceneBuilder.editEntityDetail':
+      'موجودیت‌های برخورد عمدا جدا هستند؛ برای HP، حرکت و حمله‌های آن‌ها از پنل هیولا/NPC استفاده کنید.',
+    'runtime.sceneBuilder.entityAt': '{label} در {cell}',
+    'runtime.sceneBuilder.entityFlag.blocksMovement': 'مسدودکننده حرکت',
+    'runtime.sceneBuilder.entityFlag.blocksVision': 'مسدودکننده دید',
+    'runtime.sceneBuilder.entityFlag.hidden': 'پنهان',
+    'runtime.sceneBuilder.entityFlag.transitionTo': 'گذار {kind} به {target}',
+    'runtime.sceneBuilder.entityPalette': 'پالت موجودیت‌ها',
+    'runtime.sceneBuilder.entityPreset.cover.description':
+      'شیء کوچکی که حرکت را می‌بندد اما خط دید را باز نگه می‌دارد.',
+    'runtime.sceneBuilder.entityPreset.cover.label': 'پناه',
+    'runtime.sceneBuilder.entityPreset.hiddenProp.description':
+      'ابزار پنهان سمت DM برای تله، سرنخ، یا آشکارسازی.',
+    'runtime.sceneBuilder.entityPreset.hiddenProp.label': 'ابزار پنهان',
+    'runtime.sceneBuilder.entityPreset.marker.description':
+      'نشانگر یادداشت که صفحه را مسدود نمی‌کند.',
+    'runtime.sceneBuilder.entityPreset.marker.label': 'نشانگر',
+    'runtime.sceneBuilder.entityPreset.monsterSpawn.description':
+      'نشانگر جای‌گذاری برنامه‌ریزی‌شده برای هیولا یا NPC.',
+    'runtime.sceneBuilder.entityPreset.monsterSpawn.label': 'شروع هیولا',
+    'runtime.sceneBuilder.entityPreset.playerSpawn.description':
+      'نشانگر غیرمسدودکننده برای ورود توکن بازیکن.',
+    'runtime.sceneBuilder.entityPreset.playerSpawn.label': 'شروع بازیکن',
+    'runtime.sceneBuilder.entityPreset.wall.description':
+      'مانع کشیده برای دیوار، در، یا گلوگاه.',
+    'runtime.sceneBuilder.entityPreset.wall.label': 'دیوار',
+    'runtime.sceneBuilder.entityType.monster': 'هیولا',
+    'runtime.sceneBuilder.entityType.object': 'شیء',
+    'runtime.sceneBuilder.entityType.playerSpawn': 'شروع بازیکن',
+    'runtime.sceneBuilder.entityType.terrain': 'زمین',
+    'runtime.sceneBuilder.field.cellFeet': 'فوت خانه',
+    'runtime.sceneBuilder.field.entityType': 'نوع موجودیت',
+    'runtime.sceneBuilder.field.footprintHeight': 'ارتفاع اندازه',
+    'runtime.sceneBuilder.field.footprintWidth': 'عرض اندازه',
+    'runtime.sceneBuilder.field.height': 'ارتفاع',
+    'runtime.sceneBuilder.field.name': 'نام / برچسب',
+    'runtime.sceneBuilder.field.notes': 'یادداشت‌ها',
+    'runtime.sceneBuilder.field.passiveEntity': 'موجودیت منفعل',
+    'runtime.sceneBuilder.field.sceneId': 'شناسه صحنه',
+    'runtime.sceneBuilder.field.sceneName': 'نام صحنه',
+    'runtime.sceneBuilder.field.selected': 'انتخاب‌شده',
+    'runtime.sceneBuilder.field.transitionKind': 'نوع',
+    'runtime.sceneBuilder.field.transitionNode': 'گره گذار',
+    'runtime.sceneBuilder.field.transitionTargetLabel': 'برچسب مقصد',
+    'runtime.sceneBuilder.field.transitionTargetScene': 'صحنه مقصد شناخته‌شده',
+    'runtime.sceneBuilder.field.transitionTargetSceneId': 'شناسه صحنه مقصد',
+    'runtime.sceneBuilder.field.width': 'عرض',
+    'runtime.sceneBuilder.flag.blocksMovement': 'حرکت را مسدود می‌کند',
+    'runtime.sceneBuilder.flag.blocksVision': 'دید را مسدود می‌کند',
+    'runtime.sceneBuilder.flag.hiddenMap': 'در سبک نقشه پنهان است',
+    'runtime.sceneBuilder.flag.hiddenPlayerMap': 'در سبک نقشه بازیکن پنهان است',
+    'runtime.sceneBuilder.noPassiveEntities.detail':
+      'قبل از ویرایش موجودیت‌های منفعل نقشه، یک شیء، نشانگر زمین، یا نشانگر شروع قرار دهید.',
+    'runtime.sceneBuilder.noPassiveEntities.title': 'موجودیت منفعلی نیست',
+    'runtime.sceneBuilder.passiveEntities': 'موجودیت‌های منفعل',
+    'runtime.sceneBuilder.placeEntity': 'قرار دادن موجودیت',
+    'runtime.sceneBuilder.placeEntityDetail':
+      'خانه مقصد {cell}. جای‌گذاری فقط بعد از موفقیت `place_entity_in_scene` پایدار می‌شود.',
+    'runtime.sceneBuilder.sceneDraft': 'پیش‌نویس صحنه',
+    'runtime.sceneBuilder.title': 'صحنه‌ساز',
+    'runtime.sceneBuilder.transitions.action.activate': 'فعال‌سازی پیوند',
+    'runtime.sceneBuilder.transitions.action.create': 'ساخت گذار',
+    'runtime.sceneBuilder.transitions.create': 'ساخت گذار',
+    'runtime.sceneBuilder.transitions.createDetail':
+      'خانه مقصد {cell}. فعال‌سازی پیوند فقط بعد از پذیرش فرمان توسط سرور صحنه فعال را تغییر می‌دهد.',
+    'runtime.sceneBuilder.transitions.description':
+      'نشانگرهای پیوندی ساده مثل در، پله، پرتال و دروازه بسازید. فقط DM می‌تواند گذار را فعال کند.',
+    'runtime.sceneBuilder.transitions.edit': 'ویرایش گذار پیوندی',
+    'runtime.sceneBuilder.transitions.editDetail':
+      'موجودیت‌های منفعل صحنه و موجودیت‌های برخورد عمدا جدا هستند. فعال‌سازی گذار همچنان در کنترل DM می‌ماند.',
+    'runtime.sceneBuilder.transitions.kind.door': 'در',
+    'runtime.sceneBuilder.transitions.kind.gate': 'دروازه',
+    'runtime.sceneBuilder.transitions.kind.other': 'دیگر',
+    'runtime.sceneBuilder.transitions.kind.portal': 'پرتال',
+    'runtime.sceneBuilder.transitions.kind.stairs': 'پله',
+    'runtime.sceneBuilder.transitions.noNodes.detail':
+      'قبل از ویرایش یا فعال‌سازی صحنه‌های پیوندی، یک گره گذار بسازید.',
+    'runtime.sceneBuilder.transitions.noNodes.title': 'گره گذاری وجود ندارد',
+    'runtime.sceneBuilder.transitions.preset.door.description':
+      'درگاه پیوندی میان اتاق‌ها یا تالارهای نزدیک.',
+    'runtime.sceneBuilder.transitions.preset.door.label': 'در',
+    'runtime.sceneBuilder.transitions.preset.gate.description':
+      'آستانه بزرگ، دروازه، یا خروجی بیرونی صحنه.',
+    'runtime.sceneBuilder.transitions.preset.gate.label': 'دروازه',
+    'runtime.sceneBuilder.transitions.preset.other.description':
+      'خروجی سفارشی یا پیوند صحنه‌ای تعریف‌شده توسط DM.',
+    'runtime.sceneBuilder.transitions.preset.other.label': 'دیگر',
+    'runtime.sceneBuilder.transitions.preset.portal.description':
+      'گذار جادویی یا غیرمعمول به صحنه پیوندی.',
+    'runtime.sceneBuilder.transitions.preset.portal.label': 'پرتال',
+    'runtime.sceneBuilder.transitions.preset.stairs.description':
+      'مسیر عمودی به سطح یا ارتفاع دیگر.',
+    'runtime.sceneBuilder.transitions.preset.stairs.label': 'پله',
+    'runtime.sceneBuilder.transitions.presets': 'الگوهای گذار',
+    'runtime.sceneBuilder.transitions.title': 'گذارهای صحنه',
     'runtime.disabled.busy': 'در انتظار {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
       'ابتدا یک صحنه فعال بسازید یا بازیابی کنید.',

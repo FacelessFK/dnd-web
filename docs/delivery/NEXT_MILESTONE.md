@@ -187,6 +187,21 @@ frontend/i18n-only and do not change runtime protocol, command semantics,
 scene authority, combat automation, auth, DB requirements, or read-model
 recovery behavior.
 
+Status: implemented.
+
+### Slice 12: Persian Combatant / DM Override Helper Microcopy Polish
+
+Polish remaining Persian Combatant, action, and DM override helper copy in the
+Training Room flow by replacing mixed English/Persian helper terms such as
+`combatant`, `attack`, `target`, `damage`, `override`, `turn`, `movement`,
+`reaction`, and draft/prerequisite wording with localization-aware Persian
+equivalents while preserving canonical command IDs, `DM`, `HP`, `AC`,
+`monster/NPC`, dice notation, protocol/debug labels, and server-owned combat
+authority where they are intentionally stable. Keep this frontend/i18n-only
+and do not change runtime protocol, command semantics, target legality,
+damage automation, turn validation, auth, DB requirements, or read-model
+recovery behavior.
+
 Recommended effort: `medium`.
 
 ## Historical Note

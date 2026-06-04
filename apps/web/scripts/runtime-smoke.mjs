@@ -242,7 +242,7 @@ async function main() {
       })()`,
     });
     await expectVisibleButton(page, 'Run Training Room Skirmish', false);
-    await expectVisibleText(page, 'Scene Builder', false);
+    await expectVisibleText(page, ['Scene Builder', 'صحنه‌ساز'], false);
     await expectVisibleText(page, 'Monsters & NPCs', false);
     const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
 

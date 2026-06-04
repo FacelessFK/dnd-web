@@ -409,6 +409,17 @@ Implemented Phase 6 Slice 10:
 > SSE behavior, combat automation, auth, DB requirements, or read-model
 > recovery behavior.
 
+Implemented Phase 6 Slice 11:
+
+> Polish remaining Persian Debug panel and Scene Builder helper copy in the
+> Training Room flow by replacing mixed English/Persian helper terms such as
+> `Payload`, `protocol`, `debug`, `command`, `ledger`, `entity`, `cell`, and
+> draft/prerequisite wording with localization-aware Persian equivalents while
+> preserving canonical command IDs, protocol payload names, `SSE`, server URLs,
+> and debug labels where they are intentionally stable, without changing
+> runtime protocol, command semantics, scene authority, combat automation,
+> auth, DB requirements, or read-model recovery behavior.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -433,16 +444,17 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 11:
+Phase 6 Slice 12:
 
-> Polish remaining Persian Debug panel and Scene Builder helper copy in the
-> Training Room flow by replacing mixed English/Persian helper terms such as
-> `Payload`, `protocol`, `debug`, `command`, `ledger`, `entity`, `cell`, and
-> draft/prerequisite wording with localization-aware Persian equivalents while
-> preserving canonical command IDs, protocol payload names, `SSE`, server URLs,
-> and debug labels where they are intentionally stable. Keep this
-> frontend/i18n-only and do not change runtime protocol, command semantics,
-> scene authority, combat automation, auth, DB requirements, or read-model
-> recovery behavior.
+> Polish remaining Persian Combatant, action, and DM override helper copy in
+> the Training Room flow by replacing mixed English/Persian helper terms such
+> as `combatant`, `attack`, `target`, `damage`, `override`, `turn`,
+> `movement`, `reaction`, and draft/prerequisite wording with
+> localization-aware Persian equivalents while preserving canonical command
+> IDs, `DM`, `HP`, `AC`, `monster/NPC`, dice notation, protocol/debug labels,
+> and server-owned combat authority where they are intentionally stable. Keep
+> this frontend/i18n-only and do not change runtime protocol, command
+> semantics, target legality, damage automation, turn validation, auth, DB
+> requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.

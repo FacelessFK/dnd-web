@@ -100,7 +100,6 @@ import {
   getRuntimeStatusOverview,
   getRuntimeDisabledReasons,
   getSceneEntityDisplayCells,
-  getSceneEntityLabel,
   getTacticalBoardCellAfterKeyboardNavigation,
   getTacticalBoardCellAffordance,
   getTacticalBoardCellSizePixels,
@@ -184,6 +183,154 @@ type LastResponse = {
 
 type TurnUsageDraft = Encounter['currentTurnUsage'];
 type RuntimeTranslator = ReturnType<typeof useI18n>['t'];
+
+function getLocalizedSceneEntityTypeLabel(
+  type: (typeof sceneEntityTypeOptions)[number],
+  t: RuntimeTranslator,
+): string {
+  switch (type) {
+    case 'monster':
+      return t('runtime.sceneBuilder.entityType.monster');
+    case 'object':
+      return t('runtime.sceneBuilder.entityType.object');
+    case 'player_spawn':
+      return t('runtime.sceneBuilder.entityType.playerSpawn');
+    case 'terrain':
+      return t('runtime.sceneBuilder.entityType.terrain');
+  }
+}
+
+function getLocalizedSceneTransitionKindLabel(
+  kind: (typeof sceneTransitionKindOptions)[number],
+  t: RuntimeTranslator,
+): string {
+  switch (kind) {
+    case 'door':
+      return t('runtime.sceneBuilder.transitions.kind.door');
+    case 'gate':
+      return t('runtime.sceneBuilder.transitions.kind.gate');
+    case 'other':
+      return t('runtime.sceneBuilder.transitions.kind.other');
+    case 'portal':
+      return t('runtime.sceneBuilder.transitions.kind.portal');
+    case 'stairs':
+      return t('runtime.sceneBuilder.transitions.kind.stairs');
+  }
+}
+
+function getLocalizedSceneEntityPresetLabel(
+  presetId: SceneEntityPresetId,
+  t: RuntimeTranslator,
+): string {
+  switch (presetId) {
+    case 'cover':
+      return t('runtime.sceneBuilder.entityPreset.cover.label');
+    case 'hidden_prop':
+      return t('runtime.sceneBuilder.entityPreset.hiddenProp.label');
+    case 'marker':
+      return t('runtime.sceneBuilder.entityPreset.marker.label');
+    case 'monster_spawn':
+      return t('runtime.sceneBuilder.entityPreset.monsterSpawn.label');
+    case 'player_spawn':
+      return t('runtime.sceneBuilder.entityPreset.playerSpawn.label');
+    case 'wall':
+      return t('runtime.sceneBuilder.entityPreset.wall.label');
+  }
+}
+
+function getLocalizedSceneEntityPresetDescription(
+  presetId: SceneEntityPresetId,
+  t: RuntimeTranslator,
+): string {
+  switch (presetId) {
+    case 'cover':
+      return t('runtime.sceneBuilder.entityPreset.cover.description');
+    case 'hidden_prop':
+      return t('runtime.sceneBuilder.entityPreset.hiddenProp.description');
+    case 'marker':
+      return t('runtime.sceneBuilder.entityPreset.marker.description');
+    case 'monster_spawn':
+      return t('runtime.sceneBuilder.entityPreset.monsterSpawn.description');
+    case 'player_spawn':
+      return t('runtime.sceneBuilder.entityPreset.playerSpawn.description');
+    case 'wall':
+      return t('runtime.sceneBuilder.entityPreset.wall.description');
+  }
+}
+
+function getLocalizedSceneTransitionPresetLabel(
+  presetId: SceneTransitionPresetId,
+  t: RuntimeTranslator,
+): string {
+  switch (presetId) {
+    case 'door':
+      return t('runtime.sceneBuilder.transitions.preset.door.label');
+    case 'gate':
+      return t('runtime.sceneBuilder.transitions.preset.gate.label');
+    case 'other':
+      return t('runtime.sceneBuilder.transitions.preset.other.label');
+    case 'portal':
+      return t('runtime.sceneBuilder.transitions.preset.portal.label');
+    case 'stairs':
+      return t('runtime.sceneBuilder.transitions.preset.stairs.label');
+  }
+}
+
+function getLocalizedSceneTransitionPresetDescription(
+  presetId: SceneTransitionPresetId,
+  t: RuntimeTranslator,
+): string {
+  switch (presetId) {
+    case 'door':
+      return t('runtime.sceneBuilder.transitions.preset.door.description');
+    case 'gate':
+      return t('runtime.sceneBuilder.transitions.preset.gate.description');
+    case 'other':
+      return t('runtime.sceneBuilder.transitions.preset.other.description');
+    case 'portal':
+      return t('runtime.sceneBuilder.transitions.preset.portal.description');
+    case 'stairs':
+      return t('runtime.sceneBuilder.transitions.preset.stairs.description');
+  }
+}
+
+function getLocalizedSceneEntityLabel(
+  entity: Scene['entities'][number],
+  t: RuntimeTranslator,
+): string {
+  const flags = [
+    entity.transition
+      ? t('runtime.sceneBuilder.entityFlag.transitionTo', {
+          kind: getLocalizedSceneTransitionKindLabel(entity.transition.kind, t),
+          target:
+            entity.transition.targetLabel ??
+            entity.transition.targetSceneId ??
+            'unknown',
+        })
+      : null,
+    entity.blocksMovement
+      ? t('runtime.sceneBuilder.entityFlag.blocksMovement')
+      : null,
+    entity.blocksVision
+      ? t('runtime.sceneBuilder.entityFlag.blocksVision')
+      : null,
+    entity.hidden ? t('runtime.sceneBuilder.entityFlag.hidden') : null,
+  ].filter(Boolean);
+
+  return `${entity.name} (${getLocalizedSceneEntityTypeLabel(entity.type, t)}${
+    flags.length ? `, ${flags.join(', ')}` : ''
+  })`;
+}
+
+function getLocalizedSceneEntityPositionLabel(
+  entity: Scene['entities'][number],
+  t: RuntimeTranslator,
+): string {
+  return t('runtime.sceneBuilder.entityAt', {
+    cell: `${entity.position.x},${entity.position.y}`,
+    label: getLocalizedSceneEntityLabel(entity, t),
+  });
+}
 
 function getLocalizedActiveSceneGuidance({
   activeSceneId,
@@ -4470,6 +4617,7 @@ export function RuntimeCockpit() {
                 selectedEntity={selectedSceneEntity}
                 selectedEntityId={selectedSceneEntityId}
                 selectedCell={selectedCell}
+                t={t}
                 activateDisabledReason={activateSceneReason}
                 updateEntityDisabledReason={updateSceneEntityReason}
               />
@@ -4498,6 +4646,7 @@ export function RuntimeCockpit() {
                 selectedCell={selectedCell}
                 selectedTransition={selectedTransition}
                 selectedTransitionId={selectedTransitionId}
+                t={t}
                 transitionPresets={sceneTransitionPresets}
                 transitions={transitionSceneEntities}
                 updateDisabledReason={updateTransitionReason}
@@ -6990,6 +7139,7 @@ function SceneBuilderPanel({
   selectedCell,
   selectedEntity,
   selectedEntityId,
+  t,
   updateEntityDisabledReason,
 }: {
   activateDisabledReason: string | null;
@@ -7037,13 +7187,14 @@ function SceneBuilderPanel({
   selectedCell: Cell;
   selectedEntity?: Scene['entities'][number];
   selectedEntityId: string;
+  t: RuntimeTranslator;
   updateEntityDisabledReason: string | null;
 }) {
   return (
     <Panel
-      description="Create custom tactical scenes and add simple authoritative scene entities. No fake local map edits are applied."
-      eyebrow="DM-only"
-      title="Scene Builder"
+      description={t('runtime.sceneBuilder.description')}
+      eyebrow={t('runtime.overrides.eyebrow')}
+      title={t('runtime.sceneBuilder.title')}
       tone="dm"
     >
       <div className="grid gap-4">
@@ -7055,30 +7206,32 @@ function SceneBuilderPanel({
         </Notice>
 
         <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
-          <p className="text-sm font-bold text-amber-50">Scene draft</p>
+          <p className="text-sm font-bold text-amber-50">
+            {t('runtime.sceneBuilder.sceneDraft')}
+          </p>
           {sceneDraftErrors.length ? (
             <p className="text-xs leading-5 text-amber-200">
               {sceneDraftErrors.slice(0, 3).join(' ')}
             </p>
           ) : null}
           <LabeledInput
-            label="Scene name"
+            label={t('runtime.sceneBuilder.field.sceneName')}
             onChange={(value) => onSceneFieldChange('name', value)}
             value={sceneDraft.name}
           />
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput
-              label="Width"
+              label={t('runtime.sceneBuilder.field.width')}
               onChange={(value) => onSceneFieldChange('width', value)}
               value={sceneDraft.width}
             />
             <LabeledInput
-              label="Height"
+              label={t('runtime.sceneBuilder.field.height')}
               onChange={(value) => onSceneFieldChange('height', value)}
               value={sceneDraft.height}
             />
             <LabeledInput
-              label="Cell ft"
+              label={t('runtime.sceneBuilder.field.cellFeet')}
               onChange={(value) => onSceneFieldChange('cellSizeFeet', value)}
               value={sceneDraft.cellSizeFeet}
             />
@@ -7086,15 +7239,17 @@ function SceneBuilderPanel({
           <ActionButton
             disabled={Boolean(createDisabledReason)}
             disabledReason={createDisabledReason ?? undefined}
-            label="Create Custom Scene"
+            label={t('runtime.sceneBuilder.action.createScene')}
             onClick={onCreateScene}
           />
         </div>
 
         <div className="grid gap-3 rounded-2xl border border-amber-500/15 bg-black/25 p-3">
-          <p className="text-sm font-bold text-amber-50">Activate scene</p>
+          <p className="text-sm font-bold text-amber-50">
+            {t('runtime.sceneBuilder.activateScene')}
+          </p>
           <LabeledInput
-            label="Scene ID"
+            label={t('runtime.sceneBuilder.field.sceneId')}
             onChange={onActivationSceneIdChange}
             placeholder={scene?.id ?? 'scene_...'}
             value={activationSceneId}
@@ -7102,7 +7257,7 @@ function SceneBuilderPanel({
           <ActionButton
             disabled={Boolean(activateDisabledReason)}
             disabledReason={activateDisabledReason ?? undefined}
-            label="Activate Scene"
+            label={t('runtime.sceneBuilder.action.activateScene')}
             onClick={onActivateScene}
             variant="secondary"
           />
@@ -7110,10 +7265,13 @@ function SceneBuilderPanel({
 
         <div className="grid gap-3 rounded-2xl border border-orange-300/20 bg-orange-950/15 p-3">
           <div>
-            <p className="text-sm font-bold text-amber-50">Place entity</p>
+            <p className="text-sm font-bold text-amber-50">
+              {t('runtime.sceneBuilder.placeEntity')}
+            </p>
             <p className="mt-1 text-xs leading-5 text-amber-100/60">
-              Target cell {selectedCell.x},{selectedCell.y}. Placement is
-              persisted only after `place_entity_in_scene` succeeds.
+              {t('runtime.sceneBuilder.placeEntityDetail', {
+                cell: `${selectedCell.x},${selectedCell.y}`,
+              })}
             </p>
           </div>
           {entityDraftErrors.length ? (
@@ -7123,7 +7281,7 @@ function SceneBuilderPanel({
           ) : null}
           <div className="grid gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
-              Entity palette
+              {t('runtime.sceneBuilder.entityPalette')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               {entityPresets.map((preset) => (
@@ -7131,14 +7289,14 @@ function SceneBuilderPanel({
                   className="min-h-16 rounded-xl border border-amber-300/15 bg-[#241a12] px-3 py-2 text-left transition hover:border-amber-200/45 hover:bg-[#322318] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
                   key={preset.id}
                   onClick={() => onEntityPresetSelect(preset.id)}
-                  title={preset.description}
+                  title={getLocalizedSceneEntityPresetDescription(preset.id, t)}
                   type="button"
                 >
                   <span className="block text-sm font-bold text-amber-50">
-                    {preset.label}
+                    {getLocalizedSceneEntityPresetLabel(preset.id, t)}
                   </span>
                   <span className="mt-1 block text-xs capitalize text-amber-100/55">
-                    {preset.draft.type.replaceAll('_', ' ')} ·{' '}
+                    {getLocalizedSceneEntityTypeLabel(preset.draft.type, t)} ·{' '}
                     {preset.draft.footprintWidth}x{preset.draft.footprintHeight}
                   </span>
                 </button>
@@ -7146,27 +7304,27 @@ function SceneBuilderPanel({
             </div>
           </div>
           <SelectField
-            label="Entity type"
+            label={t('runtime.sceneBuilder.field.entityType')}
             onChange={(value) => onEntityFieldChange('type', value)}
             options={sceneEntityTypeOptions.map((entityType) => ({
-              label: entityType.replaceAll('_', ' '),
+              label: getLocalizedSceneEntityTypeLabel(entityType, t),
               value: entityType,
             }))}
             value={entityDraft.type}
           />
           <LabeledInput
-            label="Name / label"
+            label={t('runtime.sceneBuilder.field.name')}
             onChange={(value) => onEntityFieldChange('name', value)}
             value={entityDraft.name}
           />
           <div className="grid grid-cols-2 gap-2">
             <LabeledInput
-              label="Footprint W"
+              label={t('runtime.sceneBuilder.field.footprintWidth')}
               onChange={(value) => onEntityFieldChange('footprintWidth', value)}
               value={entityDraft.footprintWidth}
             />
             <LabeledInput
-              label="Footprint H"
+              label={t('runtime.sceneBuilder.field.footprintHeight')}
               onChange={(value) =>
                 onEntityFieldChange('footprintHeight', value)
               }
@@ -7176,28 +7334,28 @@ function SceneBuilderPanel({
           <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
             <CheckboxField
               checked={entityDraft.blocksMovement}
-              label="Blocks movement"
+              label={t('runtime.sceneBuilder.flag.blocksMovement')}
               onChange={(checked) =>
                 onEntityFlagChange('blocksMovement', checked)
               }
             />
             <CheckboxField
               checked={entityDraft.blocksVision}
-              label="Blocks vision"
+              label={t('runtime.sceneBuilder.flag.blocksVision')}
               onChange={(checked) =>
                 onEntityFlagChange('blocksVision', checked)
               }
             />
             <CheckboxField
               checked={entityDraft.hidden}
-              label="Hidden from map styling"
+              label={t('runtime.sceneBuilder.flag.hiddenMap')}
               onChange={(checked) => onEntityFlagChange('hidden', checked)}
             />
           </div>
           <ActionButton
             disabled={Boolean(placeEntityDisabledReason)}
             disabledReason={placeEntityDisabledReason ?? undefined}
-            label="Place Entity"
+            label={t('runtime.sceneBuilder.action.placeEntity')}
             onClick={onPlaceEntity}
             variant="secondary"
           />
@@ -7206,34 +7364,33 @@ function SceneBuilderPanel({
         <div className="grid gap-3 rounded-2xl border border-amber-300/20 bg-black/25 p-3">
           <div>
             <p className="text-sm font-bold text-amber-50">
-              Edit passive entity
+              {t('runtime.sceneBuilder.editEntity')}
             </p>
             <p className="mt-1 text-xs leading-5 text-amber-100/60">
-              Combatants are intentionally excluded; use the Monster/NPC panel
-              for combatant HP, movement, and attacks.
+              {t('runtime.sceneBuilder.editEntityDetail')}
             </p>
           </div>
           {passiveEntities.length ? (
             <SelectField
-              label="Passive entity"
+              label={t('runtime.sceneBuilder.field.passiveEntity')}
               onChange={onSelectEntity}
               options={passiveEntities.map((entity) => ({
-                label: `${entity.name} (${entity.type}) at ${entity.position.x},${entity.position.y}`,
+                label: getLocalizedSceneEntityPositionLabel(entity, t),
                 value: entity.id,
               }))}
               value={selectedEntityId}
             />
           ) : (
             <EmptyState
-              detail="Place an object, terrain marker, or spawn marker before editing passive map entities."
-              title="No passive entities"
+              detail={t('runtime.sceneBuilder.noPassiveEntities.detail')}
+              title={t('runtime.sceneBuilder.noPassiveEntities.title')}
             />
           )}
           {selectedEntity ? (
             <div className="grid gap-3">
               <StatusRow
-                label="Selected"
-                value={`${selectedEntity.name} at ${selectedEntity.position.x},${selectedEntity.position.y}`}
+                label={t('runtime.sceneBuilder.field.selected')}
+                value={getLocalizedSceneEntityPositionLabel(selectedEntity, t)}
               />
               {entityEditDraftErrors.length ? (
                 <p className="text-xs leading-5 text-amber-200">
@@ -7241,29 +7398,29 @@ function SceneBuilderPanel({
                 </p>
               ) : null}
               <SelectField
-                label="Entity type"
+                label={t('runtime.sceneBuilder.field.entityType')}
                 onChange={(value) => onEditEntityFieldChange('type', value)}
                 options={sceneEntityTypeOptions.map((entityType) => ({
-                  label: entityType.replaceAll('_', ' '),
+                  label: getLocalizedSceneEntityTypeLabel(entityType, t),
                   value: entityType,
                 }))}
                 value={entityEditDraft.type}
               />
               <LabeledInput
-                label="Name / label"
+                label={t('runtime.sceneBuilder.field.name')}
                 onChange={(value) => onEditEntityFieldChange('name', value)}
                 value={entityEditDraft.name}
               />
               <div className="grid grid-cols-2 gap-2">
                 <LabeledInput
-                  label="Footprint W"
+                  label={t('runtime.sceneBuilder.field.footprintWidth')}
                   onChange={(value) =>
                     onEditEntityFieldChange('footprintWidth', value)
                   }
                   value={entityEditDraft.footprintWidth}
                 />
                 <LabeledInput
-                  label="Footprint H"
+                  label={t('runtime.sceneBuilder.field.footprintHeight')}
                   onChange={(value) =>
                     onEditEntityFieldChange('footprintHeight', value)
                   }
@@ -7273,21 +7430,21 @@ function SceneBuilderPanel({
               <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
                 <CheckboxField
                   checked={entityEditDraft.blocksMovement}
-                  label="Blocks movement"
+                  label={t('runtime.sceneBuilder.flag.blocksMovement')}
                   onChange={(checked) =>
                     onEditEntityFlagChange('blocksMovement', checked)
                   }
                 />
                 <CheckboxField
                   checked={entityEditDraft.blocksVision}
-                  label="Blocks vision"
+                  label={t('runtime.sceneBuilder.flag.blocksVision')}
                   onChange={(checked) =>
                     onEditEntityFlagChange('blocksVision', checked)
                   }
                 />
                 <CheckboxField
                   checked={entityEditDraft.hidden}
-                  label="Hidden from map styling"
+                  label={t('runtime.sceneBuilder.flag.hiddenMap')}
                   onChange={(checked) =>
                     onEditEntityFlagChange('hidden', checked)
                   }
@@ -7297,21 +7454,23 @@ function SceneBuilderPanel({
                 <ActionButton
                   disabled={Boolean(updateEntityDisabledReason)}
                   disabledReason={updateEntityDisabledReason ?? undefined}
-                  label="Update"
+                  label={t('runtime.sceneBuilder.action.update')}
                   onClick={onUpdateEntity}
                   variant="secondary"
                 />
                 <ActionButton
                   disabled={Boolean(repositionEntityDisabledReason)}
                   disabledReason={repositionEntityDisabledReason ?? undefined}
-                  label={`Move to ${selectedCell.x},${selectedCell.y}`}
+                  label={t('runtime.sceneBuilder.action.moveTo', {
+                    cell: `${selectedCell.x},${selectedCell.y}`,
+                  })}
                   onClick={onRepositionEntity}
                   variant="secondary"
                 />
                 <ActionButton
                   disabled={Boolean(deleteEntityDisabledReason)}
                   disabledReason={deleteEntityDisabledReason ?? undefined}
-                  label="Delete"
+                  label={t('runtime.sceneBuilder.action.delete')}
                   onClick={onDeleteEntity}
                   variant="danger"
                 />
@@ -7321,15 +7480,14 @@ function SceneBuilderPanel({
           {passiveEntities.length ? (
             <div className="grid gap-2 text-xs text-amber-100/70">
               <p className="font-bold uppercase tracking-[0.14em] text-amber-300/70">
-                Passive entities
+                {t('runtime.sceneBuilder.passiveEntities')}
               </p>
               {passiveEntities.slice(-5).map((entity) => (
                 <div
                   className="rounded-xl border border-amber-500/10 bg-black/20 px-3 py-2"
                   key={entity.id}
                 >
-                  {getSceneEntityLabel(entity)} at {entity.position.x},
-                  {entity.position.y}
+                  {getLocalizedSceneEntityPositionLabel(entity, t)}
                 </div>
               ))}
             </div>
@@ -7362,6 +7520,7 @@ function SceneTransitionPanel({
   selectedCell,
   selectedTransition,
   selectedTransitionId,
+  t,
   transitionPresets,
   transitions,
   updateDisabledReason,
@@ -7413,30 +7572,33 @@ function SceneTransitionPanel({
   selectedCell: Cell;
   selectedTransition?: Scene['entities'][number];
   selectedTransitionId: string;
+  t: RuntimeTranslator;
   transitionPresets: readonly SceneTransitionPreset[];
   transitions: Scene['entities'];
   updateDisabledReason: string | null;
 }) {
   const targetOptions = [
-    { label: 'Choose a known scene...', value: '' },
+    { label: t('runtime.sceneBuilder.chooseKnownScene'), value: '' },
     ...sceneOptions,
   ];
 
   return (
     <Panel
-      description="Author simple linked markers such as doors, stairs, portals, and gates. Only the DM can activate a transition."
-      eyebrow="DM-only"
-      title="Scene Transitions"
+      description={t('runtime.sceneBuilder.transitions.description')}
+      eyebrow={t('runtime.overrides.eyebrow')}
+      title={t('runtime.sceneBuilder.transitions.title')}
       tone="dm"
     >
       <div className="grid gap-4">
         <div className="grid gap-3 rounded-2xl border border-violet-300/20 bg-violet-950/20 p-3">
           <div>
-            <p className="text-sm font-bold text-amber-50">Create transition</p>
+            <p className="text-sm font-bold text-amber-50">
+              {t('runtime.sceneBuilder.transitions.create')}
+            </p>
             <p className="mt-1 text-xs leading-5 text-amber-100/60">
-              Target cell {selectedCell.x},{selectedCell.y}. Linked activation
-              changes the active scene only after the server accepts the
-              command.
+              {t('runtime.sceneBuilder.transitions.createDetail', {
+                cell: `${selectedCell.x},${selectedCell.y}`,
+              })}
             </p>
           </div>
           {draftErrors.length ? (
@@ -7446,7 +7608,7 @@ function SceneTransitionPanel({
           ) : null}
           <div className="grid gap-2">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
-              Transition presets
+              {t('runtime.sceneBuilder.transitions.presets')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               {transitionPresets.map((preset) => (
@@ -7454,14 +7616,18 @@ function SceneTransitionPanel({
                   className="min-h-16 rounded-xl border border-violet-200/15 bg-[#22162a] px-3 py-2 text-left transition hover:border-violet-200/45 hover:bg-[#2f1e3b] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
                   key={preset.id}
                   onClick={() => onDraftPresetSelect(preset.id)}
-                  title={preset.description}
+                  title={getLocalizedSceneTransitionPresetDescription(
+                    preset.id,
+                    t,
+                  )}
                   type="button"
                 >
                   <span className="block text-sm font-bold text-amber-50">
-                    {preset.label}
+                    {getLocalizedSceneTransitionPresetLabel(preset.id, t)}
                   </span>
                   <span className="mt-1 block text-xs capitalize text-amber-100/55">
-                    {preset.draft.kind} · {preset.draft.footprintWidth}x
+                    {getLocalizedSceneTransitionKindLabel(preset.draft.kind, t)}{' '}
+                    · {preset.draft.footprintWidth}x
                     {preset.draft.footprintHeight}
                   </span>
                 </button>
@@ -7470,47 +7636,47 @@ function SceneTransitionPanel({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <SelectField
-              label="Kind"
+              label={t('runtime.sceneBuilder.field.transitionKind')}
               onChange={(value) => onDraftFieldChange('kind', value)}
               options={sceneTransitionKindOptions.map((kind) => ({
-                label: kind,
+                label: getLocalizedSceneTransitionKindLabel(kind, t),
                 value: kind,
               }))}
               value={draft.kind}
             />
             <LabeledInput
-              label="Name"
+              label={t('runtime.sceneBuilder.field.name')}
               onChange={(value) => onDraftFieldChange('name', value)}
               value={draft.name}
             />
           </div>
           <SelectField
-            label="Known target scene"
+            label={t('runtime.sceneBuilder.field.transitionTargetScene')}
             onChange={(value) => onDraftFieldChange('targetSceneId', value)}
             options={targetOptions}
             value={draft.targetSceneId}
           />
           <div className="grid grid-cols-2 gap-2">
             <LabeledInput
-              label="Target scene ID"
+              label={t('runtime.sceneBuilder.field.transitionTargetSceneId')}
               onChange={(value) => onDraftFieldChange('targetSceneId', value)}
               placeholder="scene_..."
               value={draft.targetSceneId}
             />
             <LabeledInput
-              label="Target label"
+              label={t('runtime.sceneBuilder.field.transitionTargetLabel')}
               onChange={(value) => onDraftFieldChange('targetLabel', value)}
               value={draft.targetLabel}
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <LabeledInput
-              label="Footprint W"
+              label={t('runtime.sceneBuilder.field.footprintWidth')}
               onChange={(value) => onDraftFieldChange('footprintWidth', value)}
               value={draft.footprintWidth}
             />
             <LabeledInput
-              label="Footprint H"
+              label={t('runtime.sceneBuilder.field.footprintHeight')}
               onChange={(value) => onDraftFieldChange('footprintHeight', value)}
               value={draft.footprintHeight}
             />
@@ -7518,31 +7684,31 @@ function SceneTransitionPanel({
           <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
             <CheckboxField
               checked={draft.blocksMovement}
-              label="Blocks movement"
+              label={t('runtime.sceneBuilder.flag.blocksMovement')}
               onChange={(checked) =>
                 onDraftFlagChange('blocksMovement', checked)
               }
             />
             <CheckboxField
               checked={draft.blocksVision}
-              label="Blocks vision"
+              label={t('runtime.sceneBuilder.flag.blocksVision')}
               onChange={(checked) => onDraftFlagChange('blocksVision', checked)}
             />
             <CheckboxField
               checked={draft.hidden}
-              label="Hidden from player map styling"
+              label={t('runtime.sceneBuilder.flag.hiddenPlayerMap')}
               onChange={(checked) => onDraftFlagChange('hidden', checked)}
             />
           </div>
           <TextAreaField
-            label="Notes"
+            label={t('runtime.sceneBuilder.field.notes')}
             onChange={(value) => onDraftFieldChange('notes', value)}
             value={draft.notes}
           />
           <ActionButton
             disabled={Boolean(createDisabledReason)}
             disabledReason={createDisabledReason ?? undefined}
-            label="Create Transition"
+            label={t('runtime.sceneBuilder.transitions.action.create')}
             onClick={onCreate}
             variant="secondary"
           />
@@ -7551,34 +7717,36 @@ function SceneTransitionPanel({
         <div className="grid gap-3 rounded-2xl border border-violet-300/20 bg-black/25 p-3">
           <div>
             <p className="text-sm font-bold text-amber-50">
-              Edit linked transition
+              {t('runtime.sceneBuilder.transitions.edit')}
             </p>
             <p className="mt-1 text-xs leading-5 text-amber-100/60">
-              Passive scene entities and combatants are intentionally separate.
-              Transition activation remains DM-controlled.
+              {t('runtime.sceneBuilder.transitions.editDetail')}
             </p>
           </div>
           {transitions.length ? (
             <SelectField
-              label="Transition node"
+              label={t('runtime.sceneBuilder.field.transitionNode')}
               onChange={onSelectTransition}
               options={transitions.map((transition) => ({
-                label: getSceneEntityLabel(transition),
+                label: getLocalizedSceneEntityPositionLabel(transition, t),
                 value: transition.id,
               }))}
               value={selectedTransitionId}
             />
           ) : (
             <EmptyState
-              detail="Create a transition node before editing or activating linked scenes."
-              title="No transition nodes"
+              detail={t('runtime.sceneBuilder.transitions.noNodes.detail')}
+              title={t('runtime.sceneBuilder.transitions.noNodes.title')}
             />
           )}
           {selectedTransition ? (
             <div className="grid gap-3">
               <StatusRow
-                label="Selected"
-                value={`${selectedTransition.name} at ${selectedTransition.position.x},${selectedTransition.position.y}`}
+                label={t('runtime.sceneBuilder.field.selected')}
+                value={getLocalizedSceneEntityPositionLabel(
+                  selectedTransition,
+                  t,
+                )}
               />
               {editDraftErrors.length ? (
                 <p className="text-xs leading-5 text-amber-200">
@@ -7587,29 +7755,31 @@ function SceneTransitionPanel({
               ) : null}
               <div className="grid grid-cols-2 gap-2">
                 <SelectField
-                  label="Kind"
+                  label={t('runtime.sceneBuilder.field.transitionKind')}
                   onChange={(value) => onEditFieldChange('kind', value)}
                   options={sceneTransitionKindOptions.map((kind) => ({
-                    label: kind,
+                    label: getLocalizedSceneTransitionKindLabel(kind, t),
                     value: kind,
                   }))}
                   value={editDraft.kind}
                 />
                 <LabeledInput
-                  label="Name"
+                  label={t('runtime.sceneBuilder.field.name')}
                   onChange={(value) => onEditFieldChange('name', value)}
                   value={editDraft.name}
                 />
               </div>
               <SelectField
-                label="Known target scene"
+                label={t('runtime.sceneBuilder.field.transitionTargetScene')}
                 onChange={(value) => onEditFieldChange('targetSceneId', value)}
                 options={targetOptions}
                 value={editDraft.targetSceneId}
               />
               <div className="grid grid-cols-2 gap-2">
                 <LabeledInput
-                  label="Target scene ID"
+                  label={t(
+                    'runtime.sceneBuilder.field.transitionTargetSceneId',
+                  )}
                   onChange={(value) =>
                     onEditFieldChange('targetSceneId', value)
                   }
@@ -7617,21 +7787,21 @@ function SceneTransitionPanel({
                   value={editDraft.targetSceneId}
                 />
                 <LabeledInput
-                  label="Target label"
+                  label={t('runtime.sceneBuilder.field.transitionTargetLabel')}
                   onChange={(value) => onEditFieldChange('targetLabel', value)}
                   value={editDraft.targetLabel}
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <LabeledInput
-                  label="Footprint W"
+                  label={t('runtime.sceneBuilder.field.footprintWidth')}
                   onChange={(value) =>
                     onEditFieldChange('footprintWidth', value)
                   }
                   value={editDraft.footprintWidth}
                 />
                 <LabeledInput
-                  label="Footprint H"
+                  label={t('runtime.sceneBuilder.field.footprintHeight')}
                   onChange={(value) =>
                     onEditFieldChange('footprintHeight', value)
                   }
@@ -7641,26 +7811,26 @@ function SceneTransitionPanel({
               <div className="grid gap-2 rounded-2xl border border-amber-500/10 bg-black/20 p-3">
                 <CheckboxField
                   checked={editDraft.blocksMovement}
-                  label="Blocks movement"
+                  label={t('runtime.sceneBuilder.flag.blocksMovement')}
                   onChange={(checked) =>
                     onEditFlagChange('blocksMovement', checked)
                   }
                 />
                 <CheckboxField
                   checked={editDraft.blocksVision}
-                  label="Blocks vision"
+                  label={t('runtime.sceneBuilder.flag.blocksVision')}
                   onChange={(checked) =>
                     onEditFlagChange('blocksVision', checked)
                   }
                 />
                 <CheckboxField
                   checked={editDraft.hidden}
-                  label="Hidden from player map styling"
+                  label={t('runtime.sceneBuilder.flag.hiddenPlayerMap')}
                   onChange={(checked) => onEditFlagChange('hidden', checked)}
                 />
               </div>
               <TextAreaField
-                label="Notes"
+                label={t('runtime.sceneBuilder.field.notes')}
                 onChange={(value) => onEditFieldChange('notes', value)}
                 value={editDraft.notes}
               />
@@ -7668,20 +7838,20 @@ function SceneTransitionPanel({
                 <ActionButton
                   disabled={Boolean(updateDisabledReason)}
                   disabledReason={updateDisabledReason ?? undefined}
-                  label="Update"
+                  label={t('runtime.sceneBuilder.action.update')}
                   onClick={onUpdate}
                   variant="secondary"
                 />
                 <ActionButton
                   disabled={Boolean(activateDisabledReason)}
                   disabledReason={activateDisabledReason ?? undefined}
-                  label="Activate Link"
+                  label={t('runtime.sceneBuilder.transitions.action.activate')}
                   onClick={onActivate}
                 />
                 <ActionButton
                   disabled={Boolean(deleteDisabledReason)}
                   disabledReason={deleteDisabledReason ?? undefined}
-                  label="Delete"
+                  label={t('runtime.sceneBuilder.action.delete')}
                   onClick={onDelete}
                   variant="danger"
                 />
