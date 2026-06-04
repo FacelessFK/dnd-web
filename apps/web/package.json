@@ -7,6 +7,7 @@
     "build": "next build",
     "test": "node --import tsx --test \"lib/*.test.ts\"",
     "test:smoke": "node scripts/runtime-smoke.mjs",
+    "test:smoke:two-profile": "node scripts/runtime-two-profile-smoke.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit"
   },

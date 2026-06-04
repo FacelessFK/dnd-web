@@ -120,9 +120,22 @@ export function getStoredCockpitSessionIdExpression(storageKey) {
 
 export function getSessionInputAssignmentExpression(sessionId) {
   return `(() => {
-    const input = [...document.querySelectorAll('input')].find(
-      (candidate) => candidate.getAttribute('placeholder')?.includes('Paste an existing session ID'),
-    );
+    const sessionLabels = ['Session ID', 'شناسه Session'];
+    const sessionPlaceholders = [
+      'Paste an existing session ID',
+      'شناسه Session موجود',
+    ];
+    const input =
+      [...document.querySelectorAll('label')]
+        .find((candidate) =>
+          sessionLabels.some((label) => candidate.textContent?.includes(label)),
+        )
+        ?.querySelector('input') ??
+      [...document.querySelectorAll('input')].find((candidate) =>
+        sessionPlaceholders.some((placeholder) =>
+          candidate.getAttribute('placeholder')?.includes(placeholder),
+        ),
+      );
 
     if (!input) {
       return false;

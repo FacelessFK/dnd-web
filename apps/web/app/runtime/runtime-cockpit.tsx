@@ -4406,9 +4406,12 @@ export function RuntimeCockpit() {
               </Panel>
             ) : (
               <Panel
-                description={playerNextStep.detail}
+                description={getLocalizedPlayerNextStepDetail(
+                  playerNextStep,
+                  t,
+                )}
                 eyebrow={t('runtime.playerReadiness.eyebrow')}
-                title={playerNextStep.title}
+                title={getLocalizedPlayerNextStepTitle(playerNextStep, t)}
                 tone="player"
               >
                 <div className="grid gap-3">

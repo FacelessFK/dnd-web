@@ -128,3 +128,61 @@ Remaining cautions:
   IDs or terms, such as `Session ID`, `runtime`, and server URLs.
 - DB-backed saved Character Library submission was still not tested in this
   pass.
+
+## True Two-Profile Smoke QA
+
+- Date: 2026-05-29
+- Branch/build: local working tree after true two-profile handoff smoke
+- Persistence mode: in-memory
+- Automation: `node scripts/runtime-two-profile-smoke.mjs`
+- Browser/profile shape: two separate headless Chrome processes with distinct
+  `user-data-dir` values and separate DevTools ports
+- Session ID: `GH546C`
+- Runtime code changed during run: yes, frontend/i18n plus smoke coverage only
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, and Character Library persistence changed or claimed: no
+
+Observed pass:
+
+- DM profile loaded `/runtime`, stayed in DM mode, ran **Training Room
+  Skirmish**, loaded **Training Room**, **Aria**, **Borin**, and the tactical
+  grid, then started the encounter.
+- Player profile loaded `/runtime` in a separate Chrome profile, switched to
+  Player mode, pasted the DM session ID, joined the table, recovered read
+  models, and saw **Aria**, the tactical grid, and readiness state.
+- Player profile did not expose **Run Training Room Skirmish**, **Scene
+  Builder**, or **Monsters & NPCs** while DM profile still exposed DM combatant
+  controls.
+- Player **Local Reset** cleared only the player browser's local session state;
+  the DM profile still showed the same Training Room session and character.
+- Re-pasting the same session ID in the Player profile after Local Reset
+  recovered **Aria** again from server-owned read models.
+
+Fixes applied from this pass:
+
+- Added a repeatable two-profile smoke script for the Training Room handoff.
+- Made session input assignment diagnostics work with both English and Persian
+  Session ID placeholders.
+- Kept the existing one-profile runtime smoke stable by forcing in-memory
+  server startup, pinning its test profile to English locale, and narrowing its
+  Local Reset stale-content assertion to actual recovered character names.
+- Localized high-traffic Persian session controls for handoff and recovery.
+- Localized the Player-side next-step panel title and description, matching the
+  already-localized Player notice.
+- Re-ran closure validation on 2026-06-04 with
+  `corepack pnpm --filter @dnd/web test:smoke` and
+  `corepack pnpm --filter @dnd/web test:smoke:two-profile`; the two-profile
+  run passed with session `HF4GNL`.
+- Made the smoke runners discover Chrome/Edge on Windows without requiring
+  `RUNTIME_SMOKE_BROWSER`, and made temporary Chrome profile cleanup tolerate
+  short-lived Windows file locks.
+
+Remaining cautions:
+
+- This validates separate browser profiles against in-memory server state, not
+  DB-backed saved Character Library submission.
+- It does not add or claim replay/catch-up, multi-process SSE semantics,
+  production auth, monster AI, or broader combat automation.
+- A live two-human table pass is still useful for subjective clarity, but the
+  browser-local reset and session handoff mechanics now have repeatable
+  automated coverage.

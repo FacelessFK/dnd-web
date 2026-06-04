@@ -4,23 +4,22 @@ import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import {
   formatSmokeStep,
   formatSmokeWaitFailure,
-  getAbsentVisibleTextsOutsideSelectorExpression,
   getPageDiagnosticsExpression,
-  getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(scriptDir, '../../..');
-const corepackCommand =
-  process.platform === 'win32' ? 'corepack.cmd' : 'corepack';
+const webDir = resolve(scriptDir, '..');
+const repoRoot = resolve(webDir, '../..');
+const serverDir = resolve(repoRoot, 'apps/server');
+const nextBin = resolve(webDir, 'node_modules/next/dist/bin/next');
 const storageKey = 'dnd-runtime-cockpit';
 const smokeTimeoutMs = Number.parseInt(
   process.env.RUNTIME_SMOKE_TIMEOUT_MS ?? '120000',
@@ -28,22 +27,22 @@ const smokeTimeoutMs = Number.parseInt(
 );
 
 const processLogs = new Map();
+const startedProcesses = [];
+const profileDirs = [];
 const smokeStepLabels = [
   'starting authoritative server',
   'starting Next runtime UI',
-  'launching headless browser',
-  'running named DM demo scenario',
-  'starting encounter from UI',
-  'validating recovery after reload',
-  'validating player mode guardrails',
-  'validating local reset stays local',
+  'launching separate DM and Player browser profiles',
+  'building Training Room in DM profile',
+  'starting encounter in DM profile',
+  'joining and recovering table in Player profile',
+  'validating Player profile guardrails',
+  'validating Player local reset does not affect DM profile',
 ];
-const startedProcesses = [];
-let chromeUserDataDir;
 let smokeStepIndex = 0;
 
 main().catch(async (error) => {
-  console.error('\n[runtime-smoke] failed');
+  console.error('\n[runtime-two-profile-smoke] failed');
   console.error(error instanceof Error ? error.stack : error);
   printProcessLogs();
   await cleanup();
@@ -55,7 +54,7 @@ async function main() {
 
   if (!browserPath) {
     throw new Error(
-      'No Chrome/Chromium executable found. Set RUNTIME_SMOKE_BROWSER=/path/to/chrome to run the browser smoke test.',
+      'No Chrome/Chromium executable found. Set RUNTIME_SMOKE_BROWSER=/path/to/chrome to run the two-profile browser smoke test.',
     );
   }
 
@@ -67,272 +66,186 @@ async function main() {
 
   const serverPort = await getFreePort();
   const webPort = await getFreePort();
-  const debugPort = await getFreePort();
+  const dmDebugPort = await getFreePort();
+  const playerDebugPort = await getFreePort();
   const serverUrl = `http://127.0.0.1:${serverPort}`;
   const webOrigin = `http://127.0.0.1:${webPort}`;
-  const runtimeUrl = `http://127.0.0.1:${webPort}/runtime`;
+  const runtimeUrl = `${webOrigin}/runtime`;
 
   logSmokeStep('starting authoritative server');
-  const serverProcess = startProcess(
+  startProcess(
     'server',
-    corepackCommand,
-    ['pnpm', '--filter', '@dnd/server', 'dev'],
+    process.execPath,
+    ['--import', 'tsx', 'src/index.ts'],
     {
-      NEXT_PUBLIC_APP_URL: webOrigin,
-      SERVER_PERSISTENCE_MODE: 'in-memory',
-      SERVER_PORT: String(serverPort),
+      cwd: serverDir,
+      env: {
+        NEXT_PUBLIC_APP_URL: webOrigin,
+        SERVER_PERSISTENCE_MODE: 'in-memory',
+        SERVER_PORT: String(serverPort),
+      },
     },
   );
-
   await waitForHttp(`${serverUrl}/`, {
     label: 'server root',
     timeoutMs: smokeTimeoutMs,
   });
 
   logSmokeStep('starting Next runtime UI');
-  const webProcess = startProcess(
+  startProcess(
     'web',
-    corepackCommand,
-    [
-      'pnpm',
-      '--filter',
-      '@dnd/web',
-      'exec',
-      'next',
-      'dev',
-      '-p',
-      String(webPort),
-      '-H',
-      '127.0.0.1',
-    ],
+    process.execPath,
+    [nextBin, 'dev', '-p', String(webPort), '-H', '127.0.0.1'],
     {
-      NEXT_PUBLIC_SERVER_URL: serverUrl,
+      cwd: webDir,
+      env: {
+        NEXT_PUBLIC_SERVER_URL: serverUrl,
+      },
     },
   );
-
   await waitForHttp(runtimeUrl, {
     label: '/runtime',
     timeoutMs: smokeTimeoutMs,
   });
 
-  logSmokeStep('launching headless browser');
-  const browserProcess = launchBrowser(browserPath, debugPort);
-  await waitForHttp(`http://127.0.0.1:${debugPort}/json/version`, {
-    label: 'Chrome DevTools',
-    timeoutMs: smokeTimeoutMs,
-  });
+  logSmokeStep('launching separate DM and Player browser profiles');
+  launchBrowserProfile('dm-chrome', browserPath, dmDebugPort);
+  launchBrowserProfile('player-chrome', browserPath, playerDebugPort);
+  await Promise.all([
+    waitForHttp(`http://127.0.0.1:${dmDebugPort}/json/version`, {
+      label: 'DM Chrome DevTools',
+      timeoutMs: smokeTimeoutMs,
+    }),
+    waitForHttp(`http://127.0.0.1:${playerDebugPort}/json/version`, {
+      label: 'Player Chrome DevTools',
+      timeoutMs: smokeTimeoutMs,
+    }),
+  ]);
 
-  const page = await createCdpPage(debugPort, runtimeUrl);
+  const dmPage = await createCdpPage(dmDebugPort, runtimeUrl);
+  const playerPage = await createCdpPage(playerDebugPort, runtimeUrl);
 
   try {
-    await page.send('Runtime.enable');
-    await page.send('Page.enable');
+    await Promise.all([enablePage(dmPage), enablePage(playerPage)]);
 
+    await waitForRuntimeShell(dmPage, 'DM runtime shell');
+    await waitForCockpitHydrated(dmPage);
+    await clickButtonIfEnabled(dmPage, ['Local Reset', 'بازنشانی محلی']);
+    await waitForNoStoredSession(dmPage);
+    await clickButton(dmPage, ['DM Mode', 'حالت DM']);
+
+    logSmokeStep('building Training Room in DM profile');
     await waitForAnyText(
-      page,
-      ['Runtime War Table', 'میز نبرد زنده'],
-      'runtime shell',
+      dmPage,
+      ['Training Room Skirmish'],
+      'named demo scenario',
     );
-    await page.evaluate(`(() => {
-      localStorage.setItem('dnd-web.locale', 'en');
-      window.location.reload();
-      return true;
-    })()`);
-    await waitForText(page, 'Runtime War Table', 'English runtime shell');
-    await waitForCockpitHydrated(page);
-    await clickButtonIfEnabled(page, 'Local Reset');
-    await waitForNoStoredSession(page);
-    await clickButton(page, 'DM Mode');
-
-    logSmokeStep('running named DM demo scenario');
-    await waitForText(page, 'Training Room Skirmish', 'named demo scenario');
-    await clickButton(page, 'Run Training Room Skirmish');
-    await waitForCockpitState(page, (state) =>
+    await clickButton(dmPage, [
+      'Run Training Room Skirmish',
+      'اجرای Training Room Skirmish',
+    ]);
+    await waitForCockpitState(dmPage, (state) =>
       Boolean(state?.sessionId && state?.sceneId),
     );
-    await waitForText(page, 'Training Room', 'active scene after demo setup');
-    await waitForText(page, 'Aria', 'sample character Aria');
-    await waitForText(page, 'Borin', 'sample character Borin');
-    await waitForText(page, 'Tactical Grid', 'tactical grid');
-
-    logSmokeStep('starting encounter from UI');
-    await clickButton(page, 'Start Encounter');
-    await waitFor(page, {
-      label: 'encounter summary',
-      predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasEncounterStatus =
-          normalizedText.includes('encounter status') ||
-          normalizedText.includes('وضعیت encounter');
-        const hasRoundProgress =
-          normalizedText.includes('round') ||
-          text.includes('راند');
-        return hasEncounterStatus &&
-          hasRoundProgress &&
-          !normalizedText.includes('no active encounter loaded');
-      })()`,
-    });
-    await waitForText(page, 'Combat & Event Feed', 'event feed panel');
-    await waitForText(page, 'Monsters & NPCs', 'DM combatant controls panel');
-
-    logSmokeStep('validating recovery after reload');
-    await page.send('Page.reload', { ignoreCache: true });
+    const sessionId = await getStoredCockpitSessionId(dmPage);
+    await waitForAnyText(dmPage, ['Training Room'], 'DM active scene');
+    await waitForAnyText(dmPage, ['Aria'], 'DM sample character Aria');
+    await waitForAnyText(dmPage, ['Borin'], 'DM sample character Borin');
     await waitForAnyText(
-      page,
-      ['Runtime War Table', 'میز نبرد زنده'],
-      'runtime shell after reload',
+      dmPage,
+      ['Tactical Grid', 'گرید تاکتیکی'],
+      'DM tactical grid',
     );
-    await waitForCockpitHydrated(page);
-    await clickButton(page, 'Recover');
-    await waitForText(page, 'Training Room', 'recovered scene');
-    await waitForText(page, 'Aria', 'recovered character Aria');
-    await waitForText(page, 'Borin', 'recovered character Borin');
-    await waitFor(page, {
-      label: 'recovery status summary',
-      predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasRecoveryStatus =
-          normalizedText.includes('recovery status') ||
-          text.includes('وضعیت بازیابی');
-        const hasFullRecovery =
-          normalizedText.includes('5/5 loaded') ||
-          text.includes('5/5 بارگذاری شده');
-        return hasRecoveryStatus && hasFullRecovery;
-      })()`,
-    });
-    await waitFor(page, {
-      label: 'recovered encounter summary',
-      predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasEncounterStatus =
-          normalizedText.includes('encounter status') ||
-          normalizedText.includes('وضعیت encounter');
-        const hasRoundProgress =
-          normalizedText.includes('round') ||
-          text.includes('راند');
-        return hasEncounterStatus && hasRoundProgress;
-      })()`,
-    });
 
-    logSmokeStep('validating player mode guardrails');
-    await clickButton(page, 'Player Mode');
-    await waitForText(page, 'PLAYER VIEW', 'player mode tactical shell');
-    await clickButton(page, 'Recover');
-    await waitForText(page, 'Aria', 'player assigned character');
-    await waitForText(page, 'Tactical Grid', 'player tactical grid');
-    await waitFor(page, {
-      label: 'player readiness summary',
-      predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasReadinessSummary =
-          normalizedText.includes('readiness summary') ||
-          text.includes('خلاصه آمادگی');
-        const hasTokenStatus =
-          normalizedText.includes('token') ||
-          text.includes('توکن');
-        return hasReadinessSummary && hasTokenStatus;
-      })()`,
-    });
-    await expectVisibleButton(page, 'Run Training Room Skirmish', false);
-    await expectVisibleText(page, 'Scene Builder', false);
-    await expectVisibleText(page, 'Monsters & NPCs', false);
-    const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
+    logSmokeStep('starting encounter in DM profile');
+    await clickButton(dmPage, ['Start Encounter', 'شروع برخورد']);
+    await waitForEncounterSummary(dmPage, 'DM encounter summary');
+    await waitForAnyText(
+      dmPage,
+      ['Combat & Event Feed', 'Combat و رخدادها'],
+      'DM event feed',
+    );
+    await waitForAnyText(
+      dmPage,
+      ['Monsters & NPCs', 'هیولاها و NPCها'],
+      'DM combatant controls',
+    );
 
-    logSmokeStep('validating local reset stays local');
-    await clickButton(page, 'Local Reset');
-    await waitForNoStoredSession(page);
-    await waitFor(page, {
-      label: 'session input reset',
-      predicate: `(() => {
-        const input = [...document.querySelectorAll('input')].find(
-          (candidate) => candidate.getAttribute('placeholder')?.includes('Paste an existing session ID'),
-        );
-        return Boolean(input && input.value === '');
-      })()`,
-    });
-    await waitFor(page, {
-      label: 'stale recovered table content hidden after local reset',
-      predicate: getAbsentVisibleTextsOutsideSelectorExpression(
-        ['Aria', 'Borin'],
-        '[data-runtime-demo-scenario]',
-      ),
-    });
-    await setSessionInputValue(page, sessionIdBeforeLocalReset);
-    await clickButton(page, 'Recover');
-    await waitFor(page, {
-      label: 'full table recovery after local reset',
-      predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasStableScene = (${getPresentVisibleTextsExpression(['Training Room'])});
-        const hasRecoveryStatus =
-          normalizedText.includes('recovery status') ||
-          text.includes('وضعیت بازیابی');
-        const hasFullRecovery =
-          normalizedText.includes('5/5 loaded') ||
-          text.includes('5/5 بارگذاری شده');
-        const hasEncounterStatus =
-          normalizedText.includes('encounter status') ||
-          normalizedText.includes('وضعیت encounter');
-        const hasRoundProgress =
-          normalizedText.includes('round') ||
-          text.includes('راند');
-        return hasStableScene &&
-          hasRecoveryStatus &&
-          hasFullRecovery &&
-          hasEncounterStatus &&
-          hasRoundProgress;
-      })()`,
-    });
-    await waitFor(page, {
-      label: 'recovered cockpit state after local reset',
-      predicate: `(() => {
-        const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+    logSmokeStep('joining and recovering table in Player profile');
+    await waitForRuntimeShell(playerPage, 'Player runtime shell');
+    await waitForCockpitHydrated(playerPage);
+    await clickButtonIfEnabled(playerPage, ['Local Reset', 'بازنشانی محلی']);
+    await waitForNoStoredSession(playerPage);
+    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await setSessionInputValue(playerPage, sessionId);
+    await clickButton(playerPage, ['Join Session', 'پیوستن به نشست']);
+    await waitForCockpitState(playerPage, (state) => Boolean(state?.sessionId));
+    await clickButton(playerPage, ['Recover', 'بازیابی']);
+    await waitForAnyText(playerPage, ['Aria'], 'Player assigned character');
+    await waitForAnyText(
+      playerPage,
+      ['Tactical Grid', 'گرید تاکتیکی'],
+      'Player tactical grid',
+    );
+    await waitForAnyText(
+      playerPage,
+      ['Readiness summary', 'خلاصه آمادگی'],
+      'Player readiness summary',
+    );
 
-        if (!raw) {
-          return false;
-        }
+    logSmokeStep('validating Player profile guardrails');
+    await expectVisibleButton(
+      playerPage,
+      ['Run Training Room Skirmish', 'اجرای Training Room Skirmish'],
+      false,
+    );
+    await expectVisibleText(playerPage, ['Scene Builder', 'صحنه‌ساز'], false);
+    await expectVisibleText(
+      playerPage,
+      ['Monsters & NPCs', 'هیولاها و NPCها'],
+      false,
+    );
+    await expectVisibleText(
+      dmPage,
+      ['Monsters & NPCs', 'هیولاها و NPCها'],
+      true,
+    );
 
-        const state = JSON.parse(raw);
-        return state.sessionId === ${JSON.stringify(sessionIdBeforeLocalReset)} &&
-          Boolean(state.sceneId);
-      })()`,
-    });
+    logSmokeStep('validating Player local reset does not affect DM profile');
+    await clickButton(playerPage, ['Local Reset', 'بازنشانی محلی']);
+    await waitForNoStoredSession(playerPage);
+    await expectVisibleText(dmPage, ['Training Room'], true);
+    await expectVisibleText(dmPage, ['Aria'], true);
+    await waitForStoredCockpitSessionId(dmPage, sessionId);
+    await setSessionInputValue(playerPage, sessionId);
+    await clickButton(playerPage, ['Recover', 'بازیابی']);
+    await waitForAnyText(playerPage, ['Aria'], 'Player recovery after reset');
+    await waitForStoredCockpitSessionId(playerPage, sessionId);
 
-    console.log('[runtime-smoke] passed');
+    console.log(`[runtime-two-profile-smoke] passed with session ${sessionId}`);
   } finally {
-    await page.close();
+    await Promise.allSettled([dmPage.close(), playerPage.close()]);
     await cleanup();
   }
-
-  // Keep these references live for lints and for clearer cleanup ownership.
-  void serverProcess;
-  void webProcess;
-  void browserProcess;
 
   process.exit(0);
 }
 
-function startProcess(name, command, args, env = {}) {
-  const usesWindowsCommandShim =
-    process.platform === 'win32' && command.endsWith('.cmd');
-  const child = spawn(
-    usesWindowsCommandShim ? (process.env.ComSpec ?? 'cmd.exe') : command,
-    usesWindowsCommandShim ? ['/d', '/s', '/c', command, ...args] : args,
-    {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        ...env,
-        FORCE_COLOR: '0',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+async function enablePage(page) {
+  await page.send('Runtime.enable');
+  await page.send('Page.enable');
+}
+
+function startProcess(name, command, args, options = {}) {
+  const child = spawn(command, args, {
+    cwd: options.cwd ?? repoRoot,
+    env: {
+      ...process.env,
+      ...options.env,
+      FORCE_COLOR: '0',
     },
-  );
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
   startedProcesses.push(child);
   processLogs.set(child.pid, {
@@ -385,13 +298,14 @@ function logSmokeStep(label) {
   );
 }
 
-function launchBrowser(browserPath, debugPort) {
-  chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-runtime-smoke-'));
+function launchBrowserProfile(name, browserPath, debugPort) {
+  const userDataDir = mkdtempSync(resolve(tmpdir(), `dnd-${name}-`));
+  profileDirs.push(userDataDir);
 
-  return startProcess('chrome', browserPath, [
+  return startProcess(name, browserPath, [
     '--headless=new',
     `--remote-debugging-port=${debugPort}`,
-    `--user-data-dir=${chromeUserDataDir}`,
+    `--user-data-dir=${userDataDir}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-background-networking',
@@ -555,23 +469,27 @@ class CdpClient {
   }
 }
 
-async function clickButton(page, label) {
+async function waitForRuntimeShell(page, label) {
+  await waitForAnyText(page, ['Runtime War Table', 'میز نبرد زنده'], label);
+}
+
+async function clickButton(page, labels) {
   await waitFor(page, {
-    label: `button "${label}"`,
-    predicate: hasEnabledVisibleButtonExpression(label),
+    label: `button "${labels.join('" or "')}"`,
+    predicate: hasEnabledVisibleButtonExpression(labels),
   });
 
   const point = await page.evaluate(`(() => {
-    const label = ${JSON.stringify(label)};
+    const labels = ${JSON.stringify(labels)};
     const button = [...document.querySelectorAll('button')].find(
       (candidate) =>
-        candidate.textContent?.includes(label) &&
+        labels.some((label) => candidate.textContent?.includes(label)) &&
         !candidate.disabled &&
         candidate.getClientRects().length > 0,
     );
 
     if (!button) {
-      throw new Error('No enabled visible button found for ' + label);
+      throw new Error('No enabled visible button found for ' + labels.join(' or '));
     }
 
     button.scrollIntoView({ block: 'center', inline: 'center' });
@@ -605,72 +523,86 @@ async function clickButton(page, label) {
   });
 }
 
-async function clickButtonIfEnabled(page, label) {
+async function clickButtonIfEnabled(page, labels) {
   const canClick = await page.evaluate(
-    hasEnabledVisibleButtonExpression(label),
+    hasEnabledVisibleButtonExpression(labels),
   );
 
   if (canClick) {
-    await clickButton(page, label);
+    await clickButton(page, labels);
   }
 }
 
-function hasEnabledVisibleButtonExpression(label) {
-  return `(() => [...document.querySelectorAll('button')].some(
-    (candidate) =>
-      candidate.textContent?.includes(${JSON.stringify(label)}) &&
-      !candidate.disabled &&
-      candidate.getClientRects().length > 0,
-  ))()`;
-}
-
-async function waitForText(page, text, label = text) {
-  await waitFor(page, {
-    label,
-    predicate: `(() => (document.body?.innerText ?? '').includes(${JSON.stringify(
-      text,
-    )}))()`,
-  });
+function hasEnabledVisibleButtonExpression(labels) {
+  return `(() => {
+    const labels = ${JSON.stringify(labels)};
+    return [...document.querySelectorAll('button')].some(
+      (candidate) =>
+        labels.some((label) => candidate.textContent?.includes(label)) &&
+        !candidate.disabled &&
+        candidate.getClientRects().length > 0,
+    );
+  })()`;
 }
 
 async function waitForAnyText(page, texts, label) {
   await waitFor(page, {
     label,
-    predicate: `(() => {
-      const bodyText = document.body?.innerText ?? '';
-      return ${JSON.stringify(texts)}.some((text) => bodyText.includes(text));
-    })()`,
+    predicate: hasVisibleTextExpression(texts),
   });
 }
 
-async function expectVisibleText(page, text, expected) {
-  const actual = await page.evaluate(
-    `(() => {
-      const bodyText = document.body?.innerText ?? '';
-      return bodyText.includes(${JSON.stringify(text)});
-    })()`,
-  );
+async function expectVisibleText(page, texts, expected) {
+  const actual = await page.evaluate(hasVisibleTextExpression(texts));
 
   if (actual !== expected) {
     throw new Error(
-      `Expected visible text ${JSON.stringify(text)} to be ${expected}, got ${actual}.`,
+      `Expected visible text ${JSON.stringify(texts)} to be ${expected}, got ${actual}.`,
     );
   }
 }
 
-async function expectVisibleButton(page, label, expected) {
-  const actual =
-    await page.evaluate(`(() => [...document.querySelectorAll('button')].some(
-    (candidate) =>
-      candidate.textContent?.includes(${JSON.stringify(label)}) &&
-      candidate.getClientRects().length > 0,
-  ))()`);
+async function expectVisibleButton(page, labels, expected) {
+  const actual = await page.evaluate(`(() => {
+      const labels = ${JSON.stringify(labels)};
+      return [...document.querySelectorAll('button')].some(
+        (candidate) =>
+          labels.some((label) => candidate.textContent?.includes(label)) &&
+          candidate.getClientRects().length > 0,
+      );
+    })()`);
 
   if (actual !== expected) {
     throw new Error(
-      `Expected visible button ${JSON.stringify(label)} to be ${expected}, got ${actual}.`,
+      `Expected visible button ${JSON.stringify(labels)} to be ${expected}, got ${actual}.`,
     );
   }
+}
+
+function hasVisibleTextExpression(texts) {
+  return `(() => {
+    const bodyText = document.body?.innerText ?? '';
+    return ${JSON.stringify(texts)}.some((text) => bodyText.includes(text));
+  })()`;
+}
+
+async function waitForEncounterSummary(page, label) {
+  await waitFor(page, {
+    label,
+    predicate: `(() => {
+      const text = document.body?.innerText ?? '';
+      const normalizedText = text.toLocaleLowerCase('en-US');
+      const hasEncounterStatus =
+        normalizedText.includes('encounter status') ||
+        text.includes('وضعیت برخورد');
+      const hasRoundProgress =
+        normalizedText.includes('round') ||
+        text.includes('راند');
+      return hasEncounterStatus &&
+        hasRoundProgress &&
+        !normalizedText.includes('no active encounter loaded');
+    })()`,
+  });
 }
 
 async function waitForCockpitState(page, predicate) {
@@ -684,6 +616,22 @@ async function waitForCockpitState(page, predicate) {
       }
 
       return (${predicate.toString()})(JSON.parse(raw));
+    })()`,
+  });
+}
+
+async function waitForStoredCockpitSessionId(page, sessionId) {
+  await waitFor(page, {
+    label: `stored cockpit session ${sessionId}`,
+    predicate: `(() => {
+      const raw = localStorage.getItem(${JSON.stringify(storageKey)});
+
+      if (!raw) {
+        return false;
+      }
+
+      const state = JSON.parse(raw);
+      return state?.sessionId === ${JSON.stringify(sessionId)};
     })()`,
   });
 }
@@ -718,7 +666,7 @@ async function getStoredCockpitSessionId(page) {
   );
 
   if (!storedSessionId) {
-    throw new Error('Expected a stored cockpit session ID before Local Reset.');
+    throw new Error('Expected a stored cockpit session ID.');
   }
 
   return storedSessionId;
@@ -730,9 +678,7 @@ async function setSessionInputValue(page, sessionId) {
   );
 
   if (!assigned) {
-    throw new Error(
-      'Unable to restore the session ID input after Local Reset.',
-    );
+    throw new Error('Unable to assign the session ID input.');
   }
 }
 
@@ -876,8 +822,8 @@ async function cleanup() {
     [...startedProcesses].reverse().map((child) => stopProcess(child)),
   );
 
-  if (chromeUserDataDir) {
-    await removeDirectoryWithRetry(chromeUserDataDir);
+  for (const profileDir of profileDirs) {
+    await removeDirectoryWithRetry(profileDir);
   }
 }
 
