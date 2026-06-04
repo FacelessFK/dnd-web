@@ -845,7 +845,7 @@ const messages = {
     'runtime.demoSetup.description':
       'اولین مسیر قابل بازی Training Room را با فرمان‌های فعلی سرور و داده‌های نمونه آماده می‌کند.',
     'runtime.demoSetup.encounter': 'برخورد',
-    'runtime.demoSetup.encounterValue': 'شروع دستی بعد از آماده شدن setup',
+    'runtime.demoSetup.encounterValue': 'شروع دستی بعد از آماده شدن میز',
     'runtime.demoSetup.eyebrow': 'مسیر playtest برای DM',
     'runtime.demoSetup.flow': 'جریان',
     'runtime.demoSetup.flowValue':
@@ -859,8 +859,8 @@ const messages = {
     'runtime.demoSetup.scene': 'صحنه',
     'runtime.demoSetup.setup': 'وضعیت آماده‌شده',
     'runtime.demoSetup.setupValue':
-      'Session، بازیکن‌ها، کاراکترها، صحنه، جای‌گذاری توکن‌ها',
-    'runtime.demoSetup.title': 'Setup اتاق تمرین',
+      'نشست، بازیکن‌ها، کاراکترها، صحنه، جای‌گذاری توکن‌ها',
+    'runtime.demoSetup.title': 'آماده‌سازی اتاق تمرین',
     'runtime.demoSetup.action.assignPcs': 'تخصیص PCها',
     'runtime.demoSetup.action.createPcs': 'ساخت PCها',
     'runtime.demoSetup.action.createScene': 'ساخت صحنه',
@@ -877,9 +877,9 @@ const messages = {
     'runtime.debug.title': 'دفترچه Debug',
     'runtime.disabled.busy': 'در انتظار {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
-      'ابتدا یک صحنه فعال بسازید یا recover کنید.',
+      'ابتدا یک صحنه فعال بسازید یا بازیابی کنید.',
     'runtime.disabled.createActivateRecoverScene':
-      'ابتدا یک صحنه بسازید، فعال کنید، یا recover کنید.',
+      'ابتدا یک صحنه بسازید، فعال کنید، یا بازیابی کنید.',
     'runtime.disabled.combatantDefeated':
       'monster/NPC انتخاب‌شده شکست خورده و نمی‌تواند عمل کند.',
     'runtime.disabled.combatantTurn':
@@ -891,32 +891,32 @@ const messages = {
       'برای کنترل‌های monster/NPC به حالت DM بروید.',
     'runtime.disabled.dmOnlyScene': 'برای ساخت صحنه به حالت DM بروید.',
     'runtime.disabled.invalidActor':
-      'یک participant بازیکن joinشده را به‌عنوان کاراکتر فعال انتخاب کنید.',
+      'یک participant بازیکن پیوسته را به‌عنوان کاراکتر فعال انتخاب کنید.',
     'runtime.disabled.invalidTarget':
-      'یک بازیکن joinشده یا هدف monster/NPC فعال انتخاب کنید.',
+      'یک بازیکن پیوسته یا هدف monster/NPC فعال انتخاب کنید.',
     'runtime.disabled.invalidTargetDifferent':
       'یک participant هدف متفاوت انتخاب کنید.',
     'runtime.disabled.loadOrAssignCharacter':
-      'ابتدا این کاراکتر را بارگذاری یا assign کنید.',
+      'ابتدا این کاراکتر را بارگذاری یا تخصیص دهید.',
     'runtime.disabled.missingActiveScene':
-      'قبل از حرکت یا شروع combat یک صحنه فعال بسازید یا recover کنید.',
+      'قبل از حرکت یا شروع برخورد یک صحنه فعال بسازید یا بازیابی کنید.',
     'runtime.disabled.missingEncounter':
-      'ابتدا برخورد را شروع یا recover کنید.',
+      'ابتدا برخورد را شروع یا بازیابی کنید.',
     'runtime.disabled.missingPlayerIdentity':
       'شناسه participant و نام نمایشی بازیکن را وارد کنید.',
     'runtime.disabled.missingSession':
-      'ابتدا یک session بسازید، paste کنید، یا recover کنید.',
+      'ابتدا یک نشست بسازید، وارد کنید، یا بازیابی کنید.',
     'runtime.disabled.placeCharacter':
       'ابتدا حداقل یک کاراکتر را در صحنه فعال قرار دهید.',
     'runtime.disabled.playerTarget': 'یک هدف از کاراکترهای بازیکن انتخاب کنید.',
     'runtime.disabled.playerJoinMode':
-      'برای join شدن با بازیکن تنظیم‌شده به حالت بازیکن بروید.',
+      'برای پیوستن با بازیکن تنظیم‌شده به حالت بازیکن بروید.',
     'runtime.disabled.recoverCharacter':
-      'ابتدا یک کاراکتر برای این participant بارگذاری یا recover کنید.',
+      'ابتدا یک کاراکتر برای این participant بارگذاری یا بازیابی کنید.',
     'runtime.disabled.selectCombatant':
       'ابتدا یک monster/NPC combatant بسازید یا انتخاب کنید.',
     'runtime.disabled.selectedAlreadyAssigned':
-      'این participant همین کاراکتر را قبلا assign کرده است.',
+      'این participant همین کاراکتر را قبلا تخصیص داده است.',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
     'runtime.notice.commandFailed': 'Command ناموفق بود',
     'runtime.notice.recoveryWithNotes': 'بازیابی با یادداشت تکمیل شد',
@@ -1274,11 +1274,11 @@ const messages = {
     'runtime.tableSetup.item.scene.blocked': 'فعال‌سازی صحنه',
     'runtime.tableSetup.item.scene.done': 'صحنه فعال است',
     'runtime.tableSetup.item.scene.ready': 'فعال‌سازی صحنه',
-    'runtime.tableSetup.item.session.blocked': 'ساخت session',
-    'runtime.tableSetup.item.session.done': 'session بارگذاری شد',
-    'runtime.tableSetup.item.session.ready': 'ساخت session',
+    'runtime.tableSetup.item.session.blocked': 'ساخت نشست',
+    'runtime.tableSetup.item.session.done': 'نشست بارگذاری شد',
+    'runtime.tableSetup.item.session.ready': 'ساخت نشست',
     'runtime.tableSetup.detail.characters.blocked':
-      'بازیکن‌ها باید قبل از تخصیص کاراکترها join شوند.',
+      'بازیکن‌ها باید قبل از تخصیص کاراکترها به میز بپیوندند.',
     'runtime.tableSetup.detail.characters.done':
       'کاراکترهای تخصیص‌یافته برای میز آماده‌اند.',
     'runtime.tableSetup.detail.characters.ready':
@@ -1288,7 +1288,7 @@ const messages = {
     'runtime.tableSetup.detail.encounter.done':
       'یک برخورد فعال است و کنترل‌های نوبت آماده‌اند.',
     'runtime.tableSetup.detail.encounter.ready':
-      'وقتی میز برای initiative آماده است برخورد را شروع کنید.',
+      'وقتی میز برای ترتیب نوبت آماده است برخورد را شروع کنید.',
     'runtime.tableSetup.detail.placement.blocked':
       'ابتدا به تخصیص کاراکترها و صحنه فعال نیاز است.',
     'runtime.tableSetup.detail.placement.done':
@@ -1296,26 +1296,26 @@ const messages = {
     'runtime.tableSetup.detail.placement.ready':
       'کاراکترهای تخصیص‌یافته را در صحنه فعال قرار دهید.',
     'runtime.tableSetup.detail.players.blocked':
-      'قبل از join شدن بازیکن‌ها به وضعیت session نیاز است.',
+      'قبل از پیوستن بازیکن‌ها به وضعیت نشست نیاز است.',
     'runtime.tableSetup.detail.players.done': 'بازیکن‌ها روی میز نشسته‌اند.',
     'runtime.tableSetup.detail.players.ready':
-      'قبل از تخصیص کاراکترها حداقل یک بازیکن را join کنید.',
+      'قبل از تخصیص کاراکترها حداقل یک بازیکن را به میز بپیوندانید.',
     'runtime.tableSetup.detail.scene.blocked':
-      'بعد از ساخته شدن session یک صحنه بسازید و فعال کنید.',
+      'بعد از ساخته شدن نشست یک صحنه بسازید و فعال کنید.',
     'runtime.tableSetup.detail.scene.done':
       'یک صحنه فعال برای میز بارگذاری شده است.',
     'runtime.tableSetup.detail.scene.ready':
-      'یک صحنه فعال برای میز بسازید یا recover کنید.',
+      'یک صحنه فعال برای میز بسازید یا بازیابی کنید.',
     'runtime.tableSetup.detail.session.blocked':
-      'قبل از بارگذاری میز session را بسازید یا recover کنید.',
-    'runtime.tableSetup.detail.session.done': 'وضعیت session بارگذاری شده است.',
+      'قبل از بارگذاری میز نشست را بسازید یا بازیابی کنید.',
+    'runtime.tableSetup.detail.session.done': 'وضعیت نشست بارگذاری شده است.',
     'runtime.tableSetup.detail.session.ready':
-      'قبل از بارگذاری میز session را بسازید یا recover کنید.',
+      'قبل از بارگذاری میز نشست را بسازید یا بازیابی کنید.',
     'runtime.tableSetup.readyForPlay': 'میز برای بازی آماده است.',
     'runtime.tableSetup.status.blocked': 'صبر',
     'runtime.tableSetup.status.done': 'انجام شد',
     'runtime.tableSetup.status.ready': 'بعدی',
-    'runtime.tableSetup.title': 'Setup میز',
+    'runtime.tableSetup.title': 'آماده‌سازی میز',
     'runtime.actionEconomy.action': 'اکشن',
     'runtime.actionEconomy.available': 'آزاد',
     'runtime.actionEconomy.blocked': 'مسدود',

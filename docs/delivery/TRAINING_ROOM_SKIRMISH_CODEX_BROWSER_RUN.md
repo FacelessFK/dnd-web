@@ -291,3 +291,50 @@ Next narrow implementation slice:
 > or read-model recovery behavior.
 
 Recommended effort: `medium`.
+
+## Persian Table Setup / Disabled Helper Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 8 microcopy polish
+- Persistence mode: not applicable to copy-only source inspection
+- Runtime code changed during run: frontend/i18n copy only
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, and Character Library persistence changed or claimed: no
+
+Implemented polish:
+
+- Replaced mixed Persian/English Table Setup phrases such as `ساخت session`,
+  `session بارگذاری شد`, `Setup میز`, `join شوند`, `join کنید`,
+  `recover کنید`, and `initiative` with Persian-facing setup and readiness
+  copy.
+- Replaced mixed disabled-helper blockers such as `recover کنید`,
+  `paste کنید`, `join شدن`, `assign کنید`, and `combat` with Persian-facing
+  helper copy while preserving canonical `DM`, `participant`, and
+  `monster/NPC` terms where they are intentionally stable.
+- Kept this as UI copy only; no command, server, read-model, DB/auth,
+  Character Library/runtime, or combat behavior changed.
+
+Remaining product cautions:
+
+- Adjacent Persian Assignment Request and Character Library bridge copy still
+  mixes words such as `pending`, `preview`, `submit`, `recover`, and `session`
+  in high-traffic helper text.
+- These remaining strings are outside the Table Setup / disabled-helper slice
+  and should be handled as the next small i18n pass rather than broadening this
+  change.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian Assignment Request and Character Library bridge copy
+> in the Training Room flow by replacing mixed English/Persian helper terms
+> such as `pending`, `preview`, `submit`, `recover`, and `session` with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, source-library identifiers, server URLs, and
+> protocol/debug labels where they are intentionally stable. Keep this
+> frontend/i18n-only and do not change runtime protocol, command semantics,
+> Character Library/runtime separation, combat automation, auth, DB
+> requirements, or read-model recovery behavior.
+
+Recommended effort: `medium`.

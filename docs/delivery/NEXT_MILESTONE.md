@@ -145,6 +145,20 @@ intentionally stable. Keep this frontend/i18n-only and do not change runtime
 protocol, command semantics, combat automation, auth, DB requirements, or
 read-model recovery behavior.
 
+Status: implemented.
+
+### Slice 9: Persian Assignment Bridge Microcopy Polish
+
+Polish remaining Persian Assignment Request and Character Library bridge copy in
+the Training Room flow by replacing mixed English/Persian helper terms such as
+`pending`, `preview`, `submit`, `recover`, and `session` with
+localization-aware Persian equivalents while preserving canonical IDs,
+`runtime`, `Session ID`, source-library identifiers, server URLs, and
+protocol/debug labels where they are intentionally stable. Keep this
+frontend/i18n-only and do not change runtime protocol, command semantics,
+Character Library/runtime separation, combat automation, auth, DB requirements,
+or read-model recovery behavior.
+
 Recommended effort: `medium`.
 
 ## Historical Note

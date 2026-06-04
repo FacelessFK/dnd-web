@@ -376,6 +376,16 @@ Implemented Phase 6 Slice 7:
 > without changing runtime protocol, command semantics, combat automation,
 > auth, DB requirements, or read-model recovery behavior.
 
+Implemented Phase 6 Slice 8:
+
+> Polish remaining Persian Table Setup and disabled-reason helper copy in the
+> Training Room flow by replacing mixed English/Persian setup blockers with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, server URLs, and protocol/debug labels where they
+> are intentionally stable, without changing runtime protocol, command
+> semantics, combat automation, auth, DB requirements, or read-model recovery
+> behavior.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -400,14 +410,16 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 8:
+Phase 6 Slice 9:
 
-> Polish remaining Persian Table Setup and disabled-reason helper copy in the
-> Training Room flow by replacing mixed English/Persian setup blockers with
+> Polish remaining Persian Assignment Request and Character Library bridge copy
+> in the Training Room flow by replacing mixed English/Persian helper terms
+> such as `pending`, `preview`, `submit`, `recover`, and `session` with
 > localization-aware Persian equivalents while preserving canonical IDs,
-> `runtime`, `Session ID`, server URLs, and protocol/debug labels where they
-> are intentionally stable. Keep this frontend/i18n-only and do not change
-> runtime protocol, command semantics, combat automation, auth, DB requirements,
-> or read-model recovery behavior.
+> `runtime`, `Session ID`, source-library identifiers, server URLs, and
+> protocol/debug labels where they are intentionally stable. Keep this
+> frontend/i18n-only and do not change runtime protocol, command semantics,
+> Character Library/runtime separation, combat automation, auth, DB
+> requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.
