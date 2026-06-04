@@ -338,3 +338,50 @@ Next narrow implementation slice:
 > requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.
+
+## Persian Assignment Bridge Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 9 microcopy polish
+- Persistence mode: not applicable to copy-only source inspection
+- Runtime code changed during run: frontend/i18n copy only
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, Character Library/runtime separation, and Character Library
+  persistence changed or claimed: no
+
+Implemented polish:
+
+- Replaced mixed Persian/English Assignment Request phrases using helper terms
+  such as `pending`, `preview`, `submit`, `recover`, and `Player` with
+  Persian-facing request and preview copy while preserving canonical `runtime`
+  terminology and runtime copy IDs.
+- Replaced mixed Character Library bridge blockers and helper text using
+  `session`, `assign`, `refresh`, and `condition` with Persian-facing copy
+  while preserving canonical `runtime`, `DM`, `HP`, and source-library
+  terminology where they are intentionally stable.
+- Kept this as UI copy only; no command, server, read-model, DB/auth,
+  Character Library/runtime, assignment, or combat behavior changed.
+
+Remaining product cautions:
+
+- Adjacent Persian Recovery Status, stream/event-feed, and active-scene status
+  copy still mixes words such as `session`, `scene`, `read model`, `stream`,
+  `subscribe`, `recover`, `feed`, and `condition` in high-traffic status text.
+- These remaining strings are outside the Assignment Bridge slice and should be
+  handled as the next small i18n pass rather than broadening this change.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian Recovery Status, stream/event-feed, and active-scene
+> status copy in the Training Room flow by replacing mixed English/Persian
+> helper terms such as `session`, `scene`, `read model`, `stream`, `subscribe`,
+> `recover`, `feed`, and `condition` with localization-aware Persian
+> equivalents while preserving canonical IDs, `runtime`, `Session ID`, SSE,
+> server URLs, and protocol/debug labels where they are intentionally stable.
+> Keep this frontend/i18n-only and do not change runtime protocol, command
+> semantics, replay/catch-up claims, SSE behavior, combat automation, auth, DB
+> requirements, or read-model recovery behavior.
+
+Recommended effort: `medium`.

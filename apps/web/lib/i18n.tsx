@@ -747,18 +747,18 @@ const messages = {
     'runtime.assignmentRequests.build': 'ساختار',
     'runtime.assignmentRequests.character': 'کاراکتر',
     'runtime.assignmentRequests.description':
-      'درخواست‌های pending نسخه‌های runtime هستند که سرور از submission بازیکن ساخته است. Assign کردن یکی از آن‌ها، کاراکتر runtime فعال شرکت‌کننده را مشخص می‌کند؛ ورودی‌های کتابخانه همچنان قابل استفاده مجدد می‌مانند.',
+      'درخواست‌های در انتظار، نسخه‌های runtime هستند که سرور از ارسال بازیکن ساخته است. تخصیص یکی از آن‌ها، کاراکتر runtime فعال شرکت‌کننده را مشخص می‌کند؛ ورودی‌های کتابخانه همچنان قابل استفاده مجدد می‌مانند.',
     'runtime.assignmentRequests.emptyDetail':
-      'بازیکن‌ها می‌توانند از حالت Player، draft نهایی‌شده runtime یا ورودی ذخیره‌شده کتابخانه کاراکتر را submit کنند.',
-    'runtime.assignmentRequests.emptyTitle': 'درخواست کاراکتر pending نیست',
+      'بازیکن‌ها می‌توانند از حالت بازیکن، پیش‌نویس نهایی‌شده runtime یا ورودی ذخیره‌شده کتابخانه کاراکتر را ارسال کنند.',
+    'runtime.assignmentRequests.emptyTitle': 'درخواست کاراکتر در انتظار نیست',
     'runtime.assignmentRequests.hp': 'HP',
-    'runtime.assignmentRequests.needsAssignment': 'نسخه runtime pending',
+    'runtime.assignmentRequests.needsAssignment': 'نسخه runtime در انتظار',
     'runtime.assignmentRequests.previewUnavailableDetail':
-      'برای نمایش preview کامل درخواست، وضعیت میز را recover کنید یا کاراکتر pending را دوباره بخوانید.',
+      'برای نمایش پیش‌نمایش کامل درخواست، وضعیت میز را بازیابی کنید یا کاراکتر در انتظار را دوباره بخوانید.',
     'runtime.assignmentRequests.previewUnavailableTitle':
-      'Preview کاراکتر در دسترس نیست',
+      'پیش‌نمایش کاراکتر در دسترس نیست',
     'runtime.assignmentRequests.assigned': 'کاراکتر runtime فعال',
-    'runtime.assignmentRequests.replacementPending': 'نسخه جایگزین pending',
+    'runtime.assignmentRequests.replacementPending': 'نسخه جایگزین در انتظار',
     'runtime.assignmentRequests.runtimeCopy': 'نسخه runtime',
     'runtime.assignmentRequests.sourceLibraryEntry': 'ورودی کتابخانه منبع',
     'runtime.assignmentRequests.speed': 'سرعت',
@@ -781,9 +781,9 @@ const messages = {
     'runtime.board.zoomIn': 'زوم بیشتر',
     'runtime.board.zoomOut': 'زوم کمتر',
     'runtime.characterLibrary.blocker.alreadyAssigned':
-      'این شرکت‌کننده از قبل کاراکتر assign شده دارد.',
+      'این شرکت‌کننده از قبل کاراکتر تخصیص‌یافته دارد.',
     'runtime.characterLibrary.blocker.alreadySubmitted':
-      'یک کاراکتر همین حالا منتظر assign شدن توسط DM است.',
+      'یک کاراکتر همین حالا منتظر تخصیص توسط DM است.',
     'runtime.characterLibrary.blocker.busy':
       'صبر کنید کار فعلی میز زنده تمام شود.',
     'runtime.characterLibrary.blocker.missingAuth':
@@ -791,15 +791,15 @@ const messages = {
     'runtime.characterLibrary.blocker.missingSelection':
       'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
     'runtime.characterLibrary.blocker.missingSession':
-      'اول یک session بسازید، وارد کنید، یا بازیابی کنید.',
+      'اول یک نشست بسازید، وارد کنید، یا بازیابی کنید.',
     'runtime.characterLibrary.blocker.noFinalizedEntries':
       'کاراکتر ذخیره‌شده و نهایی‌شده‌ای در دسترس نیست.',
     'runtime.characterLibrary.blocker.notJoined':
-      'اول به عنوان این بازیکن وارد session شوید یا آن را بازیابی کنید.',
+      'اول به عنوان این بازیکن وارد نشست شوید یا آن را بازیابی کنید.',
     'runtime.characterLibrary.description':
-      'یک کاراکتر ذخیره‌شده و نهایی‌شده را وارد این session زنده کنید. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، conditionها و overrideهای DM ورودی ذخیره‌شده را تغییر نمی‌دهند.',
+      'یک کاراکتر ذخیره‌شده و نهایی‌شده را وارد این نشست زنده کنید. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، وضعیت‌ها و overrideهای DM ورودی ذخیره‌شده را تغییر نمی‌دهند.',
     'runtime.characterLibrary.emptyDetail':
-      'یک کاراکتر را در کتابخانه نهایی کنید و بعد این فهرست را refresh کنید.',
+      'یک کاراکتر را در کتابخانه نهایی کنید و بعد این فهرست را به‌روزرسانی کنید.',
     'runtime.characterLibrary.emptyTitle':
       'کاراکتر ذخیره‌شده و نهایی‌شده‌ای نیست',
     'runtime.characterLibrary.entryClass': 'کلاس / سطح',
@@ -813,7 +813,7 @@ const messages = {
     'runtime.characterLibrary.selectRequired':
       'اول یک کاراکتر ذخیره‌شده و نهایی‌شده انتخاب کنید.',
     'runtime.characterLibrary.selectedDetail':
-      'ارسال {name} یک نسخه runtime جدا برای این session می‌سازد. ورودی ذخیره‌شده کتابخانه همچنان قابل استفاده مجدد می‌ماند.',
+      'ارسال {name} یک نسخه runtime جدا برای این نشست می‌سازد. ورودی ذخیره‌شده کتابخانه همچنان قابل استفاده مجدد می‌ماند.',
     'runtime.characterLibrary.selectedTitle': 'ورودی ذخیره‌شده انتخاب شده',
     'runtime.characterLibrary.signInRequired':
       'برای بارگذاری کاراکترهای ذخیره‌شده وارد شوید.',
@@ -827,7 +827,7 @@ const messages = {
     'runtime.characterLibrary.submitReadyTitle': 'آماده ساخت نسخه runtime',
     'runtime.characterLibrary.title': 'کتابخانه کاراکترهای ذخیره‌شده',
     'runtime.characterLibrary.waitingDetail':
-      'نسخه runtime {characterId} در وضعیت مرجع session منتظر است. DM باید آن را assign کند تا کاراکتر فعال میز شما شود.',
+      'نسخه runtime {characterId} در وضعیت مرجع نشست منتظر است. DM باید آن را تخصیص دهد تا کاراکتر فعال میز شما شود.',
     'runtime.characterLibrary.waitingTitle':
       'نسخه runtime در انتظار تخصیص توسط DM',
     'runtime.activeScene.buildDetail':
@@ -1210,7 +1210,7 @@ const messages = {
     'runtime.statusOverview.waitingProgress': '{count} در انتظار',
     'runtime.roster.assignment': 'تخصیص',
     'runtime.roster.assignment.assigned':
-      'کاراکتر runtime {characterId} assign شده',
+      'کاراکتر runtime {characterId} تخصیص یافته',
     'runtime.roster.assignment.needsCharacter': 'به کاراکتر runtime نیاز دارد',
     'runtime.roster.assignment.pendingAssignment':
       'نسخه runtime {characterId} در انتظار تخصیص توسط DM',

@@ -159,6 +159,20 @@ frontend/i18n-only and do not change runtime protocol, command semantics,
 Character Library/runtime separation, combat automation, auth, DB requirements,
 or read-model recovery behavior.
 
+Status: implemented.
+
+### Slice 10: Persian Recovery / Stream Status Microcopy Polish
+
+Polish remaining Persian Recovery Status, stream/event-feed, and active-scene
+status copy in the Training Room flow by replacing mixed English/Persian helper
+terms such as `session`, `scene`, `read model`, `stream`, `subscribe`,
+`recover`, `feed`, and `condition` with localization-aware Persian equivalents
+while preserving canonical IDs, `runtime`, `Session ID`, SSE, server URLs, and
+protocol/debug labels where they are intentionally stable. Keep this
+frontend/i18n-only and do not change runtime protocol, command semantics,
+replay/catch-up claims, SSE behavior, combat automation, auth, DB requirements,
+or read-model recovery behavior.
+
 Recommended effort: `medium`.
 
 ## Historical Note

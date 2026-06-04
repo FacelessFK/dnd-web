@@ -386,6 +386,17 @@ Implemented Phase 6 Slice 8:
 > semantics, combat automation, auth, DB requirements, or read-model recovery
 > behavior.
 
+Implemented Phase 6 Slice 9:
+
+> Polish remaining Persian Assignment Request and Character Library bridge copy
+> in the Training Room flow by replacing mixed English/Persian helper terms
+> such as `pending`, `preview`, `submit`, `recover`, and `session` with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, source-library identifiers, server URLs, and
+> protocol/debug labels where they are intentionally stable, without changing
+> runtime protocol, command semantics, Character Library/runtime separation,
+> combat automation, auth, DB requirements, or read-model recovery behavior.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -410,16 +421,16 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 9:
+Phase 6 Slice 10:
 
-> Polish remaining Persian Assignment Request and Character Library bridge copy
-> in the Training Room flow by replacing mixed English/Persian helper terms
-> such as `pending`, `preview`, `submit`, `recover`, and `session` with
-> localization-aware Persian equivalents while preserving canonical IDs,
-> `runtime`, `Session ID`, source-library identifiers, server URLs, and
-> protocol/debug labels where they are intentionally stable. Keep this
-> frontend/i18n-only and do not change runtime protocol, command semantics,
-> Character Library/runtime separation, combat automation, auth, DB
+> Polish remaining Persian Recovery Status, stream/event-feed, and active-scene
+> status copy in the Training Room flow by replacing mixed English/Persian
+> helper terms such as `session`, `scene`, `read model`, `stream`, `subscribe`,
+> `recover`, `feed`, and `condition` with localization-aware Persian
+> equivalents while preserving canonical IDs, `runtime`, `Session ID`, SSE,
+> server URLs, and protocol/debug labels where they are intentionally stable.
+> Keep this frontend/i18n-only and do not change runtime protocol, command
+> semantics, replay/catch-up claims, SSE behavior, combat automation, auth, DB
 > requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.
