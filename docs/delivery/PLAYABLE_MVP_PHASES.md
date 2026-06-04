@@ -367,6 +367,15 @@ Implemented Phase 6 Slice 6:
 > runtime protocol, combat automation, replay/catch-up, production auth, DB/auth
 > requirements, or broader D&D systems.
 
+Implemented Phase 6 Slice 7:
+
+> Polish remaining Persian readiness/roster microcopy in the Training Room flow
+> by replacing mixed English/Persian high-traffic labels with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, and server URLs where they are intentionally stable,
+> without changing runtime protocol, command semantics, combat automation,
+> auth, DB requirements, or read-model recovery behavior.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -391,14 +400,14 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 7:
+Phase 6 Slice 8:
 
-> Polish remaining Persian readiness/roster microcopy in the Training Room flow
-> by replacing mixed English/Persian high-traffic labels with
+> Polish remaining Persian Table Setup and disabled-reason helper copy in the
+> Training Room flow by replacing mixed English/Persian setup blockers with
 > localization-aware Persian equivalents while preserving canonical IDs,
-> `runtime`, `Session ID`, and server URLs where they are intentionally stable.
-> Keep this frontend/i18n-only and do not change runtime protocol, command
-> semantics, combat automation, auth, DB requirements, or read-model recovery
-> behavior.
+> `runtime`, `Session ID`, server URLs, and protocol/debug labels where they
+> are intentionally stable. Keep this frontend/i18n-only and do not change
+> runtime protocol, command semantics, combat automation, auth, DB requirements,
+> or read-model recovery behavior.
 
 Recommended effort: `medium`.

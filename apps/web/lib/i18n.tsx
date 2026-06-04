@@ -853,7 +853,7 @@ const messages = {
     'runtime.demoSetup.guardrail': 'مرجعیت',
     'runtime.demoSetup.guardrailValue':
       'DM بازی را شروع می‌کند؛ سرور همه فرمان‌ها را اعتبارسنجی می‌کند',
-    'runtime.demoSetup.roster': 'Roster',
+    'runtime.demoSetup.roster': 'گروه بازیکن‌ها',
     'runtime.demoSetup.runTrainingRoom': 'اجرای Training Room Skirmish',
     'runtime.demoSetup.scenarioLabel': 'سناریوی demo',
     'runtime.demoSetup.scene': 'صحنه',
@@ -959,15 +959,15 @@ const messages = {
     'runtime.playerReadiness.attack': 'حمله {state}',
     'runtime.playerReadiness.blocked': 'مسدود',
     'runtime.playerReadiness.currentActor': 'نوبت فعلی',
-    'runtime.playerReadiness.detail.ready': 'setup بازیکن آماده است.',
+    'runtime.playerReadiness.detail.ready': 'آمادگی بازیکن کامل است.',
     'runtime.playerReadiness.done': 'انجام شد',
     'runtime.playerReadiness.eyebrow': 'آمادگی بازیکن',
     'runtime.playerReadiness.item.assignment.blocked.detail':
       'قبل از تخصیص به یک کاراکتر نهایی‌شده نیاز است.',
     'runtime.playerReadiness.item.assignment.blocked.title': 'ارسال برای تخصیص',
     'runtime.playerReadiness.item.assignment.done.detail':
-      'DM این کاراکتر runtime را به میز assign کرده است.',
-    'runtime.playerReadiness.item.assignment.done.title': 'کاراکتر assign شد',
+      'DM این کاراکتر runtime را به میز تخصیص داده است.',
+    'runtime.playerReadiness.item.assignment.done.title': 'کاراکتر تخصیص یافت',
     'runtime.playerReadiness.item.assignment.ready.detail':
       'کاراکتر نهایی‌شده را برای تخصیص توسط DM ارسال کنید.',
     'runtime.playerReadiness.item.assignment.ready.title': 'ارسال برای تخصیص',
@@ -975,7 +975,7 @@ const messages = {
       'یک نسخه runtime ارسال شده است و منتظر تخصیص توسط DM است.',
     'runtime.playerReadiness.item.assignment.waiting.title': 'در انتظار تخصیص',
     'runtime.playerReadiness.item.character.blocked.detail':
-      'قبل از join شدن، setup کاراکتر اهمیتی ندارد.',
+      'قبل از پیوستن، آماده‌سازی کاراکتر هنوز لازم نیست.',
     'runtime.playerReadiness.item.character.blocked.title':
       'آماده‌سازی کاراکتر',
     'runtime.playerReadiness.item.character.done.detail':
@@ -985,13 +985,13 @@ const messages = {
       'یک draft runtime بسازید یا یک ورودی ذخیره‌شده Character Library را ارسال کنید.',
     'runtime.playerReadiness.item.character.ready.title': 'آماده‌سازی کاراکتر',
     'runtime.playerReadiness.item.joined.blocked.detail':
-      'قبل از join شدن به session نیاز است.',
+      'قبل از پیوستن، به نشست نیاز است.',
     'runtime.playerReadiness.item.joined.blocked.title': 'پیوستن به میز',
     'runtime.playerReadiness.item.joined.done.detail':
-      'این بازیکن روی میز join شده است.',
+      'این بازیکن به میز پیوسته است.',
     'runtime.playerReadiness.item.joined.done.title': 'بازیکن روی میز است',
     'runtime.playerReadiness.item.joined.ready.detail':
-      'با participant ID و نام نمایشی بازیکن به میز join شوید.',
+      'با شناسه participant و نام نمایشی بازیکن به میز بپیوندید.',
     'runtime.playerReadiness.item.joined.ready.title': 'پیوستن به میز',
     'runtime.playerReadiness.item.placement.blocked.detail':
       'قبل از جای‌گذاری به صحنه و تخصیص نیاز است.',
@@ -1011,11 +1011,11 @@ const messages = {
       'در انتظار DM برای فعال کردن صحنه.',
     'runtime.playerReadiness.item.scene.waiting.title': 'در انتظار صحنه',
     'runtime.playerReadiness.item.session.done.detail':
-      'یک session بارگذاری شده است.',
-    'runtime.playerReadiness.item.session.done.title': 'Session بارگذاری شد',
+      'یک نشست بارگذاری شده است.',
+    'runtime.playerReadiness.item.session.done.title': 'نشست بارگذاری شد',
     'runtime.playerReadiness.item.session.ready.detail':
-      'Session ID را از DM paste کنید، سپس join یا recover کنید.',
-    'runtime.playerReadiness.item.session.ready.title': 'انتخاب session',
+      'Session ID را از DM وارد کنید، سپس بپیوندید یا بازیابی کنید.',
+    'runtime.playerReadiness.item.session.ready.title': 'انتخاب نشست',
     'runtime.playerReadiness.item.turn.blocked.detail':
       'قبل از آمادگی نوبت به جای‌گذاری نیاز است.',
     'runtime.playerReadiness.item.turn.blocked.title': 'در انتظار نوبت',
@@ -1023,7 +1023,7 @@ const messages = {
       '{count} گزینه نوبت در دسترس است.',
     'runtime.playerReadiness.item.turn.ready.title': 'نوبت آماده است',
     'runtime.playerReadiness.item.turn.waiting.detail':
-      'بازیگر فعلی: {actor}. board را نگاه کنید و آماده باشید.',
+      'بازیگر فعلی: {actor}. صفحه نبرد را نگاه کنید و آماده باشید.',
     'runtime.playerReadiness.item.turn.waiting.title': 'در انتظار نوبت',
     'runtime.playerReadiness.move': 'حرکت {state}',
     'runtime.playerReadiness.next': 'بعدی',
@@ -1031,7 +1031,7 @@ const messages = {
     'runtime.playerReadiness.ready': 'آماده',
     'runtime.playerReadiness.readyCount': '{count} قدم بعدی',
     'runtime.playerReadiness.selectedTarget': 'هدف انتخاب‌شده',
-    'runtime.playerReadiness.summary.blocked': 'setup بازیکن مسدود است',
+    'runtime.playerReadiness.summary.blocked': 'آمادگی بازیکن مسدود است',
     'runtime.playerReadiness.summary.readyNext': 'آماده قدم بعدی',
     'runtime.playerReadiness.summary.waitingTable': 'در انتظار میز',
     'runtime.playerReadiness.summary.waitingTurn': 'در انتظار نوبت شما',
@@ -1043,8 +1043,8 @@ const messages = {
     'runtime.playerReadiness.waiting': 'در انتظار',
     'runtime.playerReadiness.waitingCount': '{count} در انتظار',
     'runtime.playerNextStep.chooseSession.detail':
-      'Session ID را از DM paste کنید، سپس join یا recover کنید.',
-    'runtime.playerNextStep.chooseSession.title': 'انتخاب session',
+      'Session ID را از DM وارد کنید، سپس بپیوندید یا بازیابی کنید.',
+    'runtime.playerNextStep.chooseSession.title': 'انتخاب نشست',
     'runtime.playerNextStep.createCharacter.detail':
       'اینجا یک draft بسازید یا یک ورودی ذخیره‌شده Character Library را ارسال کنید، سپس منتظر تخصیص DM بمانید.',
     'runtime.playerNextStep.createCharacter.title': 'ساخت کاراکتر',
@@ -1055,10 +1055,10 @@ const messages = {
       'قبل از ارسال کاراکتر به DM، ویرایش را تمام و کاراکتر را finalize کنید.',
     'runtime.playerNextStep.finalize.title': 'نهایی‌سازی کاراکتر',
     'runtime.playerNextStep.join.detail':
-      'قبل از خواندن وضعیت میز، با این participant به session join شوید.',
+      'قبل از خواندن وضعیت میز، با این participant به نشست بپیوندید.',
     'runtime.playerNextStep.join.title': 'پیوستن به میز',
     'runtime.playerNextStep.noScene.detail':
-      'DM هنوز صحنه‌ای را فعال نکرده، یا شما باید recover کنید.',
+      'DM هنوز صحنه‌ای را فعال نکرده، یا شما باید بازیابی کنید.',
     'runtime.playerNextStep.noScene.title': 'صحنه فعالی نیست',
     'runtime.playerNextStep.placement.detail':
       'کاراکتر شما در صحنه فعال placement توکن ندارد.',
@@ -1067,7 +1067,7 @@ const messages = {
       'کاراکتر نهایی‌شده را برای تخصیص DM ارسال کنید تا میز آن را ببیند.',
     'runtime.playerNextStep.submit.title': 'ارسال برای تخصیص',
     'runtime.playerNextStep.waitingDm.detail':
-      'یک نسخه runtime ارسال‌شده در وضعیت session منتظر تخصیص توسط DM است.',
+      'یک نسخه runtime ارسال‌شده در وضعیت نشست منتظر تخصیص توسط DM است.',
     'runtime.playerNextStep.waitingDm.title': 'در انتظار تخصیص DM',
     'runtime.playerNextStep.waitingTurn.detail':
       'بازیگر فعلی را دنبال کنید و هدف یا حرکت خود را آماده کنید.',
@@ -1219,16 +1219,16 @@ const messages = {
     'runtime.roster.currentTurnId': 'نوبت: {participantId}',
     'runtime.roster.currentTurnPlayer': 'نوبت: {name}',
     'runtime.roster.description':
-      'وضعیت setup هر بازیکن از مدل‌های خواندنی session، active-scene و برخورد.',
+      'وضعیت آماده‌سازی هر بازیکن از مدل‌های خواندنی نشست، جای‌گذاری صحنه فعال و برخورد.',
     'runtime.roster.emptyDetail':
-      'بازیکن‌ها را join کنید تا roster آمادگی پر شود.',
+      'بازیکن‌ها را به میز بپیوندانید تا فهرست آمادگی پر شود.',
     'runtime.roster.emptyTitle': 'بازیکنی روی میز نیست',
     'runtime.roster.encounter': 'برخورد',
     'runtime.roster.encounter.currentTurn': 'نوبت فعلی',
     'runtime.roster.encounter.noEncounter': 'برخورد فعالی نیست',
     'runtime.roster.encounter.notInEncounter': 'در ترتیب نوبت نیست',
     'runtime.roster.encounter.waitingTurn': 'در انتظار نوبت',
-    'runtime.roster.eyebrow': 'Roster آمادگی',
+    'runtime.roster.eyebrow': 'فهرست آمادگی',
     'runtime.roster.placement': 'جای‌گذاری',
     'runtime.roster.placement.needsAssignment':
       'قبل از جای‌گذاری به تخصیص نیاز دارد',
@@ -1236,21 +1236,21 @@ const messages = {
     'runtime.roster.placement.placed': 'قرار داده شده',
     'runtime.roster.placement.placedAt': 'قرارگرفته در {x},{y}',
     'runtime.roster.placement.waitingScene': 'در انتظار صحنه فعال',
-    'runtime.roster.readySummary': '{ready}/{total} آماده روی board',
+    'runtime.roster.readySummary': '{ready}/{total} آماده روی صفحه نبرد',
     'runtime.roster.setup.needsCharacter': 'نیازمند کاراکتر',
     'runtime.roster.setup.needsPlacement': 'نیازمند جای‌گذاری',
     'runtime.roster.setup.pendingAssignment': 'در انتظار DM',
-    'runtime.roster.setup.ready': 'آماده روی board',
-    'runtime.roster.setup.waitingScene': 'در انتظار scene',
-    'runtime.roster.title': 'Roster بازیکن‌ها',
+    'runtime.roster.setup.ready': 'آماده روی صفحه نبرد',
+    'runtime.roster.setup.waitingScene': 'در انتظار صحنه',
+    'runtime.roster.title': 'فهرست بازیکن‌ها',
     'runtime.rosterPanel.description.dm':
       'همه کاراکترهای بازیکن‌های نشسته روی میز.',
     'runtime.rosterPanel.description.player':
-      'کاراکتر بارگذاری‌شده شما از read/eventهای سرور.',
+      'کاراکتر بارگذاری‌شده شما از خواندنی‌ها و رخدادهای سرور.',
     'runtime.rosterPanel.emptyDetail':
-      'بازیکن‌ها را join کنید یا یک سناریوی demo نام‌دار اجرا کنید.',
+      'بازیکن‌ها را به میز بپیوندانید یا یک سناریوی نمایشی نام‌دار اجرا کنید.',
     'runtime.rosterPanel.emptyTitle': 'بازیکنی بارگذاری نشده',
-    'runtime.rosterPanel.eyebrow': 'Roster',
+    'runtime.rosterPanel.eyebrow': 'فهرست',
     'runtime.rosterPanel.title': 'کاراکترها',
     'runtime.assignmentHelper.assigned': 'تخصیص‌یافته',
     'runtime.assignmentHelper.knownCharacter': 'کاراکتر شناخته‌شده',

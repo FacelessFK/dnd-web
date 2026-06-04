@@ -133,6 +133,18 @@ and server URLs where they are intentionally stable. Keep this
 frontend/i18n-only and do not change runtime protocol, command semantics,
 combat automation, auth, DB requirements, or read-model recovery behavior.
 
+Status: implemented.
+
+### Slice 8: Persian Table Setup / Disabled Helper Microcopy Polish
+
+Polish remaining Persian Table Setup and disabled-reason helper copy in the
+Training Room flow by replacing mixed English/Persian setup blockers with
+localization-aware Persian equivalents while preserving canonical IDs,
+`runtime`, `Session ID`, server URLs, and protocol/debug labels where they are
+intentionally stable. Keep this frontend/i18n-only and do not change runtime
+protocol, command semantics, combat automation, auth, DB requirements, or
+read-model recovery behavior.
+
 Recommended effort: `medium`.
 
 ## Historical Note

@@ -246,3 +246,48 @@ Next narrow implementation slice:
 Recommended effort: `medium`, because the next slice should be a small i18n
 copy pass with existing validation and no data-model, protocol, or server
 changes.
+
+## Persian Readiness / Roster Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 7 microcopy polish
+- Persistence mode: not applicable to copy-only source inspection
+- Runtime code changed during run: frontend/i18n copy only
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, and Character Library persistence changed or claimed: no
+
+Implemented polish:
+
+- Replaced mixed Persian/English Player readiness phrases such as
+  `setup بازیکن آماده است.`, `Session بارگذاری شد`, `انتخاب session`,
+  `board را نگاه کنید`, and `setup بازیکن مسدود است` with Persian-facing
+  equivalents while preserving canonical `Session ID`, `runtime`, `DM`, and
+  participant terminology.
+- Replaced mixed roster phrases such as `Roster آمادگی`,
+  `{ready}/{total} آماده روی board`, `آماده روی board`, `در انتظار scene`,
+  `Roster بازیکن‌ها`, and `read/eventهای سرور` with Persian-facing readiness
+  and roster copy.
+- Kept this as UI copy only; no command, server, read-model, DB/auth,
+  Character Library/runtime, or combat behavior changed.
+
+Remaining product cautions:
+
+- Adjacent Persian **Table Setup** and disabled-reason helper copy still mixes
+  words such as `session`, `join`, `recover`, and `paste` in several
+  high-traffic setup blockers.
+- These remaining strings are outside the readiness/roster slice and should be
+  handled as the next small i18n pass rather than broadening this change.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian Table Setup and disabled-reason helper copy in the
+> Training Room flow by replacing mixed English/Persian setup blockers with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, server URLs, and protocol/debug labels where they
+> are intentionally stable. Keep this frontend/i18n-only and do not change
+> runtime protocol, command semantics, combat automation, auth, DB requirements,
+> or read-model recovery behavior.
+
+Recommended effort: `medium`.
