@@ -186,3 +186,63 @@ Remaining cautions:
 - A live two-human table pass is still useful for subjective clarity, but the
   browser-local reset and session handoff mechanics now have repeatable
   automated coverage.
+
+## Post-Slice-5 Triage
+
+- Date: 2026-06-04
+- Branch/build: commit `663435a` plus triage-only working tree
+- Persistence mode: in-memory
+- Automation:
+  - `corepack pnpm --filter @dnd/web test:smoke`
+  - `corepack pnpm --filter @dnd/web test:smoke:two-profile`
+- Two-profile rerun session ID: `E7ZPYN`
+- Runtime code changed during triage: no
+- Protocol, server commands, DB/auth behavior, replay/catch-up, combat
+  automation, and Character Library persistence changed or claimed: no
+
+Observed pass:
+
+- The one-profile runtime smoke passed after the Slice 5 closure commit.
+- The two-profile DM/Player handoff smoke passed when run by itself.
+- The two-profile smoke still validates Player mode guardrails: Player profile
+  does not expose **Run Training Room Skirmish**, **Scene Builder**, or
+  **Monsters & NPCs** while the DM profile keeps DM combatant controls.
+- Player **Local Reset** remains browser-local in the two-profile run; the DM
+  profile keeps the server-owned Training Room session, and the Player profile
+  can recover the same backend session again.
+
+Validation caution:
+
+- Running the one-profile and two-profile smoke scripts concurrently can make
+  separate Next dev processes contend over `.next/` and fail before `/runtime`
+  is ready. Run the smoke scripts sequentially when using them as delivery
+  evidence.
+
+Remaining product cautions:
+
+- Persian scanability improved for session handoff and Player next-step copy,
+  but high-traffic readiness/roster strings still mix Persian with English
+  product nouns such as `setup`, `Session`, `Roster`, `board`, and `scene`.
+- Examples observed by source inspection include `setup بازیکن آماده است.`,
+  `Session بارگذاری شد`, `setup بازیکن مسدود است`, `انتخاب session`,
+  `Roster آمادگی`, `{ready}/{total} آماده روی board`, `آماده روی board`, and
+  `در انتظار scene`.
+- These are copy/scanability issues only. They do not change server authority,
+  DM role gates, read-model recovery, Character Library/runtime separation, or
+  combat semantics.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian readiness/roster microcopy in the Training Room
+> flow by replacing mixed English/Persian high-traffic labels with
+> localization-aware Persian equivalents while preserving canonical IDs,
+> `runtime`, `Session ID`, and server URLs where they are intentionally stable.
+> Keep this frontend/i18n-only and do not change runtime protocol, command
+> semantics, combat automation, auth, DB requirements, or read-model recovery
+> behavior.
+
+Recommended effort: `medium`, because the next slice should be a small i18n
+copy pass with existing validation and no data-model, protocol, or server
+changes.

@@ -111,7 +111,29 @@ Persian plus canonical ID rows easier to scan. Keep this frontend-only and do
 not change runtime protocol, command semantics, combat automation, auth, DB
 requirements, or read-model recovery behavior.
 
-Recommended effort: `high`.
+Status: implemented.
+
+### Slice 6: Post-Slice-5 Playtest Evidence Triage
+
+Use the completed one-profile and two-profile Training Room smoke evidence plus
+source inspection to choose the next narrow UI polish slice. Keep this as
+triage only unless a human explicitly approves implementation. Do not broaden
+into protocol, combat automation, replay/catch-up, production auth, DB/auth
+requirements, or broader D&D systems.
+
+Status: implemented from the post-Slice-5 triage recorded in
+`docs/delivery/TRAINING_ROOM_SKIRMISH_CODEX_BROWSER_RUN.md`.
+
+### Slice 7: Persian Readiness / Roster Microcopy Polish
+
+Polish remaining Persian readiness/roster microcopy in the Training Room flow by
+replacing mixed English/Persian high-traffic labels with localization-aware
+Persian equivalents while preserving canonical IDs, `runtime`, `Session ID`,
+and server URLs where they are intentionally stable. Keep this
+frontend/i18n-only and do not change runtime protocol, command semantics,
+combat automation, auth, DB requirements, or read-model recovery behavior.
+
+Recommended effort: `medium`.
 
 ## Historical Note
 
