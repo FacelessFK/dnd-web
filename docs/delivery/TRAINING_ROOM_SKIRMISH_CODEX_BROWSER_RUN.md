@@ -385,3 +385,50 @@ Next narrow implementation slice:
 > requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.
+
+## Persian Recovery / Stream Status Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 10 microcopy polish
+- Persistence mode: not applicable to copy-only source inspection
+- Runtime code changed during run: frontend/i18n copy only
+- Protocol, server commands, DB/auth behavior, replay/catch-up, SSE behavior,
+  combat automation, and read-model recovery behavior changed or claimed: no
+
+Implemented polish:
+
+- Replaced mixed Persian/English Active Scene and Recovery Status phrases using
+  terms such as `session`, `recover`, `read model`, `scene`, `characters`, and
+  `encounter` with Persian-facing status copy while preserving canonical
+  `runtime`, `DM`, and ID terminology.
+- Replaced mixed stream/event-feed and status overview phrases using `stream`,
+  `subscribe`, `feed`, `cell`, `command`, `actor-scoped`, `prerequisite`,
+  `server-authoritative`, and `condition` with Persian-facing equivalents
+  while preserving canonical `SSE` and no-replay wording.
+- Kept this as UI copy only; no command, server, read-model, DB/auth, SSE,
+  replay/catch-up, or combat behavior changed.
+
+Remaining product cautions:
+
+- Adjacent Persian Debug panel and Scene Builder helper copy still mixes terms
+  such as `Payload`, `protocol`, `debug`, `command`, `ledger`, `entity`,
+  `cell`, and draft/prerequisite wording in lower-level helper text.
+- These remaining strings are outside the Recovery / Stream Status slice and
+  should be handled as the next small i18n pass rather than broadening this
+  change.
+
+Triage recommendation:
+
+Next narrow implementation slice:
+
+> Polish remaining Persian Debug panel and Scene Builder helper copy in the
+> Training Room flow by replacing mixed English/Persian helper terms such as
+> `Payload`, `protocol`, `debug`, `command`, `ledger`, `entity`, `cell`, and
+> draft/prerequisite wording with localization-aware Persian equivalents while
+> preserving canonical command IDs, protocol payload names, `SSE`, server URLs,
+> and debug labels where they are intentionally stable. Keep this
+> frontend/i18n-only and do not change runtime protocol, command semantics,
+> scene authority, combat automation, auth, DB requirements, or read-model
+> recovery behavior.
+
+Recommended effort: `medium`.

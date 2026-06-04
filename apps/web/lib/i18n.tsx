@@ -831,16 +831,16 @@ const messages = {
     'runtime.characterLibrary.waitingTitle':
       'نسخه runtime در انتظار تخصیص توسط DM',
     'runtime.activeScene.buildDetail':
-      'قبل از قرار دادن توکن‌ها، entityها یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
+      'قبل از قرار دادن توکن‌ها، موجودیت‌های صحنه یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
     'runtime.activeScene.buildTitle': 'ساخت صحنه',
     'runtime.activeScene.idKnownDetail':
-      'session یک شناسه صحنه فعال دارد، اما سند کامل صحنه هنوز recover نشده است.',
+      'نشست یک شناسه صحنه فعال دارد، اما سند کامل صحنه هنوز بازیابی نشده است.',
     'runtime.activeScene.idKnownTitle': 'شناسه صحنه مشخص است',
     'runtime.activeScene.loadedDetail':
-      '{sceneName} با گرید {width}x{height} و {entityCount} entity صحنه بارگذاری شده است.',
+      '{sceneName} با گرید {width}x{height} و {entityCount} موجودیت صحنه بارگذاری شده است.',
     'runtime.activeScene.loadedTitle': 'صحنه بارگذاری شد',
     'runtime.activeScene.noneDetail':
-      'DM هنوز صحنه‌ای را فعال نکرده، یا این مرورگر باید read modelها را recover کند.',
+      'DM هنوز صحنه‌ای را فعال نکرده، یا این مرورگر باید مدل‌های خواندنی را بازیابی کند.',
     'runtime.activeScene.noneTitle': 'صحنه فعالی نیست',
     'runtime.demoSetup.description':
       'اولین مسیر قابل بازی Training Room را با فرمان‌های فعلی سرور و داده‌های نمونه آماده می‌کند.',
@@ -940,15 +940,15 @@ const messages = {
       'راند {round} - نوبت {turn}/{turnCount}',
     'runtime.encounterStatus.title': 'وضعیت برخورد',
     'runtime.eventFeed.description':
-      'خلاصه‌های خوانای updateهای زنده SSE. این هنوز replay نیست.',
+      'خلاصه‌های خوانای به‌روزرسانی‌های زنده SSE. این هنوز replay نیست.',
     'runtime.eventFeed.emptyDetail':
-      'به stream جلسه subscribe کنید، سپس حرکت، حمله، یا recover انجام دهید تا این feed پر شود.',
+      'به جریان نشست وصل شوید، سپس حرکت، حمله، یا بازیابی انجام دهید تا این فهرست رخداد پر شود.',
     'runtime.eventFeed.emptyTitle': 'هنوز خلاصه رویداد زنده‌ای نیست',
     'runtime.eventFeed.eyebrow': 'نشانه‌های زنده',
-    'runtime.eventFeed.title': 'Combat و رخدادها',
+    'runtime.eventFeed.title': 'برخورد و رخدادها',
     'runtime.grid.actingToken': 'توکن فعال',
     'runtime.grid.description':
-      'صحنه {scene}. روی cell کلیک کنید یا مختصات را وارد کنید؛ حرکت همچنان از commandهای سرور عبور می‌کند.',
+      'صحنه {scene}. روی خانه کلیک کنید یا مختصات را وارد کنید؛ حرکت همچنان از فرمان‌های سرور عبور می‌کند.',
     'runtime.grid.dmEyebrow': 'میز نبرد DM',
     'runtime.grid.dmReposition': 'جابجایی DM',
     'runtime.grid.moveActor': 'حرکت بازیگر',
@@ -1075,14 +1075,14 @@ const messages = {
     'runtime.playerNextStep.yourTurn.detail':
       'حرکت کنید، حمله کنید، یا اقتصاد اکشن خود را مصرف کنید. سرور قانونی بودن را اعتبارسنجی می‌کند.',
     'runtime.playerNextStep.yourTurn.title': 'نوبت شما',
-    'runtime.recovery.empty': 'بدون session',
+    'runtime.recovery.empty': 'بدون نشست',
     'runtime.recovery.detail.empty':
-      'هنوز session runtime قابل بازیابی در این مرورگر بارگذاری نشده است.',
+      'هنوز نشست runtime قابل بازیابی در این مرورگر بارگذاری نشده است.',
     'runtime.recovery.detail.notes': '{count} یادداشت بازیابی ثبت شد.',
     'runtime.recovery.detail.partial':
       '{loaded}/{total} مدل خواندنی بازیابی بارگذاری شده است.',
     'runtime.recovery.detail.recovered':
-      '{loaded}/{total} مدل خواندنی بازیابی بارگذاری شده است: session، scene، جای‌گذاری صحنه فعال، characters، و encounter.',
+      '{loaded}/{total} مدل خواندنی بازیابی بارگذاری شده است: نشست، صحنه، جای‌گذاری صحنه فعال، کاراکترها، و برخورد.',
     'runtime.recovery.eyebrow': 'بازیابی',
     'runtime.recovery.item.activeScene.missing':
       'مدل خواندنی جای‌گذاری صحنه فعال بارگذاری نشده است.',
@@ -1113,12 +1113,12 @@ const messages = {
       'مدل خواندنی صحنه فعال بارگذاری شده است.',
     'runtime.recovery.item.scene.title': 'صحنه',
     'runtime.recovery.item.session.missing':
-      'هیچ sessionی در وضعیت runtime محلی بارگذاری نشده است.',
+      'هیچ نشستی در وضعیت runtime محلی بارگذاری نشده است.',
     'runtime.recovery.item.session.optional_missing':
-      'تا وقتی session انتخاب نشده، بازیابی session اختیاری است.',
+      'تا وقتی نشست انتخاب نشده، بازیابی نشست اختیاری است.',
     'runtime.recovery.item.session.recovered':
-      'مدل خواندنی session در وضعیت runtime محلی حاضر است.',
-    'runtime.recovery.item.session.title': 'Session',
+      'مدل خواندنی نشست در وضعیت runtime محلی حاضر است.',
+    'runtime.recovery.item.session.title': 'نشست',
     'runtime.recovery.loaded': 'بارگذاری شد',
     'runtime.recovery.missing': 'کم است',
     'runtime.recovery.notes': 'یادداشت‌های بازیابی',
@@ -1145,16 +1145,16 @@ const messages = {
     'runtime.statePanel.activeScene': 'صحنه فعال',
     'runtime.statePanel.currentTurn': 'نوبت فعلی',
     'runtime.statePanel.description':
-      'IDها و read modelهای فعلی که در این مرورگر بارگذاری شده‌اند.',
+      'IDها و مدل‌های خواندنی فعلی که در این مرورگر بارگذاری شده‌اند.',
     'runtime.statePanel.encounter': 'برخورد',
     'runtime.statePanel.eyebrow': 'وضعیت میز',
     'runtime.statePanel.sceneName': 'نام صحنه',
-    'runtime.statePanel.session': 'Session',
-    'runtime.statePanel.title': 'State',
+    'runtime.statePanel.session': 'نشست',
+    'runtime.statePanel.title': 'وضعیت',
     'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
     'runtime.turnTarget.attackTarget': 'حمله به هدف',
     'runtime.turnTarget.description':
-      'کنترل‌های نوبت commandهای actor-scoped می‌فرستند؛ دکمه‌های غیرفعال prerequisiteهای کم‌شده را توضیح می‌دهند.',
+      'کنترل‌های نوبت فرمان‌های محدود به بازیگر می‌فرستند؛ دکمه‌های غیرفعال پیش‌نیازهای کم‌شده را توضیح می‌دهند.',
     'runtime.turnTarget.eyebrow': 'برخورد',
     'runtime.turnTarget.initiative': '· ابتکار {initiative}',
     'runtime.turnTarget.target': 'هدف',
@@ -1168,7 +1168,7 @@ const messages = {
     'runtime.turnTarget.useReaction': 'مصرف ری‌اکشن',
     'runtime.overrides.actionUsed': 'اکشن مصرف شده',
     'runtime.overrides.bonusActionUsed': 'بونس اکشن مصرف شده',
-    'runtime.overrides.conditionTags': 'تگ‌های condition',
+    'runtime.overrides.conditionTags': 'تگ‌های وضعیت',
     'runtime.overrides.controlledParticipant': 'participant تحت کنترل',
     'runtime.overrides.currentHp': 'HP فعلی',
     'runtime.overrides.description':
@@ -1177,24 +1177,24 @@ const messages = {
     'runtime.overrides.eyebrow': 'فقط DM',
     'runtime.overrides.movementUsed': 'حرکت مصرف‌شده',
     'runtime.overrides.reactionUsed': 'ری‌اکشن مصرف شده',
-    'runtime.overrides.setConditions': 'ثبت conditionها',
+    'runtime.overrides.setConditions': 'ثبت وضعیت‌ها',
     'runtime.overrides.setHp': 'ثبت HP',
     'runtime.overrides.setTurnActor': 'ثبت بازیگر نوبت',
     'runtime.overrides.setUsage': 'ثبت مصرف نوبت',
     'runtime.overrides.title': 'Overrideها',
     'runtime.overrides.turnOverride': 'Override نوبت',
     'runtime.statusOverview.description':
-      'فقط از read modelهای فعلی ساخته می‌شود؛ اعتبارسنجی فرمان‌ها همچنان روی سرور است.',
+      'فقط از مدل‌های خواندنی فعلی ساخته می‌شود؛ اعتبارسنجی فرمان‌ها همچنان روی سرور است.',
     'runtime.statusOverview.dmReadiness': 'آماده‌سازی DM',
     'runtime.statusOverview.eyebrow': 'وضعیت runtime',
     'runtime.statusOverview.nextAction': 'اقدام قابل‌مشاهده بعدی',
     'runtime.statusOverview.nextAction.dmDetail':
-      'در انتظار اقدام بعدی DM روی میز server-authoritative.',
+      'در انتظار اقدام بعدی DM روی میز تحت مرجعیت سرور.',
     'runtime.statusOverview.nextAction.ownerDetail': 'مسئول',
     'runtime.statusOverview.nextAction.playerDetail':
       'اقدام قابل‌مشاهده بعدی بازیکن آماده است.',
     'runtime.statusOverview.nextAction.tableDetail':
-      'در انتظار پیش‌نیازهای میز یا read modelهای بارگذاری‌شده فعلی.',
+      'در انتظار پیش‌نیازهای میز یا مدل‌های خواندنی بارگذاری‌شده فعلی.',
     'runtime.statusOverview.playerReadiness': 'آمادگی بازیکن',
     'runtime.statusOverview.readiness': 'آمادگی',
     'runtime.statusOverview.readinessProgress': '{completed}/{total} تکمیل',
@@ -1377,8 +1377,8 @@ const messages = {
     'runtime.outbox.status.off': 'صف خروجی خاموش',
     'runtime.outbox.status.unknown': 'صف خروجی -',
     'runtime.status.busy': 'درگیر: {label}',
-    'runtime.status.stream': 'استریم {status}',
-    'runtime.status.streamIdle': 'استریم غیرفعال',
+    'runtime.status.stream': 'جریان {status}',
+    'runtime.status.streamIdle': 'جریان غیرفعال',
     'runtime.summary':
       'یک سطح مرورگری متناسب با نقش کاربر برای بک‌اند فعلی. وضعیت نهایی همچنان دست سرور است؛ SSE فقط رویدادهای زنده را می‌رساند و بازیابی، وضعیت را از مدل‌های خواندنی بازسازی می‌کند.',
     'runtime.title': 'میز نبرد زنده',

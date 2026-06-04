@@ -173,7 +173,11 @@ async function main() {
           !normalizedText.includes('no active encounter loaded');
       })()`,
     });
-    await waitForText(page, 'Combat & Event Feed', 'event feed panel');
+    await waitForAnyText(
+      page,
+      ['Combat & Event Feed', 'برخورد و رخدادها'],
+      'event feed panel',
+    );
     await waitForText(page, 'Monsters & NPCs', 'DM combatant controls panel');
 
     logSmokeStep('validating recovery after reload');

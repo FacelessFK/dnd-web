@@ -173,6 +173,20 @@ frontend/i18n-only and do not change runtime protocol, command semantics,
 replay/catch-up claims, SSE behavior, combat automation, auth, DB requirements,
 or read-model recovery behavior.
 
+Status: implemented.
+
+### Slice 11: Persian Debug / Scene Builder Helper Microcopy Polish
+
+Polish remaining Persian Debug panel and Scene Builder helper copy in the
+Training Room flow by replacing mixed English/Persian helper terms such as
+`Payload`, `protocol`, `debug`, `command`, `ledger`, `entity`, `cell`, and
+draft/prerequisite wording with localization-aware Persian equivalents while
+preserving canonical command IDs, protocol payload names, `SSE`, server URLs,
+and debug labels where they are intentionally stable. Keep this
+frontend/i18n-only and do not change runtime protocol, command semantics,
+scene authority, combat automation, auth, DB requirements, or read-model
+recovery behavior.
+
 Recommended effort: `medium`.
 
 ## Historical Note

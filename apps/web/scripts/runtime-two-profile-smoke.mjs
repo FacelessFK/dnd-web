@@ -162,7 +162,7 @@ async function main() {
     await waitForEncounterSummary(dmPage, 'DM encounter summary');
     await waitForAnyText(
       dmPage,
-      ['Combat & Event Feed', 'Combat و رخدادها'],
+      ['Combat & Event Feed', 'برخورد و رخدادها'],
       'DM event feed',
     );
     await waitForAnyText(
