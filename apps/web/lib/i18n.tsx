@@ -50,6 +50,45 @@ const messages = {
     'nav.soon': 'Soon',
     'page.characterBuilder.title': 'Character Builder',
     'page.characterLibrary.title': 'Character Library',
+    'page.characterLibrary.armorClass': 'AC {armorClass}',
+    'page.characterLibrary.createNew': 'Create New Character',
+    'page.characterLibrary.deletePending': 'Delete - pending',
+    'page.characterLibrary.description':
+      'Review saved characters for your account, reopen drafts, keep portrait uploads, and export character sheets from the same workspace.',
+    'page.characterLibrary.duplicatePending': 'Duplicate - pending',
+    'page.characterLibrary.edit': 'Edit',
+    'page.characterLibrary.finalize': 'Finalize Character',
+    'page.characterLibrary.finalizeFailed': 'Finalize failed',
+    'page.characterLibrary.finalizePending': 'Finalizing...',
+    'page.characterLibrary.finalizeSuccess': '{name} is finalized.',
+    'page.characterLibrary.level': 'Level',
+    'page.characterLibrary.navBadge': 'Library',
+    'page.characterLibrary.pdf2014': '2014 PDF',
+    'page.characterLibrary.pdf2024': '2024 PDF',
+    'page.characterLibrary.pdfFailed': 'Character sheet PDF download failed.',
+    'page.characterLibrary.pdfFailedWithReason':
+      'Character sheet PDF download failed: {reason}',
+    'page.characterLibrary.pdfFallbackSuccess':
+      'Fallback character sheet PDF downloaded: {reason}',
+    'page.characterLibrary.pdfPending': 'Preparing...',
+    'page.characterLibrary.pdfPreviewClose': 'Close Preview',
+    'page.characterLibrary.pdfPreviewDownload': 'Download PDF',
+    'page.characterLibrary.pdfPreviewEyebrow': 'Character sheet preview',
+    'page.characterLibrary.pdfPreviewFailed': 'PDF preview failed: {reason}',
+    'page.characterLibrary.pdfPreviewFallback':
+      'Template PDF preview is using the simple generated sheet: {reason}',
+    'page.characterLibrary.pdfPreviewFallbackReady':
+      'PDF preview ready with a generated fallback sheet: {reason}',
+    'page.characterLibrary.pdfPreviewReady':
+      '{template} preview is ready. Review it before downloading.',
+    'page.characterLibrary.pdfPreviewTitle': 'Review Character Sheet',
+    'page.characterLibrary.pdfPreviewUnknownError':
+      'PDF preview failed for an unknown reason.',
+    'page.characterLibrary.pdfSuccess':
+      '{template} downloaded from saved character data.',
+    'page.characterLibrary.runtimeHint':
+      'Finalized saved entries can be submitted from Player-mode runtime. The server creates a separate runtime copy, so live HP, movement, conditions, and DM overrides do not mutate this library entry.',
+    'page.characterLibrary.useInSessionPending': 'Use in session - pending',
     'runtime.assignmentRequests.ac': 'AC',
     'runtime.assignmentRequests.build': 'Build',
     'runtime.assignmentRequests.character': 'Character',
@@ -137,6 +176,12 @@ const messages = {
       'Runtime copy {characterId} is waiting in authoritative session state. The DM must assign it before it becomes your active table character.',
     'runtime.characterLibrary.waitingTitle':
       'Runtime copy pending DM assignment',
+    'runtime.characterSummary.conditions': 'Conditions',
+    'runtime.characterSummary.initiative': 'Init',
+    'runtime.characterSummary.passivePerception': 'Passive',
+    'runtime.characterSummary.proficiency': 'Prof',
+    'runtime.characterSummary.speed': 'Speed',
+    'runtime.characterSummary.status.draft': 'Draft',
     'runtime.activeScene.buildDetail':
       'Create or activate a scene before placing tokens, entities, or starting an encounter.',
     'runtime.activeScene.buildTitle': 'Build a scene',
@@ -291,6 +336,72 @@ const messages = {
     'runtime.sceneBuilder.transitions.preset.stairs.label': 'Stairs',
     'runtime.sceneBuilder.transitions.presets': 'Transition presets',
     'runtime.sceneBuilder.transitions.title': 'Scene Transitions',
+    'runtime.sceneBuilder.transitions.validation.fixDraft':
+      'Fix the transition draft first: {error}',
+    'runtime.sceneBuilder.transitions.validation.fixEdit':
+      'Fix the transition edit form first: {error}',
+    'runtime.sceneBuilder.transitions.validation.footprint':
+      'Transition footprint must fit within the scene grid.',
+    'runtime.sceneBuilder.transitions.validation.kind':
+      'Choose a valid transition kind.',
+    'runtime.sceneBuilder.transitions.validation.name':
+      'Transition name is required.',
+    'runtime.sceneBuilder.transitions.validation.range':
+      '{field} must be between {min} and {max}.',
+    'runtime.sceneBuilder.transitions.validation.targetCell':
+      'Select a non-negative target cell.',
+    'runtime.sceneBuilder.transitions.validation.targetSceneId':
+      'Target scene ID is required.',
+    'runtime.sceneBuilder.transitions.validation.wholeNumber':
+      '{field} must be a whole number.',
+    'runtime.combatants.abilities': 'Abilities',
+    'runtime.combatants.attackTarget': 'Monster/NPC Attack Target',
+    'runtime.combatants.commandTitle': 'Command combatant',
+    'runtime.combatants.create': 'Create Combatant',
+    'runtime.combatants.createDetail':
+      'Target cell {x},{y}. Combatants block movement and can join encounter turn order.',
+    'runtime.combatants.createTitle': 'Create combatant',
+    'runtime.combatants.defeatedSuffix': ', defeated',
+    'runtime.combatants.description':
+      'Create and command narrow DM-controlled monster/NPC combatants. They are scene actors, not full stat blocks or AI.',
+    'runtime.combatants.emptyDetail':
+      'Create a combatant in the active scene first.',
+    'runtime.combatants.emptyTitle': 'No monster/NPC combatants',
+    'runtime.combatants.hidden': 'Hidden styling',
+    'runtime.combatants.hpCurrent': 'HP current',
+    'runtime.combatants.hpMax': 'HP max',
+    'runtime.combatants.hpTemp': 'Temp HP',
+    'runtime.combatants.kind': 'Kind',
+    'runtime.combatants.makeTurn': 'Make Turn',
+    'runtime.combatants.name': 'Name',
+    'runtime.combatants.option':
+      '{name} ({kind}, HP {current}/{max}{defeatSuffix})',
+    'runtime.combatants.reposition': 'Reposition',
+    'runtime.combatants.selected': 'Selected monster/NPC',
+    'runtime.combatants.setHp': 'Set HP',
+    'runtime.combatants.sizeHeight': 'Size H',
+    'runtime.combatants.sizeWidth': 'Size W',
+    'runtime.combatants.speed': 'Speed',
+    'runtime.combatants.status.active': 'active',
+    'runtime.combatants.status.currentTurn': 'Current turn',
+    'runtime.combatants.status.defeated': 'defeated',
+    'runtime.combatants.status.label': 'Status',
+    'runtime.combatants.status.selected': 'Selected',
+    'runtime.combatants.status.selectedValue': '{name} at {x},{y}',
+    'runtime.combatants.status.target': 'Target',
+    'runtime.combatants.title': 'Monsters & NPCs',
+    'runtime.combatants.validation.currentHp':
+      'Current HP cannot exceed max HP.',
+    'runtime.combatants.validation.fixDraft':
+      'Fix the combatant draft first: {error}',
+    'runtime.combatants.validation.footprint':
+      'Combatant footprint must fit within the scene grid.',
+    'runtime.combatants.validation.kind': 'Choose monster or npc.',
+    'runtime.combatants.validation.name': 'Combatant name is required.',
+    'runtime.combatants.validation.range':
+      '{field} must be between {min} and {max}.',
+    'runtime.combatants.validation.wholeNumber':
+      '{field} must be a whole number.',
     'runtime.disabled.busy': 'Waiting on {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
       'Create or recover an active scene first.',
@@ -563,6 +674,7 @@ const messages = {
     'runtime.statePanel.description':
       'Current IDs and read models loaded into this browser.',
     'runtime.statePanel.encounter': 'Encounter',
+    'runtime.statePanel.encounterValue': '{status} · round {round}',
     'runtime.statePanel.eyebrow': 'Table status',
     'runtime.statePanel.sceneName': 'Scene name',
     'runtime.statePanel.session': 'Session',
@@ -851,6 +963,46 @@ const messages = {
     'nav.soon': 'به‌زودی',
     'page.characterBuilder.title': 'سازنده کاراکتر',
     'page.characterLibrary.title': 'کتابخانه کاراکترها',
+    'page.characterLibrary.armorClass': 'AC {armorClass}',
+    'page.characterLibrary.createNew': 'ساخت کاراکتر جدید',
+    'page.characterLibrary.deletePending': 'حذف - در انتظار',
+    'page.characterLibrary.description':
+      'کاراکترهای ذخیره‌شده حساب خودتان را ببینید، پیش‌نویس‌ها را باز کنید، پرتره‌های بارگذاری‌شده را نگه دارید، و از همین محیط شیت خروجی بگیرید.',
+    'page.characterLibrary.duplicatePending': 'تکثیر - در انتظار',
+    'page.characterLibrary.edit': 'ویرایش',
+    'page.characterLibrary.finalize': 'نهایی‌سازی کاراکتر',
+    'page.characterLibrary.finalizeFailed': 'نهایی‌سازی ناموفق بود',
+    'page.characterLibrary.finalizePending': 'در حال نهایی‌سازی...',
+    'page.characterLibrary.finalizeSuccess': '{name} نهایی شد.',
+    'page.characterLibrary.level': 'سطح',
+    'page.characterLibrary.navBadge': 'کتابخانه',
+    'page.characterLibrary.pdf2014': 'PDF 2014',
+    'page.characterLibrary.pdf2024': 'PDF 2024',
+    'page.characterLibrary.pdfFailed': 'دانلود PDF شیت کاراکتر ناموفق بود.',
+    'page.characterLibrary.pdfFailedWithReason':
+      'دانلود PDF شیت کاراکتر ناموفق بود: {reason}',
+    'page.characterLibrary.pdfFallbackSuccess':
+      'PDF جایگزین شیت کاراکتر دانلود شد: {reason}',
+    'page.characterLibrary.pdfPending': 'در حال آماده‌سازی...',
+    'page.characterLibrary.pdfPreviewClose': 'بستن پیش‌نمایش',
+    'page.characterLibrary.pdfPreviewDownload': 'دانلود PDF',
+    'page.characterLibrary.pdfPreviewEyebrow': 'پیش‌نمایش شیت کاراکتر',
+    'page.characterLibrary.pdfPreviewFailed':
+      'پیش‌نمایش PDF ناموفق بود: {reason}',
+    'page.characterLibrary.pdfPreviewFallback':
+      'پیش‌نمایش PDF قالب از شیت ساده تولیدشده استفاده می‌کند: {reason}',
+    'page.characterLibrary.pdfPreviewFallbackReady':
+      'پیش‌نمایش PDF با شیت جایگزین تولیدشده آماده است: {reason}',
+    'page.characterLibrary.pdfPreviewReady':
+      'پیش‌نمایش {template} آماده است. قبل از دانلود آن را بررسی کنید.',
+    'page.characterLibrary.pdfPreviewTitle': 'بررسی شیت کاراکتر',
+    'page.characterLibrary.pdfPreviewUnknownError':
+      'پیش‌نمایش PDF به دلیل نامشخصی ناموفق بود.',
+    'page.characterLibrary.pdfSuccess':
+      '{template} از داده‌های ذخیره‌شده کاراکتر دانلود شد.',
+    'page.characterLibrary.runtimeHint':
+      'ورودی‌های ذخیره‌شده و نهایی‌شده از حالت بازیکن در runtime ارسال می‌شوند. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، وضعیت‌ها و کنترل‌های مدیریتی DM این ورودی کتابخانه را تغییر نمی‌دهند.',
+    'page.characterLibrary.useInSessionPending': 'استفاده در جلسه - در انتظار',
     'runtime.assignmentRequests.ac': 'AC',
     'runtime.assignmentRequests.build': 'ساختار',
     'runtime.assignmentRequests.character': 'کاراکتر',
@@ -905,7 +1057,7 @@ const messages = {
     'runtime.characterLibrary.blocker.notJoined':
       'اول به عنوان این بازیکن وارد نشست شوید یا آن را بازیابی کنید.',
     'runtime.characterLibrary.description':
-      'یک کاراکتر ذخیره‌شده و نهایی‌شده را وارد این نشست زنده کنید. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، وضعیت‌ها و overrideهای DM ورودی ذخیره‌شده را تغییر نمی‌دهند.',
+      'یک کاراکتر ذخیره‌شده و نهایی‌شده را وارد این نشست زنده کنید. سرور یک نسخه runtime جدا می‌سازد؛ HP، حرکت، وضعیت‌ها و کنترل‌های مدیریتی DM ورودی ذخیره‌شده را تغییر نمی‌دهند.',
     'runtime.characterLibrary.emptyDetail':
       'یک کاراکتر را در کتابخانه نهایی کنید و بعد این فهرست را به‌روزرسانی کنید.',
     'runtime.characterLibrary.emptyTitle':
@@ -938,6 +1090,12 @@ const messages = {
       'نسخه runtime {characterId} در وضعیت مرجع نشست منتظر است. DM باید آن را تخصیص دهد تا کاراکتر فعال میز شما شود.',
     'runtime.characterLibrary.waitingTitle':
       'نسخه runtime در انتظار تخصیص توسط DM',
+    'runtime.characterSummary.conditions': 'وضعیت‌ها',
+    'runtime.characterSummary.initiative': 'ابتکار',
+    'runtime.characterSummary.passivePerception': 'ادراک غیرفعال',
+    'runtime.characterSummary.proficiency': 'مهارت',
+    'runtime.characterSummary.speed': 'سرعت',
+    'runtime.characterSummary.status.draft': 'پیش‌نویس',
     'runtime.activeScene.buildDetail':
       'قبل از قرار دادن توکن‌ها، موجودیت‌های صحنه یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
     'runtime.activeScene.buildTitle': 'ساخت صحنه',
@@ -1089,6 +1247,70 @@ const messages = {
     'runtime.sceneBuilder.transitions.preset.stairs.label': 'پله',
     'runtime.sceneBuilder.transitions.presets': 'الگوهای گذار',
     'runtime.sceneBuilder.transitions.title': 'گذارهای صحنه',
+    'runtime.sceneBuilder.transitions.validation.fixDraft':
+      'ابتدا پیش‌نویس گذار را اصلاح کنید: {error}',
+    'runtime.sceneBuilder.transitions.validation.fixEdit':
+      'ابتدا فرم ویرایش گذار را اصلاح کنید: {error}',
+    'runtime.sceneBuilder.transitions.validation.footprint':
+      'محدوده گذار باید داخل گرید صحنه جا شود.',
+    'runtime.sceneBuilder.transitions.validation.kind':
+      'یک نوع معتبر برای گذار انتخاب کنید.',
+    'runtime.sceneBuilder.transitions.validation.name': 'نام گذار الزامی است.',
+    'runtime.sceneBuilder.transitions.validation.range':
+      '{field} باید بین {min} و {max} باشد.',
+    'runtime.sceneBuilder.transitions.validation.targetCell':
+      'یک خانه مقصد با مختصات نامنفی انتخاب کنید.',
+    'runtime.sceneBuilder.transitions.validation.targetSceneId':
+      'شناسه صحنه مقصد الزامی است.',
+    'runtime.sceneBuilder.transitions.validation.wholeNumber':
+      '{field} باید عدد صحیح باشد.',
+    'runtime.combatants.abilities': 'ویژگی‌ها',
+    'runtime.combatants.attackTarget': 'حمله monster/NPC به هدف',
+    'runtime.combatants.commandTitle': 'کنترل موجود مبارز',
+    'runtime.combatants.create': 'ساخت موجود مبارز',
+    'runtime.combatants.createDetail':
+      'خانه هدف {x},{y}. موجودات مبارز مسیر حرکت را می‌بندند و می‌توانند وارد ترتیب نوبت برخورد شوند.',
+    'runtime.combatants.createTitle': 'ساخت موجود مبارز',
+    'runtime.combatants.defeatedSuffix': '، شکست‌خورده',
+    'runtime.combatants.description':
+      'موجودات مبارز محدود monster/NPC تحت کنترل DM را بسازید و هدایت کنید. آن‌ها بازیگران صحنه‌اند، نه برگه کامل آمار یا هوش مصنوعی.',
+    'runtime.combatants.emptyDetail':
+      'ابتدا یک موجود مبارز در صحنه فعال بسازید.',
+    'runtime.combatants.emptyTitle': 'موجود مبارز monster/NPC وجود ندارد',
+    'runtime.combatants.hidden': 'نمایش پنهان',
+    'runtime.combatants.hpCurrent': 'HP فعلی',
+    'runtime.combatants.hpMax': 'بیشینه HP',
+    'runtime.combatants.hpTemp': 'HP موقت',
+    'runtime.combatants.kind': 'نوع',
+    'runtime.combatants.makeTurn': 'قرار دادن در نوبت',
+    'runtime.combatants.name': 'نام',
+    'runtime.combatants.option':
+      '{name} ({kind}، HP {current}/{max}{defeatSuffix})',
+    'runtime.combatants.reposition': 'جابجایی',
+    'runtime.combatants.selected': 'monster/NPC انتخاب‌شده',
+    'runtime.combatants.setHp': 'ثبت HP',
+    'runtime.combatants.sizeHeight': 'ارتفاع اندازه',
+    'runtime.combatants.sizeWidth': 'عرض اندازه',
+    'runtime.combatants.speed': 'سرعت',
+    'runtime.combatants.status.active': 'فعال',
+    'runtime.combatants.status.currentTurn': 'نوبت فعلی',
+    'runtime.combatants.status.defeated': 'شکست‌خورده',
+    'runtime.combatants.status.label': 'وضعیت',
+    'runtime.combatants.status.selected': 'انتخاب‌شده',
+    'runtime.combatants.status.selectedValue': '{name} در {x},{y}',
+    'runtime.combatants.status.target': 'هدف',
+    'runtime.combatants.title': 'هیولاها و NPCها',
+    'runtime.combatants.validation.currentHp':
+      'HP فعلی نمی‌تواند از بیشینه HP بیشتر باشد.',
+    'runtime.combatants.validation.fixDraft':
+      'ابتدا پیش‌نویس موجود مبارز را اصلاح کنید: {error}',
+    'runtime.combatants.validation.footprint':
+      'محدوده موجود مبارز باید داخل گرید صحنه جا شود.',
+    'runtime.combatants.validation.kind': 'نوع monster یا npc را انتخاب کنید.',
+    'runtime.combatants.validation.name': 'نام موجود مبارز الزامی است.',
+    'runtime.combatants.validation.range':
+      '{field} باید بین {min} و {max} باشد.',
+    'runtime.combatants.validation.wholeNumber': '{field} باید عدد صحیح باشد.',
     'runtime.disabled.busy': 'در انتظار {label}.',
     'runtime.disabled.createOrRecoverActiveScene':
       'ابتدا یک صحنه فعال بسازید یا بازیابی کنید.',
@@ -1097,9 +1319,9 @@ const messages = {
     'runtime.disabled.combatantDefeated':
       'monster/NPC انتخاب‌شده شکست خورده و نمی‌تواند عمل کند.',
     'runtime.disabled.combatantTurn':
-      'combatant انتخاب‌شده باید بازیگر نوبت فعلی باشد.',
+      'موجود مبارز انتخاب‌شده باید بازیگر نوبت فعلی باشد.',
     'runtime.disabled.currentTurnCombatant':
-      'نوبت فعلی monster/NPC است؛ از کنترل حمله combatant در DM استفاده کنید.',
+      'نوبت فعلی monster/NPC است؛ از کنترل حمله موجود مبارز در بخش DM استفاده کنید.',
     'runtime.disabled.dmOnlyControl': 'برای این کنترل به حالت DM بروید.',
     'runtime.disabled.dmOnlyCombatant':
       'برای کنترل‌های monster/NPC به حالت DM بروید.',
@@ -1128,7 +1350,7 @@ const messages = {
     'runtime.disabled.recoverCharacter':
       'ابتدا یک کاراکتر برای این participant بارگذاری یا بازیابی کنید.',
     'runtime.disabled.selectCombatant':
-      'ابتدا یک monster/NPC combatant بسازید یا انتخاب کنید.',
+      'ابتدا یک موجود مبارز monster/NPC بسازید یا انتخاب کنید.',
     'runtime.disabled.selectedAlreadyAssigned':
       'این participant همین کاراکتر را قبلا تخصیص داده است.',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
@@ -1144,7 +1366,7 @@ const messages = {
       '{reason} - راند {round}، نوبت {turn}',
     'runtime.encounterStatus.miss': 'خطا رفت',
     'runtime.encounterStatus.nextActor': 'بعدی {actor}',
-    'runtime.encounterStatus.noCombatResult': 'هنوز نتیجه combat ثبت نشده.',
+    'runtime.encounterStatus.noCombatResult': 'هنوز نتیجه مبارزه‌ای ثبت نشده.',
     'runtime.encounterStatus.noCurrentActor': 'برخورد فعالی بارگذاری نشده',
     'runtime.encounterStatus.noEncounterUpdate':
       'هنوز به‌روزرسانی برخورد دریافت نشده.',
@@ -1169,7 +1391,7 @@ const messages = {
     'runtime.grid.moveToken': 'حرکت توکن',
     'runtime.grid.playerEyebrow': 'نمای بازیکن',
     'runtime.grid.title': 'گرید تاکتیکی',
-    'runtime.playerReadiness.actions': '{count} گزینه اکشن آماده',
+    'runtime.playerReadiness.actions': '{count} گزینه اقدام آماده',
     'runtime.playerReadiness.attack': 'حمله {state}',
     'runtime.playerReadiness.blocked': 'مسدود',
     'runtime.playerReadiness.currentActor': 'نوبت فعلی',
@@ -1263,7 +1485,7 @@ const messages = {
       'اینجا یک draft بسازید یا یک ورودی ذخیره‌شده Character Library را ارسال کنید، سپس منتظر تخصیص DM بمانید.',
     'runtime.playerNextStep.createCharacter.title': 'ساخت کاراکتر',
     'runtime.playerNextStep.exploration.detail':
-      'خارج از combat می‌توانید حرکت کنید؛ منابع نوبت بعد از شروع برخورد فعال می‌شوند.',
+      'خارج از برخورد می‌توانید حرکت کنید؛ منابع نوبت بعد از شروع برخورد فعال می‌شوند.',
     'runtime.playerNextStep.exploration.title': 'حالت اکتشاف',
     'runtime.playerNextStep.finalize.detail':
       'قبل از ارسال کاراکتر به DM، ویرایش را تمام و کاراکتر را finalize کنید.',
@@ -1287,7 +1509,7 @@ const messages = {
       'بازیگر فعلی را دنبال کنید و هدف یا حرکت خود را آماده کنید.',
     'runtime.playerNextStep.waitingTurn.title': 'در انتظار نوبت شما',
     'runtime.playerNextStep.yourTurn.detail':
-      'حرکت کنید، حمله کنید، یا اقتصاد اکشن خود را مصرف کنید. سرور قانونی بودن را اعتبارسنجی می‌کند.',
+      'حرکت کنید، حمله کنید، یا منابع اقدام خود را مصرف کنید. سرور قانونی بودن را اعتبارسنجی می‌کند.',
     'runtime.playerNextStep.yourTurn.title': 'نوبت شما',
     'runtime.recovery.empty': 'بدون نشست',
     'runtime.recovery.detail.empty':
@@ -1361,6 +1583,7 @@ const messages = {
     'runtime.statePanel.description':
       'IDها و مدل‌های خواندنی فعلی که در این مرورگر بارگذاری شده‌اند.',
     'runtime.statePanel.encounter': 'برخورد',
+    'runtime.statePanel.encounterValue': '{status} · راند {round}',
     'runtime.statePanel.eyebrow': 'وضعیت میز',
     'runtime.statePanel.sceneName': 'نام صحنه',
     'runtime.statePanel.session': 'نشست',
@@ -1376,27 +1599,27 @@ const messages = {
     'runtime.turnTarget.turnOrder': 'ترتیب نوبت',
     'runtime.turnTarget.usage': 'مصرف نوبت',
     'runtime.turnTarget.usageValue':
-      '{movement} فوت، اکشن {action}، بونس {bonus}، ری‌اکشن {reaction}',
-    'runtime.turnTarget.useAction': 'مصرف اکشن',
-    'runtime.turnTarget.useBonus': 'مصرف بونس',
-    'runtime.turnTarget.useReaction': 'مصرف ری‌اکشن',
-    'runtime.overrides.actionUsed': 'اکشن مصرف شده',
-    'runtime.overrides.bonusActionUsed': 'بونس اکشن مصرف شده',
+      '{movement} فوت، اقدام {action}، اقدام اضافه {bonus}، واکنش {reaction}',
+    'runtime.turnTarget.useAction': 'مصرف اقدام',
+    'runtime.turnTarget.useBonus': 'مصرف اقدام اضافه',
+    'runtime.turnTarget.useReaction': 'مصرف واکنش',
+    'runtime.overrides.actionUsed': 'اقدام مصرف شده',
+    'runtime.overrides.bonusActionUsed': 'اقدام اضافه مصرف شده',
     'runtime.overrides.conditionTags': 'تگ‌های وضعیت',
     'runtime.overrides.controlledParticipant': 'participant تحت کنترل',
     'runtime.overrides.currentHp': 'HP فعلی',
     'runtime.overrides.description':
-      'overrideهای مدیریتی DM. این کنترل‌ها عمدا از جریان عادی برخورد جدا هستند.',
+      'کنترل‌های مدیریتی DM. این کنترل‌ها عمدا از جریان عادی برخورد جدا هستند.',
     'runtime.overrides.endEncounter': 'پایان برخورد',
     'runtime.overrides.eyebrow': 'فقط DM',
     'runtime.overrides.movementUsed': 'حرکت مصرف‌شده',
-    'runtime.overrides.reactionUsed': 'ری‌اکشن مصرف شده',
+    'runtime.overrides.reactionUsed': 'واکنش مصرف شده',
     'runtime.overrides.setConditions': 'ثبت وضعیت‌ها',
     'runtime.overrides.setHp': 'ثبت HP',
     'runtime.overrides.setTurnActor': 'ثبت بازیگر نوبت',
     'runtime.overrides.setUsage': 'ثبت مصرف نوبت',
-    'runtime.overrides.title': 'Overrideها',
-    'runtime.overrides.turnOverride': 'Override نوبت',
+    'runtime.overrides.title': 'کنترل‌های مدیریتی',
+    'runtime.overrides.turnOverride': 'کنترل مدیریتی نوبت',
     'runtime.statusOverview.description':
       'فقط از مدل‌های خواندنی فعلی ساخته می‌شود؛ اعتبارسنجی فرمان‌ها همچنان روی سرور است.',
     'runtime.statusOverview.dmReadiness': 'آماده‌سازی DM',
@@ -1530,20 +1753,19 @@ const messages = {
     'runtime.tableSetup.status.done': 'انجام شد',
     'runtime.tableSetup.status.ready': 'بعدی',
     'runtime.tableSetup.title': 'آماده‌سازی میز',
-    'runtime.actionEconomy.action': 'اکشن',
+    'runtime.actionEconomy.action': 'اقدام',
     'runtime.actionEconomy.available': 'آزاد',
     'runtime.actionEconomy.blocked': 'مسدود',
-    'runtime.actionEconomy.bonusAction': 'بونس',
+    'runtime.actionEconomy.bonusAction': 'اقدام اضافه',
     'runtime.actionEconomy.latest': '{reason} - راند {round}، نوبت {turn}',
     'runtime.actionEconomy.noEncounter': 'نوبت فعالی نیست',
-    'runtime.actionEconomy.noLatest':
-      'هنوز به‌روزرسانی action economy ثبت نشده.',
-    'runtime.actionEconomy.reaction': 'ری‌اکشن',
+    'runtime.actionEconomy.noLatest': 'هنوز به‌روزرسانی منابع اقدام ثبت نشده.',
+    'runtime.actionEconomy.reaction': 'واکنش',
     'runtime.actionEconomy.ready': 'آماده',
     'runtime.actionEconomy.resource': '{name}: {state}',
     'runtime.actionEconomy.spent': 'همه مصرف شده',
-    'runtime.actionEconomy.title': 'اقتصاد اکشن',
-    'runtime.actionEconomy.unavailable': 'اقتصاد اکشن در دسترس نیست.',
+    'runtime.actionEconomy.title': 'منابع اقدام',
+    'runtime.actionEconomy.unavailable': 'منابع اقدام در دسترس نیست.',
     'runtime.actionEconomy.used': 'مصرف شده',
     'runtime.actionFeedback.ac': 'AC {armorClass}',
     'runtime.actionFeedback.acUnknown': 'AC نامشخص',
@@ -1596,16 +1818,16 @@ const messages = {
     'runtime.summary':
       'یک سطح مرورگری متناسب با نقش کاربر برای بک‌اند فعلی. وضعیت نهایی همچنان دست سرور است؛ SSE فقط رویدادهای زنده را می‌رساند و بازیابی، وضعیت را از مدل‌های خواندنی بازسازی می‌کند.',
     'runtime.title': 'میز نبرد زنده',
-    'runtime.turnRail.action': 'اکشن {state}',
+    'runtime.turnRail.action': 'اقدام {state}',
     'runtime.turnRail.actorKind.character': 'کاراکتر',
     'runtime.turnRail.actorKind.combatant': 'هیولا/NPC',
     'runtime.turnRail.available': 'آماده',
-    'runtime.turnRail.bonus': 'بونس {state}',
+    'runtime.turnRail.bonus': 'اقدام اضافه {state}',
     'runtime.turnRail.movement': 'حرکت',
     'runtime.turnRail.movementRemaining':
       '{remaining} فوت مانده از {speed} فوت ({used} مصرف شده)',
     'runtime.turnRail.movementUnknown': '{used} فوت مصرف شده',
-    'runtime.turnRail.reaction': 'ری‌اکشن {state}',
+    'runtime.turnRail.reaction': 'واکنش {state}',
     'runtime.turnRail.roundInitiative':
       'راند {round} · initiative {initiative}',
     'runtime.turnRail.title': 'نوبت فعلی',

@@ -482,3 +482,284 @@ Next narrow implementation slice:
 > requirements, or read-model recovery behavior.
 
 Recommended effort: `medium`.
+
+## Persian Combatant / DM Override Helper Microcopy Polish
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 12 microcopy polish
+- Persistence mode: not applicable to frontend/i18n source changes
+- Runtime code changed during run: frontend/i18n copy and smoke guardrail only
+- Protocol, server commands, target legality, damage automation, turn
+  validation, DB/auth behavior, replay/catch-up, and read-model recovery
+  behavior changed or claimed: no
+
+Implemented polish:
+
+- Moved the DM-only Combatant panel title, descriptions, fields, actions,
+  selected-state rows, empty states, and draft validation messages behind
+  runtime i18n keys.
+- Replaced mixed Persian/English Combatant, action-resource, and DM override
+  helper wording with Persian-facing copy while preserving canonical `DM`,
+  `HP`, `AC`, `monster/NPC`, ability abbreviations, and runtime IDs.
+- Kept Combatant commands, server-owned turn authority, attack legality,
+  damage resolution, and DM-only visibility unchanged.
+
+Remaining product cautions:
+
+- Slice 12 closes the currently triaged high-traffic Persian microcopy passes,
+  but a bilingual browser pass is still needed before declaring Phase 6
+  presentation work complete.
+
+Triage recommendation:
+
+Next narrow task:
+
+> Use the completed one-profile and two-profile Training Room smoke evidence
+> plus a bilingual browser pass to decide whether Phase 6 presentation work can
+> close or needs one final narrow UI polish slice. Keep this as evidence/triage
+> only unless a human explicitly approves implementation. Do not broaden into
+> runtime protocol, combat automation, replay/catch-up, production auth,
+> DB/auth requirements, or broader D&D systems.
+
+Recommended effort: `medium`.
+
+## Post-Microcopy Phase 6 Closure Triage
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 12 microcopy polish
+- Persistence mode: in-memory for the bilingual browser pass
+- Runtime code changed during triage: no
+- Protocol, server commands, DM gates, Character Library/runtime separation,
+  DB/auth behavior, replay/catch-up, SSE behavior, combat automation, and
+  read-model recovery behavior changed or claimed: no
+
+Evidence reviewed:
+
+- The one-profile Training Room runtime smoke completed all eight steps.
+- The two-profile DM/Player runtime smoke completed all eight steps.
+- A Persian RTL browser pass completed the named Training Room Skirmish demo
+  and inspected the DM-facing setup, runtime status, Combatant, and override
+  surfaces.
+- An English LTR browser pass confirmed the primary runtime hierarchy and copy
+  remain coherent.
+- Player Mode hid the DM war-table surface while retaining the player-facing
+  tactical and recovery views.
+- Canonical IDs, numeric values, command names, and server-authority wording
+  remained intact during the bilingual pass.
+
+Closure findings:
+
+- Phase 6 presentation work should not close yet. The Persian surface still
+  exposes a small set of high-traffic English or mixed-language strings.
+- Transition-draft validation and disabled-reason copy still exposes messages
+  such as `Target scene ID is required.`
+- Combatant actions still expose the English selection blocker
+  `Create or select a monster/NPC first.`
+- Derived runtime empty/status values still expose English values such as
+  `No active turn` and `none`.
+- Character cards still expose English stat/status labels such as `ready`,
+  `Speed`, `Prof`, `Init`, `Passive`, and `Conditions`.
+- Lower-priority canonical or technical terms such as command IDs, protocol
+  labels, IDs, `DM`, `HP`, `AC`, `SSE`, `runtime`, and `monster/NPC` should
+  remain unchanged where intentionally stable.
+
+Triage recommendation:
+
+One final narrow implementation slice:
+
+> Close the remaining high-traffic Persian runtime copy gaps found by the Slice
+> 13 bilingual browser pass: transition-draft validation and disabled reasons,
+> combatant-selection disabled reasons, derived empty/status values such as
+> `No active turn` and `none`, and character-card stat/status labels. Preserve
+> canonical IDs, command IDs, `DM`, `HP`, `AC`, `monster/NPC`, class/sample
+> names, dice notation, protocol/debug labels, and server-owned runtime
+> authority. Keep this frontend/i18n-only and do not change runtime protocol,
+> command semantics, combat automation, replay/catch-up, auth, DB requirements,
+> or read-model recovery behavior.
+
+Recommended effort: `medium`.
+
+## Persian Residual Runtime Status / Validation Copy Closure
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 14 implementation
+- Persistence mode: in-memory for runtime smoke and bilingual browser QA
+- Runtime code changed during run: frontend/i18n rendering and smoke guardrail
+  only
+- Protocol, server commands, DM gates, Character Library/runtime separation,
+  DB/auth behavior, replay/catch-up, SSE behavior, combat automation, and
+  read-model recovery behavior changed or claimed: no
+
+Implemented polish:
+
+- Localized transition-draft validation messages and their disabled-reason
+  wrappers while preserving transition IDs, command semantics, and DM-only
+  activation authority.
+- Reused the existing localized combatant-selection blocker for DM Combatant
+  controls.
+- Replaced visible derived empty/status values such as `No active turn`,
+  `none`, and character `draft` status with localized display values without
+  changing helper or server state.
+- Localized runtime character-summary labels for speed, proficiency,
+  initiative, passive perception, conditions, and ready/draft status while
+  preserving canonical `HP`, `AC`, IDs, class/sample names, and runtime data.
+- Extended runtime smoke coverage for the Slice 14 transition validation,
+  combatant blocker, no-active-turn status, and character-summary labels.
+
+Validation evidence:
+
+- The one-profile runtime smoke completed all eight steps with the new Slice 14
+  assertions.
+- The two-profile DM/Player runtime smoke completed all eight steps and kept
+  Player-mode guardrails intact.
+- A recovered English LTR browser pass showed the expected English transition,
+  no-turn, and character-summary labels.
+- A recovered Persian RTL browser pass showed localized transition validation,
+  no-turn/empty/status values, speed, proficiency, initiative, passive
+  perception, and conditions labels.
+- The Persian browser pass did not expose raw `No active turn`, standalone
+  `none`, or mixed `وضعیت draft` values.
+
+Closure decision:
+
+- The currently triaged Phase 6 Training Room presentation work is complete.
+- Canonical technical terms such as IDs, command IDs, `DM`, `HP`, `AC`, `SSE`,
+  `runtime`, and `monster/NPC` remain intentionally stable.
+- Any further Phase 6 UI polish should come from fresh playtest evidence rather
+  than extending the microcopy sequence automatically.
+
+## Post-Phase-6 Playtest / Next-Milestone Triage
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Slice 14 implementation
+- Persistence mode: in-memory
+- Runtime code changed during triage: no
+- Protocol, server commands, DM gates, Character Library/runtime separation,
+  DB/auth behavior, replay/catch-up, SSE behavior, combat automation, and
+  read-model recovery behavior changed or claimed: no
+
+Evidence reviewed:
+
+- The one-profile Training Room runtime smoke completed all eight steps.
+- The two-profile DM/Player runtime smoke completed all eight steps.
+- A bilingual DM/Player browser pass completed the Training Room flow through
+  encounter start and Player One's active turn.
+- The Persian initial runtime page measured about 14 viewports in height.
+- In active-encounter Persian DM mode, `Turn & Target` appeared about 10.7
+  viewports below the top and `Advance Turn` about 12 viewports below the top,
+  after setup and authoring panels.
+- In Persian Player Mode during Player One's active turn, the top-level
+  `Your turn` guidance appeared immediately, but `Turn & Target` appeared about
+  7.2 viewports below the top and `Attack Target` about 8.6 viewports below the
+  top.
+- The English Player Mode pass showed the same hierarchy, confirming this is a
+  panel-order issue rather than an i18n or RTL issue.
+
+Triage findings:
+
+- The playable flow, role gates, recovery surfaces, and bilingual copy remain
+  coherent.
+- The highest-value next improvement is not a new capability. It is bringing
+  existing current-role actions closer to the Tactical Grid and current-turn
+  guidance.
+- DM authoring panels and Player onboarding/secondary panels currently push
+  active-turn actions too far down the page.
+- Duplicating controls or introducing a sticky action bar would add avoidable
+  state and accessibility risk; the narrow next slice should reorder the
+  existing panel.
+
+Selected next slice:
+
+> Reorder existing `/runtime` panels so the current role's primary action
+> surface stays near the Tactical Grid and current-turn guidance. During an
+> active encounter, show `Turn & Target` before DM authoring panels; when a
+> Player has an assigned character or active turn, show it before Player
+> Character onboarding and secondary status panels. Preserve the no-encounter
+> setup path, existing controls, commands, server validation, DM gates,
+> Character Library/runtime separation, English/Persian i18n, RTL/LTR
+> behavior, and recovery semantics. Do not duplicate action controls, add
+> sticky action bars, change protocol or command semantics, add combat
+> automation, claim replay/catch-up behavior, or broaden into additional D&D
+> systems.
+
+Recommended effort: `medium`.
+
+## Role-Focused Runtime Primary Actions
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Post-Phase-6 Slice 1 implementation
+- Persistence mode: in-memory for runtime smoke
+- Runtime code changed during run: frontend render ordering and smoke guardrail
+  only
+- Protocol, server commands, DM gates, Character Library/runtime separation,
+  DB/auth behavior, replay/catch-up, SSE behavior, combat automation, and
+  read-model recovery behavior changed or claimed: no
+
+Implemented polish:
+
+- Extracted the existing `Turn & Target` panel into a single local render
+  helper so the same controls can be rendered in role-focused positions without
+  duplicating UI.
+- Promoted `Turn & Target` above DM setup/authoring panels when an active
+  encounter is loaded.
+- Promoted `Turn & Target` above Player Character onboarding when the Player
+  has an assigned character or active turn.
+- Preserved the no-encounter setup path by keeping the panel in its previous
+  lower position until promotion conditions are met.
+- Added a bilingual two-profile smoke assertion that verifies the promoted
+  action hierarchy in both DM and Player flows.
+
+Validation evidence:
+
+- The one-profile runtime smoke completed all eight steps.
+- The two-profile DM/Player runtime smoke completed all eight steps and
+  verified `Turn & Target` appears before DM authoring panels and before Player
+  onboarding in the active flow.
+- Web typecheck and web tests passed.
+
+Closure decision:
+
+- Post-Phase-6 Slice 1 is implemented.
+- The next task should come from a fresh playtest or an explicitly approved
+  next milestone, not from automatic expansion into sticky actions, new combat
+  automation, or broader runtime systems.
+
+## Fresh Browser Playtest & Residual UX Triage
+
+- Date: 2026-06-04
+- Branch/build: local working tree after Post-Phase-6 Slice 1 implementation
+- Persistence mode: in-memory for runtime smoke
+- Runtime code changed during triage: no
+- Protocol, server commands, DM gates, Character Library/runtime separation,
+  DB/auth behavior, replay/catch-up, SSE behavior, combat automation, and
+  read-model recovery behavior changed or claimed: no
+
+Evidence reviewed:
+
+- The one-profile runtime smoke completed all eight steps after Slice 1.
+- The two-profile DM/Player runtime smoke completed all eight steps after
+  Slice 1.
+- The two-profile smoke verified that `Turn & Target` appears before DM
+  authoring panels in the active encounter flow.
+- The two-profile smoke verified that `Turn & Target` appears before Player
+  Character onboarding in the active Player flow.
+- Player-mode guardrails still hid DM-only Training Room setup, Scene Builder,
+  and monster/NPC controls.
+
+Residual UX findings:
+
+- The highest-priority hierarchy problem found in the previous playtest is now
+  covered by the promoted `Turn & Target` render order and by smoke coverage.
+- No fresh evidence from this pass justifies adding duplicate controls, sticky
+  actions, new command surfaces, or broader runtime systems.
+- Remaining runtime polish should be chosen from a new playtest brief or
+  product milestone, not by automatically extending the action-hierarchy
+  sequence.
+
+Closure decision:
+
+- Close the current post-Phase-6 action-hierarchy polish sequence.
+- Recommended next work should be scoped separately from a fresh
+  human-approved product goal or milestone.
+
+Recommended effort for this triage slice: `medium`.

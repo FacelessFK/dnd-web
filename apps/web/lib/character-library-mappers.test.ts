@@ -25,6 +25,7 @@ import {
   getPortraitImageSource,
 } from './character-library-mappers';
 import {
+  buildCharacterSheetPreviewModel,
   generateCharacterSheetPdf,
   mapCharacterSheetFields,
   selectCharacterSheetPdfTemplate,
@@ -194,7 +195,7 @@ describe('character library mappers', () => {
         uploadedAt: new Date(0).toISOString(),
         url: '/api/character-library/portraits/usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
       }),
-      '/api/character-library/portraits/usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
+      'http://localhost:2567/api/character-library/portraits/usr_00000000-0000-4000-8000-000000000000/charlib_00000000-0000-4000-8000-000000000001/stored.webp',
     );
   });
 
@@ -273,6 +274,28 @@ describe('character library mappers', () => {
     assert.equal(mapped.fieldValues['Race '], 'Human');
     assert.equal(mapped.fieldValues.AC, '16');
     assert.equal(mapped.fieldValues.ProfBonus, '+2');
+  });
+
+  it('builds a web preview model from the same character sheet fields', () => {
+    const preview = buildCharacterSheetPreviewModel(
+      createEntry({
+        rulesProfileId: 'dnd-2014-srd-5-1',
+      }),
+      'dnd-2014-template',
+    );
+
+    assert.equal(preview.title, 'Persisted Test Hero');
+    assert.equal(preview.templateEra, '2014');
+    assert.equal(
+      preview.identity.find((field) => field.label === 'Character Name')?.value,
+      'Persisted Test Hero',
+    );
+    assert.equal(preview.abilities.length, 6);
+    assert.equal(
+      preview.combat.find((field) => field.label === 'Armor Class')?.value,
+      '16',
+    );
+    assert.ok(preview.skills.some((field) => field.label === 'Athletics'));
   });
 
   it('fills the provided 2014 AcroForm template with key fields', async () => {
@@ -360,6 +383,19 @@ describe('character library mappers', () => {
 
     assert.equal(result.template.id, 'simple-fallback');
     assert.match(result.fallbackReason ?? '', /missing fixture template/);
+    assert.ok(pdfText.startsWith('%PDF-1.4'));
+    assert.match(pdfText, /Persisted Test Hero/);
+  });
+
+  it('falls back to the simple PDF when an explicit template cannot be filled', async () => {
+    const result = await generateCharacterSheetPdf(createEntry(), {
+      loadTemplateBytes: async () => new Uint8Array([60, 33, 45, 45]),
+      templateId: 'dnd-2024-template',
+    });
+    const pdfText = Buffer.from(result.bytes).toString('latin1');
+
+    assert.equal(result.template.id, 'simple-fallback');
+    assert.match(result.fallbackReason ?? '', /Template PDF filling failed/);
     assert.ok(pdfText.startsWith('%PDF-1.4'));
     assert.match(pdfText, /Persisted Test Hero/);
   });

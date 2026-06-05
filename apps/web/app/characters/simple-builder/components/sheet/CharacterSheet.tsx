@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CharacterLibraryEntryId } from '@dnd/protocol';
 
 import { useAuth } from '../../../../../lib/auth-context';
@@ -14,6 +14,7 @@ import {
   downloadCharacterSheetPdf,
   type CharacterSheetTemplateId,
 } from '../../../../../lib/character-sheet-pdf';
+import { CharacterSheetPdfPreview } from '../../../character-sheet-pdf-preview';
 import {
   createSimpleBuilderLibraryEntry,
   createSimpleBuilderSelections,
@@ -52,8 +53,10 @@ export function CharacterSheet({
 }) {
   const store = useCharacterStore();
   const { user } = useAuth();
-  const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
+  const [previewingPdfTemplate, setPreviewingPdfTemplate] =
     useState<CharacterSheetTemplateId | null>(null);
+  const downloadingPdfTemplate = previewingPdfTemplate;
+  const setDownloadingPdfTemplate = setPreviewingPdfTemplate;
   const [saving, setSaving] = useState(false);
   const [pdfNotice, setPdfNotice] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
@@ -98,12 +101,27 @@ export function CharacterSheet({
   const features = getAllFeatures(store);
   const equipment = getAllEquipment(store);
   const spellcastingSummary = getSpellcastingSummary(store);
+  const previewLibraryEntry = useMemo(
+    () =>
+      previewingPdfTemplate
+        ? createSimpleBuilderLibraryEntry(
+            store,
+            createSimpleBuilderSelections(store),
+            previewingPdfTemplate,
+            user?.id ?? 'dev-player-001',
+          )
+        : null,
+    [previewingPdfTemplate, store, user?.id],
+  );
 
   const handleDownloadPdf = async (
     templateId: CharacterSheetTemplateId,
   ): Promise<void> => {
     setDownloadingPdfTemplate(templateId);
     setPdfNotice('');
+    if (typeof window !== 'undefined') {
+      return;
+    }
 
     try {
       const result = await downloadCharacterSheetPdf(
@@ -591,6 +609,14 @@ export function CharacterSheet({
             </p>
           ) : null}
         </div>
+        {previewingPdfTemplate && previewLibraryEntry ? (
+          <CharacterSheetPdfPreview
+            entry={previewLibraryEntry}
+            onClose={() => setPreviewingPdfTemplate(null)}
+            onNotice={setPdfNotice}
+            templateId={previewingPdfTemplate}
+          />
+        ) : null}
       </div>
     </div>
   );

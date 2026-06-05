@@ -420,6 +420,37 @@ Implemented Phase 6 Slice 11:
 > runtime protocol, command semantics, scene authority, combat automation,
 > auth, DB requirements, or read-model recovery behavior.
 
+Implemented Phase 6 Slice 12:
+
+> Polish remaining Persian Combatant, action, and DM override helper copy in
+> the Training Room flow by replacing mixed English/Persian helper terms such
+> as `combatant`, `attack`, `target`, `damage`, `override`, `turn`,
+> `movement`, `reaction`, and draft/prerequisite wording with
+> localization-aware Persian equivalents while preserving canonical command
+> IDs, `DM`, `HP`, `AC`, `monster/NPC`, dice notation, protocol/debug labels,
+> and server-owned combat authority where they are intentionally stable,
+> without changing runtime protocol, command semantics, target legality,
+> damage automation, turn validation, auth, DB requirements, or read-model
+> recovery behavior.
+
+Implemented Phase 6 Slice 13:
+
+> Use completed one-profile and two-profile Training Room smoke evidence plus
+> a bilingual browser pass to decide whether Phase 6 presentation work can
+> close or needs one final narrow UI polish slice, without changing runtime
+> protocol, combat automation, replay/catch-up, production auth, DB/auth
+> requirements, or broader D&D systems. The triage kept Phase 6 open for one
+> final narrow frontend/i18n slice.
+
+Implemented Phase 6 Slice 14:
+
+> Close the remaining high-traffic Persian runtime copy gaps found by the Slice
+> 13 bilingual browser pass: transition-draft validation and disabled reasons,
+> combatant-selection disabled reasons, derived empty/status values such as
+> `No active turn` and `none`, and character-card stat/status labels, without
+> changing runtime protocol, command semantics, combat automation,
+> replay/catch-up, auth, DB requirements, or read-model recovery behavior.
+
 Non-goals for these tasks:
 
 - no new server protocol;
@@ -444,17 +475,384 @@ Validation for these tasks should include:
 
 ## First Next Task
 
-Phase 6 Slice 12:
+Implemented Post-Phase-6 Slice 1:
 
-> Polish remaining Persian Combatant, action, and DM override helper copy in
-> the Training Room flow by replacing mixed English/Persian helper terms such
-> as `combatant`, `attack`, `target`, `damage`, `override`, `turn`,
-> `movement`, `reaction`, and draft/prerequisite wording with
-> localization-aware Persian equivalents while preserving canonical command
-> IDs, `DM`, `HP`, `AC`, `monster/NPC`, dice notation, protocol/debug labels,
-> and server-owned combat authority where they are intentionally stable. Keep
-> this frontend/i18n-only and do not change runtime protocol, command
-> semantics, target legality, damage automation, turn validation, auth, DB
-> requirements, or read-model recovery behavior.
+> Reorder existing `/runtime` panels so the current role's primary action
+> surface stays near the Tactical Grid and current-turn guidance. During an
+> active encounter, show `Turn & Target` before DM authoring panels; when a
+> Player has an assigned character or active turn, show it before Player
+> Character onboarding and secondary status panels. Preserve the no-encounter
+> setup path, existing controls, commands, server validation, DM gates,
+> Character Library/runtime separation, English/Persian i18n, RTL/LTR
+> behavior, and recovery semantics. Do not duplicate action controls, add
+> sticky action bars, change protocol or command semantics, add combat
+> automation, claim replay/catch-up behavior, or broaden into additional D&D
+> systems.
+
+Recommended effort: `medium`.
+
+The implementation promotes the existing `Turn & Target` panel in active DM
+and ready Player flows while preserving the no-encounter setup path.
+
+Implemented Post-Phase-6 Slice 2:
+
+> Rerun the Training Room browser evidence after Slice 1 to decide whether the
+> post-Phase-6 role-focused action hierarchy needs another narrow UX polish
+> slice or whether this polish sequence should close, without adding new
+> runtime commands, duplicate controls, sticky action bars, combat automation,
+> replay/catch-up semantics, production auth, DB requirements, or broader D&D
+> systems.
+
+Recommended effort: `medium`.
+
+Closure decision: the current post-Phase-6 action-hierarchy polish sequence is
+closed. Choose the next task from a fresh human-approved product goal,
+playtest brief, or milestone instead of extending runtime UI polish
+automatically.
+
+Implemented Phase 7 Slice 1:
+
+> Use docs and automated evidence to determine whether the DB-mode Character
+> Library -> Runtime bridge needs a new implementation slice, a repeatable
+> browser playtest harness, or a product scope reset, without adding new
+> protocol, schema, combat automation, replay/catch-up semantics, production
+> auth, or broad D&D systems.
+
+Recommended effort: `high`.
+
+Next recommended task:
+
+**Phase 7 Slice 2: Character Library -> Runtime Bridge DB-Mode Browser
+Playtest Harness**
+
+Create or document a repeatable DB-mode browser playtest harness for the saved
+Character Library -> Runtime bridge path. Preserve HttpOnly-cookie auth behavior
+and avoid printing secrets. Keep it focused on confidence and repeatability,
+not new runtime capability.
+
+Recommended effort: `high`.
+
+Implemented Phase 7 Slice 2:
+
+> Add a repeatable DB-mode browser smoke harness for the saved Character
+> Library -> Runtime bridge path. It should require a configured, migrated
+> `DATABASE_URL`, preserve HttpOnly-cookie auth behavior, avoid printing
+> secrets, submit the saved character from a Player browser profile, assign the
+> runtime copy from a DM browser profile, and reread authoritative server state
+> to verify runtime-copy/source-library provenance.
+
+Recommended effort: `high`.
+
+Next recommended task:
+
+Run `corepack pnpm --filter @dnd/web test:smoke:bridge-db` against a migrated
+DB-mode environment. If it fails, use the failure as the next narrow
+implementation slice; if it passes, move to a fresh Phase 7 product-confidence
+triage.
+
+Implemented Phase 7 Slice 3:
+
+> Run the DB-mode bridge harness against the current local environment and turn
+> any failure into the next narrow implementation or setup slice. Keep this
+> evidence/triage-only unless the failure is inside the harness itself, without
+> changing runtime protocol, DB schema, auth semantics, combat automation,
+> replay/catch-up behavior, or broader D&D systems.
+
+Recommended effort: `high`.
+
+Result: the harness now loads repo-local `.env`, reached real DB-backed server
+startup, and was blocked by PostgreSQL password authentication for user
+`dnd_web` before the browser bridge phase.
+
+Next recommended task:
+
+**Phase 7 Slice 4: DB-Mode Local Environment Readiness Check**
+
+Add or document a non-secret preflight that verifies DB connection and required
+migration tables before running the bridge browser harness. Do not print
+`DATABASE_URL`, passwords, cookies, or raw connection strings.
+
+Recommended effort: `high`.
+
+Implemented Phase 7 Slice 4:
+
+> Add a non-secret `@dnd/db` readiness check for DB-mode validation and run it
+> before the Character Library -> Runtime bridge browser harness starts
+> server/browser processes, without creating databases, running migrations,
+> mutating records, changing runtime protocol, changing DB schema, or broadening
+> auth/product scope.
+
+Result: the readiness check now verifies `DATABASE_URL`, PostgreSQL
+connectivity, and required current DB tables. In the current local environment,
+it fails early on PostgreSQL password authentication for user `dnd_web`, before
+server/browser startup.
+
+Next recommended task:
+
+**Phase 7 Slice 5: Fix/Provision Local DB Credentials & Migration State**
+
+Make `corepack pnpm --filter @dnd/db check:readiness` pass against the local
+DB, then rerun `corepack pnpm --filter @dnd/web test:smoke:bridge-db` for real
+browser bridge evidence.
+
+Recommended effort: `high`.
+
+Implemented Phase 7 Slice 5:
+
+> Fix or provision the local DB environment so `@dnd/db` readiness passes,
+> apply the required migration state, and rerun the DB-mode Character Library
+> -> Runtime bridge browser harness for real Player/DM evidence, without
+> changing runtime protocol, DB schema, Character Library/runtime separation,
+> combat automation, replay/catch-up semantics, or production auth scope.
+
+Result: PostgreSQL was already installed, but the existing system service
+credentials were not usable and Docker Desktop was unavailable. A project-local
+PostgreSQL dev cluster was provisioned under the ignored `apps/server/data/`
+tree on port `55432`, migrations `0001` through `0010` were applied, DB
+readiness passes, and the DB-mode bridge browser smoke passes all 9 steps.
+
+Next recommended task:
+
+**Phase 7 Slice 6: Bridge DB-Mode Evidence Closure & Next Confidence Triage**
+
+Use the passing DB-mode browser harness evidence to decide whether Phase 7
+bridge confidence can close or needs one narrow follow-up. Keep this
+evidence/triage-only unless a failure appears in current code.
+
+Recommended effort: `medium`.
+
+Implemented Phase 7 Slice 6:
+
+> Use the passing DB-mode browser harness evidence to decide whether Phase 7
+> bridge confidence can close or needs one narrow follow-up, without changing
+> runtime protocol, DB schema, production auth, replay/catch-up semantics,
+> combat automation, or broader D&D systems.
+
+Closure decision: Phase 7 bridge confidence is closed for the current local
+single-process DB-mode browser path. DB readiness passes and the bridge smoke
+passes all 9 steps through Player saved-character submission, DM runtime-copy
+assignment, and authoritative runtime-copy/source-library separation
+validation.
+
+Next recommended milestone:
+
+**Fresh Product Playtest / Next-Goal Intake**
+
+Run or define the next human-approved product playtest goal before starting
+another implementation sequence. Keep the next task scoped by observed evidence
+instead of automatically extending the bridge confidence sequence.
+
+Recommended effort: `medium`.
+
+Implemented Fresh Product Playtest / Next-Goal Intake:
+
+> Collect fresh baseline evidence after Phase 6 and Phase 7 closure, then pick
+> the next product-confidence milestone from observed evidence without changing
+> runtime protocol, DB schema, production auth, replay/catch-up semantics,
+> combat automation, or broader D&D systems.
+
+Result: one-profile runtime smoke, two-profile DM/Player runtime smoke, and
+DB-mode Character Library -> Runtime bridge smoke all passed. No fresh runtime
+or bridge failure justifies extending Phase 6 or Phase 7 automatically.
+
+Next recommended milestone:
+
+**Phase 8: Character Library Builder / Export Product Confidence**
+
+Start with **Phase 8 Slice 1: Character Library Builder / Export DB-Mode
+Browser Playtest Triage**. Run a fresh DB-mode browser playtest of
+login/register, `/characters`, Builder creation, portrait validation,
+rules-derived previews, Save Draft, reload persistence, finalize, and PDF
+export from Review and from the card before choosing any implementation slice.
+
+Recommended effort: `high`.
+
+Implemented Phase 8 Slice 1:
+
+> Run a fresh DB-mode browser playtest of the persisted Character Library
+> Builder and PDF export path, then decide whether the next task should be a
+> narrow Builder/Library/PDF polish slice or closure, without changing runtime
+> protocol, DB schema, production auth, production asset storage, Character
+> Library/runtime separation, combat automation, spell automation, inventory, or
+> broader D&D systems.
+
+Result: login/register, `/characters`, Builder creation, race/class/background
+selection gates, ability previews, details, and Review/sheet derived summaries
+were verified in browser. `Save to Library` blocked before persisted card,
+reload, finalize, or PDF export verification because the local DB is
+`WIN1252`-encoded and cannot store Persian Builder JSON.
+
+Implemented Phase 8 Slice 2:
+
+> Make local DB-mode Character Library validation use a UTF-8 PostgreSQL
+> database, then rerun the Builder/Export browser playtest through persistence,
+> finalize, and PDF export.
+
+Result: the project-local PostgreSQL dev cluster was reprovisioned with UTF-8,
+migrations `0001` through `0010` were reapplied, DB readiness now verifies UTF8
+server/client encoding plus a Persian Unicode round-trip probe, and
+`corepack pnpm --filter @dnd/web test:smoke:builder-export-db` passes through
+authenticated Persian draft creation, persisted browser reload, edit/review
+sheet access, Review PDF affordance, authenticated finalize, card PDF
+affordance, and finalized-state reread.
+
+Implemented Phase 8 Slice 3:
+
+> Expose the missing Character Library card-level finalize affordance so the
+> persisted Builder/Export path completes from browser UI instead of a direct
+> command-route shortcut.
+
+Result: `/characters` draft cards now show a localized `Finalize Character`
+action when the persisted entry has an owner, call the existing authenticated
+Character Library finalize API, update the card from the returned entry, and
+reuse the existing notice surface. The DB-mode Builder/Export smoke now
+finalizes through the browser card UI before exercising card PDF affordance and
+rereading finalized persistence.
+
+Implemented Phase 8 Slice 4:
+
+> Prove the browser-generated PDF artifact, not just the presence of PDF buttons
+> or UI notices.
+
+Result: explicit template PDF failures now fall back to the simple local PDF
+instead of hard-failing browser export. The web tests cover explicit template
+fallback, and the DB-mode Builder/Export smoke now captures browser-generated
+Review/card PDF artifacts and verifies PDF header, byte length, `.pdf` file
+name, UI notice, browser finalize flow, and finalized-state reread.
+
+Implemented Phase 8 Slice 5:
+
+> Close the remaining portrait evidence gap by proving the edit-page file
+> input, portrait compression/preview, persisted storage, and library-card
+> rendering path in DB mode.
+
+Result: the DB-mode Builder/Export smoke now creates a temporary PNG, uploads it
+through the edit-page file input with Chrome DevTools file-input automation,
+verifies the preview, saves the draft, confirms the uploaded portrait persists
+through the Character Library command route, reloads `/characters`, and verifies
+the card renders the stored portrait. Stored server portrait URLs now resolve
+against `NEXT_PUBLIC_SERVER_URL`, and uploaded portraits render with a plain
+`<img>` instead of `next/image` so remote server images do not hit Next host
+restrictions.
+
+Next recommended task:
+
+Run a narrow Phase 8 Builder/Export closure/readout or choose a fresh
+product-confidence target. Do not continue DB readiness, PDF export, or portrait
+upload work unless a new environment blocker appears.
+
+Recommended effort: `medium`.
+
+Implemented Phase 8 Slice 6:
+
+> Use the completed Phase 8 DB-mode Builder/Export evidence to decide whether
+> the confidence sequence can close or needs one narrow follow-up, without
+> changing runtime protocol, DB schema, production auth, production asset
+> storage, Character Library/runtime separation, combat automation, spell
+> automation, inventory, PDF semantics, portrait storage, or broader D&D
+> systems.
+
+Closure decision: Phase 8 Builder/Export confidence is closed for the current
+local single-process DB-mode browser path. DB readiness, PDF artifact
+verification, and portrait-upload coverage should not be extended automatically
+unless a new failure or playtest blocker appears.
+
+Next recommended milestone:
+
+Saved Character To Training Room Combined Browser Evidence Harness. The
+end-to-end saved-character-to-Training-Room product-flow triage is complete and
+recorded in
+`docs/delivery/SAVED_CHARACTER_TRAINING_ROOM_PRODUCT_FLOW_TRIAGE.md`. DB
+readiness, DB-mode Builder/Export smoke, DB-mode bridge smoke, and two-profile
+Training Room runtime smoke passed. The remaining evidence gap is that these
+proofs are split across separate harnesses; no single run currently follows one
+saved Character Library entry through Player submission, DM runtime-copy
+assignment, Training Room placement, encounter start, first-turn feedback,
+recovery, and Local Reset. Do not continue DB readiness, PDF export, portrait
+upload, runtime polish, or bridge confidence automatically unless a new blocker
+appears.
+
+Recommended effort: `high`.
+
+**Character Library Usability Playtest Triage**
+
+Run a focused `/characters` DB-mode browser usability pass to decide whether
+the Character Library, Builder, draft/finalized card states, portrait behavior,
+PDF export affordances, and finalized saved-entry -> runtime submission
+boundary are understandable without internal implementation context.
+
+Recommended effort: `medium`.
+
+Implemented Character Library Usability Playtest Triage:
+
+> Run a focused `/characters` DB-mode browser usability pass and record whether
+> the Character Library, Builder, draft/finalized card states, portrait
+> behavior, PDF export affordances, and finalized saved-entry -> runtime
+> submission boundary are understandable without internal implementation
+> context.
+
+Result: DB readiness and `@dnd/web test:smoke:builder-export-db` pass through
+the current local single-process DB-mode Character Library path. No mechanics
+blocker was found. The next narrow observed issue is mixed-locale/high-traffic
+copy in `/characters`: the hardcoded `Builder` nav label and card-level
+PDF/export affordances should become localization-aware.
+
+Next recommended task:
+
+**Character Library Card Export / Bridge-Affordance Copy Polish**
+
+Recommended effort: `medium`.
+
+Implemented Character Library Card Export / Bridge-Affordance Copy Polish:
+
+> Polish high-traffic `/characters` library/card copy so the Builder nav,
+> library intro, card PDF export controls, PDF notices, and finalized
+> saved-entry -> runtime-submission affordance are localization-aware and
+> understandable in both English and Persian, without changing runtime
+> protocol, DB schema, auth, PDF generation, portrait storage, Character
+> Library/runtime separation, bridge behavior, combat automation,
+> replay/catch-up semantics, production auth, production asset storage, or
+> broader D&D systems.
+
+Result: the affected Character Library shell/card/export copy now uses the
+existing i18n system, and finalized cards explain that Player-mode `runtime`
+submission creates a separate runtime copy while live runtime overlays do not
+mutate the reusable library entry.
+
+Next recommended task:
+
+Implemented Character Sheet PDF Preview Before Download:
+
+> Change the Review/Sheet and Character Library card PDF affordances so they
+> show a simple web preview of the generated character sheet before the user
+> downloads the PDF, without changing runtime protocol, DB schema, auth, PDF
+> template semantics, portrait storage, Character Library/runtime separation,
+> bridge behavior, combat automation, replay/catch-up semantics, production
+> auth, production asset storage, or broader D&D systems.
+
+Result: Review/Sheet PDF buttons and Character Library card PDF buttons now
+open a reusable HTML character-sheet preview first. The existing local
+template/fallback PDF generator still owns the downloaded PDF, and the DB-mode
+Builder/Export smoke verifies preview readiness, PDF artifact generation, and
+explicit download from the preview dialog.
+
+Implemented Character Sheet PDF Preview Browser Verification / Closure:
+
+> Prove the generated web preview is visible and reviewable in the browser
+> before download, without changing runtime protocol, DB schema, auth, PDF
+> template semantics, portrait storage, Character Library/runtime separation,
+> bridge behavior, combat automation, replay/catch-up semantics, production
+> auth, production asset storage, or broader D&D systems.
+
+Result: the DB-mode Builder/Export smoke now verifies Review/card preview
+dialog content before download, including dialog controls, the Persian
+character name, printable LTR sheet surface, mapped sheet fields, PDF artifact
+capture, and explicit download from the preview dialog.
+
+Next recommended task:
+
+Choose a fresh human-approved product-confidence target. Do not continue DB
+readiness, PDF export, portrait upload, runtime polish, or bridge confidence
+automatically unless a new blocker appears.
 
 Recommended effort: `medium`.

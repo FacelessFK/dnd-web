@@ -171,6 +171,16 @@ async function main() {
       'DM combatant controls',
     );
 
+    await waitForVisibleTextOrder(
+      dmPage,
+      [
+        ['Turn & Target', 'نوبت و هدف'],
+        ['Scene Builder', 'صحنه‌ساز'],
+        ['Monsters & NPCs', 'هیولاها و NPCها'],
+      ],
+      'DM active encounter action hierarchy',
+    );
+
     logSmokeStep('joining and recovering table in Player profile');
     await waitForRuntimeShell(playerPage, 'Player runtime shell');
     await waitForCockpitHydrated(playerPage);
@@ -191,6 +201,12 @@ async function main() {
       playerPage,
       ['Readiness summary', 'خلاصه آمادگی'],
       'Player readiness summary',
+    );
+
+    await waitForVisibleTextOrder(
+      playerPage,
+      [['Turn & Target', 'نوبت و هدف'], ['Player Character']],
+      'Player active turn action hierarchy',
     );
 
     logSmokeStep('validating Player profile guardrails');
@@ -584,6 +600,29 @@ function hasVisibleTextExpression(texts) {
     const bodyText = document.body?.innerText ?? '';
     return ${JSON.stringify(texts)}.some((text) => bodyText.includes(text));
   })()`;
+}
+
+async function waitForVisibleTextOrder(page, texts, label) {
+  const textGroups = texts.map((text) => (Array.isArray(text) ? text : [text]));
+
+  await waitFor(page, {
+    label,
+    predicate: `(() => {
+      const bodyText = document.body?.innerText ?? '';
+      const indexes = ${JSON.stringify(textGroups)}.map((alternatives) => {
+        const presentIndexes = alternatives
+          .map((text) => bodyText.indexOf(text))
+          .filter((index) => index >= 0);
+
+        return presentIndexes.length ? Math.min(...presentIndexes) : -1;
+      });
+
+      return indexes.every((index) => index >= 0) &&
+        indexes.every((index, textIndex) =>
+          textIndex === 0 ? true : index > indexes[textIndex - 1],
+        );
+    })()`,
+  });
 }
 
 async function waitForEncounterSummary(page, label) {

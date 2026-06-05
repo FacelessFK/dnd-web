@@ -92,6 +92,15 @@ that scope.
   Library entry ID when present.
 - Assigned runtime character cards continue showing the runtime copy/source
   Character Library entry provenance after DM assignment.
+- DB-mode local validation now has a non-secret readiness preflight and a
+  passing combined bridge / Training Room browser smoke path: the local project
+  DB cluster can pass required-table readiness, and
+  `@dnd/web test:smoke:saved-character-training-room-db` proves Player
+  saved-character submission -> DM runtime-copy assignment -> reusable
+  library-entry separation -> Training Room placement -> encounter start ->
+  DM/Player recovery -> Player Local Reset recovery in a single-process local
+  DB-mode browser run. `@dnd/web test:smoke:bridge-db` remains an alias for the
+  same harness.
 
 ## Known Limitations
 
@@ -119,27 +128,76 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Playable MVP Phase 6: polish the Training Room Skirmish DM-player product flow
-using existing runtime commands and current local sample data.
+Curated merge decision or optional screenshot evidence packet for the combined
+harness evidence slice.
 
-The Character Library -> runtime bridge already has a server-side command,
-Player-mode saved-character submit UI, DM pending-assignment preview, separate
-runtime character copies, and narrow DB transaction/outbox coverage on covered
-paths. Treat bridge hardening as historical/current infrastructure, not the
-immediate next product milestone.
+The Phase 6 Training Room Skirmish polish sequence, Phase 7 Character Library
+-> Runtime bridge confidence sequence, and the fresh next-goal intake are
+closed for the currently triaged evidence. Fresh one-profile runtime,
+two-profile runtime, and DB-mode bridge smokes passed. Do not extend runtime
+polish or bridge confidence automatically.
 
-The next work should tighten the named Training Room Skirmish presentation and
-manual playtest script without adding new runtime protocol, combat automation,
-replay, cursor, catch-up, production auth, or broader D&D systems.
+Phase 8 Builder/Export confidence is now closed for the current local
+single-process DB-mode browser path. The DB-mode Builder/Export smoke covers
+authenticated Persian draft persistence, browser reload, edit/review access,
+PNG portrait upload and persisted card rendering, Review/card PDF artifact
+capture, card-level finalization, and finalized-state reread. The readiness
+preflight requires required tables, UTF8 server/client encoding, and a Persian
+Unicode round-trip.
 
-Break this into small Codex tasks:
+The Character Library card export / bridge-affordance copy polish is
+implemented, and PDF export now opens a reusable web character-sheet preview
+before download on both the Review/Sheet surface and Character Library cards.
+The preview is driven by the same mapped Character Library fields as PDF
+generation; the existing local template/fallback PDF generator still owns the
+downloaded artifact. The narrow browser visual verification/closure pass for
+the preview is complete: web tests, web typecheck, web build, lint,
+format:check, `git diff --check`, and the DB-mode Builder/Export smoke passed,
+including preview dialog content and PDF artifact checks. Do not extend DB
+readiness, PDF export mechanics, portrait upload mechanics, runtime polish, or
+bridge confidence automatically unless a new blocker appears.
 
-1. inspect current named demo scenario commands, runtime sample data, and demo
-   setup UI when changing scenario behavior;
-2. polish the named Training Room Skirmish scenario presentation without
-   introducing new runtime protocol or combat automation;
-3. avoid adding replay, cursor, catch-up, or broader D&D automation;
-4. validate helper tests, web typecheck, build, and runtime smoke honestly;
+The end-to-end saved-character-to-Training-Room product-flow triage and
+combined harness are complete for the current local evidence. DB readiness,
+DB-mode Builder/Export smoke, DB-mode bridge/Training Room smoke, and
+two-profile Training Room runtime smoke passed. The combined DB-mode browser
+run now follows one saved Character Library entry through Player submission,
+DM assignment of the separate runtime copy, Training Room placement, encounter
+start, first-turn/action feedback, DM/Player recovery, reusable-entry
+separation checks, and Player Local Reset recovery. Do not extend runtime
+polish, Character Library bridge behavior, DB/auth, PDF/portrait, or combat
+automation automatically unless fresh evidence identifies a narrow blocker.
+
+The fresh product-confidence intake after the combined harness is complete.
+It found no current mechanics blocker and no boundary violation. It
+recommended reviewer-facing evidence packaging as the next docs-only closure
+step rather than new runtime behavior.
+
+The Combined Harness Evidence Closure Packet is complete in
+`docs/delivery/COMBINED_HARNESS_EVIDENCE_CLOSURE_PACKET.md`. It summarizes the
+validation command, 12-step product loop, reviewer evidence map, boundary
+review, explicit non-claims, and closure decision. Recommended next action:
+human review / merge decision. If visual evidence is needed, approve a
+separate optional screenshot packet; do not broaden runtime protocol,
+DB/auth, replay/catch-up, Character Library bridge behavior, combat
+automation, PDF/portrait mechanics, or broader D&D systems automatically.
+
+The Human Review / Merge Decision packet is complete in
+`docs/delivery/HUMAN_REVIEW_MERGE_DECISION_COMBINED_HARNESS.md`. Verdict:
+approve with cautions for the reviewed combined harness evidence slice. Main
+caution: the working tree contains multiple previous dirty and untracked paths,
+so do not merge the entire working tree as one unreviewed unit. Use curated
+staging for the intended approved slice, or request a separate optional
+screenshot evidence packet if visual review is required.
+
+For the next task:
+
+1. inspect the current docs, existing smoke scripts, and both `/characters` and
+   `/runtime` surfaces before planning;
+2. keep the task scoped by observed evidence, not by broad product ambition;
+3. avoid adding runtime protocol, replay, cursor, catch-up, production auth,
+   combat automation, or broader D&D systems unless explicitly approved;
+4. validate with the smallest honest set of tests/smokes for the touched area;
 5. update docs after each slice.
 
 ## Coding Rules For Future Codex Tasks

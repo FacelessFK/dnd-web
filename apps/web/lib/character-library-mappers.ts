@@ -19,6 +19,7 @@ import {
   normalizeCharacterBuilderDraft,
 } from './character-builder-helpers';
 import { deriveRuleDerivedPreview } from './character-builder-rules-helpers';
+import { runtimeServerUrl } from './runtime-api';
 
 export const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
 
@@ -54,12 +55,24 @@ export function getPortraitImageSource(
   }
 
   if (portrait.kind === 'uploaded') {
-    return portrait.url ?? portrait.dataUrl ?? null;
+    return resolveUploadedPortraitUrl(portrait.url) ?? portrait.dataUrl ?? null;
   }
 
   const assetKey = asKnownPortraitAssetKey(portrait.assetKey);
 
   return assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
+}
+
+function resolveUploadedPortraitUrl(url: string | null | undefined) {
+  if (!url) {
+    return null;
+  }
+
+  if (url.startsWith('/api/character-library/portraits/')) {
+    return new URL(url, runtimeServerUrl).toString();
+  }
+
+  return url;
 }
 
 export function createUploadedPortraitReferenceFromDataUrl(

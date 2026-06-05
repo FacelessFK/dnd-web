@@ -44,12 +44,29 @@ DATABASE_URL=postgres://user:password@localhost:5432/dnd_web
 
 Apply `packages/db/migrations/` before DB-mode startup. Do not silently fall
 back to in-memory when the task is about persisted Character Library, auth,
-transactions, idempotency, or database behavior.
+transactions, idempotency, or database behavior. The DB readiness check also
+requires UTF8 server/client encoding and a Persian Unicode round-trip probe
+before Character Library DB-mode validation should proceed.
 
 For the current Character Library auth MVP, make sure the applied migration set
 includes `0008_character_library_entries.sql`,
 `0009_auth_users_and_sessions.sql`, and
 `0010_auth_user_owned_character_library.sql`.
+
+For local Character Library Builder/Export confidence, run:
+
+```bash
+corepack pnpm --filter @dnd/db check:readiness
+corepack pnpm --filter @dnd/web test:smoke:builder-export-db
+```
+
+For the combined saved-character-to-Training-Room DB-mode browser evidence
+path, run:
+
+```bash
+corepack pnpm --filter @dnd/db check:readiness
+corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
+```
 
 ## Browser QA
 

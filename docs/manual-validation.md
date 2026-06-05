@@ -187,11 +187,50 @@ session, refresh the saved-character list, select a finalized saved character,
 and submit it. Confirm the player shows a pending assignment. Switch to DM mode
 and confirm the Roster's Assignment Requests card shows a character preview
 with name, build, HP, AC, speed, runtime copy ID, and source library entry ID
-before assigning that pending runtime character. Click **Assign Pending
-Character** and confirm the assigned character card still shows the runtime
-copy ID and source library entry ID after the pending request clears. Confirm
-the reusable library entry remains separate from live runtime HP, movement,
-conditions, and DM overrides.
+before assigning that pending runtime character. Click **Assign Runtime Copy**
+and confirm the assigned character card still shows the runtime copy ID and
+source library entry ID after the pending request clears. Confirm the reusable
+library entry remains separate from live runtime HP, movement, conditions, and
+DM overrides.
+
+When DB mode is configured and migrations are applied, the same bridge path can
+also be checked with:
+
+```bash
+corepack pnpm --filter @dnd/db check:readiness
+corepack pnpm --filter @dnd/web test:smoke:builder-export-db
+corepack pnpm --filter @dnd/web test:smoke:bridge-db
+corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
+```
+
+The readiness check requires `DATABASE_URL`, loads repo-local `.env` values,
+opens a PostgreSQL connection, confirms UTF8 server/client encoding, verifies a
+Persian Unicode round-trip probe, and confirms the required DB tables exist
+without printing connection strings or mutating data. The Builder/Export smoke
+runs this same preflight before starting server/browser processes; after the
+preflight passes, it starts the server in `SERVER_PERSISTENCE_MODE=db`, creates
+an authenticated Persian Character Library draft through the command route,
+verifies persisted `/characters` reload in a browser profile, uploads a PNG
+portrait through the edit-page file input, saves the draft, confirms the
+uploaded portrait persists and renders on the library card, opens the
+edit/review sheet, verifies Review PDF and library-card PDF artifacts through a
+browser-only smoke capture hook, finalizes the entry through the `/characters`
+card UI, and rereads server state to confirm finalized persistence. The bridge
+smoke also runs this
+preflight before starting server/browser processes; it seeds a finalized saved
+character through the authenticated Character Library route, submits it through
+a Player browser profile, assigns the runtime copy through a DM browser
+profile, creates and activates a Training Room scene with existing server
+commands, places the assigned runtime copy, starts an encounter, recovers both
+browser profiles, verifies first-turn/action feedback, confirms Player Local
+Reset stays browser-local, and rereads server state to confirm
+runtime-copy/source-library provenance without printing secrets.
+
+If using the project-local PostgreSQL dev cluster, start it before the checks:
+
+```bash
+pg_ctl -D apps/server/data/postgres-dev -l apps/server/data/postgres-dev.log -o "-p 55432" -w start
+```
 
 For the rule-aware builder slice, also check:
 

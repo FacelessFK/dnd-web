@@ -154,6 +154,29 @@ async function main() {
     await waitForText(page, 'Aria', 'sample character Aria');
     await waitForText(page, 'Borin', 'sample character Borin');
     await waitForText(page, 'Tactical Grid', 'tactical grid');
+    await waitForAnyText(
+      page,
+      ['Target scene ID is required.', 'شناسه صحنه مقصد الزامی است.'],
+      'localized transition validation',
+    );
+    await waitForAnyText(
+      page,
+      [
+        'Create or select a monster/NPC combatant first.',
+        'ابتدا یک موجود مبارز monster/NPC بسازید یا انتخاب کنید.',
+      ],
+      'localized combatant selection blocker',
+    );
+    await waitForAnyText(
+      page,
+      ['No active turn', 'نوبت فعالی نیست'],
+      'localized no-active-turn status',
+    );
+    await waitForAnyText(
+      page,
+      ['Conditions:', 'وضعیت‌ها:'],
+      'localized character summary labels',
+    );
 
     logSmokeStep('starting encounter from UI');
     await clickButton(page, 'Start Encounter');
@@ -178,7 +201,16 @@ async function main() {
       ['Combat & Event Feed', 'برخورد و رخدادها'],
       'event feed panel',
     );
-    await waitForText(page, 'Monsters & NPCs', 'DM combatant controls panel');
+    await waitForAnyText(
+      page,
+      ['Monsters & NPCs', 'هیولاها و NPCها'],
+      'DM combatant controls panel',
+    );
+    await waitForAnyText(
+      page,
+      ['Create combatant', 'ساخت موجود مبارز'],
+      'localized DM combatant helper copy',
+    );
 
     logSmokeStep('validating recovery after reload');
     await page.send('Page.reload', { ignoreCache: true });
@@ -243,7 +275,11 @@ async function main() {
     });
     await expectVisibleButton(page, 'Run Training Room Skirmish', false);
     await expectVisibleText(page, ['Scene Builder', 'صحنه‌ساز'], false);
-    await expectVisibleText(page, 'Monsters & NPCs', false);
+    await expectVisibleText(
+      page,
+      ['Monsters & NPCs', 'هیولاها و NPCها'],
+      false,
+    );
     const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
 
     logSmokeStep('validating local reset stays local');

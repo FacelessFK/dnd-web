@@ -19,16 +19,17 @@ import {
   filterCharacterLibraryEntries,
   getStatusLabel,
 } from '../../lib/character-builder-helpers';
-import { listCharacterLibraryEntries } from '../../lib/character-library-api';
+import {
+  finalizeCharacterLibraryEntry,
+  listCharacterLibraryEntries,
+} from '../../lib/character-library-api';
 import {
   characterLibraryEntryToCard,
   getPortraitImageSource,
 } from '../../lib/character-library-mappers';
-import {
-  downloadCharacterSheetPdf,
-  type CharacterSheetTemplateId,
-} from '../../lib/character-sheet-pdf';
+import { type CharacterSheetTemplateId } from '../../lib/character-sheet-pdf';
 import { LanguageSwitcher, useI18n } from '../../lib/i18n';
+import { CharacterSheetPdfPreview } from './character-sheet-pdf-preview';
 import SimpleCharacterBuilder from './simple-builder/App';
 
 type CharacterBuilderPageProps = {
@@ -91,7 +92,7 @@ function Shell({
                 </span>
               </Link>
               <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]">
-                Library
+                {t('page.characterLibrary.navBadge')}
               </span>
               <nav className="ml-auto flex flex-wrap items-center gap-2 text-xs font-bold">
                 <ShellNavLink
@@ -99,7 +100,10 @@ function Shell({
                   active={active === 'library'}
                   label={t('nav.characterLibrary')}
                 />
-                <ShellNavLink href="/characters/new" label="Builder" />
+                <ShellNavLink
+                  href="/characters/new"
+                  label={t('page.characterBuilder.title')}
+                />
                 <ShellNavLink href="/runtime" label={t('nav.runtimeTable')} />
               </nav>
               <LanguageSwitcher />
@@ -232,7 +236,14 @@ function PlaceholderArt({
         size === 'wide' ? 'h-40 w-full' : '',
       ].join(' ')}
     >
-      {shouldShowImage && imagePath ? (
+      {shouldShowImage && imagePath && imageSrc ? (
+        <img
+          alt=""
+          className={`h-full w-full object-cover ${imagePositionClass}`}
+          onError={() => setFailedAssetPath(imagePath)}
+          src={imagePath}
+        />
+      ) : shouldShowImage && imagePath ? (
         <Image
           alt=""
           className={`object-cover ${imagePositionClass}`}
@@ -346,6 +357,13 @@ export function CharacterLibraryPage() {
     () => new Map(rawEntries.map((entry) => [entry.id, entry])),
     [rawEntries],
   );
+  const updateEntry = (updatedEntry: CharacterLibraryEntry) => {
+    setRawEntries((currentEntries) =>
+      currentEntries.map((entry) =>
+        entry.id === updatedEntry.id ? updatedEntry : entry,
+      ),
+    );
+  };
 
   return (
     <Shell active="library" title={t('page.characterLibrary.title')}>
@@ -379,16 +397,14 @@ export function CharacterLibraryPage() {
                   {t('page.characterLibrary.title')}
                 </h2>
                 <p className="mt-3 max-w-2xl text-base leading-7 text-[var(--color-text-muted)]">
-                  کاراکترهای ذخیره‌شده حساب خودتان را ببینید، پیش‌نویس را باز
-                  کنید، تصویر پرتره را نگه دارید، یا بدون خروج از محیط کار شیت
-                  خروجی بگیرید.
+                  {t('page.characterLibrary.description')}
                 </p>
               </div>
               <Link
                 className="inline-flex w-fit rounded-xl border border-amber-300/45 bg-amber-400 px-5 py-3 text-sm font-black text-slate-950 shadow-lg shadow-black/20 transition hover:bg-amber-300"
                 href="/characters/new"
               >
-                ساخت کاراکتر جدید
+                {t('page.characterLibrary.createNew')}
               </Link>
             </div>
 
@@ -491,7 +507,8 @@ export function CharacterLibraryPage() {
                   entry={entry}
                   key={entry.id}
                   libraryEntry={entriesById.get(entry.id)}
-                  onPdfNotice={setPdfNotice}
+                  onEntryUpdated={updateEntry}
+                  onNotice={setPdfNotice}
                 />
               ))}
             </div>
@@ -516,141 +533,189 @@ export function CharacterLibraryPage() {
 function CharacterCard({
   entry,
   libraryEntry,
-  onPdfNotice,
+  onEntryUpdated,
+  onNotice,
 }: {
   entry: CharacterBuilderLibraryEntry;
   libraryEntry?: CharacterLibraryEntry;
-  onPdfNotice: (notice: string) => void;
+  onEntryUpdated: (entry: CharacterLibraryEntry) => void;
+  onNotice: (notice: string) => void;
 }) {
-  const [downloadingPdfTemplate, setDownloadingPdfTemplate] =
+  const { t } = useI18n();
+  const [previewingPdfTemplate, setPreviewingPdfTemplate] =
     useState<CharacterSheetTemplateId | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+  const canFinalize = Boolean(libraryEntry?.ownerParticipantId);
 
-  const downloadPdf = async (
-    templateId: CharacterSheetTemplateId,
-  ): Promise<void> => {
+  const finalizeEntry = async (): Promise<void> => {
+    if (
+      !libraryEntry ||
+      !libraryEntry.ownerParticipantId ||
+      libraryEntry.status === 'finalized'
+    ) {
+      return;
+    }
+
+    setFinalizing(true);
+
+    try {
+      const result = await finalizeCharacterLibraryEntry(
+        libraryEntry.ownerParticipantId,
+        libraryEntry.id,
+      );
+
+      if (result.ok) {
+        onEntryUpdated(result.data);
+        onNotice(
+          t('page.characterLibrary.finalizeSuccess', {
+            name: result.data.name,
+          }),
+        );
+        return;
+      }
+
+      onNotice(
+        `${t('page.characterLibrary.finalizeFailed')}: ${result.error.message}`,
+      );
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  const previewPdf = (templateId: CharacterSheetTemplateId): void => {
     if (!libraryEntry) {
       return;
     }
 
-    setDownloadingPdfTemplate(templateId);
-
-    try {
-      const result = await downloadCharacterSheetPdf(libraryEntry, {
-        templateId,
-      });
-      const templateMessage = result.fallbackReason
-        ? `PDF جایگزین شیت کاراکتر دانلود شد: ${result.fallbackReason}`
-        : `${result.template.label} از داده‌های ذخیره‌شده کاراکتر دانلود شد.`;
-
-      onPdfNotice(templateMessage);
-    } catch (error) {
-      onPdfNotice(
-        error instanceof Error
-          ? `دانلود PDF شیت کاراکتر ناموفق بود: ${error.message}`
-          : 'دانلود PDF شیت کاراکتر ناموفق بود.',
-      );
-    } finally {
-      setDownloadingPdfTemplate(null);
-    }
+    setPreviewingPdfTemplate(templateId);
   };
 
   return (
-    <article
-      className="overflow-hidden rounded-2xl border shadow-xl shadow-black/25 transition hover:-translate-y-0.5 hover:border-[var(--color-gold-border)]"
-      style={{
-        background: 'rgba(30,33,48,0.9)',
-        borderColor: 'var(--color-border)',
-      }}
-    >
-      <PlaceholderArt
-        assetKey={entry.portraitAssetKey}
-        imageSrc={getPortraitImageSource(entry.portrait)}
-        label={entry.name}
-        size="portrait"
-      />
-      <div className="p-5 text-[var(--color-text)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-2xl font-black">{entry.name}</h3>
-            <p className="mt-1 text-sm font-semibold text-[var(--color-text-muted)]">
-              {entry.speciesOrRace} {entry.className}
-            </p>
-          </div>
-          <span className="rounded-xl border border-[var(--color-gold-border)] bg-[var(--color-gold)] px-3 py-2 text-center text-sm font-black text-[#0f1117]">
-            {entry.level}
-            <span className="block text-[0.55rem] uppercase tracking-[0.18em]">
-              سطح
+    <>
+      <article
+        className="overflow-hidden rounded-2xl border shadow-xl shadow-black/25 transition hover:-translate-y-0.5 hover:border-[var(--color-gold-border)]"
+        style={{
+          background: 'rgba(30,33,48,0.9)',
+          borderColor: 'var(--color-border)',
+        }}
+      >
+        <PlaceholderArt
+          assetKey={entry.portraitAssetKey}
+          imageSrc={getPortraitImageSource(entry.portrait)}
+          label={entry.name}
+          size="portrait"
+        />
+        <div className="p-5 text-[var(--color-text)]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-2xl font-black">{entry.name}</h3>
+              <p className="mt-1 text-sm font-semibold text-[var(--color-text-muted)]">
+                {entry.speciesOrRace} {entry.className}
+              </p>
+            </div>
+            <span className="rounded-xl border border-[var(--color-gold-border)] bg-[var(--color-gold)] px-3 py-2 text-center text-sm font-black text-[#0f1117]">
+              {entry.level}
+              <span className="block text-[0.55rem] uppercase tracking-[0.18em]">
+                {t('page.characterLibrary.level')}
+              </span>
             </span>
-          </span>
-        </div>
-        <p className="mt-4 min-h-12 text-sm leading-6 text-[var(--color-text-muted)]">
-          {entry.summary}
-        </p>
-        <div
-          className="mt-4 flex items-center justify-between border-t pt-4"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          <StatusBadge status={entry.status} />
-          <span className="text-sm font-bold text-[var(--color-text-muted)]">
-            درجه زره {entry.armorClass}
-          </span>
-        </div>
-        <div className="mt-4 grid gap-2">
-          <Link
-            className="rounded-xl bg-[var(--color-gold)] px-4 py-2 text-center text-sm font-bold text-[#0f1117] transition hover:brightness-110"
-            href={`/characters/${entry.id}/edit`}
-          >
-            ویرایش
-          </Link>
-          <button
-            className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-[var(--color-text-muted)] opacity-65"
-            disabled
-            type="button"
-          >
-            تکثیر - در انتظار
-          </button>
-          <button
-            className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-red-200/55"
-            disabled
-            type="button"
-          >
-            حذف - در انتظار
-          </button>
-          <button
-            className="rounded-xl border bg-black/25 px-4 py-2 text-sm font-black text-[var(--color-text-muted)] opacity-65"
+          </div>
+          <p className="mt-4 min-h-12 text-sm leading-6 text-[var(--color-text-muted)]">
+            {entry.summary}
+          </p>
+          <div
+            className="mt-4 flex items-center justify-between border-t pt-4"
             style={{ borderColor: 'var(--color-border)' }}
-            disabled
-            type="button"
           >
-            استفاده در جلسه - در انتظار
-          </button>
-          <div className="grid grid-cols-2 gap-2">
+            <StatusBadge status={entry.status} />
+            <span className="text-sm font-bold text-[var(--color-text-muted)]">
+              {t('page.characterLibrary.armorClass', {
+                armorClass: String(entry.armorClass),
+              })}
+            </span>
+          </div>
+          {libraryEntry?.status === 'finalized' ? (
+            <p className="mt-3 rounded-xl border border-sky-300/15 bg-sky-950/20 p-3 text-xs leading-5 text-sky-100/75">
+              {t('page.characterLibrary.runtimeHint')}
+            </p>
+          ) : null}
+          <div className="mt-4 grid gap-2">
+            <Link
+              className="rounded-xl bg-[var(--color-gold)] px-4 py-2 text-center text-sm font-bold text-[#0f1117] transition hover:brightness-110"
+              href={`/characters/${entry.id}/edit`}
+            >
+              {t('page.characterLibrary.edit')}
+            </Link>
+            {entry.status === 'draft' ? (
+              <button
+                className="rounded-xl border border-emerald-300/45 bg-emerald-950/65 px-4 py-2 text-sm font-black text-emerald-100 transition hover:border-emerald-200 disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={!canFinalize || finalizing}
+                onClick={() => void finalizeEntry()}
+                type="button"
+              >
+                {finalizing
+                  ? t('page.characterLibrary.finalizePending')
+                  : t('page.characterLibrary.finalize')}
+              </button>
+            ) : null}
             <button
-              className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
-              style={{ borderColor: 'var(--color-border)' }}
-              disabled={!libraryEntry || downloadingPdfTemplate !== null}
-              onClick={() => void downloadPdf('dnd-2024-template')}
+              className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-[var(--color-text-muted)] opacity-65"
+              disabled
               type="button"
             >
-              {downloadingPdfTemplate === 'dnd-2024-template'
-                ? 'در حال آماده‌سازی...'
-                : 'شیت ۲۰۲۴'}
+              {t('page.characterLibrary.duplicatePending')}
             </button>
             <button
-              className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
-              style={{ borderColor: 'var(--color-border)' }}
-              disabled={!libraryEntry || downloadingPdfTemplate !== null}
-              onClick={() => void downloadPdf('dnd-2014-template')}
+              className="rounded-xl bg-black/25 px-4 py-2 text-sm font-bold text-red-200/55"
+              disabled
               type="button"
             >
-              {downloadingPdfTemplate === 'dnd-2014-template'
-                ? 'در حال آماده‌سازی...'
-                : 'شیت ۲۰۱۴'}
+              {t('page.characterLibrary.deletePending')}
             </button>
+            <button
+              className="rounded-xl border bg-black/25 px-4 py-2 text-sm font-black text-[var(--color-text-muted)] opacity-65"
+              style={{ borderColor: 'var(--color-border)' }}
+              disabled
+              type="button"
+            >
+              {t('page.characterLibrary.useInSessionPending')}
+            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
+                style={{ borderColor: 'var(--color-border)' }}
+                disabled={!libraryEntry || previewingPdfTemplate !== null}
+                onClick={() => previewPdf('dnd-2024-template')}
+                type="button"
+              >
+                {previewingPdfTemplate === 'dnd-2024-template'
+                  ? t('page.characterLibrary.pdfPending')
+                  : t('page.characterLibrary.pdf2024')}
+              </button>
+              <button
+                className="rounded-xl border bg-black/20 px-4 py-2 text-sm font-black text-[var(--color-text)] transition hover:border-[var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-45"
+                style={{ borderColor: 'var(--color-border)' }}
+                disabled={!libraryEntry || previewingPdfTemplate !== null}
+                onClick={() => previewPdf('dnd-2014-template')}
+                type="button"
+              >
+                {previewingPdfTemplate === 'dnd-2014-template'
+                  ? t('page.characterLibrary.pdfPending')
+                  : t('page.characterLibrary.pdf2014')}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </article>
+      </article>
+      {libraryEntry && previewingPdfTemplate ? (
+        <CharacterSheetPdfPreview
+          entry={libraryEntry}
+          onClose={() => setPreviewingPdfTemplate(null)}
+          onNotice={onNotice}
+          templateId={previewingPdfTemplate}
+        />
+      ) : null}
+    </>
   );
 }
 

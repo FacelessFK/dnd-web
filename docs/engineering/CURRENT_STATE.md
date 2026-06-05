@@ -73,6 +73,10 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   characters, including source Character Library entry IDs when present;
 - assigned character cards preserve the runtime copy/source library entry
   provenance after DM assignment;
+- DB-mode combined browser smoke coverage follows one saved Character Library
+  entry through Player submission, DM runtime-copy assignment, Training Room
+  scene activation, placement, encounter start, DM/Player recovery, first-turn
+  feedback, and Player Local Reset recovery;
 - DM HP, condition, reposition, combatant, current-turn, turn-usage, and
   encounter-end controls.
 
@@ -116,7 +120,11 @@ Current bridge state:
 - in DB mode, the bridge path is covered by the DB-backed session transaction
   boundary when injected, including runtime character-copy creation, session
   pending assignment, durable idempotency success, and a post-commit
-  `session_state` outbox row.
+  `session_state` outbox row;
+- the local DB-mode combined browser harness
+  `corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db`
+  proves the saved-character bridge and Training Room placement/encounter
+  recovery loop together without mutating the reusable library entry.
 
 ## What Is DB-Backed
 
@@ -128,6 +136,12 @@ DATABASE_URL=postgres://user:password@localhost:5432/dnd_web
 ```
 
 Apply `packages/db/migrations/` before DB-mode verification.
+
+`corepack pnpm --filter @dnd/db check:readiness` now verifies that the target
+database and client connection are UTF8 and that a Persian Unicode probe
+round-trips, in addition to checking the required tables. This is required
+before DB-mode Character Library/Builder validation because Persian UI and
+user-entered Unicode content are product constraints.
 
 Covered DB-backed slices include:
 
@@ -224,6 +238,30 @@ Current runtime is intentionally narrow:
   product surfaces.
 - Portrait uploads are MVP storage, not production asset storage.
 - PDF export uses repo-owned local templates and a simple fallback.
+- The local DB-mode Builder/Export smoke
+  `corepack pnpm --filter @dnd/web test:smoke:builder-export-db` covers a
+  Persian authenticated Character Library draft, persisted browser reload,
+  portrait upload through the edit-page file input, persisted uploaded portrait
+  reread/card rendering, edit/review sheet access, Review PDF artifact capture,
+  draft finalization through the `/characters` card UI, card PDF artifact
+  capture, and finalized-state persistence against a UTF-8 migrated local DB.
+- The local DB-mode saved-character-to-Training-Room smoke
+  `corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db`
+  covers the combined saved Character Library entry -> Player runtime
+  submission -> DM runtime-copy assignment -> Training Room placement ->
+  encounter start -> browser recovery -> Player Local Reset recovery path
+  against the same UTF-8 migrated local DB.
+- The fresh product-confidence intake after that combined harness found no
+  current mechanics blocker; the remaining optional confidence step is a
+  reviewer-facing evidence closure packet, not new runtime behavior.
+- The reviewer-facing combined harness closure packet is now recorded in
+  `docs/delivery/COMBINED_HARNESS_EVIDENCE_CLOSURE_PACKET.md`; the recommended
+  next action is human review / merge decision, with an optional separately
+  approved screenshot packet only if visual evidence is needed.
+- The human review / merge decision packet is now recorded in
+  `docs/delivery/HUMAN_REVIEW_MERGE_DECISION_COMBINED_HARNESS.md`; it approves
+  the reviewed combined harness evidence slice with cautions and recommends
+  curated staging rather than merging the entire dirty working tree.
 
 ## Current i18n Reality
 

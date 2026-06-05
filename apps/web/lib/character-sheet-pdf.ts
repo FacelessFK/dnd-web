@@ -57,6 +57,45 @@ export type CharacterSheetPdfResult = {
   template: CharacterSheetTemplateDescriptor;
 };
 
+export type CharacterSheetPreviewField = {
+  label: string;
+  value: string;
+};
+
+export type CharacterSheetPreviewAbility = {
+  key: AbilityKey;
+  label: string;
+  modifier: string;
+  savingThrow: string;
+  score: string;
+};
+
+export type CharacterSheetPreviewModel = {
+  abilities: CharacterSheetPreviewAbility[];
+  combat: CharacterSheetPreviewField[];
+  equipment: string[];
+  identity: CharacterSheetPreviewField[];
+  notes: string;
+  profileLabel: string;
+  skills: CharacterSheetPreviewField[];
+  spellcasting: CharacterSheetPreviewField[];
+  templateEra: CharacterSheetTemplateDescriptor['era'];
+  title: string;
+};
+
+type CharacterSheetPdfSmokeArtifact = {
+  byteLength: number;
+  fallbackReason?: string;
+  fileName: string;
+  header: string;
+  templateId: CharacterSheetTemplateId;
+};
+
+type CharacterSheetPdfSmokeWindow = Window & {
+  __DND_ENABLE_PDF_SMOKE_ARTIFACTS?: boolean;
+  __DND_LAST_CHARACTER_SHEET_PDF?: CharacterSheetPdfSmokeArtifact;
+};
+
 export type CharacterSheetPdfGenerationOptions = {
   availableTemplateIds?: CharacterSheetTemplateId[];
   forceFallback?: boolean;
@@ -340,6 +379,85 @@ export function mapCharacterSheetFields(
   };
 }
 
+export function buildCharacterSheetPreviewModel(
+  entry: CharacterLibraryEntry,
+  templateId?: CharacterSheetTemplateId,
+): CharacterSheetPreviewModel {
+  const mappedFields = mapCharacterSheetFields(entry);
+  const selectedTemplate = templateId
+    ? (findAvailableTemplate(
+        templateId,
+        characterSheetPdfTemplates.map((template) => template.id),
+      ) ?? fallbackTemplate())
+    : selectCharacterSheetPdfTemplate(entry.rulesProfileId);
+  const fieldValues = mappedFields.fieldValues;
+
+  return {
+    abilities: abilityKeys.map((ability) => {
+      const fields = dnd2014AbilityFields[ability];
+
+      return {
+        key: ability,
+        label: ability.toUpperCase(),
+        modifier: fieldValues[fields.modifier] ?? '',
+        savingThrow: mappedFields.savingThrowValues[ability] ?? '',
+        score: fieldValues[fields.score] ?? '',
+      };
+    }),
+    combat: [
+      { label: 'Armor Class', value: fieldValues.AC ?? '' },
+      { label: 'Initiative', value: fieldValues.Initiative ?? '' },
+      { label: 'Speed', value: fieldValues.Speed ?? '' },
+      { label: 'Hit Point Max', value: fieldValues.HPMax ?? '' },
+      { label: 'Current HP', value: fieldValues.HPCurrent ?? '' },
+      { label: 'Hit Dice', value: fieldValues.HDTotal ?? '' },
+      { label: 'Proficiency', value: fieldValues.ProfBonus ?? '' },
+      { label: 'Passive Perception', value: fieldValues.Passive ?? '' },
+    ],
+    equipment: splitPreviewList(fieldValues.Equipment ?? ''),
+    identity: [
+      {
+        label: 'Character Name',
+        value: fieldValues.CharacterName ?? entry.name,
+      },
+      { label: 'Class & Level', value: fieldValues.ClassLevel ?? '' },
+      { label: 'Species', value: fieldValues['Race '] ?? '' },
+      { label: 'Background', value: fieldValues.Background ?? '' },
+      { label: 'Player Name', value: fieldValues.PlayerName ?? '' },
+    ],
+    notes: mappedFields.notes,
+    profileLabel: mappedFields.profileLabel,
+    skills: Object.entries(mappedFields.skillValues).map(([label, value]) => ({
+      label,
+      value,
+    })),
+    spellcasting: [
+      {
+        label: 'Spellcasting Class',
+        value: fieldValues['Spellcasting Class 2'] ?? '',
+      },
+      {
+        label: 'Ability',
+        value: fieldValues['SpellcastingAbility 2'] ?? '',
+      },
+      {
+        label: 'Save DC',
+        value: fieldValues['SpellSaveDC  2'] ?? '',
+      },
+      {
+        label: 'Attack Bonus',
+        value: fieldValues['SpellAtkBonus 2'] ?? '',
+      },
+      {
+        label: 'Spells',
+        value: summarizeList(mappedFields.spellNames),
+      },
+    ],
+    templateEra: selectedTemplate.era,
+    title: entry.name,
+  };
+}
+
 export async function generateCharacterSheetPdf(
   entry: CharacterLibraryEntry,
   options: CharacterSheetPdfGenerationOptions = {},
@@ -406,10 +524,6 @@ export async function generateCharacterSheetPdf(
         ? `Template PDF filling failed: ${error.message}`
         : 'Template PDF filling failed for an unknown reason.';
 
-    if (options.templateId) {
-      throw new Error(fallbackReason);
-    }
-
     return {
       bytes: generateSimpleCharacterSheetPdf(entry),
       fallbackReason,
@@ -425,6 +539,7 @@ export async function downloadCharacterSheetPdf(
   options: CharacterSheetPdfGenerationOptions = {},
 ): Promise<CharacterSheetPdfResult> {
   const result = await generateCharacterSheetPdf(entry, options);
+  recordSmokePdfArtifact(result);
   const blob = new Blob([result.bytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -437,6 +552,36 @@ export async function downloadCharacterSheetPdf(
   URL.revokeObjectURL(url);
 
   return result;
+}
+
+export function recordCharacterSheetPdfSmokeArtifact(
+  result: CharacterSheetPdfResult,
+): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const browserWindow = window as CharacterSheetPdfSmokeWindow;
+
+  if (!browserWindow.__DND_ENABLE_PDF_SMOKE_ARTIFACTS) {
+    return;
+  }
+
+  browserWindow.__DND_LAST_CHARACTER_SHEET_PDF = {
+    byteLength: result.bytes.byteLength,
+    fallbackReason: result.fallbackReason,
+    fileName: result.fileName,
+    header: bytesToLatin1(result.bytes.subarray(0, 5)),
+    templateId: result.template.id,
+  };
+}
+
+function recordSmokePdfArtifact(result: CharacterSheetPdfResult): void {
+  recordCharacterSheetPdfSmokeArtifact(result);
+}
+
+function bytesToLatin1(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
 }
 
 function findAvailableTemplate(
@@ -825,6 +970,13 @@ function formatSigned(value: number): string {
 
 function summarizeList(values: string[]): string {
   return values.length > 0 ? values.join(', ') : 'None';
+}
+
+function splitPreviewList(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function uniqueValues(values: string[]): string[] {

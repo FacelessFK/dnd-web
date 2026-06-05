@@ -459,6 +459,114 @@ function localizeRuntimeDisabledReasons(
   ) as ReturnType<typeof getRuntimeDisabledReasons>;
 }
 
+function localizeCombatantDraftError(
+  error: string,
+  t: RuntimeTranslator,
+): string {
+  const labels: Record<string, string> = {
+    'Armor Class': 'AC',
+    'Current HP': t('runtime.combatants.hpCurrent'),
+    'Footprint height': t('runtime.combatants.sizeHeight'),
+    'Footprint width': t('runtime.combatants.sizeWidth'),
+    'Max HP': t('runtime.combatants.hpMax'),
+    Speed: t('runtime.combatants.speed'),
+    'Temp HP': t('runtime.combatants.hpTemp'),
+  };
+  const wholeNumberMatch = error.match(/^(.+) must be a whole number\.$/);
+  const rangeMatch = error.match(/^(.+) must be between (\d+) and (\d+)\.$/);
+
+  if (wholeNumberMatch) {
+    return t('runtime.combatants.validation.wholeNumber', {
+      field: labels[wholeNumberMatch[1]!] ?? wholeNumberMatch[1]!,
+    });
+  }
+
+  if (rangeMatch) {
+    return t('runtime.combatants.validation.range', {
+      field: labels[rangeMatch[1]!] ?? rangeMatch[1]!,
+      max: rangeMatch[3]!,
+      min: rangeMatch[2]!,
+    });
+  }
+
+  const messages: Record<string, string> = {
+    'Choose monster or npc.': t('runtime.combatants.validation.kind'),
+    'Combatant footprint must fit within the scene grid.': t(
+      'runtime.combatants.validation.footprint',
+    ),
+    'Combatant name is required.': t('runtime.combatants.validation.name'),
+    'Current HP cannot exceed max HP.': t(
+      'runtime.combatants.validation.currentHp',
+    ),
+  };
+
+  return messages[error] ?? error;
+}
+
+function localizeTransitionDraftError(
+  error: string,
+  t: RuntimeTranslator,
+): string {
+  const labels: Record<string, string> = {
+    'Footprint height': t('runtime.sceneBuilder.field.footprintHeight'),
+    'Footprint width': t('runtime.sceneBuilder.field.footprintWidth'),
+  };
+  const wholeNumberMatch = error.match(/^(.+) must be a whole number\.$/);
+  const rangeMatch = error.match(/^(.+) must be between (\d+) and (\d+)\.$/);
+
+  if (wholeNumberMatch) {
+    return t('runtime.sceneBuilder.transitions.validation.wholeNumber', {
+      field: labels[wholeNumberMatch[1]!] ?? wholeNumberMatch[1]!,
+    });
+  }
+
+  if (rangeMatch) {
+    return t('runtime.sceneBuilder.transitions.validation.range', {
+      field: labels[rangeMatch[1]!] ?? rangeMatch[1]!,
+      max: rangeMatch[3]!,
+      min: rangeMatch[2]!,
+    });
+  }
+
+  const messages: Record<string, string> = {
+    'Choose a valid transition kind.': t(
+      'runtime.sceneBuilder.transitions.validation.kind',
+    ),
+    'Select a non-negative target cell.': t(
+      'runtime.sceneBuilder.transitions.validation.targetCell',
+    ),
+    'Target scene ID is required.': t(
+      'runtime.sceneBuilder.transitions.validation.targetSceneId',
+    ),
+    'Transition footprint must fit within the scene grid.': t(
+      'runtime.sceneBuilder.transitions.validation.footprint',
+    ),
+    'Transition name is required.': t(
+      'runtime.sceneBuilder.transitions.validation.name',
+    ),
+  };
+
+  return messages[error] ?? error;
+}
+
+function localizeRuntimeCharacterStatus(
+  status: string,
+  t: RuntimeTranslator,
+): string {
+  switch (status) {
+    case 'active':
+      return t('runtime.combatants.status.active');
+    case 'defeated':
+      return t('runtime.combatants.status.defeated');
+    case 'draft':
+      return t('runtime.characterSummary.status.draft');
+    case 'ready':
+      return t('common.ready');
+    default:
+      return status;
+  }
+}
+
 function getLocalizedPlayerNextStepTitle(
   nextStep: ReturnType<typeof getPlayerNextStep>,
   t: RuntimeTranslator,
@@ -3599,6 +3707,12 @@ export function RuntimeCockpit() {
     grid: scene?.grid,
     position: selectedTransition?.position ?? selectedCell,
   });
+  const localizedTransitionDraftErrors = transitionDraftErrors.map((error) =>
+    localizeTransitionDraftError(error, t),
+  );
+  const localizedTransitionEditDraftErrors = transitionEditDraftErrors.map(
+    (error) => localizeTransitionDraftError(error, t),
+  );
   const combatants = getCombatantEntities(scene);
   const attackableCombatants = getAttackableCombatantEntities(scene);
   const selectedCombatant = combatants.find(
@@ -3609,6 +3723,9 @@ export function RuntimeCockpit() {
     grid: scene?.grid,
     position: selectedCell,
   });
+  const localizedCombatantDraftErrors = combatantDraftErrors.map((error) =>
+    localizeCombatantDraftError(error, t),
+  );
   const sceneDraftReason =
     sceneDraftErrors.length > 0
       ? `Fix the scene draft first: ${sceneDraftErrors[0]}`
@@ -3647,12 +3764,16 @@ export function RuntimeCockpit() {
   const repositionSceneEntityReason = selectedPassiveEntityReason;
   const deleteSceneEntityReason = selectedPassiveEntityReason;
   const transitionDraftReason =
-    transitionDraftErrors.length > 0
-      ? `Fix the transition draft first: ${transitionDraftErrors[0]}`
+    localizedTransitionDraftErrors.length > 0
+      ? t('runtime.sceneBuilder.transitions.validation.fixDraft', {
+          error: localizedTransitionDraftErrors[0]!,
+        })
       : null;
   const transitionEditDraftReason =
-    transitionEditDraftErrors.length > 0
-      ? `Fix the transition edit form first: ${transitionEditDraftErrors[0]}`
+    localizedTransitionEditDraftErrors.length > 0
+      ? t('runtime.sceneBuilder.transitions.validation.fixEdit', {
+          error: localizedTransitionEditDraftErrors[0]!,
+        })
       : null;
   const createTransitionReason =
     busyReason ??
@@ -3671,8 +3792,10 @@ export function RuntimeCockpit() {
   const deleteTransitionReason = selectedTransitionReason;
   const activateTransitionReason = selectedTransitionReason;
   const combatantDraftReason =
-    combatantDraftErrors.length > 0
-      ? `Fix the combatant draft first: ${combatantDraftErrors[0]}`
+    localizedCombatantDraftErrors.length > 0
+      ? t('runtime.combatants.validation.fixDraft', {
+          error: localizedCombatantDraftErrors[0]!,
+        })
       : null;
   const createCombatantReason =
     busyReason ??
@@ -3685,7 +3808,7 @@ export function RuntimeCockpit() {
     missingSessionReason ??
     dmOnlySceneReason ??
     (scene ? null : 'Create, activate, or recover a scene first.') ??
-    (selectedCombatantId ? null : 'Create or select a monster/NPC first.');
+    (selectedCombatantId ? null : t('runtime.disabled.selectCombatant'));
   const combatantAttackReason = localizeRuntimeDisabledReason(
     getDmCombatantActionDisabledReason({
       busyLabel,
@@ -3815,6 +3938,10 @@ export function RuntimeCockpit() {
     participants,
     scene,
   });
+  const currentTurnDisplayName =
+    currentTurnName === 'No active turn'
+      ? t('runtime.actionEconomy.noEncounter')
+      : currentTurnName;
   const currentTurnRailSummary = getCurrentTurnRailSummary({
     charactersByParticipant,
     encounter,
@@ -3940,7 +4067,7 @@ export function RuntimeCockpit() {
       : t('runtime.disabled.recoverCharacter'));
   const activeSceneLabel = scene
     ? `${scene.name} (${scene.id})`
-    : (activeScene?.activeSceneId ?? sceneId) || 'none';
+    : (activeScene?.activeSceneId ?? sceneId) || t('common.none');
   const playerPlacement = activeScene?.placedCharacters.find(
     (placement) => placement.participantId === playerParticipantId,
   );
@@ -3974,7 +4101,7 @@ export function RuntimeCockpit() {
   });
   const playerReadinessSummary = getPlayerReadinessSummary({
     attackReady: actionTargetFeedbackSummary.attackReady,
-    currentActorLabel: currentTurnName,
+    currentActorLabel: currentTurnDisplayName,
     hasActiveScene: Boolean(activeScene),
     hasCharacter: Boolean(playerCharacter),
     hasEncounter: Boolean(encounter),
@@ -4045,6 +4172,167 @@ export function RuntimeCockpit() {
       case 'not_joined':
         return t('runtime.characterLibrary.blocker.notJoined');
     }
+  }
+
+  const shouldPromoteTurnTargetPanel =
+    mode === 'dm'
+      ? Boolean(encounter)
+      : isPlayerCharacterAssigned ||
+        currentTurnParticipantId === playerParticipantId;
+
+  function renderTurnTargetPanel() {
+    return (
+      <Panel
+        description={t('runtime.turnTarget.description')}
+        eyebrow={t('runtime.turnTarget.eyebrow')}
+        title={t('runtime.turnTarget.title')}
+      >
+        <div className="grid gap-3">
+          <EncounterStatusFeedback summary={encounterStatusSummary} t={t} />
+          {encounter ? (
+            <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
+              <StatusRow
+                label={t('runtime.turnTarget.usage')}
+                value={t('runtime.turnTarget.usageValue', {
+                  action: t(
+                    encounter.currentTurnUsage.actionUsed
+                      ? 'common.yes'
+                      : 'common.no',
+                  ),
+                  bonus: t(
+                    encounter.currentTurnUsage.bonusActionUsed
+                      ? 'common.yes'
+                      : 'common.no',
+                  ),
+                  movement: String(encounter.currentTurnUsage.movementUsed),
+                  reaction: t(
+                    encounter.currentTurnUsage.reactionUsed
+                      ? 'common.yes'
+                      : 'common.no',
+                  ),
+                })}
+              />
+              <div className="pt-2">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
+                  {t('runtime.turnTarget.turnOrder')}
+                </p>
+                <div className="mt-2 grid gap-1">
+                  {encounter.participants.map((participant, index) => {
+                    const isCombatant = 'combatantId' in participant;
+                    const combatant = isCombatant
+                      ? combatants.find(
+                          (entity) => entity.id === participant.combatantId,
+                        )
+                      : null;
+
+                    return (
+                      <div
+                        className={`rounded-xl border px-2 py-1 text-xs ${
+                          index === encounter.currentTurnIndex
+                            ? 'border-amber-200/35 bg-amber-900/30 text-amber-50'
+                            : 'border-amber-500/10 bg-black/20 text-amber-100/65'
+                        }`}
+                        key={
+                          isCombatant
+                            ? participant.combatantId
+                            : participant.participantId
+                        }
+                      >
+                        {index + 1}.{' '}
+                        {isCombatant
+                          ? `${combatant?.name ?? participant.combatantId} (DM ${participant.participantId})`
+                          : getCurrentTurnLabel({
+                              encounter: {
+                                ...encounter,
+                                currentTurnIndex: index,
+                              },
+                              participants,
+                              scene,
+                            })}{' '}
+                        {t('runtime.turnTarget.initiative', {
+                          initiative: String(participant.initiative),
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <SelectField
+            label={t('runtime.turnTarget.target')}
+            onChange={(value) => {
+              if (mode !== 'player') {
+                setSelectedTarget(value);
+                return;
+              }
+
+              const [targetKind, targetId] = value.split(':', 2);
+
+              if (targetKind === 'combatant' && targetId) {
+                setSelectedTargetCombatantId(targetId);
+                return;
+              }
+
+              if (targetKind === 'participant' && targetId) {
+                setSelectedTarget(targetId);
+                setSelectedTargetCombatantId('');
+              }
+            }}
+            options={attackTargetOptions}
+            value={selectedAttackTargetValue}
+          />
+          <ActionTargetFeedback summary={actionTargetFeedbackSummary} t={t} />
+          <ActionEconomyFeedback summary={actionEconomyFeedbackSummary} t={t} />
+          <div className="grid grid-cols-2 gap-2">
+            <ActionButton
+              disabled={Boolean(actionEconomyAction.blockedReason)}
+              disabledReason={actionEconomyAction.blockedReason ?? undefined}
+              label={t('runtime.turnTarget.useAction')}
+              onClick={() =>
+                runEncounterCommand(actionEconomyAction.commandType)
+              }
+              variant="secondary"
+            />
+            <ActionButton
+              disabled={Boolean(actionEconomyBonusAction.blockedReason)}
+              disabledReason={
+                actionEconomyBonusAction.blockedReason ?? undefined
+              }
+              label={t('runtime.turnTarget.useBonus')}
+              onClick={() =>
+                runEncounterCommand(actionEconomyBonusAction.commandType)
+              }
+              variant="secondary"
+            />
+            <ActionButton
+              disabled={Boolean(actionEconomyReaction.blockedReason)}
+              disabledReason={actionEconomyReaction.blockedReason ?? undefined}
+              label={t('runtime.turnTarget.useReaction')}
+              onClick={() =>
+                runEncounterCommand(actionEconomyReaction.commandType)
+              }
+              variant="secondary"
+            />
+            {mode === 'dm' ? (
+              <ActionButton
+                disabled={Boolean(disabledReasons.dmEncounter)}
+                disabledReason={disabledReasons.dmEncounter ?? undefined}
+                label={t('runtime.turnTarget.advanceTurn')}
+                onClick={() => runEncounterCommand('advance_turn')}
+                variant="secondary"
+              />
+            ) : null}
+          </div>
+          <ActionButton
+            disabled={Boolean(playerAttackDisabledReason)}
+            disabledReason={playerAttackDisabledReason ?? undefined}
+            label={t('runtime.turnTarget.attackTarget')}
+            onClick={attackTarget}
+          />
+        </div>
+      </Panel>
+    );
   }
 
   return (
@@ -4433,6 +4721,10 @@ export function RuntimeCockpit() {
             />
             <PlayerReadinessRosterPanel roster={runtimeReadinessRoster} t={t} />
 
+            {mode === 'dm' && shouldPromoteTurnTargetPanel
+              ? renderTurnTargetPanel()
+              : null}
+
             {mode === 'dm' ? (
               <DmTableSetupPanel checklist={dmTableSetupChecklist} t={t} />
             ) : null}
@@ -4570,7 +4862,7 @@ export function RuntimeCockpit() {
                     variant="hero"
                   />
                   <PlayerReadinessPanel
-                    selectedTargetLabel={selectedTarget || 'none'}
+                    selectedTargetLabel={selectedTarget || t('common.none')}
                     summary={playerReadinessSummary}
                     tokenPositionLabel={
                       playerPlacement
@@ -4582,6 +4874,10 @@ export function RuntimeCockpit() {
                 </div>
               </Panel>
             )}
+
+            {mode === 'player' && shouldPromoteTurnTargetPanel
+              ? renderTurnTargetPanel()
+              : null}
 
             {mode === 'dm' ? (
               <SceneBuilderPanel
@@ -4629,9 +4925,9 @@ export function RuntimeCockpit() {
                 createDisabledReason={createTransitionReason}
                 deleteDisabledReason={deleteTransitionReason}
                 draft={sceneTransitionDraft}
-                draftErrors={transitionDraftErrors}
+                draftErrors={localizedTransitionDraftErrors}
                 editDraft={sceneTransitionEditDraft}
-                editDraftErrors={transitionEditDraftErrors}
+                editDraftErrors={localizedTransitionEditDraftErrors}
                 onActivate={activateSceneTransition}
                 onCreate={createSceneTransition}
                 onDelete={deleteSceneTransition}
@@ -4657,7 +4953,7 @@ export function RuntimeCockpit() {
               <CombatantPanel
                 attackDisabledReason={combatantAttackReason}
                 combatantDraft={combatantDraft}
-                combatantDraftErrors={combatantDraftErrors}
+                combatantDraftErrors={localizedCombatantDraftErrors}
                 combatants={combatants}
                 createDisabledReason={createCombatantReason}
                 currentTurnCombatantId={currentTurnCombatantId}
@@ -4678,6 +4974,7 @@ export function RuntimeCockpit() {
                 selectedCombatant={selectedCombatant}
                 selectedCombatantId={selectedCombatantId}
                 setHpDisabledReason={selectedCombatantReason}
+                t={t}
                 targetParticipantId={selectedTarget}
               />
             ) : null}
@@ -4715,172 +5012,7 @@ export function RuntimeCockpit() {
               />
             ) : null}
 
-            <Panel
-              description={t('runtime.turnTarget.description')}
-              eyebrow={t('runtime.turnTarget.eyebrow')}
-              title={t('runtime.turnTarget.title')}
-            >
-              <div className="grid gap-3">
-                <EncounterStatusFeedback
-                  summary={encounterStatusSummary}
-                  t={t}
-                />
-                {encounter ? (
-                  <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
-                    <StatusRow
-                      label={t('runtime.turnTarget.usage')}
-                      value={t('runtime.turnTarget.usageValue', {
-                        action: t(
-                          encounter.currentTurnUsage.actionUsed
-                            ? 'common.yes'
-                            : 'common.no',
-                        ),
-                        bonus: t(
-                          encounter.currentTurnUsage.bonusActionUsed
-                            ? 'common.yes'
-                            : 'common.no',
-                        ),
-                        movement: String(
-                          encounter.currentTurnUsage.movementUsed,
-                        ),
-                        reaction: t(
-                          encounter.currentTurnUsage.reactionUsed
-                            ? 'common.yes'
-                            : 'common.no',
-                        ),
-                      })}
-                    />
-                    <div className="pt-2">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300/70">
-                        {t('runtime.turnTarget.turnOrder')}
-                      </p>
-                      <div className="mt-2 grid gap-1">
-                        {encounter.participants.map((participant, index) => {
-                          const isCombatant = 'combatantId' in participant;
-                          const combatant = isCombatant
-                            ? combatants.find(
-                                (entity) =>
-                                  entity.id === participant.combatantId,
-                              )
-                            : null;
-
-                          return (
-                            <div
-                              className={`rounded-xl border px-2 py-1 text-xs ${
-                                index === encounter.currentTurnIndex
-                                  ? 'border-amber-200/35 bg-amber-900/30 text-amber-50'
-                                  : 'border-amber-500/10 bg-black/20 text-amber-100/65'
-                              }`}
-                              key={
-                                isCombatant
-                                  ? participant.combatantId
-                                  : participant.participantId
-                              }
-                            >
-                              {index + 1}.{' '}
-                              {isCombatant
-                                ? `${combatant?.name ?? participant.combatantId} (DM ${participant.participantId})`
-                                : getCurrentTurnLabel({
-                                    encounter: {
-                                      ...encounter,
-                                      currentTurnIndex: index,
-                                    },
-                                    participants,
-                                    scene,
-                                  })}{' '}
-                              {t('runtime.turnTarget.initiative', {
-                                initiative: String(participant.initiative),
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                <SelectField
-                  label={t('runtime.turnTarget.target')}
-                  onChange={(value) => {
-                    if (mode !== 'player') {
-                      setSelectedTarget(value);
-                      return;
-                    }
-
-                    const [targetKind, targetId] = value.split(':', 2);
-
-                    if (targetKind === 'combatant' && targetId) {
-                      setSelectedTargetCombatantId(targetId);
-                      return;
-                    }
-
-                    if (targetKind === 'participant' && targetId) {
-                      setSelectedTarget(targetId);
-                      setSelectedTargetCombatantId('');
-                    }
-                  }}
-                  options={attackTargetOptions}
-                  value={selectedAttackTargetValue}
-                />
-                <ActionTargetFeedback
-                  summary={actionTargetFeedbackSummary}
-                  t={t}
-                />
-                <ActionEconomyFeedback
-                  summary={actionEconomyFeedbackSummary}
-                  t={t}
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <ActionButton
-                    disabled={Boolean(actionEconomyAction.blockedReason)}
-                    disabledReason={
-                      actionEconomyAction.blockedReason ?? undefined
-                    }
-                    label={t('runtime.turnTarget.useAction')}
-                    onClick={() =>
-                      runEncounterCommand(actionEconomyAction.commandType)
-                    }
-                    variant="secondary"
-                  />
-                  <ActionButton
-                    disabled={Boolean(actionEconomyBonusAction.blockedReason)}
-                    disabledReason={
-                      actionEconomyBonusAction.blockedReason ?? undefined
-                    }
-                    label={t('runtime.turnTarget.useBonus')}
-                    onClick={() =>
-                      runEncounterCommand(actionEconomyBonusAction.commandType)
-                    }
-                    variant="secondary"
-                  />
-                  <ActionButton
-                    disabled={Boolean(actionEconomyReaction.blockedReason)}
-                    disabledReason={
-                      actionEconomyReaction.blockedReason ?? undefined
-                    }
-                    label={t('runtime.turnTarget.useReaction')}
-                    onClick={() =>
-                      runEncounterCommand(actionEconomyReaction.commandType)
-                    }
-                    variant="secondary"
-                  />
-                  {mode === 'dm' ? (
-                    <ActionButton
-                      disabled={Boolean(disabledReasons.dmEncounter)}
-                      disabledReason={disabledReasons.dmEncounter ?? undefined}
-                      label={t('runtime.turnTarget.advanceTurn')}
-                      onClick={() => runEncounterCommand('advance_turn')}
-                      variant="secondary"
-                    />
-                  ) : null}
-                </div>
-                <ActionButton
-                  disabled={Boolean(playerAttackDisabledReason)}
-                  disabledReason={playerAttackDisabledReason ?? undefined}
-                  label={t('runtime.turnTarget.attackTarget')}
-                  onClick={attackTarget}
-                />
-              </div>
-            </Panel>
+            {!shouldPromoteTurnTargetPanel ? renderTurnTargetPanel() : null}
 
             <Panel
               description={
@@ -5016,7 +5148,10 @@ export function RuntimeCockpit() {
                               )}
                               <StatusRow
                                 label={t('runtime.assignmentRequests.assigned')}
-                                value={request.assignedCharacterId ?? 'none'}
+                                value={
+                                  request.assignedCharacterId ??
+                                  t('common.none')
+                                }
                               />
                               <ActionButton
                                 disabled={Boolean(busyReason)}
@@ -5055,15 +5190,21 @@ export function RuntimeCockpit() {
                       />
                       <StatusRow
                         label={t('runtime.assignmentHelper.knownCharacter')}
-                        value={selectedActorKnownCharacterId ?? 'none'}
+                        value={
+                          selectedActorKnownCharacterId ?? t('common.none')
+                        }
                       />
                       <StatusRow
                         label={t('runtime.assignmentHelper.pending')}
-                        value={selectedActorPendingCharacterId ?? 'none'}
+                        value={
+                          selectedActorPendingCharacterId ?? t('common.none')
+                        }
                       />
                       <StatusRow
                         label={t('runtime.assignmentHelper.assigned')}
-                        value={selectedActorAssignedCharacterId ?? 'none'}
+                        value={
+                          selectedActorAssignedCharacterId ?? t('common.none')
+                        }
                       />
                       <ActionButton
                         disabled={Boolean(dmAssignSelectedReason)}
@@ -5222,26 +5363,29 @@ export function RuntimeCockpit() {
               <dl className="grid gap-2 text-sm">
                 <StatusRow
                   label={t('runtime.statePanel.session')}
-                  value={sessionId || 'none'}
+                  value={sessionId || t('common.none')}
                 />
                 <StatusRow
                   label={t('runtime.statePanel.activeScene')}
-                  value={sceneId || 'none'}
+                  value={sceneId || t('common.none')}
                 />
                 <StatusRow
                   label={t('runtime.statePanel.sceneName')}
-                  value={scene?.name ?? 'none'}
+                  value={scene?.name ?? t('common.none')}
                 />
                 <StatusRow
                   label={t('runtime.statePanel.currentTurn')}
-                  value={currentTurnName}
+                  value={currentTurnDisplayName}
                 />
                 <StatusRow
                   label={t('runtime.statePanel.encounter')}
                   value={
                     encounter
-                      ? `${encounter.status} round ${encounter.roundNumber}`
-                      : 'none'
+                      ? t('runtime.statePanel.encounterValue', {
+                          round: String(encounter.roundNumber),
+                          status: getEncounterStatusLabel(encounter.status, t),
+                        })
+                      : t('common.none')
                   }
                 />
               </dl>
@@ -6771,7 +6915,7 @@ function ActionTargetFeedback({
               <StatusBadge label={armorClassLabel} tone="info" />
               <StatusBadge
                 label={t('runtime.actionFeedback.status', {
-                  status: target.status,
+                  status: localizeRuntimeCharacterStatus(target.status, t),
                 })}
                 tone={target.status === 'defeated' ? 'danger' : 'success'}
               />
@@ -6861,6 +7005,10 @@ function ActionEconomyFeedback({
         turn: String(summary.latestEncounterUpdate.turnNumber),
       })
     : t('runtime.actionEconomy.noLatest');
+  const actorLabel =
+    summary.overallStatus === 'no_encounter'
+      ? t('runtime.actionEconomy.noEncounter')
+      : summary.actorLabel;
 
   return (
     <div className="grid gap-2 rounded-xl border border-amber-300/15 bg-amber-950/10 p-3 text-xs text-amber-50">
@@ -6870,7 +7018,7 @@ function ActionEconomyFeedback({
             {t('runtime.actionEconomy.title')}
           </p>
           <p className="mt-1 truncate text-sm font-black text-white">
-            {summary.actorLabel}
+            {actorLabel}
           </p>
         </div>
         <StatusBadge label={statusLabel} tone={statusTone} />
@@ -7888,6 +8036,7 @@ function CombatantPanel({
   selectedCombatant,
   selectedCombatantId,
   setHpDisabledReason,
+  t,
   targetParticipantId,
 }: {
   attackDisabledReason: string | null;
@@ -7922,22 +8071,27 @@ function CombatantPanel({
   selectedCombatant?: ReturnType<typeof getCombatantEntities>[number];
   selectedCombatantId: string;
   setHpDisabledReason: string | null;
+  t: RuntimeTranslator;
   targetParticipantId: string;
 }) {
   return (
     <Panel
-      description="Create and command narrow DM-controlled monster/NPC combatants. They are scene actors, not full stat blocks or AI."
-      eyebrow="DM-only"
-      title="Monsters & NPCs"
+      description={t('runtime.combatants.description')}
+      eyebrow={t('runtime.overrides.eyebrow')}
+      title={t('runtime.combatants.title')}
       tone="dm"
     >
       <div className="grid gap-4">
         <div className="grid gap-3 rounded-2xl border border-red-300/20 bg-red-950/15 p-3">
           <div>
-            <p className="text-sm font-bold text-amber-50">Create combatant</p>
+            <p className="text-sm font-bold text-amber-50">
+              {t('runtime.combatants.createTitle')}
+            </p>
             <p className="mt-1 text-xs leading-5 text-amber-100/60">
-              Target cell {selectedCell.x},{selectedCell.y}. Combatants block
-              movement and can join encounter turn order.
+              {t('runtime.combatants.createDetail', {
+                x: String(selectedCell.x),
+                y: String(selectedCell.y),
+              })}
             </p>
           </div>
           {combatantDraftErrors.length ? (
@@ -7947,7 +8101,7 @@ function CombatantPanel({
           ) : null}
           <div className="grid grid-cols-2 gap-2">
             <SelectField
-              label="Kind"
+              label={t('runtime.combatants.kind')}
               onChange={(value) => onFieldChange('kind', value)}
               options={[
                 { label: 'monster', value: 'monster' },
@@ -7956,24 +8110,24 @@ function CombatantPanel({
               value={combatantDraft.kind}
             />
             <LabeledInput
-              label="Name"
+              label={t('runtime.combatants.name')}
               onChange={(value) => onFieldChange('name', value)}
               value={combatantDraft.name}
             />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <LabeledInput
-              label="HP max"
+              label={t('runtime.combatants.hpMax')}
               onChange={(value) => onHpChange('max', value)}
               value={combatantDraft.hp.max}
             />
             <LabeledInput
-              label="HP current"
+              label={t('runtime.combatants.hpCurrent')}
               onChange={(value) => onHpChange('current', value)}
               value={combatantDraft.hp.current}
             />
             <LabeledInput
-              label="Temp"
+              label={t('runtime.combatants.hpTemp')}
               onChange={(value) => onHpChange('temp', value)}
               value={combatantDraft.hp.temp}
             />
@@ -7985,24 +8139,24 @@ function CombatantPanel({
               value={combatantDraft.armorClass}
             />
             <LabeledInput
-              label="Speed"
+              label={t('runtime.combatants.speed')}
               onChange={(value) => onFieldChange('speed', value)}
               value={combatantDraft.speed}
             />
             <LabeledInput
-              label="Size W"
+              label={t('runtime.combatants.sizeWidth')}
               onChange={(value) => onFieldChange('footprintWidth', value)}
               value={combatantDraft.footprintWidth}
             />
             <LabeledInput
-              label="Size H"
+              label={t('runtime.combatants.sizeHeight')}
               onChange={(value) => onFieldChange('footprintHeight', value)}
               value={combatantDraft.footprintHeight}
             />
           </div>
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
-              Abilities
+              {t('runtime.combatants.abilities')}
             </p>
             <div className="grid grid-cols-3 gap-2">
               {abilityKeys.map((abilityKey) => (
@@ -8017,70 +8171,89 @@ function CombatantPanel({
           </div>
           <CheckboxField
             checked={combatantDraft.hidden}
-            label="Hidden styling"
+            label={t('runtime.combatants.hidden')}
             onChange={onHiddenChange}
           />
           <ActionButton
             disabled={Boolean(createDisabledReason)}
             disabledReason={createDisabledReason ?? undefined}
-            label="Create Combatant"
+            label={t('runtime.combatants.create')}
             onClick={onCreate}
           />
         </div>
 
         <div className="grid gap-3 rounded-2xl border border-red-300/20 bg-black/25 p-3">
-          <p className="text-sm font-bold text-amber-50">Command combatant</p>
+          <p className="text-sm font-bold text-amber-50">
+            {t('runtime.combatants.commandTitle')}
+          </p>
           {combatants.length ? (
             <SelectField
-              label="Selected monster/NPC"
+              label={t('runtime.combatants.selected')}
               onChange={onSelectCombatant}
               options={combatants.map((combatant) => ({
-                label: `${combatant.name} (${combatant.combatant.kind}, HP ${combatant.combatant.hp.current}/${combatant.combatant.hp.max}${isCombatantEntityDefeated(combatant) ? ', defeated' : ''})`,
+                label: t('runtime.combatants.option', {
+                  current: String(combatant.combatant.hp.current),
+                  defeatSuffix: isCombatantEntityDefeated(combatant)
+                    ? t('runtime.combatants.defeatedSuffix')
+                    : '',
+                  kind: combatant.combatant.kind,
+                  max: String(combatant.combatant.hp.max),
+                  name: combatant.name,
+                }),
                 value: combatant.id,
               }))}
               value={selectedCombatantId}
             />
           ) : (
             <EmptyState
-              detail="Create a combatant in the active scene first."
-              title="No monster/NPC combatants"
+              detail={t('runtime.combatants.emptyDetail')}
+              title={t('runtime.combatants.emptyTitle')}
             />
           )}
           {selectedCombatant ? (
             <div className="grid gap-2 text-sm">
               <StatusRow
-                label="Selected"
-                value={`${selectedCombatant.name} at ${selectedCombatant.position.x},${selectedCombatant.position.y}`}
+                label={t('runtime.combatants.status.selected')}
+                value={t('runtime.combatants.status.selectedValue', {
+                  name: selectedCombatant.name,
+                  x: String(selectedCombatant.position.x),
+                  y: String(selectedCombatant.position.y),
+                })}
               />
               <StatusRow
-                label="Current turn"
+                label={t('runtime.combatants.status.currentTurn')}
                 value={
-                  currentTurnCombatantId === selectedCombatant.id ? 'yes' : 'no'
+                  currentTurnCombatantId === selectedCombatant.id
+                    ? t('common.yes')
+                    : t('common.no')
                 }
               />
               <StatusRow
-                label="Status"
+                label={t('runtime.combatants.status.label')}
                 value={
                   isCombatantEntityDefeated(selectedCombatant)
-                    ? 'defeated'
-                    : 'active'
+                    ? t('runtime.combatants.status.defeated')
+                    : t('runtime.combatants.status.active')
                 }
               />
-              <StatusRow label="Target" value={targetParticipantId || 'none'} />
+              <StatusRow
+                label={t('runtime.combatants.status.target')}
+                value={targetParticipantId || t('common.none')}
+              />
             </div>
           ) : null}
           <div className="grid grid-cols-2 gap-2">
             <ActionButton
               disabled={Boolean(repositionDisabledReason)}
               disabledReason={repositionDisabledReason ?? undefined}
-              label="Reposition"
+              label={t('runtime.combatants.reposition')}
               onClick={onReposition}
               variant="secondary"
             />
             <ActionButton
               disabled={Boolean(repositionDisabledReason)}
               disabledReason={repositionDisabledReason ?? undefined}
-              label="Make Turn"
+              label={t('runtime.combatants.makeTurn')}
               onClick={onSetCurrentTurn}
               variant="secondary"
             />
@@ -8094,7 +8267,7 @@ function CombatantPanel({
             <ActionButton
               disabled={Boolean(setHpDisabledReason)}
               disabledReason={setHpDisabledReason ?? undefined}
-              label="Set HP"
+              label={t('runtime.combatants.setHp')}
               onClick={onSetHp}
               variant="secondary"
             />
@@ -8102,7 +8275,7 @@ function CombatantPanel({
           <ActionButton
             disabled={Boolean(attackDisabledReason)}
             disabledReason={attackDisabledReason ?? undefined}
-            label="Monster/NPC Attack Target"
+            label={t('runtime.combatants.attackTarget')}
             onClick={onAttack}
             variant="danger"
           />
@@ -8997,7 +9170,7 @@ function CharacterSummary({
           </p>
         </div>
         <StatusBadge
-          label={resource.character.status}
+          label={localizeRuntimeCharacterStatus(resource.character.status, t)}
           tone={participantId === currentTurnParticipantId ? 'warning' : 'info'}
         />
       </div>
@@ -9007,22 +9180,28 @@ function CharacterSummary({
           value={`${resource.character.hp.current}/${resource.character.hp.max}`}
         />
         <Stat label="AC" value={String(resource.character.armorClass)} />
-        <Stat label="Speed" value={`${resource.character.speed} ft`} />
-        <Stat label="Prof" value={`+${resource.derived.proficiencyBonus}`} />
         <Stat
-          label="Init"
+          label={t('runtime.characterSummary.speed')}
+          value={`${resource.character.speed} ft`}
+        />
+        <Stat
+          label={t('runtime.characterSummary.proficiency')}
+          value={`+${resource.derived.proficiencyBonus}`}
+        />
+        <Stat
+          label={t('runtime.characterSummary.initiative')}
           value={`${resource.derived.initiativeModifier >= 0 ? '+' : ''}${resource.derived.initiativeModifier}`}
         />
         <Stat
-          label="Passive"
+          label={t('runtime.characterSummary.passivePerception')}
           value={String(resource.derived.passivePerception)}
         />
       </dl>
       <p className="mt-3 text-xs text-amber-100/60">
-        Conditions:{' '}
+        {t('runtime.characterSummary.conditions')}:{' '}
         {resource.overlay.activeConditions.length
           ? resource.overlay.activeConditions.join(', ')
-          : 'none'}
+          : t('common.none')}
       </p>
       {sourceProvenance ? (
         <dl className="mt-3 grid gap-2 rounded-xl border border-sky-300/15 bg-sky-950/20 p-2 text-xs">
