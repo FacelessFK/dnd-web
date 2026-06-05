@@ -262,6 +262,10 @@ Current runtime is intentionally narrow:
   `docs/delivery/HUMAN_REVIEW_MERGE_DECISION_COMBINED_HARNESS.md`; it approves
   the reviewed combined harness evidence slice with cautions and recommends
   curated staging rather than merging the entire dirty working tree.
+- The curated merge / optional screenshot decision packet is now recorded in
+  `docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`; it recommends curated
+  merge preparation by default, optional screenshots only on request, and no
+  actual git staging/commit/merge until a human explicitly asks for it.
 
 ## Current i18n Reality
 

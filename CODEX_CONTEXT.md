@@ -128,8 +128,8 @@ that scope.
 ## Next Priorities
 
 Recommended next milestone:
-Curated merge decision or optional screenshot evidence packet for the combined
-harness evidence slice.
+Explicit staged commit/PR request for the curated combined harness slice, or
+an optional screenshot evidence packet if visual review is required.
 
 The Phase 6 Training Room Skirmish polish sequence, Phase 7 Character Library
 -> Runtime bridge confidence sequence, and the fresh next-goal intake are
@@ -189,6 +189,14 @@ caution: the working tree contains multiple previous dirty and untracked paths,
 so do not merge the entire working tree as one unreviewed unit. Use curated
 staging for the intended approved slice, or request a separate optional
 screenshot evidence packet if visual review is required.
+
+The Curated Merge Or Optional Screenshot Packet is complete in
+`docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`. It recommends curated
+merge preparation as the default path, with screenshots only if a visual
+reviewer asks for them. No git staging, commit, merge, push, or PR action has
+been performed. If the human wants a real commit/PR, they should explicitly
+request staging/commit/PR and confirm the exact file set because the working
+tree contains multiple prior dirty and untracked paths.
 
 For the next task:
 

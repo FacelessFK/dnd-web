@@ -14,12 +14,14 @@ corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
 The fresh product-confidence intake and Combined Harness Evidence Closure
 Packet after the combined harness are complete. The Human Review / Merge
 Decision packet is also complete and approves the reviewed slice with cautions.
-The next useful step is a curated merge decision for the intended slice, or a
-separately approved optional screenshot packet if visual reviewer evidence is
-needed. Do not automatically expand into runtime protocol, replay/catch-up,
-production auth, DB/auth schema work, Character Library bridge behavior,
-PDF/portrait mechanics, combat automation, or broader D&D systems without
-fresh evidence and approval.
+The Curated Merge Or Optional Screenshot Packet is also complete and recommends
+curated merge preparation as the default path. The next useful step is an
+explicit staged commit/PR request for the curated slice, or a separately
+approved optional screenshot packet if visual reviewer evidence is needed. Do
+not automatically expand into runtime protocol, replay/catch-up, production
+auth, DB/auth schema work, Character Library bridge behavior, PDF/portrait
+mechanics, combat automation, or broader D&D systems without fresh evidence
+and approval.
 
 ## Recommendation
 
@@ -785,12 +787,23 @@ screenshot packet for the same combined harness path.
 Status: implemented in
 `docs/delivery/HUMAN_REVIEW_MERGE_DECISION_COMBINED_HARNESS.md`.
 
-## Next Recommended Milestone: Curated Merge Or Optional Screenshot Packet
+## Implemented: Curated Merge Or Optional Screenshot Packet
 
 Use the human review / merge decision packet to choose one of two paths:
 curated staging and merge of the approved slice, or a separately approved
 optional screenshot evidence packet for the same combined harness path. Do not
 merge the entire dirty working tree as one unreviewed unit.
+
+Status: implemented in
+`docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`.
+
+## Next Recommended Milestone: Explicit Staged Commit/PR Or Optional Screenshot Packet
+
+If the human wants to proceed with merge, explicitly request staging/commit/PR
+and confirm the exact file set because the current working tree contains
+multiple prior dirty and untracked paths. If visual evidence is required first,
+approve a separate optional screenshot evidence packet for the same combined
+harness path.
 
 Recommended effort: `medium`.
 
