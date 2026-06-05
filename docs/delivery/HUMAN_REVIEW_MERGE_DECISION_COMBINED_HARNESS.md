@@ -154,3 +154,15 @@ Next action:
 - Human chooses whether to merge the curated slice now.
 - Optional follow-up, only if requested: screenshot evidence packet for the
   same combined harness path.
+
+## Curated Merge Or Optional Screenshot Packet
+
+Status: implemented in
+`docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`.
+
+Decision:
+
+- Curated merge preparation is the default path.
+- Screenshot evidence is optional and should be requested only if visual review
+  is required.
+- No git staging, commit, merge, push, or PR action has been performed.
