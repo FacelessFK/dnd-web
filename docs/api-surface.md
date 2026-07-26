@@ -298,12 +298,31 @@ Notes:
 - Encounter commands return the current encounter snapshot.
 - `start_encounter` includes placed assigned player characters and active-scene
   monster/NPC combatants with current HP above 0.
+- `start_encounter` rolls initiative once per participant server-side as
+  `d20 + initiative modifier`, then orders the turn list from highest to lowest.
+  Ties fall back to a stable participant/actor ordering, so turn order is
+  reproducible for a given set of rolls but is no longer a pure function of
+  ability scores. There is no initiative re-roll, advantage, or DM initiative
+  edit command; the DM can still override the current turn with
+  `dm_set_current_turn_participant`.
 - Encounter participants can be player-character turns or DM-controlled
   combatant turns. Character participants preserve the existing response shape;
   combatant participants include `kind: "combatant"` and `combatantId`.
 - `attack` uses the narrow attack foundation: legality-before-RNG, 5-foot
-  melee reach, d20 roll, fixed hit damage of 1, HP floor, and server-owned
-  turn/action updates.
+  melee reach, d20 roll, rolled damage, HP floor, and server-owned turn/action
+  updates.
+- Attack rolls follow the baseline 5e outcome rules: a natural 20 always hits
+  and is a critical hit, a natural 1 always misses, and any other roll compares
+  `d20 + modifier` against the target's armor class. The resolved `roll` object
+  reports optional `critical` and `criticalMiss` flags.
+- Damage on a hit is rolled server-side from a baseline `1d8` plus the
+  attacker's Strength modifier, with a floor of 0. A critical hit doubles the
+  damage dice but adds the flat modifier once. The resolved combat event
+  includes an optional `damageRoll` breakdown with `dice`, `diceTotal`,
+  `modifier`, `total`, `critical`, and a `notation` string such as `1d8+2`.
+- This is still not a weapon system: there is no weapon model, damage type,
+  resistance, finesse/ranged ability selection, or per-class damage die. The
+  baseline lives in `BASELINE_MELEE_DAMAGE_DICE` in `packages/rules`.
 - `attack.payload` must include exactly one target selector:
   `targetParticipantId` for an opposing placed player character or
   `targetCombatantId` for an active placed DM-controlled combatant in the

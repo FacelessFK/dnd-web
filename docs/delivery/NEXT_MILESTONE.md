@@ -13,12 +13,14 @@ corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
 
 The fresh product-confidence intake and Combined Harness Evidence Closure
 Packet after the combined harness are complete. The Human Review / Merge
-Decision packet is also complete and approves the reviewed slice with cautions.
-The Curated Merge Or Optional Screenshot Packet is also complete and recommends
-curated merge preparation as the default path. The next useful step is an
-explicit staged commit/PR request for the curated slice, or a separately
-approved optional screenshot packet if visual reviewer evidence is needed. Do
-not automatically expand into runtime protocol, replay/catch-up, production
+Decision packet approved the reviewed slice with cautions, and the Curated
+Merge Or Optional Screenshot Packet recommended curated merge preparation. The
+curated slice has now landed on `main` as merge commit `c8d4015`, and the
+Post-Merge Main Verification / Closure packet is complete in
+`docs/delivery/POST_MERGE_MAIN_VERIFICATION_CLOSURE.md`. The next useful step
+is a fresh human-approved product goal or playtest brief, or a separately
+approved optional screenshot packet only if visual reviewer evidence is needed.
+Do not automatically expand into runtime protocol, replay/catch-up, production
 auth, DB/auth schema work, Character Library bridge behavior, PDF/portrait
 mechanics, combat automation, or broader D&D systems without fresh evidence
 and approval.
@@ -806,6 +808,107 @@ approve a separate optional screenshot evidence packet for the same combined
 harness path.
 
 Recommended effort: `medium`.
+
+Status: superseded by the completed curated merge to `main` and post-merge
+main verification / closure packet.
+
+## Implemented: Post-Merge Main Verification / Closure
+
+Verify the post-merge `main` state for the curated combined harness evidence
+slice and close the merge operation without adding runtime behavior.
+
+Status: implemented in
+`docs/delivery/POST_MERGE_MAIN_VERIFICATION_CLOSURE.md`.
+
+Closure decision: the curated combined harness evidence slice is closed on
+`main` for the current local single-process DB-mode evidence path. Choose the
+next task from a fresh human-approved product goal or playtest brief. Optional
+screenshot evidence remains a separate reviewer-requested task only.
+
+## Implemented: Post-Merge Fresh Product Playtest Intake
+
+Choose the next fresh product-confidence path after main-branch closure and
+collect current evidence before starting any new implementation sequence.
+
+Status: implemented in
+`docs/delivery/POST_MERGE_FRESH_PRODUCT_PLAYTEST_INTAKE.md`.
+
+Chosen path: reviewer-facing Character Library -> Runtime handoff playtest
+intake.
+
+Recommended effort: `medium`.
+
+Validation evidence: DB readiness, DB-mode Builder/Export smoke, and DB-mode
+saved-character-to-Training-Room smoke passed on 2026-06-05.
+
+Closure decision: no fresh mechanics blocker appeared. The next narrow slice is
+a docs-only reviewer playtest brief that maps the existing `/characters`,
+Player-mode `runtime`, DM assignment, Training Room recovery, Local Reset, and
+reusable-entry separation checkpoints to the already-passing evidence.
+
+## Implemented: Character Library -> Runtime Handoff Reviewer Playtest Brief
+
+Create the docs-only reviewer guide for the current Character Library ->
+Runtime handoff path, tying each review checkpoint to the existing smoke
+evidence and project boundaries.
+
+Status: implemented in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEWER_PLAYTEST_BRIEF.md`.
+
+Recommended effort: `medium`.
+
+Closure decision: use this brief as the current manual review guide. If review
+finds no fresh blocker, choose the next product task from a new human-approved
+playtest goal instead of extending this handoff sequence automatically.
+
+## Implemented: Character Library -> Runtime Handoff Review Closure Packet
+
+Create the reviewer result / closure packet for the current handoff review
+brief, including verdict options, evidence sufficiency, boundary closure, and
+follow-up rules.
+
+Status: implemented in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_CLOSURE_PACKET.md`.
+
+Recommended effort: `medium`.
+
+Closure decision: use the packet to record `pass`, `follow-up`, or `blocked`.
+If review passes, close the current handoff sequence and choose the next task
+from a new human-approved product goal.
+
+## Implemented: Character Library -> Runtime Handoff Review Verdict
+
+Record the reviewer verdict for the current Character Library -> Runtime
+handoff review sequence.
+
+Status: implemented in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_VERDICT.md`.
+
+Verdict: `pass` with cautions.
+
+Closure decision: no follow-up slice is required from the current evidence.
+Close the current handoff review sequence and choose the next Codex task from a
+new human-approved product goal or playtest brief.
+
+## Implemented: Training Room Table Experience Fresh Goal Intake
+
+Choose the next fresh product goal after the Character Library -> Runtime
+handoff review verdict closed with `pass` and cautions.
+
+Status: implemented in
+`docs/delivery/TRAINING_ROOM_TABLE_EXPERIENCE_FRESH_GOAL_INTAKE.md`.
+
+Chosen path: Training Room table experience reviewer pass.
+
+Recommended effort: `medium`.
+
+Validation evidence: `corepack pnpm --filter @dnd/web test:smoke` passed, and
+`corepack pnpm --filter @dnd/web test:smoke:two-profile` passed all 8 steps
+with session `SCU9S8` on 2026-06-05.
+
+Closure decision: no fresh mechanics blocker appeared. The next narrow slice is
+a docs/evidence reviewer pass using the Training Room playtest checklist, not
+immediate runtime implementation.
 
 ## Historical Note
 

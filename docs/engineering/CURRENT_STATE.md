@@ -40,7 +40,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
   scene, token placement, and encounter read state;
 - named Training Room Skirmish demo scenario setup that uses existing runtime
   commands and current local sample data;
-- mixed player/combatant encounters;
+- mixed player/combatant encounters with server-rolled initiative
+  (`d20 + initiative modifier`) ordering the turn list at encounter start;
 - compact current-turn rail that shows the current actor, remaining movement,
   and used action/bonus/reaction state from loaded read models;
 - selected target and latest combat-result feedback derived from loaded read
@@ -214,8 +215,10 @@ late subscribers still do not receive historical event replay.
 Current runtime is intentionally narrow:
 
 - condition tags are metadata only;
-- attacks are narrow melee foundations with fixed hit damage in the current
-  MVP;
+- attacks are narrow melee foundations: the server rolls a d20 against target
+  AC with natural-20/natural-1 handling, then rolls a baseline `1d8` plus the
+  attacker's Strength modifier for damage, doubling the dice on a critical.
+  There is no weapon model, damage type, resistance, or per-class damage die;
 - monster/NPC combatants are narrow DM-controlled actors, not full monster stat
   blocks;
 - no monster AI;
@@ -263,9 +266,42 @@ Current runtime is intentionally narrow:
   the reviewed combined harness evidence slice with cautions and recommends
   curated staging rather than merging the entire dirty working tree.
 - The curated merge / optional screenshot decision packet is now recorded in
-  `docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`; it recommends curated
-  merge preparation by default, optional screenshots only on request, and no
-  actual git staging/commit/merge until a human explicitly asks for it.
+  `docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`; it recommended
+  curated merge preparation by default, with optional screenshots only on
+  request.
+- The post-merge main verification / closure packet is now recorded in
+  `docs/delivery/POST_MERGE_MAIN_VERIFICATION_CLOSURE.md`; the curated
+  combined harness evidence slice has landed on `main` as merge commit
+  `c8d4015` and is closed for the current local single-process DB-mode evidence
+  path.
+- The post-merge fresh product playtest intake is now recorded in
+  `docs/delivery/POST_MERGE_FRESH_PRODUCT_PLAYTEST_INTAKE.md`; it chose the
+  reviewer-facing Character Library -> Runtime handoff path with `medium`
+  effort. DB readiness, Builder/Export DB smoke, and saved-character Training
+  Room DB smoke passed, and the next recommended slice is a docs-only reviewer
+  playtest brief rather than new runtime or Character Library behavior.
+- The Character Library -> Runtime handoff reviewer playtest brief is now
+  recorded in
+  `docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEWER_PLAYTEST_BRIEF.md`;
+  it maps the current manual review checkpoints to existing smoke evidence and
+  reiterates that the reusable Character Library entry, separate runtime copy,
+  explicit DM assignment, Player Local Reset, and read-model recovery boundaries
+  remain unchanged.
+- The Character Library -> Runtime handoff review closure packet is now
+  recorded in
+  `docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_CLOSURE_PACKET.md`;
+  it defines `pass`, `follow-up`, and `blocked` reviewer outcomes and keeps any
+  follow-up scoped to the exact observed issue instead of automatic runtime or
+  Character Library expansion.
+- The Character Library -> Runtime handoff review verdict is now recorded in
+  `docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_VERDICT.md`; verdict:
+  `pass` with cautions. No follow-up slice is required from the current
+  evidence, and the current handoff review sequence is closed.
+- The Training Room table experience fresh goal intake is now recorded in
+  `docs/delivery/TRAINING_ROOM_TABLE_EXPERIENCE_FRESH_GOAL_INTAKE.md`; fresh
+  runtime smoke and two-profile runtime smoke passed on 2026-06-05, and the
+  next recommended task is a docs/evidence Training Room reviewer pass rather
+  than immediate runtime implementation.
 
 ## Current i18n Reality
 

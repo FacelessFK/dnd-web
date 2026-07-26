@@ -56,10 +56,11 @@ that scope.
   tactical board camera controls, tactical board state badges, tactical board
   keyboard navigation, a named Training Room Skirmish demo setup, DM-facing
   Table Setup checklist, mixed
-  player/combatant encounters, compact current-turn rail, encounter status
+  player/combatant encounters ordered by server-rolled initiative, compact
+  current-turn rail, encounter status
   feedback, player readiness feedback, action economy feedback, narrow melee
-  attacks, turn usage, readable event feed, recovery status feedback, and
-  explicit DM controls.
+  attacks with rolled damage, turn usage, readable event feed, recovery status
+  feedback, and explicit DM controls.
 - Runtime smoke coverage now reports numbered steps and richer wait-failure
   diagnostics: current URL, summarized cockpit local state, visible enabled
   buttons, visible page text, and recent child-process output.
@@ -121,13 +122,36 @@ that scope.
   opportunity attacks, broad weapon/ranged system, full monster stat blocks,
   monster AI, fog of war, line of sight, lighting, or production deployment
   posture.
+- Combat now rolls real dice, but only at a baseline level. Initiative is
+  `d20 + initiative modifier`, rolled once per participant at
+  `start_encounter`. Attacks apply natural-20/natural-1 outcome rules and roll
+  a baseline `1d8` plus the attacker's Strength modifier for damage, doubling
+  the dice on a critical. There is still no weapon model, damage type,
+  resistance, finesse/ranged ability selection, per-class damage die,
+  initiative re-roll, or advantage/disadvantage.
 - Character Library entries and live runtime overlays are intentionally
   separate; live damage, movement, conditions, and DM overrides must not mutate
   reusable library entries.
 
 ## Next Priorities
 
-Recommended next milestone:
+Latest completed slice (2026-07-26): **real dice combat**. Initiative is now
+rolled server-side at `start_encounter` (`d20 + initiative modifier`), and a
+landed attack rolls a baseline `1d8` plus the attacker's Strength modifier
+instead of applying a flat 1 damage. Natural 20 always hits and doubles the
+damage dice; natural 1 always misses. `combat_event.roll` gained optional
+`critical`/`criticalMiss` flags and the event gained an optional `damageRoll`
+breakdown. `packages/rules` now has its own unit test suite wired into the root
+`pnpm test`, and `InMemoryGameRuntime` exposes injectable `dieRoller` and
+`initiativeRoller` plus a `withRollers()` builder for deterministic tests.
+
+Known follow-ups deliberately left open: the runtime event feed detail strings
+in `apps/web/lib/runtime-cockpit-helpers.ts` are still English-only
+(pre-existing), and there is no weapon model, damage type, resistance,
+finesse/ranged ability selection, per-class damage die, advantage/disadvantage,
+or DM initiative-edit command.
+
+Earlier recommended next milestone:
 Explicit staged commit/PR request for the curated combined harness slice, or
 an optional screenshot evidence packet if visual review is required.
 
@@ -191,12 +215,56 @@ staging for the intended approved slice, or request a separate optional
 screenshot evidence packet if visual review is required.
 
 The Curated Merge Or Optional Screenshot Packet is complete in
-`docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`. It recommends curated
-merge preparation as the default path, with screenshots only if a visual
-reviewer asks for them. No git staging, commit, merge, push, or PR action has
-been performed. If the human wants a real commit/PR, they should explicitly
-request staging/commit/PR and confirm the exact file set because the working
-tree contains multiple prior dirty and untracked paths.
+`docs/delivery/CURATED_MERGE_OR_SCREENSHOT_PACKET.md`. The curated slice has
+now landed on `main` through merge commit `c8d4015`.
+
+The Post-Merge Main Verification / Closure packet is complete in
+`docs/delivery/POST_MERGE_MAIN_VERIFICATION_CLOSURE.md`; it closes the curated
+combined harness evidence slice on `main` for the current local single-process
+DB-mode evidence path. The working tree was clean before this docs-only
+closure update. The next useful action is a fresh human-approved product goal
+or playtest brief, with optional screenshots only if a reviewer asks for visual
+evidence.
+
+The Post-Merge Fresh Product Playtest Intake is complete in
+`docs/delivery/POST_MERGE_FRESH_PRODUCT_PLAYTEST_INTAKE.md`. It chose the
+reviewer-facing Character Library -> Runtime handoff path at `medium` effort.
+DB readiness, the DB-mode Builder/Export smoke, and the DB-mode
+saved-character-to-Training-Room smoke passed on 2026-06-05. No fresh mechanics
+blocker appeared; the recommended next narrow slice is a docs-only reviewer
+playtest brief that maps `/characters`, Player-mode `runtime`, DM assignment,
+Training Room recovery, Local Reset, and reusable-entry separation to the
+existing evidence.
+
+The Character Library -> Runtime Handoff Reviewer Playtest Brief is complete in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEWER_PLAYTEST_BRIEF.md`.
+It gives reviewers the current manual review path and checkpoint map for
+`/characters`, PDF preview/download, Player saved-character submission, explicit
+DM runtime-copy assignment, Training Room recovery, Player Local Reset, and
+Character Library/runtime separation. Do not extend the handoff sequence
+automatically unless that review finds a concrete blocker.
+
+The Character Library -> Runtime Handoff Review Closure Packet is complete in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_CLOSURE_PACKET.md`. It
+defines reviewer verdicts (`pass`, `follow-up`, `blocked`), evidence
+sufficiency, boundary closure checks, and follow-up rules. If review passes,
+close the current handoff sequence and choose the next task from a new
+human-approved product goal rather than continuing this chain automatically.
+
+The Character Library -> Runtime Handoff Review Verdict is complete in
+`docs/delivery/CHARACTER_LIBRARY_RUNTIME_HANDOFF_REVIEW_VERDICT.md`. Verdict:
+`pass` with cautions. No follow-up slice is required from the current evidence.
+Close the current handoff review sequence; the next Codex task should come from
+a new human-approved product goal or playtest brief.
+
+The Training Room Table Experience Fresh Goal Intake is complete in
+`docs/delivery/TRAINING_ROOM_TABLE_EXPERIENCE_FRESH_GOAL_INTAKE.md`. It chose a
+fresh Training Room table-experience reviewer pass at `medium` effort. Fresh
+runtime evidence on 2026-06-05 passed `@dnd/web test:smoke` and
+`@dnd/web test:smoke:two-profile` with two-profile session `SCU9S8`. No fresh
+mechanics blocker appeared; the recommended next slice is a docs/evidence
+reviewer pass using the Training Room playtest checklist, not immediate runtime
+implementation.
 
 For the next task:
 
