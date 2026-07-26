@@ -1,4 +1,3 @@
-import type { CharacterBuilderAssetKey } from './character-builder-assets';
 import type { AbilityKey } from './character-builder-data';
 
 export type RuleSourceInfo = {
@@ -60,7 +59,6 @@ export type RuleChoice = {
 };
 
 export type RuleSpecies = {
-  assetKey?: CharacterBuilderAssetKey;
   builderChoices?: RuleChoice[];
   creatureType: string;
   displayName: string;
@@ -86,7 +84,6 @@ export type RuleSpellcasting = {
 
 export type RuleClass = {
   armorProficiencies: string[];
-  assetKey?: CharacterBuilderAssetKey;
   difficulty: string;
   displayName: string;
   equipment: string[];
@@ -106,7 +103,6 @@ export type RuleClass = {
 
 export type RuleBackground = {
   abilityScoreOptions: AbilityKey[];
-  assetKey?: CharacterBuilderAssetKey;
   displayName: string;
   equipment: string[];
   id: string;
@@ -398,7 +394,6 @@ const gamingSetChoices = [
 
 export const rulesSpecies: RuleSpecies[] = [
   {
-    assetKey: 'species.dragonborn',
     builderChoices: [
       {
         choose: 1,
@@ -441,7 +436,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.dwarf',
     creatureType: 'Humanoid',
     displayName: 'Dwarf',
     hpBonusPerLevel: 1,
@@ -467,7 +461,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.elf',
     builderChoices: [
       {
         choose: 1,
@@ -505,7 +498,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.gnome',
     builderChoices: [
       {
         choose: 1,
@@ -533,7 +525,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.goliath',
     builderChoices: [
       {
         choose: 1,
@@ -572,7 +563,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.halfling',
     creatureType: 'Humanoid',
     displayName: 'Halfling',
     id: 'Halfling',
@@ -597,7 +587,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.human',
     builderChoices: [
       { choose: 1, from: ['Small', 'Medium'], label: 'Size' },
       { choose: 1, from: allSkillChoice, label: 'Skillful Skill' },
@@ -622,7 +611,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.orc',
     creatureType: 'Humanoid',
     displayName: 'Orc',
     id: 'Orc',
@@ -643,7 +631,6 @@ export const rulesSpecies: RuleSpecies[] = [
     ],
   },
   {
-    assetKey: 'species.tiefling',
     builderChoices: [
       {
         choose: 1,
@@ -675,7 +662,6 @@ export const rulesSpecies: RuleSpecies[] = [
 export const rulesClasses: RuleClass[] = [
   {
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields'],
-    assetKey: 'class.barbarian',
     difficulty: 'Beginner friendly',
     displayName: 'Barbarian',
     equipment: ['Greataxe', 'Handaxe', "Explorer's Pack"],
@@ -704,7 +690,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor'],
-    assetKey: 'class.bard',
     difficulty: 'Intermediate',
     displayName: 'Bard',
     equipment: [
@@ -752,7 +737,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields'],
-    assetKey: 'class.cleric',
     difficulty: 'Beginner friendly',
     displayName: 'Cleric',
     equipment: [
@@ -796,7 +780,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor', 'Shields'],
-    assetKey: 'class.druid',
     difficulty: 'Intermediate',
     displayName: 'Druid',
     equipment: [
@@ -855,7 +838,6 @@ export const rulesClasses: RuleClass[] = [
       'Heavy armor',
       'Shields',
     ],
-    assetKey: 'class.fighter',
     difficulty: 'Beginner friendly',
     displayName: 'Fighter',
     equipment: [
@@ -893,7 +875,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: [],
-    assetKey: 'class.monk',
     difficulty: 'Intermediate',
     displayName: 'Monk',
     equipment: ['Spear', 'Dagger', "Explorer's Pack"],
@@ -932,7 +913,6 @@ export const rulesClasses: RuleClass[] = [
       'Heavy armor',
       'Shields',
     ],
-    assetKey: 'class.paladin',
     difficulty: 'Intermediate',
     displayName: 'Paladin',
     equipment: [
@@ -979,7 +959,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor', 'Medium armor', 'Shields'],
-    assetKey: 'class.ranger',
     difficulty: 'Intermediate',
     displayName: 'Ranger',
     equipment: [
@@ -1030,7 +1009,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor'],
-    assetKey: 'class.rogue',
     difficulty: 'Beginner friendly',
     displayName: 'Rogue',
     equipment: [
@@ -1077,7 +1055,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: [],
-    assetKey: 'class.sorcerer',
     difficulty: 'Advanced',
     displayName: 'Sorcerer',
     equipment: ['Spear', 'Dagger', 'Arcane Focus', "Dungeoneer's Pack"],
@@ -1122,7 +1099,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: ['Light armor'],
-    assetKey: 'class.warlock',
     difficulty: 'Advanced',
     displayName: 'Warlock',
     equipment: [
@@ -1170,7 +1146,6 @@ export const rulesClasses: RuleClass[] = [
   },
   {
     armorProficiencies: [],
-    assetKey: 'class.wizard',
     difficulty: 'Intermediate',
     displayName: 'Wizard',
     equipment: [
@@ -1225,7 +1200,6 @@ export const rulesClasses: RuleClass[] = [
 export const rulesBackgrounds: RuleBackground[] = [
   {
     abilityScoreOptions: ['int', 'wis', 'cha'],
-    assetKey: 'background.acolyte',
     displayName: 'Acolyte',
     equipment: [
       "Calligrapher's Supplies",
@@ -1244,7 +1218,6 @@ export const rulesBackgrounds: RuleBackground[] = [
   },
   {
     abilityScoreOptions: ['dex', 'con', 'int'],
-    assetKey: 'background.criminal',
     displayName: 'Criminal',
     equipment: [
       "Thieves' Tools",
@@ -1262,7 +1235,6 @@ export const rulesBackgrounds: RuleBackground[] = [
   },
   {
     abilityScoreOptions: ['con', 'int', 'wis'],
-    assetKey: 'background.sage',
     displayName: 'Sage',
     equipment: [
       "Calligrapher's Supplies",
@@ -1281,7 +1253,6 @@ export const rulesBackgrounds: RuleBackground[] = [
   },
   {
     abilityScoreOptions: ['str', 'dex', 'con'],
-    assetKey: 'background.soldier',
     displayName: 'Soldier',
     equipment: [
       'Spear',

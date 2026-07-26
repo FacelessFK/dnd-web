@@ -4,11 +4,6 @@ import type {
   CharacterLibraryPortraitReference,
 } from '@dnd/protocol';
 
-import {
-  getCharacterBuilderAssetManifestEntries,
-  getCharacterBuilderAssetPath,
-  type CharacterBuilderAssetKey,
-} from './character-builder-assets';
 import type {
   CharacterBuilderDraft,
   CharacterBuilderLibraryEntry,
@@ -22,24 +17,6 @@ import { deriveRuleDerivedPreview } from './character-builder-rules-helpers';
 import { runtimeServerUrl } from './runtime-api';
 
 export const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
-
-const knownAssetKeys = new Set(
-  getCharacterBuilderAssetManifestEntries().map((entry) => entry.key),
-);
-
-function asKnownAssetKey(value: string): CharacterBuilderAssetKey | undefined {
-  return knownAssetKeys.has(value as CharacterBuilderAssetKey)
-    ? (value as CharacterBuilderAssetKey)
-    : undefined;
-}
-
-function asKnownPortraitAssetKey(
-  value: string,
-): CharacterBuilderAssetKey | undefined {
-  const assetKey = asKnownAssetKey(value);
-
-  return assetKey?.startsWith('portrait.') ? assetKey : undefined;
-}
 
 export function getDraftPortraitReference(
   draft: CharacterBuilderDraft,
@@ -58,9 +35,7 @@ export function getPortraitImageSource(
     return resolveUploadedPortraitUrl(portrait.url) ?? portrait.dataUrl ?? null;
   }
 
-  const assetKey = asKnownPortraitAssetKey(portrait.assetKey);
-
-  return assetKey ? getCharacterBuilderAssetPath(assetKey) : null;
+  return null;
 }
 
 function resolveUploadedPortraitUrl(url: string | null | undefined) {
@@ -111,14 +86,6 @@ export function createUploadedPortraitReferenceFromDataUrl(
     sizeBytes,
     uploadedAt: options.uploadedAt ?? new Date().toISOString(),
   };
-}
-
-export function getPortraitAssetKey(
-  portrait: CharacterLibraryPortraitReference | null | undefined,
-): CharacterBuilderAssetKey | undefined {
-  return portrait?.kind === 'asset'
-    ? asKnownPortraitAssetKey(portrait.assetKey)
-    : undefined;
 }
 
 export function draftToCharacterLibraryEntryInput(
@@ -194,7 +161,6 @@ export function characterLibraryEntryToCard(
     name: entry.name,
     ownerParticipantId: entry.ownerParticipantId,
     portrait,
-    portraitAssetKey: getPortraitAssetKey(portrait),
     speciesOrRace: entry.speciesOrRace,
     status: entry.status === 'finalized' ? 'ready' : 'draft',
     summary:

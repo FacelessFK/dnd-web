@@ -118,11 +118,10 @@ describe('character library mappers', () => {
     assert.equal(card.name, 'Persisted Test Hero');
     assert.equal(card.status, 'draft');
     assert.equal(card.portrait, null);
-    assert.equal(card.portraitAssetKey, undefined);
     assert.equal(getPortraitImageSource(card.portrait), null);
   });
 
-  it('shows only explicit uploaded or portrait asset images on library cards', () => {
+  it('shows only uploaded portrait images on library cards', () => {
     const uploadedPortrait = createUploadedPortraitReferenceFromDataUrl(
       'data:image/png;base64,aGVybw==',
     );
@@ -134,18 +133,10 @@ describe('character library mappers', () => {
         portrait: uploadedPortrait,
       }),
     );
-    const portraitAssetCard = characterLibraryEntryToCard(
+    const assetCard = characterLibraryEntryToCard(
       createEntry({
         portrait: {
           assetKey: 'portrait.elara',
-          kind: 'asset',
-        },
-      }),
-    );
-    const speciesAssetCard = characterLibraryEntryToCard(
-      createEntry({
-        portrait: {
-          assetKey: 'species.human',
           kind: 'asset',
         },
       }),
@@ -155,12 +146,9 @@ describe('character library mappers', () => {
       getPortraitImageSource(uploadedCard.portrait),
       uploadedPortrait.dataUrl,
     );
-    assert.equal(
-      getPortraitImageSource(portraitAssetCard.portrait),
-      '/assets/character-builder/portraits/elara-nightbloom.webp',
-    );
-    assert.equal(speciesAssetCard.portraitAssetKey, undefined);
-    assert.equal(getPortraitImageSource(speciesAssetCard.portrait), null);
+    // Bundled portrait artwork was removed; the builder only ever writes
+    // uploaded portraits, so legacy asset references render the fallback.
+    assert.equal(getPortraitImageSource(assetCard.portrait), null);
   });
 
   it('normalizes uploaded portrait data URLs for persisted library entries', () => {
