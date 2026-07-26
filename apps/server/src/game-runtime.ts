@@ -3,18 +3,20 @@ import { randomUUID } from 'node:crypto';
 import {
   applyFixedDamage,
   calculateAttackModifier,
-  calculateAttackTotal,
+  calculateDamageModifier,
   calculateInitiativeModifier,
   calculateMovementDistanceFeet,
   deriveCharacterStats,
   doesDestinationOverlapBlockingOccupancy,
   doesOccupancyFitWithinGrid,
-  isAttackHit,
   isCharacterDowned,
   isCombatantDefeated,
   isOccupancyWithinBaselineMeleeReach,
   isWithinBaselineMeleeReach,
+  resolveAttackRoll,
+  rollAttackDamage,
   rollD20,
+  rollInitiative,
 } from '@dnd/rules';
 import type {
   ActiveSceneState,
@@ -249,6 +251,7 @@ type ResolvedAttack = {
   roll: CombatEvent['roll'];
   hit: boolean;
   damage: number;
+  damageRoll: CombatEvent['damageRoll'] | null;
   targetArmorClass: number;
   targetHp: CombatEvent['targetHp'];
   nextTargetRecord: StoredCharacterRecord | null;
@@ -297,6 +300,15 @@ export class InMemoryGameRuntime<
       update: MovementStateUpdate,
     ) => void,
     private readonly combatEventSink?: (update: CombatEvent) => void,
+    // Damage dice roller, separate from d20Roller so tests can fix attack rolls
+    // and damage rolls independently. Kept last so existing positional call
+    // sites stay valid.
+    readonly dieRoller: (sides: number) => number = (sides) =>
+      Math.floor(Math.random() * sides) + 1,
+    // Initiative is rolled at encounter start, on its own roller. Keeping it
+    // separate from d20Roller means tests can still assert that an illegal
+    // attack consumed no attack RNG.
+    readonly initiativeRoller: () => number = () => rollD20(),
   ) {}
 
   createSession(
@@ -360,6 +372,33 @@ export class InMemoryGameRuntime<
       this.encounterStateUpdateSink,
       this.movementStateUpdateSink,
       this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
+    );
+  }
+
+  // Combat and initiative randomness is injectable so tests and harnesses can
+  // pin rolls without reaching into runtime internals.
+  withRollers(
+    rollers: {
+      d20Roller?: () => number;
+      dieRoller?: (sides: number) => number;
+      initiativeRoller?: () => number;
+    } = {},
+  ): InMemoryGameRuntime<TCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      this.characters,
+      this.scenes,
+      this.encounters,
+      rollers.d20Roller ?? this.d20Roller,
+      this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
+      this.combatEventSink,
+      rollers.dieRoller ?? this.dieRoller,
+      rollers.initiativeRoller ?? this.initiativeRoller,
     );
   }
 
@@ -381,6 +420,8 @@ export class InMemoryGameRuntime<
       this.encounterStateUpdateSink,
       options.movementStateUpdateSink ?? this.movementStateUpdateSink,
       this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
     );
   }
 
@@ -398,6 +439,8 @@ export class InMemoryGameRuntime<
       this.encounterStateUpdateSink,
       this.movementStateUpdateSink,
       this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
     );
   }
 
@@ -418,6 +461,8 @@ export class InMemoryGameRuntime<
       options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
       this.movementStateUpdateSink,
       this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
     );
   }
 
@@ -443,6 +488,8 @@ export class InMemoryGameRuntime<
       options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
       options.movementStateUpdateSink ?? this.movementStateUpdateSink,
       options.combatEventSink ?? this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
     );
   }
 
@@ -2917,13 +2964,20 @@ export class InMemoryGameRuntime<
     const updatedEncounter = markEncounterActionUsed(context.encounter);
     const d20 = rollD20(this.d20Roller);
     const modifier = calculateAttackModifier(context.attackerRecord.character);
-    const total = calculateAttackTotal(d20, modifier);
     const targetArmorClass =
       context.kind === 'character'
         ? context.targetRecord.character.armorClass
         : context.targetCombatant.combatant.armorClass;
-    const hit = isAttackHit(total, targetArmorClass);
-    const damage = hit ? 1 : 0;
+    const outcome = resolveAttackRoll({ d20, modifier, targetArmorClass });
+    const hit = outcome.hit;
+    const damageRoll = hit
+      ? rollAttackDamage({
+          critical: outcome.critical,
+          modifier: calculateDamageModifier(context.attackerRecord.character),
+          roller: this.dieRoller,
+        })
+      : null;
+    const damage = damageRoll?.total ?? 0;
     const previousTargetHp =
       context.kind === 'character'
         ? context.targetRecord.character.hp.current
@@ -2937,10 +2991,13 @@ export class InMemoryGameRuntime<
       roll: {
         d20,
         modifier,
-        total,
+        total: outcome.total,
+        critical: outcome.critical,
+        criticalMiss: outcome.criticalMiss,
       },
       hit,
       damage,
+      damageRoll,
       targetArmorClass,
       targetHp: {
         previous: previousTargetHp,
@@ -2986,9 +3043,17 @@ export class InMemoryGameRuntime<
       abilities: combatant.abilities,
       level: 1,
     });
-    const total = calculateAttackTotal(d20, modifier);
-    const hit = isAttackHit(total, context.targetRecord.character.armorClass);
-    const damage = hit ? 1 : 0;
+    const targetArmorClass = context.targetRecord.character.armorClass;
+    const outcome = resolveAttackRoll({ d20, modifier, targetArmorClass });
+    const hit = outcome.hit;
+    const damageRoll = hit
+      ? rollAttackDamage({
+          critical: outcome.critical,
+          modifier: calculateDamageModifier({ abilities: combatant.abilities }),
+          roller: this.dieRoller,
+        })
+      : null;
+    const damage = damageRoll?.total ?? 0;
     const previousTargetHp = context.targetRecord.character.hp.current;
     const currentTargetHp = hit
       ? applyFixedDamage(previousTargetHp, damage)
@@ -2999,11 +3064,14 @@ export class InMemoryGameRuntime<
       roll: {
         d20,
         modifier,
-        total,
+        total: outcome.total,
+        critical: outcome.critical,
+        criticalMiss: outcome.criticalMiss,
       },
       hit,
       damage,
-      targetArmorClass: context.targetRecord.character.armorClass,
+      damageRoll,
+      targetArmorClass,
       targetHp: {
         previous: previousTargetHp,
         current: currentTargetHp,
@@ -3099,6 +3167,7 @@ export class InMemoryGameRuntime<
         targetArmorClass: resolution.targetArmorClass,
         hit: resolution.hit,
         damage: resolution.damage,
+        ...(resolution.damageRoll ? { damageRoll: resolution.damageRoll } : {}),
         targetHp: resolution.targetHp,
       };
     }
@@ -3118,6 +3187,7 @@ export class InMemoryGameRuntime<
       targetArmorClass: resolution.targetArmorClass,
       hit: resolution.hit,
       damage: resolution.damage,
+      ...(resolution.damageRoll ? { damageRoll: resolution.damageRoll } : {}),
       targetHp: resolution.targetHp,
     };
   }
@@ -3163,6 +3233,7 @@ export class InMemoryGameRuntime<
       targetArmorClass: resolution.targetArmorClass,
       hit: resolution.hit,
       damage: resolution.damage,
+      ...(resolution.damageRoll ? { damageRoll: resolution.damageRoll } : {}),
       targetHp: resolution.targetHp,
     };
   }
@@ -3856,8 +3927,12 @@ export class InMemoryGameRuntime<
             return {
               characterId: record.character.id,
               participantId: participant.id,
-              initiative: deriveCharacterStats(record.character)
-                .initiativeModifier,
+              // Initiative is rolled server-side once, at encounter start.
+              initiative: rollInitiative({
+                d20: rollD20(this.initiativeRoller),
+                initiativeModifier: deriveCharacterStats(record.character)
+                  .initiativeModifier,
+              }),
             };
           },
         );
@@ -3874,9 +3949,12 @@ export class InMemoryGameRuntime<
               kind: 'combatant',
               combatantId: entity.id,
               participantId: snapshot.session.dmParticipantId,
-              initiative: calculateInitiativeModifier(
-                entity.combatant.abilities,
-              ),
+              initiative: rollInitiative({
+                d20: rollD20(this.initiativeRoller),
+                initiativeModifier: calculateInitiativeModifier(
+                  entity.combatant.abilities,
+                ),
+              }),
             },
           ];
         }),

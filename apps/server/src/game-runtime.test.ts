@@ -27,6 +27,30 @@ import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
 import { SessionStoreError } from './session-store.js';
 
+// Initiative and damage are rolled server-side, so tests that do not care about
+// specific rolls still need deterministic ones. TEST_D20 keeps encounter turn
+// order ordered by initiative modifier (the pre-rolled-initiative behavior), and
+// TEST_DAMAGE_DIE fixes each damage die so HP assertions stay stable.
+const TEST_D20 = 10;
+const TEST_DAMAGE_DIE = 3;
+
+function createTestRuntime() {
+  return new InMemoryGameRuntime<InMemoryCharacterStore>(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_D20,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_DAMAGE_DIE,
+    () => TEST_D20,
+  );
+}
+
 function createRuntimeWithAttackRoll(d20: number) {
   return new InMemoryGameRuntime<InMemoryCharacterStore>(
     undefined,
@@ -35,6 +59,12 @@ function createRuntimeWithAttackRoll(d20: number) {
     undefined,
     undefined,
     () => d20,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_DAMAGE_DIE,
+    () => TEST_D20,
   );
 }
 
@@ -46,6 +76,12 @@ function createRuntimeWithAttackRoller(roller: () => number) {
     undefined,
     undefined,
     roller,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_DAMAGE_DIE,
+    () => TEST_D20,
   );
 }
 
@@ -1258,7 +1294,7 @@ test('derived stat calculations follow the baseline 5e progression', () => {
 });
 
 test('sessions reject unknown rules profile references', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
 
   assert.throws(
     () => {
@@ -1282,7 +1318,7 @@ test('sessions reject unknown rules profile references', () => {
 });
 
 test('create character starts as a draft resource with derived stats', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1301,7 +1337,7 @@ test('create character starts as a draft resource with derived stats', () => {
 });
 
 test('get character returns the stored canonical character resource', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1326,7 +1362,7 @@ test('get character returns the stored canonical character resource', () => {
 });
 
 test('player can edit their own character', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1346,7 +1382,7 @@ test('player can edit their own character', () => {
 });
 
 test('dm can edit a participant character in the same session', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1364,7 +1400,7 @@ test('dm can edit a participant character in the same session', () => {
 });
 
 test('players cannot edit another participant character', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1387,7 +1423,7 @@ test('players cannot edit another participant character', () => {
 });
 
 test('finalizing a valid draft marks it ready', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1409,7 +1445,7 @@ test('finalizing a valid draft marks it ready', () => {
 });
 
 test('finalizing an already-ready character is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1448,7 +1484,7 @@ test('finalizing an already-ready character is rejected', () => {
 });
 
 test('editing a ready character reopens it as a draft', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1477,7 +1513,7 @@ test('editing a ready character reopens it as a draft', () => {
 });
 
 test('assigning a character links it to the participant and broadcasts session state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const updates: string[] = [];
 
@@ -1516,7 +1552,7 @@ test('assigning a character links it to the participant and broadcasts session s
 });
 
 test('player can submit own finalized character for DM assignment', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const updates: string[] = [];
 
@@ -1566,7 +1602,7 @@ test('player can submit own finalized character for DM assignment', () => {
 });
 
 test('player can submit a finalized library entry for DM assignment without mutating the reusable entry', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const libraryEntry = createFinalizedLibraryEntry();
   const originalLibraryEntry = structuredClone(libraryEntry);
@@ -1616,7 +1652,7 @@ test('player can submit a finalized library entry for DM assignment without muta
 });
 
 test('draft library entry submission is rejected before runtime state is created', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1649,7 +1685,7 @@ test('draft library entry submission is rejected before runtime state is created
 });
 
 test('library entry owner mismatch is rejected before runtime state is created', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1682,7 +1718,7 @@ test('library entry owner mismatch is rejected before runtime state is created',
 });
 
 test('submitting another participant character is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1723,7 +1759,7 @@ test('submitting another participant character is rejected', () => {
 });
 
 test('draft character submission is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1751,7 +1787,7 @@ test('draft character submission is rejected', () => {
 });
 
 test('dm participants cannot submit characters for assignment', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const character = runtime.createCharacter({
     commandId: 'create-dm-character-for-submit',
@@ -1820,7 +1856,7 @@ test('dm participants cannot submit characters for assignment', () => {
 });
 
 test('assignment clears a pending character request', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1865,7 +1901,7 @@ test('assignment clears a pending character request', () => {
 });
 
 test('assigning a character to the wrong participant is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -1895,7 +1931,7 @@ test('assigning a character to the wrong participant is rejected', () => {
 });
 
 test('dm can set assigned character current HP and broadcast character state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
   const characterUpdateCountBefore = getCharacterStateUpdates(updates).length;
@@ -1944,7 +1980,7 @@ test('dm can set assigned character current HP and broadcast character state', (
 });
 
 test('players cannot set character HP through the DM control surface', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -1965,7 +2001,7 @@ test('players cannot set character HP through the DM control surface', () => {
 });
 
 test('dm HP override validates target participant assignment', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -1985,7 +2021,7 @@ test('dm HP override validates target participant assignment', () => {
 });
 
 test('dm HP override rejects values outside the character HP range', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2020,7 +2056,7 @@ test('dm HP override rejects values outside the character HP range', () => {
 });
 
 test('dm setting current turn actor HP to zero feeds existing downed gating', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -2050,7 +2086,7 @@ test('dm setting current turn actor HP to zero feeds existing downed gating', ()
 });
 
 test('dm can set assigned character active condition tags and broadcast character state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
   const encounter = startEncounter(runtime, session.sessionId);
@@ -2125,7 +2161,7 @@ test('dm can set assigned character active condition tags and broadcast characte
 });
 
 test('players cannot set active condition tags through the DM control surface', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2146,7 +2182,7 @@ test('players cannot set active condition tags through the DM control surface', 
 });
 
 test('dm condition tag editing validates target participant assignment', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2166,7 +2202,7 @@ test('dm condition tag editing validates target participant assignment', () => {
 });
 
 test('dm condition tag editing rejects invalid condition lists', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2201,7 +2237,7 @@ test('dm condition tag editing rejects invalid condition lists', () => {
 });
 
 test('dm can reposition an unplaced assigned character into the active scene', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -2235,7 +2271,7 @@ test('dm can reposition an unplaced assigned character into the active scene', (
 });
 
 test('dm can reposition an already placed character and emit movement_state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
   const movementUpdateCountBefore = getMovementUpdates(updates).length;
@@ -2269,7 +2305,7 @@ test('dm can reposition an already placed character and emit movement_state', ()
 });
 
 test('dm can reposition a character from another scene into the active scene', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
   const secondScene = runtime.createScene({
     commandId: 'create-second-scene-for-dm-reposition',
@@ -2321,7 +2357,7 @@ test('dm can reposition a character from another scene into the active scene', (
 });
 
 test('players cannot reposition characters through the DM control surface', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, firstCharacter } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2345,7 +2381,7 @@ test('players cannot reposition characters through the DM control surface', () =
 });
 
 test('dm reposition validates active scene and target assignment', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -2409,7 +2445,7 @@ test('dm reposition validates active scene and target assignment', () => {
 });
 
 test('dm reposition rejects out-of-bounds and blocked destinations', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { scene, session, firstCharacter } =
     setupEncounterParticipants(runtime);
 
@@ -2458,7 +2494,7 @@ test('dm reposition rejects out-of-bounds and blocked destinations', () => {
 });
 
 test('dm reposition during an encounter does not spend movement or emit encounter_state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, secondCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -2496,7 +2532,7 @@ test('dm reposition during an encounter does not spend movement or emit encounte
 });
 
 test('dm can set current encounter turn usage without changing turn ownership', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const startedEncounter = startEncounter(runtime, session.sessionId);
   const updates = subscribeToSession(runtime, session.sessionId);
@@ -2539,7 +2575,7 @@ test('dm can set current encounter turn usage without changing turn ownership', 
 });
 
 test('dm turn usage override does not mutate character movement or combat state', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { firstCharacter, session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2574,7 +2610,7 @@ test('dm turn usage override does not mutate character movement or combat state'
 });
 
 test('players cannot set current encounter turn usage', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2600,7 +2636,7 @@ test('players cannot set current encounter turn usage', () => {
 });
 
 test('dm turn usage override requires an active encounter', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2619,7 +2655,7 @@ test('dm turn usage override requires an active encounter', () => {
 });
 
 test('dm can set the current turn participant without changing encounter order or round', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { firstCharacter, secondCharacter, session } =
     setupEncounterParticipants(runtime);
   const startedEncounter = startEncounter(runtime, session.sessionId);
@@ -2706,7 +2742,7 @@ test('dm can set the current turn participant without changing encounter order o
 });
 
 test('players cannot set the current turn participant', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const encounter = startEncounter(runtime, session.sessionId);
 
@@ -2726,7 +2762,7 @@ test('players cannot set the current turn participant', () => {
 });
 
 test('dm current turn participant override requires an active encounter', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2740,7 +2776,7 @@ test('dm current turn participant override requires an active encounter', () => 
 });
 
 test('dm current turn participant override requires an encounter participant', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2756,7 +2792,7 @@ test('dm current turn participant override requires an encounter participant', (
 });
 
 test('dm can end an active encounter and start a new one later', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { firstCharacter, session } = setupEncounterParticipants(runtime);
   const activeSceneId = runtime.getSessionSnapshotForParticipant(
     session.sessionId,
@@ -2814,7 +2850,7 @@ test('dm can end an active encounter and start a new one later', () => {
 });
 
 test('players cannot end active encounters', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -2830,7 +2866,7 @@ test('players cannot end active encounters', () => {
 });
 
 test('dm encounter end requires an active encounter', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -2844,7 +2880,7 @@ test('dm encounter end requires an active encounter', () => {
 });
 
 test('players cannot create characters for other participants', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -2893,7 +2929,7 @@ test('players cannot create characters for other participants', () => {
 });
 
 test('scene creation returns an empty scene that session participants can retrieve', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -2918,7 +2954,7 @@ test('scene creation returns an empty scene that session participants can retrie
 });
 
 test('non-DM participants cannot create scenes', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -2951,7 +2987,7 @@ test('non-DM participants cannot create scenes', () => {
 });
 
 test('activating a scene updates the authoritative session snapshot and broadcasts the revision', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const updates: string[] = [];
 
@@ -2982,7 +3018,7 @@ test('activating a scene updates the authoritative session snapshot and broadcas
 });
 
 test('placing an entity stores it on the authoritative scene', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = createScene(runtime, session.sessionId);
 
@@ -3005,7 +3041,7 @@ test('placing an entity stores it on the authoritative scene', () => {
 });
 
 test('non-DM participants cannot place scene entities', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -3047,7 +3083,7 @@ test('non-DM participants cannot place scene entities', () => {
 });
 
 test('out-of-bounds entity placement is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = createScene(runtime, session.sessionId);
 
@@ -3071,7 +3107,7 @@ test('out-of-bounds entity placement is rejected', () => {
 });
 
 test('overlapping entity placement is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = createScene(runtime, session.sessionId);
 
@@ -3101,7 +3137,7 @@ test('overlapping entity placement is rejected', () => {
 });
 
 test('dm can update reposition and delete passive scene entities', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = createScene(runtime, session.sessionId);
   const placedScene = placeEntity(runtime, session.sessionId, scene.id);
@@ -3192,7 +3228,7 @@ test('dm can update reposition and delete passive scene entities', () => {
 });
 
 test('players cannot update reposition or delete passive scene entities', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = createScene(runtime, session.sessionId);
   const placedScene = placeEntity(runtime, session.sessionId, scene.id);
@@ -3250,7 +3286,7 @@ test('players cannot update reposition or delete passive scene entities', () => 
 });
 
 test('passive scene entity editing rejects missing targets combatants and illegal placement', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = activateScene(runtime, session.sessionId);
   const firstEntityScene = placeEntity(runtime, session.sessionId, scene.id, {
@@ -3393,7 +3429,7 @@ test('passive scene entity editing rejects missing targets combatants and illega
 });
 
 test('passive scene entity reposition rejects blocking character overlap', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = activateScene(runtime, session.sessionId);
   const placedScene = placeEntity(runtime, session.sessionId, scene.id, {
@@ -3424,7 +3460,7 @@ test('passive scene entity reposition rejects blocking character overlap', () =>
 });
 
 test('dm can create update delete and activate scene transition nodes', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const sourceScene = createScene(runtime, session.sessionId);
   const targetScene = runtime.createScene({
@@ -3504,7 +3540,7 @@ test('dm can create update delete and activate scene transition nodes', () => {
 });
 
 test('scene transition commands are dm-only and reject invalid transition targets', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const sourceScene = activateScene(runtime, session.sessionId);
   const targetScene = runtime.createScene({
@@ -3673,7 +3709,7 @@ test('scene transition commands are dm-only and reject invalid transition target
 });
 
 test('dm can create a combatant in the active scene and players cannot', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   const updatedScene = dmCreateCombatantInActiveScene(
@@ -3714,7 +3750,7 @@ test('dm can create a combatant in the active scene and players cannot', () => {
 });
 
 test('combatant creation validates grid bounds and occupancy', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -3746,7 +3782,7 @@ test('combatant creation validates grid bounds and occupancy', () => {
 });
 
 test('combatants block player movement and can be repositioned only by the DM', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { firstCharacter, session } = setupEncounterParticipants(runtime);
   const sceneWithCombatant = dmCreateCombatantInActiveScene(
     runtime,
@@ -3844,7 +3880,7 @@ test('combatants block player movement and can be repositioned only by the DM', 
 });
 
 test('dm can set combatant HP and invalid HP is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const sceneWithCombatant = dmCreateCombatantInActiveScene(
     runtime,
@@ -3876,7 +3912,7 @@ test('dm can set combatant HP and invalid HP is rejected', () => {
 });
 
 test('activating a scene from another session is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const firstSession = createSession(runtime);
   const secondSession = runtime.createSession({
     commandId: 'create-session-2',
@@ -3930,7 +3966,7 @@ test('activating a scene from another session is rejected', () => {
 });
 
 test('placing an assigned character into the active scene sets authoritative position', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -3952,7 +3988,7 @@ test('placing an assigned character into the active scene sets authoritative pos
 });
 
 test('placing an assigned character broadcasts an authoritative movement update to connected participants', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const dmUpdates: SessionStreamEvent[] = [];
   const playerUpdates: SessionStreamEvent[] = [];
@@ -4000,7 +4036,7 @@ test('placing an assigned character broadcasts an authoritative movement update 
 });
 
 test('movement updates a placed character within the active scene when the destination is legal', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4032,7 +4068,7 @@ test('movement updates a placed character within the active scene when the desti
 });
 
 test('movement broadcasts an authoritative update that matches stored overlay position', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const receivedUpdates: SessionStreamEvent[] = [];
 
@@ -4098,7 +4134,7 @@ test('movement broadcasts an authoritative update that matches stored overlay po
 });
 
 test('active-scene placement snapshot reads the authoritative placed characters for the active scene', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4135,7 +4171,7 @@ test('active-scene placement snapshot reads the authoritative placed characters 
 });
 
 test('active-scene placement snapshot reflects authoritative overlay positions after movement', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4177,7 +4213,7 @@ test('active-scene placement snapshot reflects authoritative overlay positions a
 });
 
 test('reconnected participants can recover the current active-scene placement snapshot with an explicit read', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4245,7 +4281,7 @@ test('reconnected participants can recover the current active-scene placement sn
 });
 
 test('movement out of bounds is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4281,7 +4317,7 @@ test('movement out of bounds is rejected', () => {
 });
 
 test('movement into blocking occupancy is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const scene = activateScene(runtime, session.sessionId);
 
@@ -4324,7 +4360,7 @@ test('movement into blocking occupancy is rejected', () => {
 });
 
 test('invalid movement does not emit movement updates', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
   const receivedUpdates: SessionStreamEvent[] = [];
   const scene = activateScene(runtime, session.sessionId);
@@ -4381,7 +4417,7 @@ test('invalid movement does not emit movement updates', () => {
 });
 
 test('movement without an active scene is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4411,7 +4447,7 @@ test('movement without an active scene is rejected', () => {
 });
 
 test('active-scene placement snapshot without an active scene is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4427,7 +4463,7 @@ test('active-scene placement snapshot without an active scene is rejected', () =
 });
 
 test('movement without an assigned character is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4458,7 +4494,7 @@ test('movement without an assigned character is rejected', () => {
 });
 
 test('movement when the character has not been placed is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4490,7 +4526,7 @@ test('movement when the character has not been placed is rejected', () => {
 });
 
 test('movement beyond the character speed allowance is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4526,7 +4562,7 @@ test('movement beyond the character speed allowance is rejected', () => {
 });
 
 test('active-scene placement snapshot fails explicitly when stored placement is impossible', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -4560,7 +4596,7 @@ test('active-scene placement snapshot fails explicitly when stored placement is 
 });
 
 test('active-scene placement snapshot rejects a broken cross-session active scene reference', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const firstSession = createSession(runtime);
   const secondSession = runtime.createSession({
     commandId: 'create-session-for-foreign-active-scene',
@@ -4606,7 +4642,7 @@ test('active-scene placement snapshot rejects a broken cross-session active scen
 });
 
 test('starting an encounter derives deterministic participants from placed characters in the active scene', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, scene, firstCharacter, secondCharacter } =
     setupEncounterParticipants(runtime);
 
@@ -4624,22 +4660,95 @@ test('starting an encounter derives deterministic participants from placed chara
     reactionUsed: false,
     movementUsed: 0,
   });
+  // Initiative is now rolled: the fixed test d20 of 10 is added to each
+  // character's initiative modifier (+2 and +1 respectively).
   assert.deepEqual(encounter.participants, [
     {
       characterId: firstCharacter.character.id,
       participantId: 'player-001',
-      initiative: 2,
+      initiative: 12,
     },
     {
       characterId: secondCharacter.character.id,
       participantId: 'player-002',
-      initiative: 1,
+      initiative: 11,
     },
   ]);
 });
 
+test('rolled initiative can reorder encounter turn order away from raw modifier order', () => {
+  // player-001 has the higher initiative modifier (+2 vs +1), so under the
+  // previous static-modifier ordering it always acted first. A low roll for the
+  // first character and a high roll for the second must now flip that order.
+  const initiativeRolls = [2, 19];
+  let rollIndex = 0;
+  const runtime = new InMemoryGameRuntime<InMemoryCharacterStore>(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_D20,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_DAMAGE_DIE,
+    () => {
+      const roll = initiativeRolls[rollIndex] ?? 10;
+      rollIndex += 1;
+      return roll;
+    },
+  );
+  const { session, firstCharacter, secondCharacter } =
+    setupEncounterParticipants(runtime);
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.deepEqual(encounter.participants, [
+    {
+      characterId: secondCharacter.character.id,
+      participantId: 'player-002',
+      initiative: 20,
+    },
+    {
+      characterId: firstCharacter.character.id,
+      participantId: 'player-001',
+      initiative: 4,
+    },
+  ]);
+  assert.equal(encounter.currentTurnIndex, 0);
+});
+
+test('an encounter start rolls initiative once per participant', () => {
+  let initiativeRollCount = 0;
+  const runtime = new InMemoryGameRuntime<InMemoryCharacterStore>(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_D20,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => TEST_DAMAGE_DIE,
+    () => {
+      initiativeRollCount += 1;
+      return TEST_D20;
+    },
+  );
+  const { session } = setupEncounterParticipants(runtime);
+
+  const encounter = startEncounter(runtime, session.sessionId);
+
+  assert.equal(encounter.participants.length, 2);
+  assert.equal(initiativeRollCount, 2);
+});
+
 test('get encounter state returns the authoritative runtime encounter for session members', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const startedEncounter = startEncounter(runtime, session.sessionId);
 
@@ -4653,7 +4762,7 @@ test('get encounter state returns the authoritative runtime encounter for sessio
 });
 
 test('starting an encounter emits an authoritative encounter_state stream update', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4666,7 +4775,7 @@ test('starting an encounter emits an authoritative encounter_state stream update
 });
 
 test('active turn participant can use their action exactly once per turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4683,7 +4792,7 @@ test('active turn participant can use their action exactly once per turn', () =>
 });
 
 test('non-active participants cannot use current-turn actions', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -4699,7 +4808,7 @@ test('non-active participants cannot use current-turn actions', () => {
 });
 
 test('actions cannot be used twice in the same turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -4716,7 +4825,7 @@ test('actions cannot be used twice in the same turn', () => {
 });
 
 test('bonus actions cannot be used twice in the same turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -4733,7 +4842,7 @@ test('bonus actions cannot be used twice in the same turn', () => {
 });
 
 test('active turn participant emits encounter_state when using a bonus action', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4750,7 +4859,7 @@ test('active turn participant emits encounter_state when using a bonus action', 
 });
 
 test('active turn participant can use their reaction exactly once per turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4768,7 +4877,7 @@ test('active turn participant can use their reaction exactly once per turn', () 
 });
 
 test('reactions cannot be used twice in the same turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4789,7 +4898,7 @@ test('reactions cannot be used twice in the same turn', () => {
 });
 
 test('non-active participants cannot use current-turn reactions', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -4805,7 +4914,7 @@ test('non-active participants cannot use current-turn reactions', () => {
 });
 
 test('movement usage can be recorded against the current turn allowance', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4821,7 +4930,7 @@ test('movement usage can be recorded against the current turn allowance', () => 
 });
 
 test('downed current-turn actors cannot use their action', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4844,7 +4953,7 @@ test('downed current-turn actors cannot use their action', () => {
 });
 
 test('downed current-turn actors cannot use their bonus action', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4867,7 +4976,7 @@ test('downed current-turn actors cannot use their bonus action', () => {
 });
 
 test('downed current-turn actors cannot use their reaction', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4890,7 +4999,7 @@ test('downed current-turn actors cannot use their reaction', () => {
 });
 
 test('downed current-turn actors cannot record movement usage', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -4913,7 +5022,7 @@ test('downed current-turn actors cannot record movement usage', () => {
 });
 
 test('start encounter includes placed player characters and active scene combatants', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const sceneWithCombatant = dmCreateCombatantInActiveScene(
     runtime,
@@ -4941,7 +5050,7 @@ test('start encounter includes placed player characters and active scene combata
 });
 
 test('mixed turn order can advance to a combatant and DM can spend its action', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const sceneWithCombatant = dmCreateCombatantInActiveScene(
     runtime,
@@ -4971,7 +5080,7 @@ test('mixed turn order can advance to a combatant and DM can spend its action', 
     kind: 'combatant',
     combatantId,
     participantId: 'dm-001',
-    initiative: 5,
+    initiative: 15,
   });
 
   const updatedEncounter = useAction(runtime, session.sessionId, 'dm-001');
@@ -5024,7 +5133,9 @@ test('DM-controlled combatant attacks a player character on its turn without rol
   );
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
-  assert.equal(targetRecord.character.hp.current, 25);
+  // A hit now rolls 1d8 damage plus the attacker's Strength modifier instead of
+  // applying a flat 1 point.
+  assert.equal(targetRecord.character.hp.current, 17);
   assert.equal(rollCount, 1);
   assert.equal(combatEvent?.attackerKind, 'combatant');
   assert.equal(combatEvent?.attackerCombatantId, combatantId);
@@ -5102,7 +5213,7 @@ test('defeated current-turn combatants cannot attack before rolling or emitting 
   assert.equal(rollCount, 1);
 });
 
-test('current turn owner can resolve an attack that consumes action, applies fixed damage, and emits encounter and combat events', () => {
+test('current turn owner can resolve an attack that consumes action, rolls damage, and emits encounter and combat events', () => {
   const runtime = createRuntimeWithAttackRoll(20);
   const { session, secondCharacter } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
@@ -5131,7 +5242,7 @@ test('current turn owner can resolve an attack that consumes action, applies fix
   );
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
-  assert.equal(targetRecord.character.hp.current, 33);
+  assert.equal(targetRecord.character.hp.current, 29);
   assert.deepEqual(
     newEvents.map((event) => event.type),
     ['encounter_state', 'combat_event'],
@@ -5144,17 +5255,29 @@ test('current turn owner can resolve an attack that consumes action, applies fix
   assert.equal(combatEvent?.attackerParticipantId, 'player-001');
   assert.equal(combatEvent?.targetParticipantId, 'player-002');
   assert.equal(combatEvent?.targetCharacterId, secondCharacter.character.id);
+  // A natural 20 is a critical hit, so the baseline 1d8 is rolled as 2d8 while
+  // the flat damage modifier is still added once.
   assert.deepEqual(combatEvent?.roll, {
     d20: 20,
     modifier: 2,
     total: 22,
+    critical: true,
+    criticalMiss: false,
   });
   assert.equal(combatEvent?.targetArmorClass, 16);
   assert.equal(combatEvent?.hit, true);
-  assert.equal(combatEvent?.damage, 1);
+  assert.equal(combatEvent?.damage, 5);
+  assert.deepEqual(combatEvent?.damageRoll, {
+    dice: [TEST_DAMAGE_DIE, TEST_DAMAGE_DIE],
+    diceTotal: 6,
+    modifier: -1,
+    total: 5,
+    critical: true,
+    notation: '2d8-1',
+  });
   assert.deepEqual(combatEvent?.targetHp, {
     previous: 34,
-    current: 33,
+    current: 29,
   });
 });
 
@@ -5191,7 +5314,7 @@ test('current turn player character can attack an active scene combatant and emi
   const combatEvent = getCombatEvents(newEvents)[0];
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
-  assert.equal(targetCombatant?.combatant?.hp.current, 7);
+  assert.equal(targetCombatant?.combatant?.hp.current, 3);
   assert.deepEqual(
     newEvents.map((event) => event.type),
     ['encounter_state', 'combat_event'],
@@ -5202,7 +5325,7 @@ test('current turn player character can attack an active scene combatant and emi
   assert.equal(combatEvent?.targetParticipantId, 'dm-001');
   assert.deepEqual(combatEvent?.targetHp, {
     previous: 8,
-    current: 7,
+    current: 3,
   });
 });
 
@@ -5267,13 +5390,17 @@ test('a miss still consumes action and emits a combat event without changing tar
   assert.equal(encounterUpdates.length, 1);
   assert.equal(combatEvents.length, 1);
   assert.ok(combatEvent);
+  // A natural 1 always misses, regardless of the attack total.
   assert.deepEqual(combatEvent?.roll, {
     d20: 1,
     modifier: 2,
     total: 3,
+    critical: false,
+    criticalMiss: true,
   });
   assert.equal(combatEvent?.hit, false);
   assert.equal(combatEvent?.damage, 0);
+  assert.equal(combatEvent?.damageRoll, undefined);
   assert.deepEqual(combatEvent?.targetHp, {
     previous: 34,
     current: 34,
@@ -5356,7 +5483,7 @@ test('player attack damage defeats combatants without removing them from the sce
 });
 
 test('start encounter excludes combatants that are already defeated', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const sceneWithCombatant = dmCreateCombatantInActiveScene(
     runtime,
@@ -5812,7 +5939,7 @@ test('failed attack commands emit neither combat_event nor encounter_state updat
 });
 
 test('invalid movement usage is rejected for negative or excessive values', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -5837,7 +5964,7 @@ test('invalid movement usage is rejected for negative or excessive values', () =
 });
 
 test('encounter-aware movement emits independent encounter_state and movement_state updates', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, scene, firstCharacter } =
     setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
@@ -5898,7 +6025,7 @@ test('encounter-aware movement emits independent encounter_state and movement_st
 });
 
 test('zero-cost encounter movement emits only movement_state and leaves encounter usage unchanged', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, scene, firstCharacter } =
     setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
@@ -5954,7 +6081,7 @@ test('zero-cost encounter movement emits only movement_state and leaves encounte
 });
 
 test('downed current-turn actors cannot move during an active encounter', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session, scene, firstCharacter } =
     setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
@@ -6006,7 +6133,7 @@ test('downed current-turn actors cannot move during an active encounter', () => 
 });
 
 test('non-active participants cannot move during another participant turn', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -6036,7 +6163,7 @@ test('non-active participants cannot move during another participant turn', () =
 });
 
 test('encounter movement spending rejects legal destinations that exceed remaining turn budget', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -6067,7 +6194,7 @@ test('encounter movement spending rejects legal destinations that exceed remaini
 });
 
 test('advance turn resets turn usage after real action and movement mutations', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -6092,7 +6219,7 @@ test('advance turn resets turn usage after real action and movement mutations', 
 });
 
 test('dm can advance past a downed current-turn actor', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupDownedCurrentTurnActor(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -6115,7 +6242,7 @@ test('dm can advance past a downed current-turn actor', () => {
 });
 
 test('advancing turn wraps to the first participant and increments the round number', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -6130,7 +6257,7 @@ test('advancing turn wraps to the first participant and increments the round num
 });
 
 test('starting an encounter without an active scene is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const session = createSession(runtime);
 
   joinPlayer(runtime, session.sessionId);
@@ -6146,7 +6273,7 @@ test('starting an encounter without an active scene is rejected', () => {
 });
 
 test('starting a duplicate active encounter for a session is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   startEncounter(runtime, session.sessionId);
@@ -6162,7 +6289,7 @@ test('starting a duplicate active encounter for a session is rejected', () => {
 });
 
 test('reading or advancing encounter state without an active encounter is rejected', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
 
   assert.throws(
@@ -6194,7 +6321,7 @@ test('reading or advancing encounter state without an active encounter is reject
 });
 
 test('failed invalid-turn encounter mutations do not emit encounter_state updates', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -6215,7 +6342,7 @@ test('failed invalid-turn encounter mutations do not emit encounter_state update
 });
 
 test('failed duplicate action usage does not emit an encounter_state update', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 
@@ -6237,7 +6364,7 @@ test('failed duplicate action usage does not emit an encounter_state update', ()
 });
 
 test('failed excessive movement usage does not emit an encounter_state update', () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = createTestRuntime();
   const { session } = setupEncounterParticipants(runtime);
   const updates = subscribeToSession(runtime, session.sessionId);
 

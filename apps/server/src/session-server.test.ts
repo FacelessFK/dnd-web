@@ -195,6 +195,17 @@ async function getJson<TResponse>(
   };
 }
 
+// Initiative and damage are rolled server-side. These tests exercise HTTP,
+// transaction, idempotency, and SSE plumbing rather than combat math, so they
+// pin every roll to keep encounter turn order and HP deltas deterministic.
+// Deliberately does not set d20Roller: tests that care about attack rolls
+// inject their own (often counting) roller positionally, and overriding it here
+// would silently break those assertions.
+const TEST_ROLLERS = {
+  dieRoller: () => 3,
+  initiativeRoller: () => 10,
+};
+
 function createMockResponse() {
   return {
     body: '',
@@ -2567,7 +2578,7 @@ test('server command paths can use the DB-backed character repository without pu
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -2944,7 +2955,7 @@ test('server command paths can use the DB-backed character repository without pu
 });
 
 test('character command route submits finalized library entries into runtime assignment state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const characterLibrary = new CharacterLibraryService();
   const session = await runtime.createSession({
@@ -3085,7 +3096,7 @@ test('db-backed character state can be reread after runtime reinitialization, wh
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { characterCommandTransaction: transactionBeforeRestart } =
@@ -3241,7 +3252,7 @@ test('db-backed character state can be reread after runtime reinitialization, wh
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyAfterRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
 
@@ -3368,7 +3379,7 @@ test('db-backed session snapshots and scenes survive runtime reinitialization fo
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { characterCommandTransaction: transactionBeforeRestart } =
@@ -3628,7 +3639,7 @@ test('db-backed session snapshots and scenes survive runtime reinitialization fo
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyAfterRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
 
@@ -3788,7 +3799,7 @@ test('db-backed active encounters can be reread after restart when durable sessi
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyBeforeRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { characterCommandTransaction: transactionBeforeRestart } =
@@ -4152,7 +4163,7 @@ test('db-backed active encounters can be reread after restart when durable sessi
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotencyAfterRestart: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
 
@@ -4237,7 +4248,7 @@ test('db-backed missed realtime delivery is recovered through read models withou
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
     () => 20,
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { characterCommandTransaction } =
@@ -4464,7 +4475,7 @@ test('db-backed missed realtime delivery is recovered through read models withou
     encounterRead.body.data.encounter.currentTurnUsage.movementUsed,
     10,
   );
-  assert.equal(targetCharacterRead.body.data.character.hp.current, 33);
+  assert.equal(targetCharacterRead.body.data.character.hp.current, 29);
   assert.equal(lateStreamUpdates.length, 1);
   assert.equal(lateStreamUpdates[0]?.type, 'session_state');
   assert.equal(
@@ -4503,7 +4514,7 @@ test('db-backed session transaction boundary writes one outbox row, dispatches a
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -4603,7 +4614,7 @@ test('db-backed session transaction boundary writes one outbox row for submit_ch
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -4692,7 +4703,7 @@ test('db-backed session transaction boundary writes one outbox row for submit_ch
 });
 
 test('outbox status endpoint reports unpublished backlog without draining rows', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
   const session = runtime.createSession({
@@ -4805,7 +4816,7 @@ test('db-backed session transaction boundary writes one runtime copy and one out
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const characterLibrary = new CharacterLibraryService(
     new DbBackedCharacterLibraryRepository(characterLibraryDatabase),
   );
@@ -5013,7 +5024,7 @@ test('db-backed session transaction boundary writes one outbox row, dispatches a
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5103,7 +5114,7 @@ test('db-backed session transaction boundary persists create_session durably wit
   );
   const runtime = new InMemoryGameRuntime(
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5191,7 +5202,7 @@ test('concurrent duplicate db-backed create_session requests cannot create two s
   );
   const runtime = new InMemoryGameRuntime(
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5258,7 +5269,7 @@ test('concurrent conflicting db-backed create_session fingerprints still fail ho
   );
   const runtime = new InMemoryGameRuntime(
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5339,7 +5350,7 @@ test('db-backed session transaction boundary writes one outbox row for join_sess
   );
   const runtime = new InMemoryGameRuntime(
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5445,7 +5456,7 @@ test('db-backed session transaction boundary keeps no-op session mutations silen
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -5521,7 +5532,7 @@ test('db-backed scene transaction boundary commits create_scene durably and retu
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sceneCommandTransaction } =
@@ -5620,7 +5631,7 @@ test('concurrent duplicate db-backed create_scene requests cannot create two sce
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sceneCommandTransaction } =
@@ -5709,7 +5720,7 @@ test('db-backed scene transaction boundary commits place_entity_in_scene durably
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sceneCommandTransaction } =
@@ -5799,7 +5810,7 @@ test('concurrent duplicate db-backed place_entity_in_scene requests cannot appen
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sceneCommandTransaction } =
@@ -5887,7 +5898,7 @@ test('db-backed scene transaction boundary commits passive entity update reposit
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sceneId, sessionId } =
@@ -6092,7 +6103,7 @@ test('db-backed scene transaction boundary commits transition create update and 
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sceneId, sessionId } =
@@ -6291,7 +6302,7 @@ test('db-backed session transaction boundary commits activate_scene_transition a
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
     await DbBackedSceneStore.fromDatabase(sceneDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { sessionCommandTransaction } = createSessionCommandTransactionHarness(
@@ -6428,7 +6439,7 @@ test('concurrent duplicate db-backed create_character requests cannot create two
     await DbBackedSessionStore.fromDatabase(sessionDatabase),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { characterCommandTransaction } =
@@ -6539,7 +6550,7 @@ test('db-backed encounter transaction boundary writes one outbox row, dispatches
     new InMemoryCharacterStore(),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { encounterCommandTransaction } =
@@ -6649,7 +6660,7 @@ test('transactional encounter command ID conflicts still reject conflicting fing
     new InMemoryCharacterStore(),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { encounterCommandTransaction } =
@@ -6751,7 +6762,7 @@ test('failed transactional encounter commands do not persist durable success rec
     new InMemoryCharacterStore(),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { encounterCommandTransaction } =
@@ -6835,7 +6846,7 @@ test('transactional DM encounter end routes the final ended snapshot through one
     new InMemoryCharacterStore(),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { encounterCommandTransaction } =
@@ -6939,7 +6950,7 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
     () => 20,
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -6998,7 +7009,7 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   assert.equal(attack.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 1);
   assert.equal(outboxDatabase.recordCount, 2);
-  assert.equal(target.character.hp.current, 33);
+  assert.equal(target.character.hp.current, 29);
   assert.equal(encounter.currentTurnUsage.actionUsed, true);
   assert.equal(encounterUpdates.length, 1);
   assert.equal(encounterUpdates[0]?.reason, 'action_used');
@@ -7016,7 +7027,7 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   assert.equal(combatEvents[0]?.targetCharacterId, secondCharacterId);
   assert.deepEqual(combatEvents[0]?.targetHp, {
     previous: 34,
-    current: 33,
+    current: 29,
   });
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
@@ -7049,7 +7060,7 @@ test('db-backed combat transaction boundary commits combatant target damage, enc
       rollCount += 1;
       return 20;
     },
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7175,7 +7186,7 @@ test('db-backed combat transaction boundary commits combatant target damage, enc
   assert.equal(idempotencyDatabase.recordCount, 1);
   assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(rollCount, 1);
-  assert.equal(updatedCombatant?.combatant?.hp.current, 7);
+  assert.equal(updatedCombatant?.combatant?.hp.current, 3);
   assert.equal(encounter.currentTurnUsage.actionUsed, true);
   assert.equal(encounterUpdates.length, 1);
   assert.equal(combatEvents.length, 1);
@@ -7183,7 +7194,7 @@ test('db-backed combat transaction boundary commits combatant target damage, enc
   assert.equal(combatEvents[0]?.targetCombatantId, combatantId);
   assert.deepEqual(combatEvents[0]?.targetHp, {
     previous: 8,
-    current: 7,
+    current: 3,
   });
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
@@ -7213,7 +7224,7 @@ test('transactional attack duplicate retry returns cached durable success withou
       rollCount += 1;
       return 20;
     },
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7268,7 +7279,7 @@ test('transactional attack duplicate retry returns cached durable success withou
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(rollCount, 1);
-  assert.equal(target.character.hp.current, 33);
+  assert.equal(target.character.hp.current, 29);
   assert.equal(idempotencyDatabase.recordCount, 1);
   assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
@@ -7297,7 +7308,7 @@ test('failed transactional attack does not persist a durable success record', as
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
     () => 20,
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7378,7 +7389,7 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
       rollCount += 1;
       return 20;
     },
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7444,7 +7455,7 @@ test('transactional attack command ID conflicts still reject conflicting fingerp
   assert.equal(conflict.status, 409);
   assert.equal(conflict.body.ok, false);
   assert.equal(rollCount, 1);
-  assert.equal(target.character.hp.current, 33);
+  assert.equal(target.character.hp.current, 29);
   assert.equal(encounter.currentTurnUsage.actionUsed, true);
   assert.equal(
     getEncounterUpdates(updates).length,
@@ -7473,7 +7484,7 @@ test('db-backed character transaction boundary writes one movement_state outbox 
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -7592,7 +7603,7 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7696,7 +7707,7 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7795,7 +7806,7 @@ test('failed transactional encounter-aware movement does not persist a durable s
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7874,7 +7885,7 @@ test('transactional encounter-aware movement command ID conflicts still reject c
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -7982,7 +7993,7 @@ test('zero-cost encounter movement writes one movement_state outbox row, dispatc
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -8100,7 +8111,7 @@ test('no-active-encounter movement writes one movement_state outbox row, dispatc
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -8218,7 +8229,7 @@ test('move_character_in_active_scene falls back to the character transaction bou
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -8320,7 +8331,7 @@ test('movement fallback retries through the combat boundary if an active encount
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { sessionId } = await setupDurableEncounterForIdempotency(runtime);
@@ -8451,7 +8462,7 @@ test('db-backed character transaction boundary writes one movement_state outbox 
     new InMemorySessionStore(),
     undefined,
     new DbBackedCharacterRepository(characterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   let { characterCommandTransaction } =
@@ -8571,7 +8582,7 @@ test('db-backed character transaction boundary writes one movement_state outbox 
 });
 
 test('default in-memory movement behavior remains unchanged without the DB-backed combat transaction boundary', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -8637,7 +8648,7 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
     new DbBackedCharacterRepository(characterDatabase),
     undefined,
     await DbBackedEncounterStore.fromDatabase(encounterDatabase),
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency: CommandIdempotencyStore =
     new InMemoryCommandIdempotencyStore();
   const { combatCommandTransaction } = createCombatCommandTransactionHarness(
@@ -8748,7 +8759,7 @@ test('encounter success payloads are validated as authoritative turn-order respo
 });
 
 test('duplicate mutating encounter commands return cached success without duplicate SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -8799,7 +8810,7 @@ test('duplicate attack commands do not reroll, double damage, or duplicate SSE',
       rollCount += 1;
       return 20;
     },
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { secondCharacterId, sessionId } =
     setupEncounterForIdempotency(runtime);
@@ -8836,13 +8847,13 @@ test('duplicate attack commands do not reroll, double damage, or duplicate SSE',
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(rollCount, 1);
-  assert.equal(target.character.hp.current, 33);
+  assert.equal(target.character.hp.current, 29);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getCombatEvents(updates).length - combatEventsBefore, 1);
 });
 
 test('duplicate DM combatant creation commands return cached success without duplicate scene entities', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const activeSceneId = runtime.getSessionSnapshotForParticipant(
@@ -8909,7 +8920,7 @@ test('duplicate DM combatant creation commands return cached success without dup
 });
 
 test('duplicate DM HP override commands return cached success without duplicate character_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -8956,7 +8967,7 @@ test('duplicate DM HP override commands return cached success without duplicate 
 });
 
 test('DM HP override command ID conflicts do not mutate HP or emit SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9012,7 +9023,7 @@ test('DM HP override command ID conflicts do not mutate HP or emit SSE', async (
 });
 
 test('duplicate DM condition tag commands return cached success without duplicate character_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9061,7 +9072,7 @@ test('duplicate DM condition tag commands return cached success without duplicat
 });
 
 test('DM condition tag command ID conflicts do not mutate conditions or emit SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9117,7 +9128,7 @@ test('DM condition tag command ID conflicts do not mutate conditions or emit SSE
 });
 
 test('duplicate DM reposition commands return cached success without duplicate movement_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9167,7 +9178,7 @@ test('duplicate DM reposition commands return cached success without duplicate m
 });
 
 test('DM reposition command ID conflicts do not mutate position or emit SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9233,7 +9244,7 @@ test('DM reposition command ID conflicts do not mutate position or emit SSE', as
 });
 
 test('duplicate DM turn usage override commands return cached success without duplicate encounter_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9290,7 +9301,7 @@ test('duplicate DM turn usage override commands return cached success without du
 });
 
 test('DM turn usage override command ID conflicts do not mutate usage or emit SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9367,7 +9378,7 @@ test('DM turn usage override command ID conflicts do not mutate usage or emit SS
 });
 
 test('duplicate DM current turn participant commands return cached success without duplicate encounter_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9435,7 +9446,7 @@ test('duplicate DM current turn participant commands return cached success witho
 });
 
 test('DM current turn participant command ID conflicts do not mutate turn or emit SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9517,7 +9528,7 @@ test('DM current turn participant command ID conflicts do not mutate turn or emi
 });
 
 test('duplicate DM encounter end commands return cached success without duplicate encounter_state', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9563,7 +9574,7 @@ test('duplicate DM encounter end commands return cached success without duplicat
 });
 
 test('command ID conflicts are rejected without runtime mutation or SSE', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
   const updates = subscribeToSessionEvents(runtime, sessionId);
@@ -9625,7 +9636,7 @@ test('command ID conflicts are rejected without runtime mutation or SSE', async 
 });
 
 test('read commands are not cached as idempotent mutations', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { sessionId } = setupEncounterForIdempotency(runtime);
 
@@ -9687,7 +9698,7 @@ test('read commands are not cached as idempotent mutations', async () => {
 });
 
 test('reconnect returns the current session snapshot with active scene and character assignments', async () => {
-  const runtime = new InMemoryGameRuntime();
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { firstCharacterId, secondCharacterId, sessionId } =
     setupEncounterForIdempotency(runtime);
@@ -9739,7 +9750,7 @@ test('reconnecting participants can recover movement, encounter, and character H
     undefined,
     undefined,
     () => 20,
-  );
+  ).withRollers(TEST_ROLLERS);
   const idempotency = new InMemoryCommandIdempotencyStore();
   const { secondCharacterId, sessionId } =
     setupEncounterForIdempotency(runtime);
@@ -9878,7 +9889,7 @@ test('reconnecting participants can recover movement, encounter, and character H
     encounterRead.body.data.encounter.currentTurnUsage.movementUsed,
     10,
   );
-  assert.equal(characterRead.body.data.character.hp.current, 33);
+  assert.equal(characterRead.body.data.character.hp.current, 29);
 });
 
 test('reconnected SSE subscribers receive current session state without combat event replay', () => {
@@ -9889,7 +9900,7 @@ test('reconnected SSE subscribers receive current session state without combat e
     undefined,
     undefined,
     () => 20,
-  );
+  ).withRollers(TEST_ROLLERS);
   const { firstCharacterId, sessionId } = setupEncounterForIdempotency(runtime);
   const liveUpdates: SessionStreamEvent[] = [];
   const reconnectUpdates: SessionStreamEvent[] = [];

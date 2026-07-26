@@ -12,6 +12,21 @@ export const combatRollSchema = z.object({
   d20: z.number().int().min(1).max(20),
   modifier: z.number().int(),
   total: z.number().int(),
+  // A natural 20 always hits and doubles the damage dice; a natural 1 always
+  // misses. Both flags are optional so existing consumers stay compatible.
+  critical: z.boolean().optional(),
+  criticalMiss: z.boolean().optional(),
+});
+
+// Present on resolved hits. Damage dice are rolled server-side; the breakdown
+// is reported so the event feed can show how a result was reached.
+export const combatDamageRollSchema = z.object({
+  dice: z.array(z.number().int().min(1)),
+  diceTotal: z.number().int().min(0),
+  modifier: z.number().int(),
+  total: z.number().int().min(0),
+  critical: z.boolean(),
+  notation: z.string(),
 });
 
 export const combatTargetHpSchema = z.object({
@@ -36,9 +51,11 @@ export const combatEventSchema = z.object({
   targetArmorClass: z.number().int(),
   hit: z.boolean(),
   damage: z.number().int().min(0),
+  damageRoll: combatDamageRollSchema.optional(),
   targetHp: combatTargetHpSchema,
 });
 
 export type CombatRoll = z.infer<typeof combatRollSchema>;
+export type CombatDamageRoll = z.infer<typeof combatDamageRollSchema>;
 export type CombatTargetHp = z.infer<typeof combatTargetHpSchema>;
 export type CombatEvent = z.infer<typeof combatEventSchema>;

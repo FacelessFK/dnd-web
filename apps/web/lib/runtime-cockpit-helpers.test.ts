@@ -22,6 +22,7 @@ import {
   createSceneEntityDraftFormFromEntity,
   createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
+  describeCombatAttackResult,
   describeSessionStreamEvent,
   demoScenarios,
   formatRuntimeFailure,
@@ -901,6 +902,112 @@ describe('runtime cockpit helpers', () => {
       true,
     );
     assert.equal(isSessionStreamEvent({ type: 'unknown_event' }), false);
+  });
+
+  it('reports the rolled damage breakdown for resolved attacks', () => {
+    const baseEvent = {
+      attackerCharacterId: 'CHAR-001',
+      attackerParticipantId: 'player-001',
+      encounterId: 'ENC-001',
+      reason: 'attack_resolved',
+      sessionId: 'SESSION-001',
+      targetArmorClass: 13,
+      targetCharacterId: 'CHAR-002',
+      targetParticipantId: 'player-002',
+      type: 'combat_event',
+    } as const;
+
+    assert.equal(
+      describeCombatAttackResult({
+        ...baseEvent,
+        damage: 7,
+        damageRoll: {
+          critical: false,
+          dice: [5],
+          diceTotal: 5,
+          modifier: 2,
+          notation: '1d8+2',
+          total: 7,
+        },
+        hit: true,
+        roll: {
+          critical: false,
+          criticalMiss: false,
+          d20: 15,
+          modifier: 5,
+          total: 20,
+        },
+        targetHp: { current: 20, previous: 27 },
+      }),
+      'hit for 7 (1d8+2)',
+    );
+    assert.equal(
+      describeCombatAttackResult({
+        ...baseEvent,
+        damage: 13,
+        damageRoll: {
+          critical: true,
+          dice: [5, 6],
+          diceTotal: 11,
+          modifier: 2,
+          notation: '2d8+2',
+          total: 13,
+        },
+        hit: true,
+        roll: {
+          critical: true,
+          criticalMiss: false,
+          d20: 20,
+          modifier: 5,
+          total: 25,
+        },
+        targetHp: { current: 14, previous: 27 },
+      }),
+      'critical hit for 13 (2d8+2)',
+    );
+    assert.equal(
+      describeCombatAttackResult({
+        ...baseEvent,
+        damage: 0,
+        hit: false,
+        roll: {
+          critical: false,
+          criticalMiss: true,
+          d20: 1,
+          modifier: 5,
+          total: 6,
+        },
+        targetHp: { current: 27, previous: 27 },
+      }),
+      'critical miss',
+    );
+    assert.equal(
+      describeCombatAttackResult({
+        ...baseEvent,
+        damage: 0,
+        hit: false,
+        roll: {
+          critical: false,
+          criticalMiss: false,
+          d20: 4,
+          modifier: 5,
+          total: 9,
+        },
+        targetHp: { current: 27, previous: 27 },
+      }),
+      'missed',
+    );
+    // Events without a damage breakdown still render a usable summary.
+    assert.equal(
+      describeCombatAttackResult({
+        ...baseEvent,
+        damage: 3,
+        hit: true,
+        roll: { d20: 15, modifier: 5, total: 20 },
+        targetHp: { current: 24, previous: 27 },
+      }),
+      'hit for 3',
+    );
   });
 
   it('explains the next player step from loaded read models', () => {

@@ -24,6 +24,35 @@ export type InitiativeOrderEntry = {
 
 export const BASELINE_MELEE_REACH_FEET = 5;
 
+// Baseline melee damage for the current narrow attack foundation. This is a
+// documented default in the same spirit as BASELINE_MELEE_REACH_FEET, not a
+// weapon system: there is no weapon model, no damage type, and no resistance
+// handling. Replace this constant only as part of a dedicated weapon slice.
+export const BASELINE_MELEE_DAMAGE_DICE: DamageDice = { count: 1, sides: 8 };
+
+export type DamageDice = {
+  count: number;
+  sides: number;
+};
+
+export type DamageRollBreakdown = {
+  critical: boolean;
+  dice: number[];
+  diceTotal: number;
+  modifier: number;
+  notation: string;
+  total: number;
+};
+
+export type AttackRollOutcome = {
+  critical: boolean;
+  criticalMiss: boolean;
+  d20: number;
+  hit: boolean;
+  modifier: number;
+  total: number;
+};
+
 export function calculateAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
@@ -201,6 +230,123 @@ export function isAttackHit(
   targetArmorClass: number,
 ): boolean {
   return attackTotal >= targetArmorClass;
+}
+
+export function isCriticalHit(d20: number): boolean {
+  return d20 === 20;
+}
+
+export function isCriticalMiss(d20: number): boolean {
+  return d20 === 1;
+}
+
+// A natural 20 always hits and a natural 1 always misses, regardless of the
+// attack total. Otherwise the total is compared against the target's AC.
+export function resolveAttackRoll(params: {
+  d20: number;
+  modifier: number;
+  targetArmorClass: number;
+}): AttackRollOutcome {
+  const critical = isCriticalHit(params.d20);
+  const criticalMiss = isCriticalMiss(params.d20);
+  const total = calculateAttackTotal(params.d20, params.modifier);
+
+  return {
+    critical,
+    criticalMiss,
+    d20: params.d20,
+    hit:
+      critical ||
+      (!criticalMiss && isAttackHit(total, params.targetArmorClass)),
+    modifier: params.modifier,
+    total,
+  };
+}
+
+export function rollDie(
+  sides: number,
+  roller: (dieSides: number) => number = (dieSides) =>
+    Math.floor(Math.random() * dieSides) + 1,
+): number {
+  if (!Number.isInteger(sides) || sides < 2) {
+    throw new RangeError('Die sides must be a whole number of at least 2.');
+  }
+
+  const result = roller(sides);
+
+  if (Number.isInteger(result) && result >= 1 && result <= sides) {
+    return result;
+  }
+
+  throw new RangeError(`Die roller must return an integer from 1 to ${sides}.`);
+}
+
+// Damage uses the attacker's Strength modifier for the current melee baseline.
+// A finesse/ranged split belongs to a dedicated weapon slice, not here.
+export function calculateDamageModifier(
+  character: Pick<Character, 'abilities'>,
+): number {
+  return calculateAbilityModifier(character.abilities.str);
+}
+
+export function formatDamageDiceNotation(
+  dice: DamageDice,
+  modifier: number,
+): string {
+  const base = `${dice.count}d${dice.sides}`;
+
+  if (modifier === 0) {
+    return base;
+  }
+
+  return `${base}${modifier > 0 ? '+' : '-'}${Math.abs(modifier)}`;
+}
+
+// A critical hit doubles the number of damage dice rolled; the flat modifier is
+// added once, per the baseline 5e rule.
+export function rollAttackDamage(params: {
+  critical?: boolean;
+  dice?: DamageDice;
+  modifier: number;
+  roller?: (dieSides: number) => number;
+}): DamageRollBreakdown {
+  const baseDice = params.dice ?? BASELINE_MELEE_DAMAGE_DICE;
+  const critical = params.critical ?? false;
+  const rolledDice: DamageDice = {
+    count: critical ? baseDice.count * 2 : baseDice.count,
+    sides: baseDice.sides,
+  };
+
+  if (!Number.isInteger(rolledDice.count) || rolledDice.count < 1) {
+    throw new RangeError(
+      'Damage dice count must be a whole number above zero.',
+    );
+  }
+
+  const dice: number[] = [];
+
+  for (let index = 0; index < rolledDice.count; index += 1) {
+    dice.push(rollDie(rolledDice.sides, params.roller));
+  }
+
+  const diceTotal = dice.reduce((sum, value) => sum + value, 0);
+
+  return {
+    critical,
+    dice,
+    diceTotal,
+    modifier: params.modifier,
+    notation: formatDamageDiceNotation(rolledDice, params.modifier),
+    // Damage never heals the target, so the applied total has a floor of zero.
+    total: Math.max(0, diceTotal + params.modifier),
+  };
+}
+
+export function rollInitiative(params: {
+  d20: number;
+  initiativeModifier: number;
+}): number {
+  return params.d20 + params.initiativeModifier;
 }
 
 export function applyFixedDamage(currentHp: number, damage: number): number {

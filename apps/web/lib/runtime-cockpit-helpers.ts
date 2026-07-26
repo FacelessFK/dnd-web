@@ -3593,6 +3593,23 @@ export function isSessionStreamEvent(
   );
 }
 
+// Describes the hit/miss half of a resolved attack, including the server-rolled
+// damage breakdown when the attack landed. A natural 20 is reported as a
+// critical hit and a natural 1 as a critical miss.
+export function describeCombatAttackResult(
+  event: Extract<SessionStreamEvent, { type: 'combat_event' }>,
+): string {
+  if (!event.hit) {
+    return event.roll.criticalMiss ? 'critical miss' : 'missed';
+  }
+
+  const verb = event.roll.critical ? 'critical hit for' : 'hit for';
+
+  return event.damageRoll
+    ? `${verb} ${event.damage} (${event.damageRoll.notation})`
+    : `${verb} ${event.damage}`;
+}
+
 export function describeSessionStreamEvent(
   event: SessionStreamEvent,
 ): RuntimeEventSummary {
@@ -3604,7 +3621,7 @@ export function describeSessionStreamEvent(
           : event.targetParticipantId;
 
       return {
-        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${event.hit ? `hit for ${event.damage}` : 'missed'} (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
+        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${describeCombatAttackResult(event)} (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
         title: 'Attack resolved',
         tone: event.hit ? 'danger' : 'warning',
       };
