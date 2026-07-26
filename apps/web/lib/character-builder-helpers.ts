@@ -1,39 +1,24 @@
 import {
   abilityKeys,
-  backgroundChoices,
-  builderSteps,
-  classChoices,
   type AbilityKey,
-  type BackgroundChoiceCard,
-  type BuilderChoiceCard,
-  type BuilderStepId,
   type CharacterBuilderDraft,
   type CharacterBuilderLibraryEntry,
   type CharacterBuilderStatus,
-  type ClassChoiceCard,
-  speciesChoices,
 } from './character-builder-data';
 import {
-  changeAbilityScoreMethod,
   deriveDefaultBuilderSelections,
   deriveRuleDerivedPreview,
   getProficiencyBonus,
-  getRuleProfileById,
-  getValidationIssuesForStep,
   sanitizeRuleSelections,
-  toggleRuleSelection,
 } from './character-builder-rules-helpers';
-import {
-  defaultRulesProfileId,
-  type AbilityScoreMethod,
-} from './character-builder-rules-data';
+import { defaultRulesProfileId } from './character-builder-rules-data';
 
 export type CharacterLibraryFilter = {
   query: string;
   status: CharacterBuilderStatus | 'all';
 };
 
-export const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
+const defaultCharacterLibraryOwnerParticipantId = 'dev-player-001';
 
 export type CharacterBuilderSummary = {
   armorClass: number;
@@ -150,47 +135,12 @@ export function filterCharacterLibraryEntries(
   });
 }
 
-export function getAbilityModifier(score: number): number {
+function getAbilityModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
 
-export function formatAbilityModifier(score: number): string {
-  const modifier = getAbilityModifier(score);
-
-  return modifier >= 0 ? `+${modifier}` : String(modifier);
-}
-
-export function clampAbilityScore(score: number): number {
+function clampAbilityScore(score: number): number {
   return Math.min(20, Math.max(3, Math.trunc(score)));
-}
-
-export function updateAbilityScore(
-  draft: CharacterBuilderDraft,
-  ability: AbilityKey,
-  delta: number,
-): CharacterBuilderDraft {
-  const profile = getRuleProfileById(draft.rulesProfileId);
-  const scoreMethod = draft.abilityScoreMethod;
-  const min =
-    scoreMethod === 'manual'
-      ? profile.abilityScoreRules.manualMin
-      : profile.abilityScoreRules.pointBuyMin;
-  const max =
-    scoreMethod === 'manual'
-      ? profile.abilityScoreRules.manualMax
-      : profile.abilityScoreRules.pointBuyMax;
-  const abilities = {
-    ...draft.abilities,
-    [ability]: Math.min(
-      max,
-      Math.max(min, Math.trunc(draft.abilities[ability] + delta)),
-    ),
-  };
-
-  return normalizeCharacterBuilderDraft({
-    ...draft,
-    abilities,
-  });
 }
 
 export function normalizeCharacterBuilderDraft(
@@ -228,74 +178,6 @@ export function normalizeCharacterBuilderDraft(
   });
 }
 
-export function getBuilderStepIndex(stepId: BuilderStepId): number {
-  return builderSteps.findIndex((step) => step.id === stepId);
-}
-
-export function getNextBuilderStep(stepId: BuilderStepId): BuilderStepId {
-  const index = getBuilderStepIndex(stepId);
-  const nextStep = builderSteps[Math.min(builderSteps.length - 1, index + 1)];
-
-  return nextStep?.id ?? 'review';
-}
-
-export function getPreviousBuilderStep(stepId: BuilderStepId): BuilderStepId {
-  const index = getBuilderStepIndex(stepId);
-  const previousStep = builderSteps[Math.max(0, index - 1)];
-
-  return previousStep?.id ?? 'identity';
-}
-
-export function isStepComplete(
-  draft: CharacterBuilderDraft,
-  stepId: BuilderStepId,
-): boolean {
-  const stepIssues = getValidationIssuesForStep(draft, stepId);
-
-  if (stepIssues.some((issue) => issue.severity === 'error')) {
-    return false;
-  }
-
-  switch (stepId) {
-    case 'identity':
-      return draft.name.trim().length > 0;
-    case 'species':
-      return draft.speciesOrRace.trim().length > 0;
-    case 'class':
-      return draft.className.trim().length > 0;
-    case 'background':
-      return draft.background.trim().length > 0;
-    case 'ability-scores':
-      return abilityKeys.every((ability) => draft.abilities[ability] >= 3);
-    case 'proficiencies':
-      return (
-        draft.builderSelections.skills.length > 0 &&
-        draft.builderSelections.languages.length > 0
-      );
-    case 'equipment':
-      return draft.builderSelections.equipment.length > 0;
-    case 'spells':
-      return true;
-    case 'review':
-      return builderSteps
-        .filter((step) => step.id !== 'review')
-        .every((step) => isStepComplete(draft, step.id));
-  }
-}
-
-export function updateAbilityScoreMethod(
-  draft: CharacterBuilderDraft,
-  method: AbilityScoreMethod,
-): CharacterBuilderDraft {
-  return changeAbilityScoreMethod(draft, method);
-}
-
-export function getBuilderCompletionCount(
-  draft: CharacterBuilderDraft,
-): number {
-  return builderSteps.filter((step) => isStepComplete(draft, step.id)).length;
-}
-
 export function deriveCharacterBuilderSummary(
   draft: CharacterBuilderDraft,
 ): CharacterBuilderSummary {
@@ -324,36 +206,6 @@ export function deriveCharacterBuilderSummary(
   };
 }
 
-export function getSelectedSpecies(
-  draft: CharacterBuilderDraft,
-): BuilderChoiceCard | undefined {
-  return speciesChoices.find((choice) => choice.id === draft.speciesOrRace);
-}
-
-export function getSelectedClass(
-  draft: CharacterBuilderDraft,
-): ClassChoiceCard | undefined {
-  return classChoices.find((choice) => choice.id === draft.className);
-}
-
-export function getSelectedBackground(
-  draft: CharacterBuilderDraft,
-): BackgroundChoiceCard | undefined {
-  return backgroundChoices.find((choice) => choice.id === draft.background);
-}
-
-export function toggleBuilderSelection(
-  values: string[],
-  value: string,
-  maxSelected?: number,
-): string[] {
-  return toggleRuleSelection(
-    values,
-    value,
-    maxSelected ?? Number.MAX_SAFE_INTEGER,
-  );
-}
-
 export function getStatusLabel(status: CharacterBuilderStatus): string {
   switch (status) {
     case 'draft':
@@ -362,16 +214,5 @@ export function getStatusLabel(status: CharacterBuilderStatus): string {
       return 'آماده';
     case 'in_session':
       return 'داخل جلسه';
-  }
-}
-
-export function getStatusTone(status: CharacterBuilderStatus): string {
-  switch (status) {
-    case 'draft':
-      return 'bg-stone-700 text-stone-100 ring-stone-400/40';
-    case 'ready':
-      return 'bg-emerald-900 text-emerald-100 ring-emerald-400/50';
-    case 'in_session':
-      return 'bg-sky-900 text-sky-100 ring-sky-400/50';
   }
 }

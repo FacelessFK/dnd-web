@@ -1,16 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CharacterLibraryEntry } from '@dnd/protocol';
 
 import { useAuth } from '../../lib/auth-context';
-import {
-  getCharacterBuilderAssetFallbackLabel,
-  getCharacterBuilderAssetPath,
-  type CharacterBuilderAssetKey,
-} from '../../lib/character-builder-assets';
 import {
   type CharacterBuilderLibraryEntry,
   type CharacterBuilderStatus,
@@ -191,30 +185,21 @@ function ParchmentPanel({
 }
 
 function PlaceholderArt({
-  assetKey,
   imageSrc,
   label,
-  priority = false,
   size = 'large',
 }: {
-  assetKey?: CharacterBuilderAssetKey;
   imageSrc?: string | null;
   label: string;
-  priority?: boolean;
   size?: 'avatar' | 'choice' | 'large' | 'portrait' | 'small' | 'wide';
 }) {
-  const imagePath =
-    imageSrc ?? (assetKey ? getCharacterBuilderAssetPath(assetKey) : null);
+  const imagePath = imageSrc ?? null;
   const [failedAssetPath, setFailedAssetPath] = useState<string | null>(null);
   const shouldShowImage = Boolean(imagePath && imagePath !== failedAssetPath);
-  const imagePositionClass =
-    assetKey?.startsWith('portrait.') || imageSrc?.startsWith('data:')
-      ? 'object-top'
-      : 'object-center';
-  const fallbackLabel = assetKey
-    ? getCharacterBuilderAssetFallbackLabel(assetKey)
-    : label;
-  const initials = fallbackLabel
+  const imagePositionClass = imageSrc?.startsWith('data:')
+    ? 'object-top'
+    : 'object-center';
+  const initials = label
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -236,33 +221,11 @@ function PlaceholderArt({
         size === 'wide' ? 'h-40 w-full' : '',
       ].join(' ')}
     >
-      {shouldShowImage && imagePath && imageSrc ? (
+      {shouldShowImage && imagePath ? (
         <img
           alt=""
           className={`h-full w-full object-cover ${imagePositionClass}`}
           onError={() => setFailedAssetPath(imagePath)}
-          src={imagePath}
-        />
-      ) : shouldShowImage && imagePath ? (
-        <Image
-          alt=""
-          className={`object-cover ${imagePositionClass}`}
-          fill
-          onError={() => setFailedAssetPath(imagePath)}
-          priority={priority}
-          sizes={
-            size === 'small'
-              ? '80px'
-              : size === 'avatar'
-                ? '(min-width: 1280px) 384px, min(100vw, 384px)'
-                : size === 'choice'
-                  ? '(min-width: 1280px) 25vw, (min-width: 768px) 50vw, 100vw'
-                  : size === 'wide'
-                    ? '(min-width: 1280px) 360px, 100vw'
-                    : size === 'portrait'
-                      ? '(min-width: 1536px) 25vw, (min-width: 768px) 50vw, 100vw'
-                      : '(min-width: 1280px) 420px, 100vw'
-          }
           src={imagePath}
         />
       ) : (
@@ -600,7 +563,6 @@ function CharacterCard({
         }}
       >
         <PlaceholderArt
-          assetKey={entry.portraitAssetKey}
           imageSrc={getPortraitImageSource(entry.portrait)}
           label={entry.name}
           size="portrait"
