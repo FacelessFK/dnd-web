@@ -7,6 +7,7 @@
     "build": "next build",
     "test": "node --import tsx --test \"lib/*.test.ts\"",
     "test:smoke:builder-export-db": "node scripts/character-builder-export-db-smoke.mjs",
+    "test:smoke:map-builder": "node scripts/map-builder-smoke.mjs",
     "test:smoke:bridge-db": "node scripts/runtime-bridge-db-smoke.mjs",
     "test:smoke:saved-character-training-room-db": "node scripts/runtime-bridge-db-smoke.mjs",
     "test:smoke": "node scripts/runtime-smoke.mjs",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@dnd/protocol": "workspace:*",
+    "@dnd/rules": "workspace:*",
     "next": "^15.0.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",

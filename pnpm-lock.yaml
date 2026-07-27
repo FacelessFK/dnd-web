@@ -57,6 +57,9 @@ importers:
       '@dnd/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@dnd/rules':
+        specifier: workspace:*
+        version: link:../../packages/rules
       next:
         specifier: ^15.0.0
         version: 15.5.15(react-dom@19.2.5(react@19.2.5))(react@19.2.5)

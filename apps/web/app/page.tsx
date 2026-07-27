@@ -20,7 +20,7 @@ export default function HomePage() {
           <p className="text-lg leading-8 text-slate-300">{t('home.intro')}</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Link
             className="rounded-2xl border border-amber-300/35 bg-amber-400 px-5 py-4 font-bold text-slate-950 shadow-lg shadow-black/25 transition hover:bg-amber-300"
             href="/runtime"
@@ -41,6 +41,15 @@ export default function HomePage() {
             </span>
             <span className="mt-1 block text-sm font-medium text-slate-300">
               {t('home.card.characters.description')}
+            </span>
+          </Link>
+          <Link
+            className="rounded-2xl border border-slate-600/70 bg-slate-900/70 px-5 py-4 font-bold text-slate-50 shadow-lg shadow-black/20 transition hover:border-slate-400"
+            href="/maps"
+          >
+            <span className="block text-lg">{t('home.card.maps.title')}</span>
+            <span className="mt-1 block text-sm font-medium text-slate-300">
+              {t('home.card.maps.description')}
             </span>
           </Link>
           <a

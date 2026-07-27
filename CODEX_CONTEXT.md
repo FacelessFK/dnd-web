@@ -38,7 +38,7 @@ that scope.
 
 ## Repo Shape
 
-- `apps/web`: Next.js / React / Tailwind surfaces for `/runtime`,
+- `apps/web`: Next.js / React / Tailwind surfaces for `/runtime`, `/maps`,
   `/characters`, and `/login`.
 - `apps/server`: Node/TypeScript authoritative HTTP/SSE runtime.
 - `packages/protocol`: Zod schemas and inferred protocol types.
@@ -49,6 +49,17 @@ that scope.
 
 ## Current Implementation State
 
+- Scenes carry a paintable `terrain` layer: a run-length encoded, row-major
+  tile array validated in `packages/rules`, mutated by the DM-only
+  `paint_scene_terrain` command, and enforced in movement (blocking tiles join
+  the existing blocking-occupancy check).
+- `/runtime` renders a canvas tactical map instead of a DOM cell grid: terrain
+  art, raised walls, liquids, props, transition markers, tokens with HP arcs
+  and a current-turn ring, movement-range overlay, drag-pan, cursor-anchored
+  zoom, and a culled focusable grid overlay for keyboard/screen-reader access.
+- `/maps` is a standalone map builder (paint tools, prop placement, undo/redo,
+  resize, JSON import/export, Training Room preset) that publishes a painted
+  map to a table via `create_scene` + `place_entity_in_scene`.
 - `/runtime` is a live tactical cockpit with DM and Player modes, session
   create/join/reconnect, SSE subscription, read-model recovery, scene creation
   and activation, passive scene entities, compact scene entity presets,
@@ -105,6 +116,13 @@ that scope.
 
 ## Known Limitations
 
+- Terrain tiles carry movement/vision blocking only: no difficult-terrain
+  movement cost, no hazard damage, and terrain `blocksVision` is stored but not
+  consumed by any visibility system.
+- The tactical map's light and vignette are atmosphere, not fog of war or line
+  of sight; nothing is occluded.
+- `/maps` publishes new scenes only. It cannot re-open or overwrite a server
+  scene, and it does not activate what it publishes.
 - Default local startup may still be in-memory.
 - Character Library auth is an MVP, not production account security.
 - SSE subscribers are process-local.
@@ -135,7 +153,19 @@ that scope.
 
 ## Next Priorities
 
-Latest completed slice (2026-07-26): **real dice combat**. Initiative is now
+Latest completed slice (2026-07-27): **visual tactical map + map builder**.
+Added the scene terrain layer end to end (shared/protocol/rules/server/movement),
+replaced the runtime's DOM cell grid with a canvas renderer, rebuilt the demo
+Training Room as an authored room layout, and shipped `/maps`. Validation:
+`pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` (487),
+`@dnd/web build`, `@dnd/web test:smoke`, `test:smoke:two-profile`, and the new
+`test:smoke:map-builder` (which verifies the published scene on the server).
+
+Natural follow-ups, none started: difficult-terrain movement cost, terrain
+`blocksVision` feeding a visibility system, editing an existing server scene
+from `/maps`, and token portraits on the map.
+
+Earlier slice (2026-07-26): **real dice combat**. Initiative is now
 rolled server-side at `start_encounter` (`d20 + initiative modifier`), and a
 landed attack rolls a baseline `1d8` plus the attacker's Strength modifier
 instead of applying a flat 1 damage. Natural 20 always hits and doubles the

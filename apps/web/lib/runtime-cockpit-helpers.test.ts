@@ -139,7 +139,7 @@ describe('runtime cockpit helpers', () => {
       detail:
         'Training Room Skirmish uses Training Room with Aria and Borin for a short two-player encounter.',
       rosterLabel: 'Aria, Borin',
-      sceneLabel: 'Training Room · 8x8',
+      sceneLabel: 'Training Room · 16x12',
       title: 'Training Room Skirmish',
     });
   });
@@ -2035,6 +2035,7 @@ describe('runtime cockpit helpers', () => {
       id: 'scene_11111111-1111-4111-8111-111111111111',
       name: 'Rune Hall',
       sessionId: 'ABC123',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const passive = getPassiveSceneEntities(scene);
@@ -2237,6 +2238,7 @@ describe('runtime cockpit helpers', () => {
       id: 'scene_11111111-1111-4111-8111-111111111111',
       name: 'Rune Hall',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const transition = getTransitionSceneEntities(scene)[0]!;
@@ -2280,6 +2282,7 @@ describe('runtime cockpit helpers', () => {
           id: 'scene_22222222-2222-4222-8222-222222222222',
           name: 'Lower Crypt',
           sessionId: 'SESSION-001',
+          terrain: null,
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       }),
@@ -2324,6 +2327,7 @@ describe('runtime cockpit helpers', () => {
           id: 'SCENE-001',
           name: 'Training Room',
           sessionId: 'SESSION-001',
+          terrain: null,
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       }).title,
@@ -2363,6 +2367,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
@@ -2496,6 +2501,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const encounter = {
@@ -2663,6 +2669,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const encounter = {
@@ -2803,6 +2810,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const encounter = {
@@ -3180,6 +3188,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
     const participants = [
@@ -3529,6 +3538,7 @@ describe('runtime cockpit helpers', () => {
       id: 'SCENE-001',
       name: 'Training Room',
       sessionId: 'SESSION-001',
+      terrain: null,
       updatedAt: '2026-01-01T00:00:00.000Z',
     };
 
@@ -3572,6 +3582,7 @@ describe('runtime cockpit helpers', () => {
           id: 'SCENE-001',
           name: 'Training Room',
           sessionId: 'SESSION-001',
+          terrain: null,
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
         selectedCombatantId:

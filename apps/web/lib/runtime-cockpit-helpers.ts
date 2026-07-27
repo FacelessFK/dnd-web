@@ -26,6 +26,9 @@ import {
 } from '@dnd/protocol';
 
 import type { RuntimeApiFailure } from './runtime-api';
+import { buildTrainingRoomLayout } from './scene-terrain-presets';
+
+const trainingRoomLayout = buildTrainingRoomLayout();
 
 export type SessionSnapshot = SessionCommandSuccess['data']['state'];
 
@@ -328,17 +331,15 @@ export const demoScenarios: readonly DemoScenario[] = [
     id: 'training-room-skirmish',
     name: 'Training Room Skirmish',
     playerParticipantIds: ['player-001', 'player-002'],
+    // Inside the walled hall rather than at the origin, which is now wall.
     positions: {
-      'player-001': { x: 0, y: 0 },
-      'player-002': { x: 1, y: 0 },
+      'player-001': { x: 2, y: 5 },
+      'player-002': { x: 2, y: 6 },
     },
     scene: {
-      grid: {
-        cellSizeFeet: 5,
-        height: 8,
-        width: 8,
-      },
+      grid: trainingRoomLayout.grid,
       name: 'Training Room',
+      terrain: trainingRoomLayout.terrain,
     },
   },
 ];
@@ -1381,6 +1382,7 @@ export function getCombatantDisplayCells(
       id: '',
       name: '',
       sessionId: '',
+      terrain: null,
       updatedAt: '',
     }),
     entities: getCombatantEntities(scene),

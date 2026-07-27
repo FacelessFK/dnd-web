@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 
 import type {
@@ -59,7 +52,6 @@ import {
   createSceneTransitionDraftFormFromPreset,
   createSceneTransitionDraftFormFromEntity,
   defaultDemoScenario,
-  defaultTacticalBoardViewport,
   defaultDm,
   defaultPlayer,
   demoScenarios,
@@ -72,7 +64,6 @@ import {
   getAssignedCharacterRefs,
   getAttackableCombatantEntities,
   getCharacterLibrarySourceProvenance,
-  getCombatantDisplayCells,
   getCombatantEntities,
   getCurrentTurnCombatantId,
   getCurrentTurnLabel,
@@ -99,14 +90,7 @@ import {
   getRuntimeReadinessRoster,
   getRuntimeStatusOverview,
   getRuntimeDisabledReasons,
-  getSceneEntityDisplayCells,
-  getTacticalBoardCellAfterKeyboardNavigation,
-  getTacticalBoardCellAffordance,
-  getTacticalBoardCellSizePixels,
-  getTacticalBoardViewportAfterPan,
-  getTacticalBoardViewportAfterZoom,
   getTransitionSceneEntities,
-  initials,
   isSessionStreamEvent,
   isCombatantEntityDefeated,
   isExpectedRecoveryMiss,
@@ -156,12 +140,9 @@ import {
   type SceneTransitionPresetId,
   type SessionSnapshot,
   type StoredCockpitState,
-  type TacticalBoardCellBadgeKind,
-  type TacticalBoardPanDirection,
-  type TacticalBoardViewport,
-  type TacticalBoardZoomDirection,
 } from '../../lib/runtime-cockpit-helpers';
 import { useSessionStream } from '../../lib/use-session-stream';
+import { TacticalMap } from './tactical-map';
 
 type SimpleEncounterCommandType =
   | 'advance_turn'
@@ -736,8 +717,6 @@ export function RuntimeCockpit() {
   const [selectedTargetCombatantId, setSelectedTargetCombatantId] =
     useState('');
   const [selectedCell, setSelectedCell] = useState<Cell>({ x: 0, y: 0 });
-  const [tacticalBoardViewport, setTacticalBoardViewport] =
-    useState<TacticalBoardViewport>(defaultTacticalBoardViewport);
   const [selectedCombatantId, setSelectedCombatantId] = useState('');
   const [hpDraft, setHpDraft] = useState('1');
   const [combatantHpDraft, setCombatantHpDraft] = useState('8');
@@ -1831,14 +1810,7 @@ export function RuntimeCockpit() {
           },
           commandId: createCommandId('create-scene'),
           payload: {
-            scene: {
-              grid: {
-                cellSizeFeet: 5,
-                height: 8,
-                width: 8,
-              },
-              name: 'Training Room',
-            },
+            scene: defaultDemoScenario.scene,
             sessionId,
           },
           type: 'create_scene',
@@ -3468,6 +3440,21 @@ export function RuntimeCockpit() {
     }
   }
 
+  // The map reports one entity id; route it to whichever selection the entity
+  // actually belongs to so the existing DM panels stay in sync.
+  function selectMapSceneEntity(entityId: string): void {
+    const entity = scene?.entities.find(
+      (candidate) => candidate.id === entityId,
+    );
+
+    if (entity?.transition) {
+      selectSceneTransitionNode(entityId);
+      return;
+    }
+
+    selectPassiveSceneEntity(entityId);
+  }
+
   function selectSceneTransitionNode(transitionId: string): void {
     setSelectedTransitionId(transitionId);
 
@@ -3643,26 +3630,6 @@ export function RuntimeCockpit() {
     height: 8,
     width: 8,
   };
-  function panTacticalBoard(direction: TacticalBoardPanDirection): void {
-    setTacticalBoardViewport((current) =>
-      getTacticalBoardViewportAfterPan({
-        direction,
-        grid,
-        viewport: current,
-      }),
-    );
-  }
-
-  function zoomTacticalBoard(direction: TacticalBoardZoomDirection): void {
-    setTacticalBoardViewport((current) =>
-      getTacticalBoardViewportAfterZoom(current, direction),
-    );
-  }
-
-  function resetTacticalBoardView(): void {
-    setTacticalBoardViewport(defaultTacticalBoardViewport);
-  }
-
   const localizedActiveSceneGuidance = getLocalizedActiveSceneGuidance({
     activeSceneId: sceneId || sessionState?.session.activeSceneId || null,
     mode,
@@ -3980,6 +3947,32 @@ export function RuntimeCockpit() {
     participants,
     selectedCell,
   });
+  // Name and HP are all the tactical map needs from a character resource; the
+  // map stays decoupled from the full runtime character shape.
+  const mapCharacterSummaries = useMemo(() => {
+    const summaries: Record<
+      string,
+      { name: string; hp: { current: number; max: number } } | undefined
+    > = {};
+
+    for (const [entryParticipantId, resource] of Object.entries(
+      charactersByParticipant,
+    )) {
+      if (!resource) {
+        continue;
+      }
+
+      summaries[entryParticipantId] = {
+        hp: {
+          current: resource.character.hp.current,
+          max: resource.character.hp.max,
+        },
+        name: resource.character.name,
+      };
+    }
+
+    return summaries;
+  }, [charactersByParticipant]);
   const playerAttackDisabledReason =
     disabledReasons.attack ??
     (currentTurnCombatantId
@@ -4574,29 +4567,27 @@ export function RuntimeCockpit() {
             >
               <CurrentTurnRail summary={currentTurnRailSummary} t={t} />
               <MovementFeedback summary={movementFeedbackSummary} t={t} />
-              <TacticalGrid
+              <TacticalMap
                 activeScene={activeScene}
-                actingParticipantId={actingParticipantId}
-                charactersByParticipant={charactersByParticipant}
+                characterNamesByParticipant={mapCharacterSummaries}
                 currentTurnCombatantId={currentTurnCombatantId}
                 currentTurnParticipantId={currentTurnParticipantId}
-                grid={grid}
                 mode={mode}
-                moveDisabledReason={movementFeedbackSummary.moveBlockedReason}
-                onPanBoard={panTacticalBoard}
-                onResetBoardView={resetTacticalBoardView}
+                movementBudgetFeet={
+                  movementFeedbackSummary.movementRemainingFeet
+                }
+                movingParticipantId={actingParticipantId || null}
                 onSelectCell={setSelectedCell}
-                onSelectSceneEntity={selectPassiveSceneEntity}
-                onSelectTransition={selectSceneTransitionNode}
-                onZoomBoard={zoomTacticalBoard}
+                onSelectCombatant={setSelectedCombatantId}
+                onSelectParticipant={setSelectedTarget}
+                onSelectSceneEntity={selectMapSceneEntity}
+                ownParticipantId={streamParticipantId || null}
                 scene={scene}
                 selectedCell={selectedCell}
                 selectedCombatantId={selectedCombatantId}
                 selectedSceneEntityId={selectedSceneEntityId}
-                selectedTargetCombatantId={selectedTargetCombatantId}
-                selectedTargetParticipantId={selectedTarget}
-                selectedTransitionId={selectedTransitionId}
-                viewport={tacticalBoardViewport}
+                targetCombatantId={selectedTargetCombatantId}
+                targetParticipantId={selectedTarget}
               />
               <div className="mt-4 grid gap-3 rounded-2xl border border-amber-500/15 bg-black/20 p-3 md:grid-cols-[minmax(220px,1fr)_auto_auto_auto] md:items-end">
                 {mode === 'dm' ? (
@@ -8652,476 +8643,6 @@ function CharacterOnboardingPanel({
       </div>
     </Panel>
   );
-}
-
-function TacticalGrid({
-  activeScene,
-  actingParticipantId,
-  charactersByParticipant,
-  currentTurnCombatantId,
-  currentTurnParticipantId,
-  grid,
-  mode,
-  moveDisabledReason,
-  onPanBoard,
-  onResetBoardView,
-  onSelectCell,
-  onSelectSceneEntity,
-  onSelectTransition,
-  onZoomBoard,
-  scene,
-  selectedCell,
-  selectedCombatantId,
-  selectedSceneEntityId,
-  selectedTargetCombatantId,
-  selectedTargetParticipantId,
-  selectedTransitionId,
-  viewport,
-}: {
-  activeScene: ActiveSceneState | null;
-  actingParticipantId: string;
-  charactersByParticipant: Record<string, CharacterResource | undefined>;
-  currentTurnCombatantId: string | null;
-  currentTurnParticipantId: string | null;
-  grid: {
-    height: number;
-    width: number;
-  };
-  mode: RuntimeMode;
-  moveDisabledReason: string | null;
-  onPanBoard: (direction: TacticalBoardPanDirection) => void;
-  onResetBoardView: () => void;
-  onSelectCell: (cell: Cell) => void;
-  onSelectSceneEntity: (entityId: string) => void;
-  onSelectTransition: (transitionId: string) => void;
-  onZoomBoard: (direction: TacticalBoardZoomDirection) => void;
-  scene: Scene | null;
-  selectedCell: Cell;
-  selectedCombatantId: string;
-  selectedSceneEntityId: string;
-  selectedTargetCombatantId: string;
-  selectedTargetParticipantId: string;
-  selectedTransitionId: string;
-  viewport: TacticalBoardViewport;
-}) {
-  const { t } = useI18n();
-  const cellButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const entityCells = useMemo(() => getSceneEntityDisplayCells(scene), [scene]);
-  const visibleEntityCells = useMemo(
-    () =>
-      mode === 'player'
-        ? entityCells.filter(
-            (candidate) =>
-              !(candidate.entity.transition && candidate.entity.hidden),
-          )
-        : entityCells,
-    [entityCells, mode],
-  );
-  const combatantCells = useMemo(
-    () => getCombatantDisplayCells(scene),
-    [scene],
-  );
-  const cells: Cell[] = [];
-
-  for (let y = 0; y < grid.height; y += 1) {
-    for (let x = 0; x < grid.width; x += 1) {
-      cells.push({ x, y });
-    }
-  }
-
-  const boardCellSizePixels = getTacticalBoardCellSizePixels(viewport.zoom);
-  const zoomPercent = `${Math.round(viewport.zoom * 100)}%`;
-  const boardPixelWidth = grid.width * boardCellSizePixels;
-  const cameraButtonClassName =
-    'flex size-9 items-center justify-center rounded-lg border border-amber-400/25 bg-black/25 text-xs font-black text-amber-100 transition hover:border-amber-200 hover:bg-amber-300/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200';
-  const boardBadgeLabels: Record<TacticalBoardCellBadgeKind, string> = {
-    move: t('runtime.board.badge.move'),
-    selected: t('runtime.board.badge.selected'),
-    target: t('runtime.board.badge.target'),
-    turn: t('runtime.board.badge.turn'),
-  };
-
-  function handleCellKeyboardNavigation(
-    event: KeyboardEvent<HTMLButtonElement>,
-    cell: Cell,
-  ): void {
-    const nextCell = getTacticalBoardCellAfterKeyboardNavigation({
-      cell,
-      grid,
-      key: event.key,
-    });
-
-    if (!nextCell) {
-      return;
-    }
-
-    event.preventDefault();
-    onSelectCell(nextCell);
-
-    window.requestAnimationFrame(() => {
-      cellButtonRefs.current[getTacticalBoardCellKey(nextCell)]?.focus();
-    });
-  }
-
-  return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/20 bg-black/25 p-3">
-        <div>
-          <p className="text-xs font-black uppercase text-amber-100">
-            {t('runtime.board.camera')}
-          </p>
-          <p className="mt-1 text-xs text-amber-100/60">
-            {t('runtime.board.viewportSummary', {
-              panX: String(viewport.panX),
-              panY: String(viewport.panY),
-              zoom: zoomPercent,
-            })}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl border border-amber-500/15 bg-black/30 p-1">
-            <button
-              aria-label={t('runtime.board.zoomOut')}
-              className={cameraButtonClassName}
-              onClick={() => onZoomBoard('out')}
-              title={t('runtime.board.zoomOut')}
-              type="button"
-            >
-              -
-            </button>
-            <span className="min-w-14 text-center text-xs font-bold text-amber-100">
-              {zoomPercent}
-            </span>
-            <button
-              aria-label={t('runtime.board.zoomIn')}
-              className={cameraButtonClassName}
-              onClick={() => onZoomBoard('in')}
-              title={t('runtime.board.zoomIn')}
-              type="button"
-            >
-              +
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-1 rounded-xl border border-amber-500/15 bg-black/30 p-1">
-            <span aria-hidden="true" />
-            <button
-              aria-label={t('runtime.board.panUp')}
-              className={cameraButtonClassName}
-              onClick={() => onPanBoard('up')}
-              title={t('runtime.board.panUp')}
-              type="button"
-            >
-              ^
-            </button>
-            <span aria-hidden="true" />
-            <button
-              aria-label={t('runtime.board.panLeft')}
-              className={cameraButtonClassName}
-              onClick={() => onPanBoard('left')}
-              title={t('runtime.board.panLeft')}
-              type="button"
-            >
-              &lt;
-            </button>
-            <button
-              aria-label={t('runtime.board.resetView')}
-              className={cameraButtonClassName}
-              onClick={onResetBoardView}
-              title={t('runtime.board.resetView')}
-              type="button"
-            >
-              0
-            </button>
-            <button
-              aria-label={t('runtime.board.panRight')}
-              className={cameraButtonClassName}
-              onClick={() => onPanBoard('right')}
-              title={t('runtime.board.panRight')}
-              type="button"
-            >
-              &gt;
-            </button>
-            <span aria-hidden="true" />
-            <button
-              aria-label={t('runtime.board.panDown')}
-              className={cameraButtonClassName}
-              onClick={() => onPanBoard('down')}
-              title={t('runtime.board.panDown')}
-              type="button"
-            >
-              v
-            </button>
-            <span aria-hidden="true" />
-          </div>
-        </div>
-      </div>
-      <div className="min-h-[360px] overflow-hidden rounded-3xl border border-amber-400/30 bg-[#110d0a] p-2 shadow-inner shadow-black/70">
-        <div
-          className="mx-auto grid transition-transform duration-200 ease-out"
-          aria-label={t('runtime.board.gridLabel')}
-          role="grid"
-          style={{
-            gridAutoRows: `${boardCellSizePixels}px`,
-            gridTemplateColumns: `repeat(${grid.width}, ${boardCellSizePixels}px)`,
-            transform: `translate(${viewport.panX * boardCellSizePixels}px, ${viewport.panY * boardCellSizePixels}px)`,
-            width: `${boardPixelWidth}px`,
-          }}
-        >
-          {cells.map((cell) => {
-            const entitiesAtCell = visibleEntityCells.filter(
-              (candidate) => candidate.x === cell.x && candidate.y === cell.y,
-            );
-            const primaryEntityCell = entitiesAtCell[0];
-            const combatantsAtCell = combatantCells.filter(
-              (candidate) => candidate.x === cell.x && candidate.y === cell.y,
-            );
-            const primaryCombatantCell = combatantsAtCell[0];
-            const placement = activeScene?.placedCharacters.find(
-              (candidate) =>
-                candidate.position.x === cell.x &&
-                candidate.position.y === cell.y,
-            );
-            const resource = placement
-              ? charactersByParticipant[placement.participantId]
-              : undefined;
-            const cellKey = getTacticalBoardCellKey(cell);
-            const cellAffordance = getTacticalBoardCellAffordance({
-              actingParticipantId,
-              cell,
-              combatantId: primaryCombatantCell?.entity.id ?? null,
-              currentTurnCombatantId,
-              currentTurnParticipantId,
-              moveDisabledReason,
-              participantId: placement?.participantId ?? null,
-              selectedCell,
-              selectedCombatantId,
-              selectedTargetCombatantId,
-              selectedTargetParticipantId,
-            });
-            const isCurrentTurn =
-              placement?.participantId === currentTurnParticipantId;
-            const isSelected = cellAffordance.isSelectedCell;
-            const isSelectedEntity =
-              primaryEntityCell?.entity.id === selectedSceneEntityId;
-            const isSelectedTransition =
-              primaryEntityCell?.entity.id === selectedTransitionId;
-            const isTransitionEntity = Boolean(
-              primaryEntityCell?.entity.transition,
-            );
-            const isActingToken =
-              placement?.participantId === actingParticipantId;
-            const isTarget =
-              placement?.participantId === selectedTargetParticipantId;
-            const isPlayerOwn =
-              mode === 'player' &&
-              placement?.participantId === actingParticipantId;
-            const isCurrentCombatant =
-              primaryCombatantCell?.entity.id === currentTurnCombatantId;
-            const isSelectedCombatant =
-              primaryCombatantCell?.entity.id === selectedCombatantId;
-            const isTargetCombatant =
-              primaryCombatantCell?.entity.id === selectedTargetCombatantId;
-            const isDefeatedCombatant = primaryCombatantCell
-              ? isCombatantEntityDefeated(primaryCombatantCell.entity)
-              : false;
-            const tokenTone = isTarget
-              ? 'border-red-300 bg-red-800 text-red-50 shadow-red-500/40'
-              : isPlayerOwn
-                ? 'border-sky-200 bg-sky-500 text-slate-950 shadow-sky-300/35'
-                : isCurrentTurn
-                  ? 'border-amber-100 bg-amber-400 text-stone-950 shadow-amber-300/40'
-                  : isActingToken
-                    ? 'border-emerald-200 bg-emerald-600 text-emerald-950 shadow-emerald-300/30'
-                    : 'border-stone-300 bg-stone-900 text-amber-50 shadow-black/40';
-            const entityTone = primaryCombatantCell
-              ? isDefeatedCombatant
-                ? 'border-stone-400/50 bg-stone-900/70 text-stone-200'
-                : 'border-red-200/60 bg-red-900/65 text-red-50'
-              : isTransitionEntity
-                ? 'border-violet-200/60 bg-violet-950/55 text-violet-100'
-                : primaryEntityCell?.entity.type === 'terrain'
-                  ? 'border-emerald-300/45 bg-emerald-950/45 text-emerald-100'
-                  : primaryEntityCell?.entity.type === 'monster'
-                    ? 'border-red-300/45 bg-red-950/45 text-red-100'
-                    : primaryEntityCell?.entity.type === 'player_spawn'
-                      ? 'border-sky-300/45 bg-sky-950/45 text-sky-100'
-                      : 'border-orange-300/40 bg-orange-950/40 text-orange-100';
-            const ariaParts = [
-              `Select cell ${cell.x}, ${cell.y}`,
-              primaryCombatantCell
-                ? primaryCombatantCell.label
-                : primaryEntityCell
-                  ? primaryEntityCell.label
-                  : null,
-              placement
-                ? `token ${resource?.character.name ?? placement.participantId}`
-                : null,
-              ...cellAffordance.badges.map((badge) => boardBadgeLabels[badge]),
-            ].filter(Boolean);
-
-            return (
-              <button
-                aria-label={ariaParts.join(', ')}
-                aria-selected={isSelected}
-                className={`group relative border border-amber-950/60 text-xs transition focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-amber-200 ${
-                  cellAffordance.isMovementTarget
-                    ? 'bg-emerald-300/15 shadow-[inset_0_0_0_2px_rgba(52,211,153,0.95)]'
-                    : isSelected
-                      ? 'bg-amber-300/20 shadow-[inset_0_0_0_2px_rgba(252,211,77,0.95)]'
-                      : primaryCombatantCell
-                        ? 'bg-[#3b1614] hover:bg-[#4a1d18]'
-                        : primaryEntityCell
-                          ? 'bg-[#2c2114] hover:bg-[#3b2b19]'
-                          : 'bg-[#211711] hover:bg-[#332316]'
-                }`}
-                key={cellKey}
-                onClick={() => {
-                  onSelectCell(cell);
-
-                  if (
-                    mode === 'dm' &&
-                    primaryEntityCell &&
-                    !primaryEntityCell.entity.combatant
-                  ) {
-                    if (primaryEntityCell.entity.transition) {
-                      onSelectTransition(primaryEntityCell.entity.id);
-                    } else {
-                      onSelectSceneEntity(primaryEntityCell.entity.id);
-                    }
-                  }
-                }}
-                onKeyDown={(event) => handleCellKeyboardNavigation(event, cell)}
-                ref={(element) => {
-                  cellButtonRefs.current[cellKey] = element;
-                }}
-                role="gridcell"
-                tabIndex={isSelected ? 0 : -1}
-                type="button"
-              >
-                <span className="absolute left-1 top-1 text-[9px] font-semibold text-amber-100/20 group-hover:text-amber-100/55">
-                  {cell.x},{cell.y}
-                </span>
-                {cellAffordance.badges.length ? (
-                  <span className="pointer-events-none absolute right-1 top-1 z-30 flex max-w-[calc(100%-0.5rem)] flex-wrap justify-end gap-0.5">
-                    {cellAffordance.badges.map((badge) => (
-                      <span
-                        className={getTacticalBoardBadgeClassName(badge)}
-                        key={badge}
-                        title={boardBadgeLabels[badge]}
-                      >
-                        {getTacticalBoardBadgeGlyph(badge)}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-                {primaryEntityCell ? (
-                  <span
-                    className={`absolute inset-1 flex items-end justify-start rounded-lg border px-1 pb-0.5 text-[9px] font-black uppercase tracking-wide ${entityTone} ${
-                      isSelectedEntity ? 'ring-2 ring-amber-200/80' : ''
-                    } ${isSelectedTransition ? 'ring-2 ring-violet-100/90' : ''} ${
-                      primaryEntityCell.entity.hidden ? 'opacity-45' : ''
-                    }`}
-                    title={primaryEntityCell.label}
-                  >
-                    {primaryEntityCell.isOrigin ? (
-                      primaryEntityCell.entity.transition ? (
-                        <span className="flex items-center gap-1">
-                          <span>T</span>
-                          <span>
-                            {initials(primaryEntityCell.entity.name) || 'T'}
-                          </span>
-                        </span>
-                      ) : (
-                        initials(primaryEntityCell.entity.name) || 'E'
-                      )
-                    ) : (
-                      '·'
-                    )}
-                  </span>
-                ) : null}
-                {primaryCombatantCell ? (
-                  <span
-                    className={`runtime-token-pop absolute inset-x-2 top-1/2 z-20 mx-auto flex size-10 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${
-                      isTargetCombatant
-                        ? 'border-fuchsia-100 bg-fuchsia-500 text-stone-950 shadow-fuchsia-300/45'
-                        : isSelectedCombatant
-                          ? 'border-red-100 bg-red-500 text-stone-950 shadow-red-300/45'
-                          : isCurrentCombatant
-                            ? 'border-amber-100 bg-red-700 text-red-50 shadow-amber-300/35'
-                            : isDefeatedCombatant
-                              ? 'border-stone-300/70 bg-stone-800 text-stone-200 opacity-75 shadow-black/40'
-                              : 'border-red-200/70 bg-red-950 text-red-50 shadow-black/50'
-                    } ${cellAffordance.isSelectedToken ? 'ring-2 ring-cyan-100 ring-offset-2 ring-offset-[#110d0a]' : ''} ${isCurrentCombatant && !isDefeatedCombatant ? 'animate-pulse' : ''}`}
-                    title={primaryCombatantCell.label}
-                  >
-                    {primaryCombatantCell.isOrigin
-                      ? initials(primaryCombatantCell.entity.name) || 'M'
-                      : '·'}
-                    {isDefeatedCombatant ? (
-                      <span className="absolute -bottom-4 text-[8px] uppercase tracking-wide text-stone-200">
-                        defeated
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-                {placement ? (
-                  <span
-                    className={`runtime-token-pop relative z-10 mx-auto flex size-9 items-center justify-center rounded-full border-2 text-[11px] font-black shadow-lg transition ${tokenTone} ${
-                      isCurrentTurn ? 'animate-pulse' : ''
-                    } ${cellAffordance.isSelectedToken ? 'ring-2 ring-cyan-100 ring-offset-2 ring-offset-[#110d0a]' : ''}`}
-                    title={resource?.character.name ?? placement.participantId}
-                  >
-                    {initials(
-                      resource?.character.name ?? placement.participantId,
-                    )}
-                  </span>
-                ) : (
-                  <span className="sr-only">
-                    {t('runtime.board.noCharacterToken')}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function getTacticalBoardBadgeGlyph(kind: TacticalBoardCellBadgeKind): string {
-  switch (kind) {
-    case 'move':
-      return 'MV';
-    case 'selected':
-      return 'SEL';
-    case 'target':
-      return 'TGT';
-    case 'turn':
-      return 'TRN';
-  }
-}
-
-function getTacticalBoardBadgeClassName(
-  kind: TacticalBoardCellBadgeKind,
-): string {
-  const base =
-    'rounded border px-1 py-0.5 text-[8px] font-black leading-none shadow-sm';
-
-  switch (kind) {
-    case 'move':
-      return `${base} border-emerald-100 bg-emerald-400 text-emerald-950 shadow-emerald-300/30`;
-    case 'selected':
-      return `${base} border-cyan-100 bg-cyan-300 text-slate-950 shadow-cyan-300/25`;
-    case 'target':
-      return `${base} border-fuchsia-100 bg-fuchsia-400 text-slate-950 shadow-fuchsia-300/30`;
-    case 'turn':
-      return `${base} border-amber-100 bg-amber-300 text-stone-950 shadow-amber-300/30`;
-  }
-}
-
-function getTacticalBoardCellKey(cell: Cell): string {
-  return `${cell.x}-${cell.y}`;
 }
 
 function CharacterSummary({

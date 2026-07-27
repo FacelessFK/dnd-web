@@ -218,6 +218,7 @@ Mutating commands:
 - `update_scene_entity`
 - `reposition_scene_entity`
 - `delete_scene_entity`
+- `paint_scene_terrain`
 - `create_scene_transition`
 - `update_scene_transition`
 - `delete_scene_transition`
@@ -230,11 +231,24 @@ Read command:
 Notes:
 
 - `create_scene`, `place_entity_in_scene`, `update_scene_entity`,
-  `reposition_scene_entity`, `delete_scene_entity`,
+  `reposition_scene_entity`, `delete_scene_entity`, `paint_scene_terrain`,
   `create_scene_transition`, `update_scene_transition`, and
   `delete_scene_transition` mutate scene records.
 - `activate_scene_for_session` and `activate_scene_transition` mutate the
   session snapshot and return the updated session state.
+- A scene carries a `terrain` layer alongside its entities: a run-length
+  encoded, row-major array of tiles covering `grid.width * grid.height` cells.
+  It is nullable, so scenes stored before the terrain layer still read back;
+  consumers treat null as an unpainted map of the default tile.
+- `paint_scene_terrain` is DM-only and takes a sparse `cells` patch
+  (`{ position, tile }`, capped per command), so the same command serves a
+  single brush stroke and a full map-builder save. Cells outside the grid are
+  rejected with `scene_terrain_out_of_bounds`, and a paint that would put a
+  movement-blocking tile under a placed character or combatant is rejected with
+  `scene_terrain_blocks_occupant`.
+- Movement-blocking terrain tiles (`wall`, `wall_brick`, `chasm`, `deep_water`,
+  `lava`, `void`) join scene entities in the movement blocking-occupancy check,
+  so painted walls stop tokens the same way blocking props do.
 - Scene entity placement is separate from character active-scene placement.
 - Scene entities use the existing scene entity shape: type, name, position,
   footprint, movement/vision blocking flags, hidden flag, and optional metadata.

@@ -26,16 +26,16 @@ explicit human decision to change scope.
 
 TypeScript pnpm monorepo (`pnpm-workspace.yaml`: `apps/*`, `packages/*`).
 
-| Path                | Role                                                                   |
-| ------------------- | ---------------------------------------------------------------------- |
-| `apps/server`       | Node/TypeScript authoritative HTTP + SSE runtime. Owns truth.          |
-| `apps/web`          | Next.js 15 / React 19 / Tailwind. `/runtime`, `/characters`, `/login`. |
-| `packages/protocol` | Zod command/response/event schemas. **Final truth when docs drift.**   |
-| `packages/shared`   | Shared domain primitives and const unions.                             |
-| `packages/rules`    | Deterministic, mostly-pure rules helpers.                              |
-| `packages/db`       | Drizzle/Postgres schema, adapters, migrations, unit-of-work.           |
-| `.agents/skills`    | Repo-local Codex skills (`SKILL.md` each).                             |
-| `.claude/skills`    | Claude skills mirroring the same workflow roles.                       |
+| Path                | Role                                                                            |
+| ------------------- | ------------------------------------------------------------------------------- |
+| `apps/server`       | Node/TypeScript authoritative HTTP + SSE runtime. Owns truth.                   |
+| `apps/web`          | Next.js 15 / React 19 / Tailwind. `/runtime`, `/maps`, `/characters`, `/login`. |
+| `packages/protocol` | Zod command/response/event schemas. **Final truth when docs drift.**            |
+| `packages/shared`   | Shared domain primitives and const unions.                                      |
+| `packages/rules`    | Deterministic, mostly-pure rules helpers.                                       |
+| `packages/db`       | Drizzle/Postgres schema, adapters, migrations, unit-of-work.                    |
+| `.agents/skills`    | Repo-local Codex skills (`SKILL.md` each).                                      |
+| `.claude/skills`    | Claude skills mirroring the same workflow roles.                                |
 
 ## Commands
 
@@ -65,6 +65,8 @@ Browser smoke harnesses (all spawn real local server/web dev processes):
 ```bash
 corepack pnpm --filter @dnd/web test:smoke                                  # Training Room, one profile
 corepack pnpm --filter @dnd/web test:smoke:two-profile                      # DM + Player profiles
+corepack pnpm --filter @dnd/web test:smoke:map-builder                      # /maps paint -> publish -> verify on server
+node apps/web/scripts/visual-capture.mjs                                    # screenshots only, no assertions
 corepack pnpm --filter @dnd/db  check:readiness                             # DB mode preflight
 corepack pnpm --filter @dnd/web test:smoke:builder-export-db                # DB mode, builder + PDF export
 corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db # DB mode, full bridge loop
@@ -82,7 +84,7 @@ node scripts/guards/check-sensitive-files.mjs --all-changed
 ```
 
 Local URLs: web `http://localhost:3000`, server `http://localhost:2567`,
-cockpit `/runtime`, library `/characters`, auth `/login`.
+cockpit `/runtime`, map builder `/maps`, library `/characters`, auth `/login`.
 
 ## Environment Gotchas
 
@@ -222,11 +224,18 @@ Library, auth, transactions, idempotency, or database behavior.
 ## Code Patterns To Follow
 
 - **Pure logic lives in a tested helper module; React components stay
-  presentational.** `apps/web/app/runtime/runtime-cockpit.tsx` (~9.2k lines) is
-  the view layer, and nearly all of its derivations live in
-  `apps/web/lib/runtime-cockpit-helpers.ts` (~3.7k lines) with matching
-  `.test.ts` coverage. New runtime logic belongs in the helper module with a
-  test, not inline in the component.
+  presentational.** `apps/web/app/runtime/runtime-cockpit.tsx` is the view
+  layer, and nearly all of its derivations live in
+  `apps/web/lib/runtime-cockpit-helpers.ts` with matching `.test.ts` coverage.
+  New runtime logic belongs in the helper module with a test, not inline in the
+  component.
+- **Map rendering is split three ways.** `lib/tactical-map-render.ts` holds
+  camera maths, palettes, and token/decor derivation (tested);
+  `lib/tactical-map-draw.ts` holds the shared canvas terrain art used by both
+  `/runtime` and `/maps`; the components own only pointers and React state.
+  `lib/map-builder-state.ts` holds every map-builder mutation, including
+  undo/redo, so tool behaviour is unit tested rather than exercised through the
+  DOM.
 - **Tests use `node --test` + `tsx`**, not Jest or Vitest. Server tests are
   `apps/server/src/*.test.ts`; web tests are `apps/web/lib/*.test.ts`.
 - **Protocol changes start in `packages/protocol`** as Zod schemas; server
@@ -285,17 +294,22 @@ Review skills are review-only — they report findings and do not patch code.
 ## Current State Summary
 
 Implemented and working: session create/join/reconnect + SSE; read-model
-recovery; scene creation/activation, passive entities, transition nodes;
-placement and movement; a tactical board with camera, badges, and keyboard
-navigation; the named Training Room Skirmish demo scenario; mixed
+recovery; scene creation/activation, passive entities, transition nodes; a
+paintable scene terrain layer that blocks movement; placement and movement; a
+canvas tactical map with camera, tokens, movement range, and a keyboard-
+accessible grid overlay; the `/maps` map builder with paint tools, prop
+placement, undo/redo, import/export, and publish-to-table; the named Training Room Skirmish demo scenario; mixed
 player/combatant encounters; turn usage and narrow melee attacks; a readable
 event feed; DM controls for HP, conditions, repositioning, combatants, current
 turn, turn usage, and encounter end; the Character Library and Builder with
 SRD-style local data, portrait upload, and PDF export; the auth MVP; and the
 Character Library → runtime pending-assignment bridge.
 
-Intentionally narrow: condition tags are metadata only; attacks are a narrow
-melee foundation with fixed damage; combatants are simple DM-controlled actors,
+Intentionally narrow: terrain blocks movement/vision but has no difficult-
+terrain cost, hazard damage, or visibility system consuming `blocksVision`; map
+lighting is atmosphere, not fog of war; `/maps` publishes new scenes only and
+cannot re-edit a server scene; condition tags are metadata only; attacks are a narrow melee
+foundation with rolled d20 + 1d8 damage and no weapon model; combatants are simple DM-controlled actors,
 not stat blocks; player-specific visibility filtering is incomplete; auth is an
 MVP without password reset, email verification, MFA, OAuth, account management,
 or a dedicated CSRF token.

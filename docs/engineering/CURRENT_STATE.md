@@ -7,7 +7,7 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 ## What Exists Now
 
 - TypeScript pnpm monorepo.
-- Next.js web app with `/runtime`, `/characters`, and `/login`.
+- Next.js web app with `/runtime`, `/maps`, `/characters`, and `/login`.
 - Node/TypeScript authoritative runtime with HTTP command endpoints and SSE.
 - Zod protocol schemas in `packages/protocol`.
 - Shared domain primitives in `packages/shared`.
@@ -31,11 +31,12 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - compact DM transition preset palette that fills the existing transition draft
   with door, stairs, portal, gate, and other exit presets;
 - character placement and movement;
-- local tactical board camera controls for zoom, bounded pan, and reset view;
-- tactical board badges for selected movement cell, selected token,
-  current-turn actor, and attack target affordances;
-- tactical board keyboard affordances for roving selected-cell focus and
-  arrow/Home/End navigation;
+- a canvas tactical map that renders the scene terrain layer, blocking props,
+  transition markers, and tokens, with drag-to-pan, wheel zoom anchored under
+  the cursor, fit-to-map, hover and selection feedback, per-token HP arcs, a
+  pulsing current-turn ring, and a movement-range overlay;
+- a culled, focusable accessibility grid layered over the canvas so cell
+  selection and arrow-key navigation stay available without a pointer;
 - DM-facing Table Setup checklist derived from session, player assignment,
   scene, token placement, and encounter read state;
 - named Training Room Skirmish demo scenario setup that uses existing runtime
@@ -83,6 +84,27 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 
 The browser submits commands and renders server responses. It is not
 authoritative.
+
+## Map Builder
+
+`/maps` is a standalone map editor. It edits a local document (persisted to
+`localStorage` and exportable as JSON), then publishes to a table.
+
+- Terrain painting with brush, rectangle (filled or outline), line, flood fill,
+  and eraser tools over the full tile palette in `sceneTerrainTiles`.
+- Prop placement for blocking/non-blocking objects, decor, player spawns, and
+  monster markers, with an inspector for name and the movement/vision/hidden
+  flags.
+- Undo/redo (`Ctrl`/`Cmd`+`Z`, `Ctrl`/`Cmd`+`Shift`+`Z`), map resize that keeps
+  painted terrain inside the new bounds, JSON import/export, and a Training
+  Room preset.
+- "Publish to table" reads the session and DM participant already stored by
+  `/runtime`, then issues `create_scene` with the painted terrain followed by
+  one `place_entity_in_scene` per prop. The scene is created but not activated;
+  the DM activates it from the runtime table.
+
+The builder is a design surface. It holds no authoritative state: nothing it
+draws is real until the server accepts the publish commands.
 
 ## Character Library And Builder
 
@@ -227,11 +249,19 @@ Current runtime is intentionally narrow:
   foundations;
 - no broad weapon, ranged, inventory, or death-save system;
 - no full fog of war, line of sight, lighting, traps, locks, scripts, or
-  automatic transition automation.
+  automatic transition automation;
+- terrain tiles carry only movement/vision blocking. There is no difficult
+  terrain movement cost, no hazard damage (lava and deep water simply block
+  movement), and terrain `blocksVision` is recorded but not yet consumed by any
+  visibility system.
 
 ## Frontend And Product Limitations
 
 - `/runtime` is a functional cockpit, not final production UX.
+- The tactical map's torch glow and vignette are atmosphere only. Nothing is
+  occluded and there is no line-of-sight or fog-of-war system behind them.
+- `/maps` publishes new scenes only. It cannot open, re-edit, or overwrite an
+  existing server scene, and it does not activate what it publishes.
 - `/characters` is a usable Character Library/Builder MVP, not a complete D&D
   character product.
 - The Character Library to runtime assignment bridge has a server-side
