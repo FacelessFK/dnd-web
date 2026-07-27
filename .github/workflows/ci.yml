@@ -28,8 +28,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Steps below run even after an earlier one fails, so a single run reports
+      # every broken check instead of only the first. The job still fails if any
+      # step fails. This matters most for formatting: a Windows-saved file shows
+      # up as a whole-file CRLF diff, which would otherwise mask real failures
+      # further down the list.
+      #
+      # Order matches the validation sequence documented in CLAUDE.md.
+
+      - name: Format check
+        if: ${{ !cancelled() }}
+        run: pnpm format:check
+
       - name: Lint
+        if: ${{ !cancelled() }}
         run: pnpm lint
 
+      # `next build` type-checks apps/web only. This covers the server and every
+      # package, and it is the sole enforcement of the i18n parity rule: because
+      # `type Messages = typeof messages.en`, a key added to `en` without a `fa`
+      # counterpart is a type error and nothing else catches it. Tests run
+      # through tsx, which strips types rather than checking them.
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: pnpm typecheck
+
       - name: Test
+        if: ${{ !cancelled() }}
         run: pnpm test
+
+      # Catches build-time failures that typecheck cannot see, such as invalid
+      # server/client component boundaries or bad static generation.
+      - name: Build web
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web build

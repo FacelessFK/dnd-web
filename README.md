@@ -72,7 +72,7 @@ current handoff, API surface, persistence notes, or implementation.
 
 ## Setup
 
-Use Node 20 and pnpm:
+Use Node 22 or newer (the version pinned in `.nvmrc`) and pnpm:
 
 ```bash
 corepack pnpm install

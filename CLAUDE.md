@@ -99,7 +99,13 @@ cockpit `/runtime`, map builder `/maps`, library `/characters`, auth `/login`.
   and fails `format:check` while being byte-identical apart from line endings.
   Check with `git diff --ignore-all-space`; fix with
   `perl -pi -e 's/\r\n/\n/' <file>`.
-- `.nvmrc` pins Node 20; the toolchain also runs on newer Node.
+- **`.nvmrc` pins Node 22, and 22 is a hard floor.** `apps/web`'s test script
+  passes a quoted glob to `node --test` so it resolves the same way on Windows
+  and Linux, and Node's glob expansion for the test runner does not exist in
+  Node 20 — there it reports `Could not find '…/lib/*.test.ts'` and the whole
+  `pnpm test` chain fails. `packages/rules` and `apps/server` use unquoted
+  globs, so they expand in the shell and mask the problem on Linux. Node 20 also
+  reached end of life in April 2026. Newer Node than 22 is fine.
 - The working tree is on an NTFS/exFAT mount, so `core.filemode` is `false` and
   `git status` can report stale `M` entries whose `git diff` is empty. Run
   `git update-index --refresh` before trusting a dirty-tree report.

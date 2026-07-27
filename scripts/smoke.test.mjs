@@ -41,12 +41,39 @@ test('root package manager is pnpm', () => {
   assert.match(packageJson.packageManager, /^pnpm@/);
 });
 
-test('root node engine targets Node 20 or newer', () => {
+// Node 22 is a hard floor, not a preference: the web test script passes a
+// quoted glob to `node --test` so that it resolves identically on Windows and
+// Linux, and Node's own glob expansion for the test runner does not exist in
+// Node 20. Lowering this makes `pnpm --filter @dnd/web test` fail to find any
+// test files at all rather than fail loudly.
+test('root node engine targets Node 22 or newer', () => {
   const packageJson = JSON.parse(
     readFileSync(join(root, 'package.json'), 'utf8'),
   );
 
-  assert.equal(packageJson.engines?.node, '>=20');
+  assert.equal(packageJson.engines?.node, '>=22');
+});
+
+test('the pinned .nvmrc version satisfies the declared engine range', () => {
+  const packageJson = JSON.parse(
+    readFileSync(join(root, 'package.json'), 'utf8'),
+  );
+  const nvmrc = readFileSync(join(root, '.nvmrc'), 'utf8').trim();
+  const engineFloor = Number(
+    /^>=(\d+)$/.exec(packageJson.engines?.node ?? '')?.[1],
+  );
+
+  assert.ok(
+    Number.isInteger(engineFloor),
+    'engines.node should be a ">=<major>" range',
+  );
+  assert.match(nvmrc, /^\d+$/);
+  // CI installs Node from .nvmrc, so a drift between these two files means CI
+  // silently stops testing the version the project claims to support.
+  assert.ok(
+    Number(nvmrc) >= engineFloor,
+    `.nvmrc pins Node ${nvmrc} but engines.node requires >=${engineFloor}`,
+  );
 });
 
 test('runtime smoke diagnostics summarize the active cockpit state', () => {
