@@ -23,7 +23,8 @@ Codex task execution. For exact payloads, use `docs/api-surface.md` and
 - session create/join/reconnect;
 - SSE session stream;
 - read-model recovery after refresh;
-- scene create/activate/read;
+- scene create/activate/read, with `get_scene` projected per role so a player
+  never receives entities the DM marked hidden;
 - passive scene entity create/update/reposition/delete;
 - compact DM scene entity palette that fills the existing placement draft with
   wall, cover, marker, hidden prop, player spawn, and monster spawn presets;
@@ -254,6 +255,18 @@ Current runtime is intentionally narrow:
   terrain movement cost, no hazard damage (lava and deep water simply block
   movement), and terrain `blocksVision` is recorded but not yet consumed by any
   visibility system.
+- Role projection currently covers scene entities only. `get_scene` strips
+  hidden entities for players, but encounter state is not projected: a hidden
+  combatant that the DM adds to an encounter still appears in the shared
+  initiative order. It leaks only its entity ID and initiative - no name,
+  position, HP, or stat block - and the cockpit falls back to rendering the raw
+  ID, since the player's scene no longer carries the entity to resolve a name
+  from. Whether a concealed creature belongs in a shared initiative order at all
+  is an open product question, not just a filtering gap.
+- Because a player's scene omits hidden blocking entities, the client movement
+  preview can offer a cell the server rejects on submit. That is intended - the
+  alternative reveals concealed blockers as holes in the reachable-cell overlay
+  - but the resulting error text is generic rather than in-fiction.
 
 ## Frontend And Product Limitations
 

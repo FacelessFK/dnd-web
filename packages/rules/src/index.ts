@@ -4,6 +4,8 @@ import type {
   Character,
   DerivedCharacterStats,
   GridDefinition,
+  ParticipantRole,
+  Scene,
   SceneCombatant,
   SceneTerrain,
   SceneTerrainTile,
@@ -801,4 +803,41 @@ export function buildBlockingTerrainOccupancies(
   }
 
   return occupancies;
+}
+
+// ---------------------------------------------------------------------------
+// Scene visibility projection
+// ---------------------------------------------------------------------------
+// The DM is omniscient by product rule; players are not. Concealment therefore
+// has to be applied before a scene leaves the server: anything sent to a client
+// is readable by that player regardless of what the UI chooses to draw. A
+// render-time filter hides a monster from the canvas but not from devtools, the
+// network tab, or a hand-written request.
+
+/**
+ * The scene as a given role is allowed to perceive it.
+ *
+ * Players never receive hidden entities. Dropping the whole entity rather than
+ * blanking its fields also removes the indirect tell: a hidden entity that
+ * still carried `blocksMovement` would outline itself as a hole in the client's
+ * reachable-cell overlay even though it was never drawn.
+ *
+ * The consequence is deliberate. A player's movement preview can now offer a
+ * cell that the server rejects on submit, because the client cannot see the
+ * blocker standing there. That is the correct shape for concealment - you find
+ * the invisible wall by walking into it - and the server stays the authority on
+ * whether the move is legal.
+ */
+export function projectSceneForRole(
+  scene: Scene,
+  role: ParticipantRole,
+): Scene {
+  if (role === 'dm') {
+    return scene;
+  }
+
+  return {
+    ...scene,
+    entities: scene.entities.filter((entity) => !entity.hidden),
+  };
 }

@@ -16,6 +16,7 @@ import {
   isCombatantDefeated,
   isOccupancyWithinBaselineMeleeReach,
   isWithinBaselineMeleeReach,
+  projectSceneForRole,
   resolveAttackRoll,
   rollAttackDamage,
   rollD20,
@@ -1264,16 +1265,23 @@ export class InMemoryGameRuntime<
     );
   }
 
+  // `get_scene` is the only scene read a player can issue - every other command
+  // that returns a Scene is DM-gated - so it is also the only place concealment
+  // has to be enforced on the way out.
   getScene(command: GetSceneCommand): Scene {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
       command.actor.participantId,
     );
     const scene = this.scenes.getScene(command.payload.sceneId);
 
     assertSceneBelongsToSession(snapshot, scene);
 
-    return scene;
+    return projectSceneForRole(scene, actor.role);
   }
 
   activateSceneForSession(

@@ -240,6 +240,12 @@ Notes:
   encoded, row-major array of tiles covering `grid.width * grid.height` cells.
   It is nullable, so scenes stored before the terrain layer still read back;
   consumers treat null as an unpainted map of the default tile.
+- `get_scene` is role-projected. The DM receives the scene as stored; a player
+  receives it with every `hidden` entity removed, so concealed monsters, props,
+  and transitions never cross the wire to a player at all. Concealment is not a
+  client rendering concern - the browser filter is a DM-view convenience only.
+  Because a player's copy omits hidden blockers, a client-side movement preview
+  can offer a cell the server then rejects; the server remains the authority.
 - `paint_scene_terrain` is DM-only and takes a sparse `cells` patch
   (`{ position, tile }`, capped per command), so the same command serves a
   single brush stroke and a full map-builder save. Cells outside the grid are

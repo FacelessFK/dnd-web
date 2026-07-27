@@ -113,6 +113,11 @@ export function TacticalMap(props: TacticalMapProps) {
     ],
   );
 
+  // Concealment is enforced on the server: `get_scene` already strips hidden
+  // entities for a player, so this flag is a rendering choice for the DM's own
+  // view, not the boundary that keeps secrets from players. Do not reintroduce
+  // hidden entities into a player payload on the assumption that this filter
+  // protects them.
   const decor = useMemo(
     () => buildMapDecor(props.scene, { includeHidden: props.mode === 'dm' }),
     [props.mode, props.scene],

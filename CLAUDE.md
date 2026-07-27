@@ -310,7 +310,8 @@ terrain cost, hazard damage, or visibility system consuming `blocksVision`; map
 lighting is atmosphere, not fog of war; `/maps` publishes new scenes only and
 cannot re-edit a server scene; condition tags are metadata only; attacks are a narrow melee
 foundation with rolled d20 + 1d8 damage and no weapon model; combatants are simple DM-controlled actors,
-not stat blocks; player-specific visibility filtering is incomplete; auth is an
+not stat blocks; `get_scene` is role-projected so players never receive hidden
+entities, but encounter state is not yet projected; auth is an
 MVP without password reset, email verification, MFA, OAuth, account management,
 or a dedicated CSRF token.
 
