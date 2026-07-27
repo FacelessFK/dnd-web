@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  applySceneTerrainCells,
+  createSceneTerrain,
   doesSceneEntityFitWithinGrid,
   doSceneEntitiesOverlap,
   isGridDefinitionValid as isValidGridDefinition,
@@ -34,6 +36,11 @@ export function createSceneRecord(
     sessionId,
     name: sceneInput.name,
     grid: structuredClone(sceneInput.grid),
+    // Normalized at creation so every new scene carries a full-size terrain
+    // layer, and a caller-supplied layer is clamped to the declared grid.
+    terrain: sceneInput.terrain
+      ? applySceneTerrainCells(sceneInput.grid, sceneInput.terrain, [])
+      : createSceneTerrain(sceneInput.grid),
     entities: [],
     createdAt: now,
     updatedAt: now,

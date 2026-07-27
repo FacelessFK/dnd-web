@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import {
   applyFixedDamage,
+  applySceneTerrainCells,
+  buildBlockingTerrainOccupancies,
   calculateAttackModifier,
   calculateDamageModifier,
   calculateInitiativeModifier,
@@ -9,6 +11,7 @@ import {
   deriveCharacterStats,
   doesDestinationOverlapBlockingOccupancy,
   doesOccupancyFitWithinGrid,
+  doesSceneTerrainTileBlockMovement,
   isCharacterDowned,
   isCombatantDefeated,
   isOccupancyWithinBaselineMeleeReach,
@@ -60,6 +63,7 @@ import type {
   MoveCharacterInActiveSceneCommand,
   MovementStateUpdate,
   MovementStateUpdateReason,
+  PaintSceneTerrainCommand,
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
   RecordMovementUsageCommand,
@@ -93,6 +97,7 @@ import type {
   SceneEntityId,
   SceneId,
   ScenePosition,
+  SceneTerrain,
   SessionSnapshot,
   SessionId,
 } from '@dnd/shared';
@@ -1517,6 +1522,70 @@ export class InMemoryGameRuntime<
         updatedAt: this.now(),
       }),
       (updatedScene) => updatedScene,
+    );
+  }
+
+  paintSceneTerrain(command: PaintSceneTerrainCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const scene = this.scenes.getScene(command.payload.sceneId);
+
+    this.assertActorIsDm(actor, 'paint scene terrain');
+    assertSceneBelongsToSession(snapshot, scene);
+    assertGridDefinitionIsValid(scene.grid);
+
+    for (const cell of command.payload.cells) {
+      if (
+        cell.position.x >= scene.grid.width ||
+        cell.position.y >= scene.grid.height
+      ) {
+        throw new SceneStoreError(
+          'scene_terrain_out_of_bounds',
+          `Terrain cell ${cell.position.x},${cell.position.y} is outside scene "${scene.id}".`,
+        );
+      }
+    }
+
+    const terrain = applySceneTerrainCells(
+      scene.grid,
+      scene.terrain,
+      command.payload.cells,
+    );
+    // Only newly blocking cells can invalidate existing placement, so the
+    // occupancy check runs against the painted result rather than every
+    // blocking tile that was already on the map.
+    const paintsBlockingTile = command.payload.cells.some((cell) =>
+      doesSceneTerrainTileBlockMovement(cell.tile),
+    );
+
+    return this.resolveRepositoryResult(
+      paintsBlockingTile
+        ? this.getResolvedSessionCharacterRecords(snapshot)
+        : [],
+      (allCharacterRecords) => {
+        if (paintsBlockingTile) {
+          this.assertSceneTerrainDoesNotTrapOccupants({
+            characterRecords: allCharacterRecords,
+            scene,
+            terrain,
+          });
+        }
+
+        return this.resolveRepositoryResult(
+          this.scenes.saveScene({
+            ...scene,
+            terrain,
+            updatedAt: this.now(),
+          }),
+          (updatedScene) => updatedScene,
+        );
+      },
     );
   }
 
@@ -3441,6 +3510,62 @@ export class InMemoryGameRuntime<
         'scene_entity_overlap',
         `Scene entity "${params.entity.id}" overlaps with a character token in scene "${params.scene.id}".`,
       );
+    }
+  }
+
+  // Painting a movement-blocking tile under a token or a blocking entity would
+  // strand it in impassable terrain, so the paint is rejected rather than
+  // silently creating a position the movement rules can never undo.
+  private assertSceneTerrainDoesNotTrapOccupants(params: {
+    characterRecords: StoredCharacterRecord[];
+    scene: Scene;
+    terrain: SceneTerrain;
+  }): void {
+    const blockedCells = buildBlockingTerrainOccupancies(
+      params.scene.grid,
+      params.terrain,
+    );
+
+    for (const record of params.characterRecords) {
+      if (
+        !record.overlay.position ||
+        record.overlay.position.sceneId !== params.scene.id
+      ) {
+        continue;
+      }
+
+      const occupancy = {
+        footprint: record.overlay.footprint,
+        position: {
+          x: record.overlay.position.x,
+          y: record.overlay.position.y,
+        },
+      };
+
+      if (doesDestinationOverlapBlockingOccupancy(occupancy, blockedCells)) {
+        throw new SceneStoreError(
+          'scene_terrain_blocks_occupant',
+          `Terrain paint would block a character token in scene "${params.scene.id}".`,
+        );
+      }
+    }
+
+    for (const entity of params.scene.entities) {
+      if (!entity.combatant) {
+        continue;
+      }
+
+      if (
+        doesDestinationOverlapBlockingOccupancy(
+          { footprint: entity.footprint, position: entity.position },
+          blockedCells,
+        )
+      ) {
+        throw new SceneStoreError(
+          'scene_terrain_blocks_occupant',
+          `Terrain paint would block combatant "${entity.id}" in scene "${params.scene.id}".`,
+        );
+      }
     }
   }
 

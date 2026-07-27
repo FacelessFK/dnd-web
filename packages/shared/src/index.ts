@@ -25,6 +25,27 @@ export const sceneTransitionKinds = [
   'other',
 ] as const;
 
+// Paintable per-cell map surface. This is the map-builder tile palette and the
+// visual base layer under scene entities; it is deliberately separate from
+// `sceneEntityTypes`, which stays an entity/object list.
+export const sceneTerrainTiles = [
+  'void',
+  'stone',
+  'flagstone',
+  'wood',
+  'dirt',
+  'grass',
+  'sand',
+  'water',
+  'deep_water',
+  'ice',
+  'rubble',
+  'lava',
+  'chasm',
+  'wall',
+  'wall_brick',
+] as const;
+
 export type SessionId = string;
 export type ParticipantId = string;
 export type CharacterId = string;
@@ -44,6 +65,7 @@ export type VisibilityState = (typeof visibilityStates)[number];
 export type SceneEntityType = (typeof sceneEntityTypes)[number];
 export type SceneCombatantKind = (typeof sceneCombatantKinds)[number];
 export type SceneTransitionKind = (typeof sceneTransitionKinds)[number];
+export type SceneTerrainTile = (typeof sceneTerrainTiles)[number];
 export type RulesConfigValue = string | number | boolean | null;
 export type CharacterMeta = Record<string, RulesConfigValue>;
 export type SceneEntityMeta = Record<string, RulesConfigValue>;
@@ -240,11 +262,26 @@ export interface SceneEntity {
   meta: SceneEntityMeta;
 }
 
+// Row-major run-length encoding of the terrain layer. A 60x40 map is 2400
+// cells; storing one entry per cell would bloat every scene read model and SSE
+// payload, while painted maps compress to a handful of runs.
+export interface SceneTerrainRun {
+  tile: SceneTerrainTile;
+  length: number;
+}
+
+export interface SceneTerrain {
+  runs: SceneTerrainRun[];
+}
+
 export interface Scene {
   id: SceneId;
   sessionId: SessionId;
   name: string;
   grid: GridDefinition;
+  // Nullable so scenes persisted before the terrain layer stay readable; the
+  // terrain helpers treat null as an unpainted map of the default base tile.
+  terrain: SceneTerrain | null;
   entities: SceneEntity[];
   createdAt: string;
   updatedAt: string;

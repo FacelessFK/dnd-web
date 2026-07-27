@@ -47,6 +47,8 @@ export const runtimeErrorCodeSchema = z.enum([
   'scene_entity_out_of_bounds',
   'scene_entity_overlap',
   'scene_not_found',
+  'scene_terrain_blocks_occupant',
+  'scene_terrain_out_of_bounds',
   'self_target_not_allowed',
   'session_not_found',
   'turn_actor_downed',

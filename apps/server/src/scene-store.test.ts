@@ -14,6 +14,7 @@ test('scene repository returns clones instead of exposing authoritative storage'
       width: 6,
       height: 6,
     },
+    terrain: null,
     entities: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',

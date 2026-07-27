@@ -1249,6 +1249,8 @@ async function handleSceneCommandRequest(
                   return transactionRuntime.repositionSceneEntity(command);
                 case 'delete_scene_entity':
                   return transactionRuntime.deleteSceneEntity(command);
+                case 'paint_scene_terrain':
+                  return transactionRuntime.paintSceneTerrain(command);
                 case 'create_scene_transition':
                   return transactionRuntime.createSceneTransition(command);
                 case 'update_scene_transition':
@@ -1291,6 +1293,7 @@ async function handleSceneCommandRequest(
       case 'update_scene_entity':
       case 'reposition_scene_entity':
       case 'delete_scene_entity':
+      case 'paint_scene_terrain':
       case 'create_scene_transition':
       case 'update_scene_transition':
       case 'delete_scene_transition': {
@@ -1307,11 +1310,13 @@ async function handleSceneCommandRequest(
                     ? await runtime.repositionSceneEntity(command)
                     : command.type === 'delete_scene_entity'
                       ? await runtime.deleteSceneEntity(command)
-                      : command.type === 'create_scene_transition'
-                        ? await runtime.createSceneTransition(command)
-                        : command.type === 'update_scene_transition'
-                          ? await runtime.updateSceneTransition(command)
-                          : await runtime.deleteSceneTransition(command);
+                      : command.type === 'paint_scene_terrain'
+                        ? await runtime.paintSceneTerrain(command)
+                        : command.type === 'create_scene_transition'
+                          ? await runtime.createSceneTransition(command)
+                          : command.type === 'update_scene_transition'
+                            ? await runtime.updateSceneTransition(command)
+                            : await runtime.deleteSceneTransition(command);
         const success: SceneCommandSuccess = {
           ok: true,
           data: {
@@ -2393,6 +2398,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'reaction_already_used':
     case 'self_target_not_allowed':
     case 'scene_entity_overlap':
+    case 'scene_terrain_blocks_occupant':
     case 'turn_actor_downed':
       return 409;
     // These errors mean the request target itself is invalid for the current
@@ -2413,6 +2419,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'movement_exceeds_allowance':
     case 'movement_out_of_bounds':
     case 'scene_entity_out_of_bounds':
+    case 'scene_terrain_out_of_bounds':
       return 400;
     case 'invalid_role_assumption':
       return 403;

@@ -1,4 +1,5 @@
 import {
+  buildBlockingTerrainOccupancies,
   calculateMovementDistanceFeet,
   doesDestinationOverlapBlockingOccupancy,
   doesOccupancyFitWithinGrid,
@@ -161,6 +162,14 @@ export function buildMovementBlockingOccupancies(params: {
       footprint: entity.footprint,
     }));
 
+  // Painted walls, chasms, deep water, and lava block movement exactly like a
+  // blocking entity does, so terrain joins the same occupancy list instead of
+  // needing a second validation path.
+  const terrainBlockers = buildBlockingTerrainOccupancies(
+    params.scene.grid,
+    params.scene.terrain,
+  );
+
   const characterBlockers = params.characterRecords
     .filter((record) => record.character.id !== params.excludedCharacterId)
     .flatMap((record) => {
@@ -182,7 +191,7 @@ export function buildMovementBlockingOccupancies(params: {
       ];
     });
 
-  return [...sceneEntityBlockers, ...characterBlockers];
+  return [...sceneEntityBlockers, ...terrainBlockers, ...characterBlockers];
 }
 
 export function withCharacterPlacedInScene(params: {

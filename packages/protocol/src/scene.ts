@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   sceneCombatantKinds,
   sceneEntityTypes,
+  sceneTerrainTiles,
   sceneTransitionKinds,
 } from '@dnd/shared';
 
@@ -20,6 +21,29 @@ import { sessionSnapshotSchema } from './session.js';
 export const sceneEntityTypeSchema = z.enum(sceneEntityTypes);
 export const sceneCombatantKindSchema = z.enum(sceneCombatantKinds);
 export const sceneTransitionKindSchema = z.enum(sceneTransitionKinds);
+export const sceneTerrainTileSchema = z.enum(sceneTerrainTiles);
+
+// Upper bound on encoded runs. A 500x500 grid is 250k cells, but a map that
+// needs a run per cell is pathological rather than authored, so the cap keeps
+// scene payloads bounded without constraining real map work.
+const maxSceneTerrainRuns = 20000;
+
+export const sceneTerrainRunSchema = z.object({
+  tile: sceneTerrainTileSchema,
+  length: z.number().int().min(1).max(250000),
+});
+
+export const sceneTerrainSchema = z.object({
+  runs: z.array(sceneTerrainRunSchema).max(maxSceneTerrainRuns),
+});
+
+export const sceneTerrainCellSchema = z.object({
+  position: z.object({
+    x: z.number().int().min(0).max(499),
+    y: z.number().int().min(0).max(499),
+  }),
+  tile: sceneTerrainTileSchema,
+});
 
 const sceneNameSchema = z.string().trim().min(1).max(80);
 const sceneEntityNameSchema = z.string().trim().min(1).max(80);
@@ -97,6 +121,9 @@ export const sceneSchema = z.object({
   sessionId: sessionIdSchema,
   name: sceneNameSchema,
   grid: gridDefinitionSchema,
+  // Nullable rather than required so scenes stored before the terrain layer
+  // still parse; consumers treat null as an unpainted map.
+  terrain: sceneTerrainSchema.nullable().default(null),
   entities: z.array(sceneEntitySchema),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -105,6 +132,7 @@ export const sceneSchema = z.object({
 export const sceneInputSchema = z.object({
   name: sceneNameSchema,
   grid: gridDefinitionSchema,
+  terrain: sceneTerrainSchema.nullable().optional(),
 });
 
 export const sceneEntityInputSchema = z.object({
@@ -256,6 +284,20 @@ export const deleteSceneEntityCommandSchema = z.object({
   }),
 });
 
+// Sparse cell patch rather than a whole-map replace: the same command serves a
+// single DM brush stroke during play and a full map-builder save, and a patch
+// keeps concurrent edits from clobbering unrelated regions.
+export const paintSceneTerrainCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('paint_scene_terrain'),
+  actor: sessionActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    sceneId: sceneIdSchema,
+    cells: z.array(sceneTerrainCellSchema).min(1).max(8192),
+  }),
+});
+
 export const createSceneTransitionCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('create_scene_transition'),
@@ -309,6 +351,7 @@ export const sceneCommandSchema = z.discriminatedUnion('type', [
   updateSceneEntityCommandSchema,
   repositionSceneEntityCommandSchema,
   deleteSceneEntityCommandSchema,
+  paintSceneTerrainCommandSchema,
   createSceneTransitionCommandSchema,
   updateSceneTransitionCommandSchema,
   deleteSceneTransitionCommandSchema,
@@ -340,6 +383,14 @@ export const sceneCommandResponseSchema = z.union([
 ]);
 
 export type GridDefinition = z.infer<typeof gridDefinitionSchema>;
+export type SceneEntityType = z.infer<typeof sceneEntityTypeSchema>;
+export type SceneTerrainTile = z.infer<typeof sceneTerrainTileSchema>;
+export type SceneTerrainRun = z.infer<typeof sceneTerrainRunSchema>;
+export type SceneTerrain = z.infer<typeof sceneTerrainSchema>;
+export type SceneTerrainCell = z.infer<typeof sceneTerrainCellSchema>;
+export type PaintSceneTerrainCommand = z.infer<
+  typeof paintSceneTerrainCommandSchema
+>;
 export type ScenePosition = z.infer<typeof scenePositionSchema>;
 export type SceneEntityFootprint = z.infer<typeof sceneEntityFootprintSchema>;
 export type SceneCombatant = z.infer<typeof sceneCombatantSchema>;
