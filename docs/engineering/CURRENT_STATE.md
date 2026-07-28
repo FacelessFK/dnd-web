@@ -200,7 +200,47 @@ Auth currently supports the Character Library session MVP in DB mode:
 - opaque `dnd_web_session` HttpOnly cookie;
 - database stores only hashed session tokens;
 - passwords are hashed with Node `scrypt`;
-- logout revokes the current session row and clears the cookie.
+- logout revokes the current session row and clears the cookie;
+- login and register are rate limited, and login always performs password
+  hashing work even for an unknown email so response time does not reveal
+  whether an address is registered.
+
+### Brute-Force Limits
+
+`apps/server/src/auth-rate-limiter.ts` gates `POST /api/auth/login` and
+`POST /api/auth/register`. Exceeding a limit returns HTTP 429 with error code
+`too_many_requests` and a `Retry-After` header.
+
+- login, per source IP **and** submitted email: 5 failures per 15 minutes, then
+  blocked for 15 minutes; cleared by a successful login;
+- login, per source IP: 30 failures per 15 minutes, then blocked for 15 minutes;
+- register, per source IP: 5 attempts per hour, then blocked for an hour;
+- password hashing is capped at 8 concurrent operations across both endpoints;
+  requests beyond that are rejected immediately rather than queued.
+
+`logout` is deliberately not limited: it revokes a token the caller already
+holds and costs one indexed update.
+
+**This state is in-memory and per-process.** It is lost on restart and is not
+shared between processes. If the server is ever run as more than one process,
+each enforces its own independent budget and the effective limit multiplies by
+the process count. This is not cluster-wide or distributed rate limiting, and
+moving to multiple processes requires shared storage before these limits mean
+anything.
+
+Two gaps are known and accepted at MVP scope:
+
+- a distributed attack on one account from many source IPs is not blocked. The
+  tight bucket is keyed on IP _and_ email precisely so that an attacker cannot
+  lock a victim out of their own account, and a global per-email counter would
+  reintroduce exactly that lockout;
+- `register` still answers `email_already_registered`, which lets a caller
+  confirm whether an address has an account. Removing that would require
+  deferred/email-verified signup, which is out of scope here.
+
+`x-forwarded-for` is ignored unless `SERVER_TRUST_PROXY_HEADER=true`, since the
+header is client-supplied and would otherwise let a single host mint unlimited
+throttle keys.
 
 It is not full production account security:
 

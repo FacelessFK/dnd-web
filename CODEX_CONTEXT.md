@@ -129,6 +129,11 @@ that scope.
   scene, and it does not activate what it publishes.
 - Default local startup may still be in-memory.
 - Character Library auth is an MVP, not production account security.
+- Auth brute-force limits on login/register are in-memory and per-process. They
+  reset on restart and are not shared between processes, so they are not
+  cluster-wide enforcement. A distributed many-IP attack on a single account is
+  not blocked, and `register` still reveals whether an email is registered. See
+  `docs/engineering/CURRENT_STATE.md` for the exact budgets.
 - SSE subscribers are process-local.
 - Unpublished outbox rows are not auto-redelivered on cold boot.
 - `GET /api/outbox/status` reports unpublished outbox backlog counts without

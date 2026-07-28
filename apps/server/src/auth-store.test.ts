@@ -59,6 +59,55 @@ test('auth service rejects invalid passwords and revokes sessions on logout', as
   assert([...database.sessions.values()][0]?.revokedAt);
 });
 
+test('login spends password-hashing work even when the email is unknown', async () => {
+  const database = new MemoryAuthUserDatabase();
+  const auth = new AuthService(database);
+
+  await auth.register({
+    displayName: 'Test User',
+    email: 'known@example.com',
+    password: 'correct horse battery staple',
+  });
+
+  const timeRejection = async (email: string): Promise<number> => {
+    const startedAt = process.hrtime.bigint();
+
+    await assert.rejects(() =>
+      auth.login({ email, password: 'wrong password' }),
+    );
+
+    return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+  };
+
+  // Medians over several runs, so one scheduling hiccup cannot decide the
+  // result.
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+  const known: number[] = [];
+  const unknown: number[] = [];
+
+  for (let run = 0; run < 5; run += 1) {
+    known.push(await timeRejection('known@example.com'));
+    unknown.push(await timeRejection('ghost@example.com'));
+  }
+
+  const knownMedian = median(known);
+  const unknownMedian = median(unknown);
+
+  // Before the decoy hash, an unknown email short-circuited past scrypt and
+  // answered in roughly the time of one Map lookup — microseconds against tens
+  // of milliseconds, which is a remotely measurable enumeration oracle.
+  //
+  // The bar is deliberately loose: this asserts the decoy verification happens
+  // at all, not that the two paths are cycle-identical. A regression that
+  // restores the short-circuit fails by two orders of magnitude, far outside
+  // any scheduling noise this threshold tolerates.
+  assert(
+    unknownMedian > knownMedian * 0.5,
+    `unknown-email login returned far too quickly (${unknownMedian.toFixed(2)}ms vs ${knownMedian.toFixed(2)}ms for a known email), which leaks whether an address is registered`,
+  );
+});
+
 test('auth service rejects expired sessions', async () => {
   const database = new MemoryAuthUserDatabase();
   const auth = new AuthService(database);

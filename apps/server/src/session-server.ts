@@ -59,6 +59,12 @@ import {
   type SessionStreamEvent,
 } from '@dnd/protocol';
 
+import {
+  AuthRateLimiter,
+  authThrottleMessage,
+  PasswordHashConcurrencyGate,
+  type AuthThrottleDecision,
+} from './auth-rate-limiter.js';
 import { AuthService, AuthStoreError } from './auth-store.js';
 import { CharacterStoreError } from './character-store.js';
 import {
@@ -124,6 +130,31 @@ type GameRuntime = InMemoryGameRuntime<
 
 type ErrorResponseSchema = { parse: (input: unknown) => unknown };
 
+/**
+ * Brute-force gates for `/api/auth/*`. Both are per-process and in-memory —
+ * see `auth-rate-limiter.ts` for exactly what that does and does not buy.
+ */
+export type AuthThrottle = {
+  gate: PasswordHashConcurrencyGate;
+  limiter: AuthRateLimiter;
+};
+
+export function createAuthThrottle(): AuthThrottle {
+  return {
+    gate: new PasswordHashConcurrencyGate(),
+    limiter: new AuthRateLimiter(),
+  };
+}
+
+/**
+ * Shared by every request that does not supply its own throttle.
+ *
+ * This is deliberately a module singleton rather than a per-call default:
+ * counters only mean something if consecutive requests hit the same instance.
+ * Tests pass an explicit throttle to stay isolated from each other.
+ */
+const defaultAuthThrottle = createAuthThrottle();
+
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
@@ -150,6 +181,8 @@ export function createSessionServer(
   runtime: GameRuntime;
   store: GameRuntime['sessions'];
 } {
+  // One throttle per server instance, shared by every request it serves.
+  const authThrottle = createAuthThrottle();
   const server = createServer(async (request, response) => {
     try {
       await handleRequest(
@@ -165,6 +198,7 @@ export function createSessionServer(
         characterLibrary,
         auth,
         commandEventOutboxDispatcher,
+        authThrottle,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -201,6 +235,7 @@ export async function handleRequest(
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
   auth?: AuthService,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
+  authThrottle: AuthThrottle = defaultAuthThrottle,
 ): Promise<void> {
   setCorsHeaders(response, request);
 
@@ -233,12 +268,12 @@ export async function handleRequest(
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/register') {
-    await handleAuthRegisterRequest(request, response, auth);
+    await handleAuthRegisterRequest(request, response, auth, authThrottle);
     return;
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/login') {
-    await handleAuthLoginRequest(request, response, auth);
+    await handleAuthLoginRequest(request, response, auth, authThrottle);
     return;
   }
 
@@ -446,7 +481,8 @@ async function handleOutboxStatusRequest(
 async function handleAuthRegisterRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  auth?: AuthService,
+  auth: AuthService | undefined,
+  authThrottle: AuthThrottle,
 ): Promise<void> {
   let body: unknown;
 
@@ -474,6 +510,28 @@ async function handleAuthRegisterRequest(
     return;
   }
 
+  const ip = readClientIp(request);
+  const registerDecision = authThrottle.limiter.checkRegister({ ip });
+
+  if (!registerDecision.allowed) {
+    sendThrottled(response, registerDecision);
+    return;
+  }
+
+  // Registration counts every attempt up front, not just failures: a
+  // successful signup is precisely what account-spam wants to repeat, and it
+  // runs the same expensive scrypt hash as a login.
+  authThrottle.limiter.recordRegisterAttempt({ ip });
+
+  if (!authThrottle.gate.tryAcquire()) {
+    sendThrottled(response, {
+      allowed: false,
+      retryAfterSeconds: 1,
+      scope: 'concurrency',
+    });
+    return;
+  }
+
   try {
     const service = requireAuthService(auth);
     const session = await service.register(requestResult.data);
@@ -492,13 +550,16 @@ async function handleAuthRegisterRequest(
     );
   } catch (error) {
     handleRuntimeError(response, error, authResponseSchema);
+  } finally {
+    authThrottle.gate.release();
   }
 }
 
 async function handleAuthLoginRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  auth?: AuthService,
+  auth: AuthService | undefined,
+  authThrottle: AuthThrottle,
 ): Promise<void> {
   let body: unknown;
 
@@ -526,10 +587,36 @@ async function handleAuthLoginRequest(
     return;
   }
 
+  const ip = readClientIp(request);
+  const decision = authThrottle.limiter.checkLogin({
+    email: requestResult.data.email,
+    ip,
+  });
+
+  // Denied attempts are rejected here and never recorded as failures, so a
+  // client that keeps hammering a blocked key cannot extend its own block.
+  if (!decision.allowed) {
+    sendThrottled(response, decision);
+    return;
+  }
+
+  if (!authThrottle.gate.tryAcquire()) {
+    sendThrottled(response, {
+      allowed: false,
+      retryAfterSeconds: 1,
+      scope: 'concurrency',
+    });
+    return;
+  }
+
   try {
     const service = requireAuthService(auth);
     const session = await service.login(requestResult.data);
 
+    authThrottle.limiter.recordLoginSuccess({
+      email: requestResult.data.email,
+      ip,
+    });
     setAuthCookie(response, session.token, session.expiresAt);
     sendJson(
       response,
@@ -543,7 +630,22 @@ async function handleAuthLoginRequest(
       authSuccessSchema,
     );
   } catch (error) {
+    // Count only genuine credential rejections. A misconfigured server or a
+    // database outage surfaces as a different code, and must not accumulate
+    // toward a lockout that would outlive the outage.
+    if (
+      error instanceof AuthStoreError &&
+      error.code === 'invalid_credentials'
+    ) {
+      authThrottle.limiter.recordLoginFailure({
+        email: requestResult.data.email,
+        ip,
+      });
+    }
+
     handleRuntimeError(response, error, authResponseSchema);
+  } finally {
+    authThrottle.gate.release();
   }
 }
 
@@ -2425,6 +2527,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
       return 403;
     case 'unauthenticated':
       return 401;
+    case 'too_many_requests':
+      return 429;
   }
 }
 
@@ -2459,6 +2563,52 @@ async function requireAuthenticatedUser(
   auth?: AuthService,
 ) {
   return requireAuthService(auth).requireUserByToken(readAuthCookie(request));
+}
+
+function sendThrottled(
+  response: ServerResponse,
+  decision: Extract<AuthThrottleDecision, { allowed: false }>,
+): void {
+  response.setHeader('retry-after', String(decision.retryAfterSeconds));
+  sendJson(
+    response,
+    429,
+    {
+      ok: false,
+      error: {
+        // The message stays uniform across every scope. Saying which gate
+        // tripped would tell an attacker whether the address they guessed is
+        // interesting, which is the enumeration leak this work is closing.
+        code: 'too_many_requests',
+        message: authThrottleMessage,
+      },
+    },
+    authResponseSchema,
+  );
+}
+
+/**
+ * Best-effort source address for throttling.
+ *
+ * `x-forwarded-for` is client-supplied and trivially spoofed, so honouring it
+ * unconditionally would let an attacker mint a fresh throttle key per request
+ * and bypass every per-IP limit here. It is therefore only trusted when the
+ * operator explicitly asserts a proxy is in front via
+ * `SERVER_TRUST_PROXY_HEADER=true`. Default deployment reads the socket.
+ */
+function readClientIp(request: IncomingMessage): string {
+  if (process.env.SERVER_TRUST_PROXY_HEADER === 'true') {
+    const forwarded = request.headers['x-forwarded-for'];
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+      ?.split(',')[0]
+      ?.trim();
+
+    if (first) {
+      return first;
+    }
+  }
+
+  return request.socket?.remoteAddress ?? 'unknown';
 }
 
 function invalidAuthRequest(message: string) {

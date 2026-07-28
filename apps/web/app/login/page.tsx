@@ -5,16 +5,28 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { useAuth } from '../../lib/auth-context';
+import { selectAuthErrorCopy } from '../../lib/auth-error-copy';
+import { useI18n } from '../../lib/i18n';
 
 type AuthMode = 'login' | 'register';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { error, loading, login, register } = useAuth();
+  const { t } = useI18n();
+  const { error, errorCode, errorRetryAfterSeconds, loading, login, register } =
+    useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // Throttle rejections get localized copy; everything else keeps showing the
+  // server's own message, which is what this page did before.
+  const errorCopy = selectAuthErrorCopy({
+    code: errorCode ?? undefined,
+    retryAfterSeconds: errorRetryAfterSeconds ?? undefined,
+  });
+  const errorText = errorCopy ? t(errorCopy.key, errorCopy.values) : error;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -118,9 +130,12 @@ export default function LoginPage() {
             </label>
           </div>
 
-          {error ? (
-            <p className="mt-4 rounded-xl border border-red-300/30 bg-red-950/40 px-4 py-3 text-sm text-red-100">
-              {error}
+          {errorText ? (
+            <p
+              className="mt-4 rounded-xl border border-red-300/30 bg-red-950/40 px-4 py-3 text-sm text-red-100"
+              role="alert"
+            >
+              {errorText}
             </p>
           ) : null}
 

@@ -31,6 +31,19 @@ export type AuthSessionIssue = {
 };
 
 export class AuthService {
+  /**
+   * A throwaway hash in the real storage format, verified against when the
+   * submitted email has no account. It never matches anything: the "expected"
+   * key is random bytes rather than the scrypt of a known password.
+   *
+   * Its only job is to make an unknown-email login perform the same scrypt
+   * work as a known-email login, so response time stops revealing whether an
+   * address is registered. See `login` for why that matters.
+   */
+  private readonly decoyPasswordHash = `scrypt:${randomBytes(16).toString(
+    'hex',
+  )}:${randomBytes(PASSWORD_KEY_LENGTH).toString('hex')}`;
+
   constructor(private readonly database: AuthUserDatabase) {}
 
   async register(params: {
@@ -74,10 +87,20 @@ export class AuthService {
       this.normalizeEmail(params.email),
     );
 
-    if (
-      !user ||
-      !(await this.verifyPassword(params.password, user.passwordHash))
-    ) {
+    // Always run a password verification, even when the email is unknown.
+    //
+    // Short-circuiting on `!user` would skip scrypt entirely, so an
+    // unregistered address would answer in about the time of one indexed
+    // SELECT while a registered one paid a full key derivation. That timing
+    // gap is a user-enumeration oracle regardless of how generic the error
+    // message is, and it is measurable remotely. Hashing against a decoy
+    // costs one wasted derivation on a request that was going to fail anyway.
+    const passwordMatches = await this.verifyPassword(
+      params.password,
+      user ? user.passwordHash : this.decoyPasswordHash,
+    );
+
+    if (!user || !passwordMatches) {
       throw new AuthStoreError(
         'invalid_credentials',
         'Email or password is incorrect.',

@@ -51,6 +51,7 @@ export const runtimeErrorCodeSchema = z.enum([
   'scene_terrain_out_of_bounds',
   'self_target_not_allowed',
   'session_not_found',
+  'too_many_requests',
   'turn_actor_downed',
   'unauthenticated',
 ]);

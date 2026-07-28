@@ -77,6 +77,20 @@ currently installed in the workspace. This remains an MVP, not full production
 auth: there is no password reset, email verification, MFA, OAuth, account
 settings UI, or dedicated CSRF token beyond `SameSite=Lax`.
 
+`POST /api/auth/login` and `POST /api/auth/register` are rate limited. When a
+budget is exhausted the endpoint answers HTTP 429 with error code
+`too_many_requests` and a `Retry-After` header giving whole seconds. The
+message is identical for every scope so it does not disclose which limit
+tripped or whether the account exists. `POST /api/auth/logout` is not limited.
+
+Login performs password-hashing work even when the email is unknown, so
+response time does not disclose whether an address is registered.
+
+These limits are **in-memory and per-process**: they reset on restart and are
+not shared between processes, so they are not cluster-wide enforcement. Budgets,
+key derivation, and the known gaps are documented in
+`docs/engineering/CURRENT_STATE.md`.
+
 ## Operational Status Endpoints
 
 ### `GET /api/outbox/status`

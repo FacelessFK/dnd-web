@@ -12,8 +12,19 @@ export type AuthApiResult =
       user: AuthUser | null;
     }
   | {
+      /**
+       * Server error code, when the server produced a structured one. The UI
+       * uses this to pick localized copy instead of showing the server's own
+       * English message.
+       */
+      code?: string;
       message: string;
       ok: false;
+      /**
+       * Seconds from the `Retry-After` header on a throttled response. Advisory
+       * display only — the gate itself is enforced server-side.
+       */
+      retryAfterSeconds?: number;
     };
 
 export async function getCurrentAuthUser(): Promise<AuthApiResult> {
@@ -90,8 +101,10 @@ async function requestAuth(
 
   if (!parsed.data.ok) {
     return {
+      code: parsed.data.error.code,
       message: parsed.data.error.message,
       ok: false,
+      retryAfterSeconds: readRetryAfterSeconds(response),
     };
   }
 
@@ -99,4 +112,16 @@ async function requestAuth(
     ok: true,
     user: parsed.data.data.user,
   };
+}
+
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers.get('retry-after');
+
+  if (!header) {
+    return undefined;
+  }
+
+  const seconds = Number.parseInt(header, 10);
+
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
 }

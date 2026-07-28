@@ -19,6 +19,10 @@ const defaultLocale: Locale = 'fa';
 const messages = {
   en: {
     'app.brand': 'DND Web',
+    'auth.error.tooManyAttempts':
+      'Too many attempts. Try again in about {minutes} minutes.',
+    'auth.error.tooManyAttemptsSoon':
+      'Too many attempts. Try again in a moment.',
     'common.characters': 'Characters',
     'common.dashboard': 'Dashboard',
     'common.language': 'Language',
@@ -1000,6 +1004,10 @@ const messages = {
   },
   fa: {
     'app.brand': 'DND Web',
+    'auth.error.tooManyAttempts':
+      'تلاش‌های ناموفق بیش از حد. حدود {minutes} دقیقه دیگر دوباره تلاش کنید.',
+    'auth.error.tooManyAttemptsSoon':
+      'تلاش‌های ناموفق بیش از حد. لحظه‌ای دیگر دوباره تلاش کنید.',
     'common.characters': 'کاراکترها',
     'common.dashboard': 'داشبورد',
     'common.language': 'زبان',

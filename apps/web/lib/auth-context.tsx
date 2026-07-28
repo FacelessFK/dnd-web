@@ -20,6 +20,10 @@ import {
 
 type AuthContextValue = {
   error: string | null;
+  /** Server error code for the current `error`, when it had one. */
+  errorCode: string | null;
+  /** `Retry-After` seconds for the current `error`, when the server sent one. */
+  errorRetryAfterSeconds: number | null;
   loading: boolean;
   login: (params: { email: string; password: string }) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -38,6 +42,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [errorRetryAfterSeconds, setErrorRetryAfterSeconds] = useState<
+    number | null
+  >(null);
+
+  const clearError = useCallback(() => {
+    setError(null);
+    setErrorCode(null);
+    setErrorRetryAfterSeconds(null);
+  }, []);
+
+  const applyError = useCallback(
+    (result: {
+      code?: string;
+      message: string;
+      retryAfterSeconds?: number;
+    }) => {
+      setError(result.message);
+      setErrorCode(result.code ?? null);
+      setErrorRetryAfterSeconds(result.retryAfterSeconds ?? null);
+    },
+    [],
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -45,14 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (result.ok) {
       setUser(result.user);
-      setError(null);
+      clearError();
     } else {
       setUser(null);
-      setError(result.message);
+      applyError(result);
     }
 
     setLoading(false);
-  }, []);
+  }, [applyError, clearError]);
 
   useEffect(() => {
     void refresh();
@@ -65,16 +92,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (result.ok) {
         setUser(result.user);
-        setError(null);
+        clearError();
         setLoading(false);
         return true;
       }
 
-      setError(result.message);
+      applyError(result);
       setLoading(false);
       return false;
     },
-    [],
+    [applyError, clearError],
   );
 
   const register = useCallback(
@@ -88,29 +115,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (result.ok) {
         setUser(result.user);
-        setError(null);
+        clearError();
         setLoading(false);
         return true;
       }
 
-      setError(result.message);
+      applyError(result);
       setLoading(false);
       return false;
     },
-    [],
+    [applyError, clearError],
   );
 
   const logout = useCallback(async () => {
     setLoading(true);
     await logoutAuth();
     setUser(null);
-    setError(null);
+    clearError();
     setLoading(false);
-  }, []);
+  }, [clearError]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       error,
+      errorCode,
+      errorRetryAfterSeconds,
       loading,
       login,
       logout,
@@ -118,7 +147,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       user,
     }),
-    [error, loading, login, logout, refresh, register, user],
+    [
+      error,
+      errorCode,
+      errorRetryAfterSeconds,
+      loading,
+      login,
+      logout,
+      refresh,
+      register,
+      user,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
