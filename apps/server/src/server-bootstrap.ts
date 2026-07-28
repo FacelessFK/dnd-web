@@ -43,6 +43,8 @@ import { DbBackedSceneStore } from './db-scene-store.js';
 import { DbBackedSessionStore } from './db-session-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 import { createSessionServer } from './session-server.js';
+import type { SceneEntityId, SessionId } from '@dnd/shared';
+
 import type { RuntimeSessionStore } from './session-store.js';
 
 export type ServerPersistenceMode = 'db' | 'in-memory';
@@ -75,6 +77,9 @@ export type ServerBootstrapDependencies = {
   createCommandEventOutboxDispatcher: (
     database: CommandEventOutboxDatabase,
     sessions: RuntimeSessionStore,
+    resolveConcealedCombatantIds: (
+      sessionId: SessionId,
+    ) => ReadonlySet<SceneEntityId>,
   ) => CommandEventOutboxDispatcherLike;
   createPersistenceConnection: (databaseUrl: string) => PersistenceConnection;
   createSceneRecordDatabase: (db: DndDatabase) => SceneRecordDatabase;
@@ -94,8 +99,16 @@ const defaultDependencies: ServerBootstrapDependencies = {
     new DrizzleCommandIdempotencyRecordDatabase(db),
   createCommandEventOutboxDatabase: (db) =>
     new DrizzleCommandEventOutboxDatabase(db),
-  createCommandEventOutboxDispatcher: (database, sessions) =>
-    new CommandEventOutboxDispatcher(database, sessions),
+  createCommandEventOutboxDispatcher: (
+    database,
+    sessions,
+    resolveConcealedCombatantIds,
+  ) =>
+    new CommandEventOutboxDispatcher(
+      database,
+      sessions,
+      resolveConcealedCombatantIds,
+    ),
   createPersistenceConnection: (databaseUrl) =>
     createNodePostgresDndDatabaseConnection(databaseUrl),
   createSceneRecordDatabase: (db) => new DrizzleSceneRecordDatabase(db),
@@ -190,6 +203,8 @@ export async function createBootstrappedSessionServer(
       dependencies.createCommandEventOutboxDispatcher(
         commandEventOutboxRecords,
         runtime.sessions,
+        (sessionId) =>
+          runtime.resolveConcealedCombatantIdsForSession(sessionId),
       );
     const characterCommandTransaction =
       new DbBackedCharacterCommandTransactionBoundary(

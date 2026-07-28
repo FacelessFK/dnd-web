@@ -52,7 +52,15 @@ export const combatEventSchema = z.object({
   hit: z.boolean(),
   damage: z.number().int().min(0),
   damageRoll: combatDamageRollSchema.optional(),
-  targetHp: combatTargetHpSchema,
+  // Absent when the target is a combatant the viewer may not identify: the
+  // health pool of a creature a player cannot see is itself concealed
+  // information. Present in every DM view and whenever the target is visible.
+  targetHp: combatTargetHpSchema.optional(),
+  // Set on role-projected events where the corresponding combatant ID was
+  // withheld, so the event feed can say "something you cannot see" instead of
+  // rendering a gap. Never set on the authoritative event.
+  attackerConcealed: z.boolean().optional(),
+  targetConcealed: z.boolean().optional(),
 });
 
 export type CombatRoll = z.infer<typeof combatRollSchema>;

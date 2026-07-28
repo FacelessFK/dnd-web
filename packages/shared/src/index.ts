@@ -170,9 +170,23 @@ export interface CombatantEncounterParticipant {
   initiative: number;
 }
 
+/**
+ * A combatant the viewer may not identify.
+ *
+ * Only ever produced by role projection on the way out to a client. The
+ * authoritative encounter never holds one, so turn resolution, attack
+ * validation, and persistence keep working with fully identified participants.
+ */
+export interface ConcealedCombatantEncounterParticipant {
+  kind: 'concealed_combatant';
+  participantId: ParticipantId;
+  initiative: number;
+}
+
 export type EncounterParticipant =
   | CharacterEncounterParticipant
-  | CombatantEncounterParticipant;
+  | CombatantEncounterParticipant
+  | ConcealedCombatantEncounterParticipant;
 
 export interface Encounter {
   id: EncounterId;

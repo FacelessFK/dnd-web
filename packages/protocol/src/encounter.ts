@@ -34,9 +34,29 @@ const combatantEncounterParticipantSchema = z.object({
   initiative: z.number().int(),
 });
 
+/**
+ * A combatant the viewer is not allowed to identify.
+ *
+ * This variant exists only in role-projected views. The authoritative encounter
+ * held by the server never contains one: concealment is derived from the scene
+ * entity's `hidden` flag at read time, so there is no denormalized copy to keep
+ * in sync when the DM reveals or conceals a creature mid-encounter.
+ *
+ * The entry keeps its position in `participants` so `currentTurnIndex` stays
+ * positionally valid for every viewer, and keeps `participantId` so a player
+ * can still tell whether the current turn is theirs. It drops `combatantId`,
+ * which is the scene entity ID the player is not permitted to correlate.
+ */
+const concealedCombatantEncounterParticipantSchema = z.object({
+  kind: z.literal('concealed_combatant'),
+  participantId: participantIdSchema,
+  initiative: z.number().int(),
+});
+
 export const encounterParticipantSchema = z.union([
   characterEncounterParticipantSchema,
   combatantEncounterParticipantSchema,
+  concealedCombatantEncounterParticipantSchema,
 ]);
 
 export const encounterSchema = z.object({

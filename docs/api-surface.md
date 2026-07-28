@@ -260,6 +260,16 @@ Notes:
   client rendering concern - the browser filter is a DM-view convenience only.
   Because a player's copy omits hidden blockers, a client-side movement preview
   can offer a cell the server then rejects; the server remains the authority.
+- Encounter state and combat events are role-projected on the same principle.
+  A player's `get_encounter_state`, `encounter_state` event, and `combat_event`
+  replace a concealed combatant with a `concealed_combatant` participant that
+  keeps its slot and initiative but carries no `combatantId`, and drop that
+  combatant's `targetHp` from combat events. The DM receives every payload as
+  stored. The slot is retained deliberately: `currentTurnIndex` is a positional
+  index into `participants`, so filtering entries would leave the DM and player
+  views pointing at different actors. `targetHp` and `combatantId` are therefore
+  optional on `combat_event`, and `attackerConcealed` / `targetConcealed` mark
+  which identity was withheld.
 - `paint_scene_terrain` is DM-only and takes a sparse `cells` patch
   (`{ position, tile }`, capped per command), so the same command serves a
   single brush stroke and a full map-builder save. Cells outside the grid are

@@ -2,10 +2,13 @@ import { sceneTerrainTiles } from '@dnd/shared';
 import type {
   AbilityScores,
   Character,
+  ConcealedCombatantEncounterParticipant,
   DerivedCharacterStats,
+  Encounter,
   GridDefinition,
   ParticipantRole,
   Scene,
+  SceneEntityId,
   SceneCombatant,
   SceneTerrain,
   SceneTerrainTile,
@@ -840,4 +843,71 @@ export function projectSceneForRole(
     ...scene,
     entities: scene.entities.filter((entity) => !entity.hidden),
   };
+}
+
+/**
+ * The set of combatant scene-entity IDs a player is not allowed to identify.
+ *
+ * Derived from the scene rather than stored on the encounter, so revealing or
+ * concealing a creature mid-encounter takes effect immediately and there is no
+ * second copy of `hidden` to drift out of sync.
+ */
+export function collectConcealedCombatantIds(
+  scene: Scene,
+): ReadonlySet<SceneEntityId> {
+  return new Set(
+    scene.entities
+      .filter((entity) => entity.combatant && entity.hidden)
+      .map((entity) => entity.id),
+  );
+}
+
+/**
+ * The encounter as a given role is allowed to perceive it.
+ *
+ * Concealed combatants keep their slot in `participants` instead of being
+ * filtered out. That is deliberate on two counts:
+ *
+ *  - `currentTurnIndex` is a positional index into this array, read directly by
+ *    the client. Removing entries would silently shift every index and make the
+ *    turn rail point at the wrong actor for players but not for the DM.
+ *  - It matches how concealment works at a table. When something unseen acts,
+ *    the players know a turn happened and roughly where it falls in the order;
+ *    they just do not know what acted.
+ *
+ * What the projection removes is identity: `combatantId` is the scene entity ID
+ * a player could otherwise correlate against map data, combat events, and other
+ * rounds to count and track creatures the DM concealed.
+ *
+ * Initiative is deliberately retained. It is required to keep the order
+ * readable, and it is already implied by the entry's position in the list.
+ */
+export function projectEncounterForRole(
+  encounter: Encounter,
+  role: ParticipantRole,
+  concealedCombatantIds: ReadonlySet<SceneEntityId>,
+): Encounter {
+  if (role === 'dm' || concealedCombatantIds.size === 0) {
+    return encounter;
+  }
+
+  let changed = false;
+  const participants = encounter.participants.map((participant) => {
+    if (
+      participant.kind !== 'combatant' ||
+      !concealedCombatantIds.has(participant.combatantId)
+    ) {
+      return participant;
+    }
+
+    changed = true;
+
+    return {
+      kind: 'concealed_combatant',
+      participantId: participant.participantId,
+      initiative: participant.initiative,
+    } satisfies ConcealedCombatantEncounterParticipant;
+  });
+
+  return changed ? { ...encounter, participants } : encounter;
 }

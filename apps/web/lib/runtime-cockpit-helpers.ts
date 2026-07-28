@@ -65,8 +65,10 @@ export type RuntimeMode = 'dm' | 'player';
 
 export type CurrentTurnRailSummary = {
   actionUsed: boolean;
-  actorId: string;
-  actorKind: 'character' | 'combatant';
+  // Null for a concealed combatant: the server withheld the identifier, so
+  // there is nothing to select, target, or correlate on.
+  actorId: string | null;
+  actorKind: 'character' | 'combatant' | 'concealed_combatant';
   actorLabel: string;
   bonusActionUsed: boolean;
   initiative: number;
@@ -88,14 +90,25 @@ export type ActionTargetFeedbackTarget = {
   status: CharacterResource['character']['status'] | 'active' | 'defeated';
 };
 
+/**
+ * Sentinel label for a combatant the server refused to identify.
+ *
+ * These helpers are pure and have no translator, matching the rest of this
+ * module, so they emit this marker and the cockpit swaps in localized copy.
+ * Never render it directly.
+ */
+export const CONCEALED_COMBATANT_LABEL = '__concealed_combatant__';
+
 export type ActionTargetFeedbackResult = {
   attackerLabel: string;
   damage: number;
   hit: boolean;
   rollTotal: number;
   targetArmorClass: number;
-  targetHpCurrent: number;
-  targetHpPrevious: number;
+  // Null when the server withheld the target's health because the viewer is not
+  // allowed to identify that combatant.
+  targetHpCurrent: number | null;
+  targetHpPrevious: number | null;
   targetLabel: string;
 };
 
@@ -1418,6 +1431,13 @@ export function getCurrentTurnLabel({
     return 'No active turn';
   }
 
+  // A concealed combatant carries no ID to look up, and must not fall through
+  // to the DM's participant name - that would label the unseen creature's turn
+  // with the DM's own name.
+  if (current.kind === 'concealed_combatant') {
+    return CONCEALED_COMBATANT_LABEL;
+  }
+
   if ('combatantId' in current) {
     const combatant = getCombatantEntities(scene).find(
       (entity) => entity.id === current.combatantId,
@@ -1471,6 +1491,17 @@ export function getCurrentTurnRailSummary({
     reactionUsed: encounter.currentTurnUsage.reactionUsed,
     roundNumber: encounter.roundNumber,
   };
+
+  if (current.kind === 'concealed_combatant') {
+    return {
+      ...base,
+      actorId: null,
+      actorKind: 'concealed_combatant',
+      actorLabel: CONCEALED_COMBATANT_LABEL,
+      movementRemainingFeet: null,
+      movementSpeedFeet: null,
+    };
+  }
 
   if ('combatantId' in current) {
     const combatant = getCombatantEntities(scene).find(
@@ -1545,8 +1576,8 @@ export function getEncounterStatusSummary({
         hit: lastCombatEvent.hit,
         rollTotal: lastCombatEvent.roll.total,
         targetArmorClass: lastCombatEvent.targetArmorClass,
-        targetHpCurrent: lastCombatEvent.targetHp.current,
-        targetHpPrevious: lastCombatEvent.targetHp.previous,
+        targetHpCurrent: lastCombatEvent.targetHp?.current ?? null,
+        targetHpPrevious: lastCombatEvent.targetHp?.previous ?? null,
         targetLabel: getCombatEventActorLabel({
           combatantId: lastCombatEvent.targetCombatantId,
           participantId: lastCombatEvent.targetParticipantId,
@@ -1631,8 +1662,8 @@ export function getActionTargetFeedbackSummary({
           hit: lastCombatEvent.hit,
           rollTotal: lastCombatEvent.roll.total,
           targetArmorClass: lastCombatEvent.targetArmorClass,
-          targetHpCurrent: lastCombatEvent.targetHp.current,
-          targetHpPrevious: lastCombatEvent.targetHp.previous,
+          targetHpCurrent: lastCombatEvent.targetHp?.current ?? null,
+          targetHpPrevious: lastCombatEvent.targetHp?.previous ?? null,
           targetLabel: getCombatEventActorLabel({
             combatantId: lastCombatEvent.targetCombatantId,
             participantId: lastCombatEvent.targetParticipantId,
@@ -3617,13 +3648,23 @@ export function describeSessionStreamEvent(
 ): RuntimeEventSummary {
   switch (event.type) {
     case 'combat_event': {
-      const targetLabel =
-        event.targetKind === 'combatant' && event.targetCombatantId
+      // A concealed combatant arrives without its ID and, when it is the
+      // target, without its health. Fall back to an unnamed label and drop the
+      // HP clause rather than rendering "undefined".
+      const targetLabel = event.targetConcealed
+        ? 'Unknown combatant'
+        : event.targetKind === 'combatant' && event.targetCombatantId
           ? event.targetCombatantId
           : event.targetParticipantId;
+      const attackerLabel = event.attackerConcealed
+        ? 'Unknown combatant'
+        : (event.attackerCombatantId ?? event.attackerParticipantId);
+      const hpClause = event.targetHp
+        ? ` (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current})`
+        : ` (${targetLabel})`;
 
       return {
-        detail: `${event.attackerCombatantId ?? event.attackerParticipantId} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${describeCombatAttackResult(event)} (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current}).`,
+        detail: `${attackerLabel} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${describeCombatAttackResult(event)}${hpClause}.`,
         title: 'Attack resolved',
         tone: event.hit ? 'danger' : 'warning',
       };

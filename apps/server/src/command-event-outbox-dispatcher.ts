@@ -12,6 +12,8 @@ import type {
   SessionStateUpdate,
 } from '@dnd/protocol';
 
+import type { SceneEntityId, SessionId } from '@dnd/shared';
+
 import type { RuntimeSessionStore } from './session-store.js';
 
 export interface CommandEventOutboxDispatcherLike {
@@ -26,6 +28,18 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
   constructor(
     private readonly outbox: CommandEventOutboxDatabase,
     private readonly sessions: RuntimeSessionStore,
+    /**
+     * Resolves which combatants are concealed for a session, so replayed rows
+     * are projected per role exactly like a live publish.
+     *
+     * Outbox rows store the authoritative payload, which is correct - the row
+     * is a durable record, not a per-viewer message - so concealment has to be
+     * applied at delivery. The default conceals nothing, which is right only
+     * for callers with no scene access, such as tests.
+     */
+    private readonly resolveConcealedCombatantIds: (
+      sessionId: SessionId,
+    ) => ReadonlySet<SceneEntityId> = () => new Set<SceneEntityId>(),
   ) {}
 
   async drainAllUnpublished(): Promise<void> {
@@ -120,8 +134,11 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     }
 
     if (row.eventType === 'encounter_state') {
+      const update = this.clone(row.payload as EncounterStateUpdate);
+
       this.sessions.publishEncounterStateUpdate(
-        this.clone(row.payload as EncounterStateUpdate),
+        update,
+        this.resolveConcealedCombatantIds(update.sessionId),
       );
       return;
     }
@@ -134,7 +151,12 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     }
 
     if (row.eventType === 'combat_event') {
-      this.sessions.publishCombatEvent(this.clone(row.payload as CombatEvent));
+      const event = this.clone(row.payload as CombatEvent);
+
+      this.sessions.publishCombatEvent(
+        event,
+        this.resolveConcealedCombatantIds(event.sessionId),
+      );
       return;
     }
 

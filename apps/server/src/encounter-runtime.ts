@@ -210,7 +210,11 @@ export function isCombatantEncounterParticipant(
 export function isCharacterEncounterParticipant(
   participant: EncounterParticipant,
 ): participant is Extract<EncounterParticipant, { characterId: string }> {
-  return participant.kind !== 'combatant';
+  // Tested positively rather than as "not a combatant". `kind` is optional on
+  // character entries for wire compatibility, but the union also carries the
+  // projection-only `concealed_combatant` variant, and a negative test would
+  // silently classify that as a character.
+  return participant.kind === undefined || participant.kind === 'character';
 }
 
 export function markEncounterActionUsed(encounter: Encounter): Encounter {

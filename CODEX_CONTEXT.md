@@ -121,10 +121,12 @@ that scope.
   consumed by any visibility system.
 - The tactical map's light and vignette are atmosphere, not fog of war or line
   of sight; nothing is occluded.
-- Role projection covers scene entities only. `get_scene` strips hidden entities
-  for players; encounter state is not projected, so a hidden combatant still
-  appears in the shared initiative order by entity ID (no name, position, HP, or
-  stat block).
+- Role projection covers scene entities, encounter state, and combat events.
+  `get_scene` strips hidden entities for players; encounter reads and the
+  `encounter_state` / `combat_event` streams replace a concealed combatant with
+  an identity-free `concealed_combatant` slot and withhold its HP. A player can
+  still tell that some concealed creature exists and its initiative, because the
+  slot stays to keep `currentTurnIndex` aligned across roles.
 - `/maps` publishes new scenes only. It cannot re-open or overwrite a server
   scene, and it does not activate what it publishes.
 - Default local startup may still be in-memory.

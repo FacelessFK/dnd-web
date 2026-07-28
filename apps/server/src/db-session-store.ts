@@ -13,12 +13,14 @@ import type {
   SessionStateUpdateReason,
   SessionStreamEvent,
 } from '@dnd/protocol';
+import { projectEncounterForRole } from '@dnd/rules';
 import type {
   CharacterId,
   Participant,
   ParticipantId,
   ParticipantRole,
   SceneEntityFootprint,
+  SceneEntityId,
   SceneId,
   ScenePosition,
   Session,
@@ -29,6 +31,8 @@ import type {
   PersistedSessionSnapshotDocument,
   SessionSnapshotDatabase,
 } from '@dnd/db';
+
+import { projectCombatEventForRole } from './encounter-visibility.js';
 
 import {
   SessionStoreError,
@@ -392,16 +396,41 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
     return this.clone(update);
   }
 
-  publishEncounterStateUpdate(update: EncounterStateUpdate): void {
+  publishEncounterStateUpdate(
+    update: EncounterStateUpdate,
+    concealedCombatantIds?: ReadonlySet<SceneEntityId>,
+  ): void {
     const room = this.requireRoom(update.sessionId);
 
-    this.broadcast(room, update);
+    if (!concealedCombatantIds?.size) {
+      this.broadcast(room, update);
+      return;
+    }
+
+    this.broadcastByRole(room, (role) => ({
+      ...update,
+      encounter: projectEncounterForRole(
+        update.encounter,
+        role,
+        concealedCombatantIds,
+      ),
+    }));
   }
 
-  publishCombatEvent(update: CombatEvent): void {
+  publishCombatEvent(
+    update: CombatEvent,
+    concealedCombatantIds?: ReadonlySet<SceneEntityId>,
+  ): void {
     const room = this.requireRoom(update.sessionId);
 
-    this.broadcast(room, update);
+    if (!concealedCombatantIds?.size) {
+      this.broadcast(room, update);
+      return;
+    }
+
+    this.broadcastByRole(room, (role) =>
+      projectCombatEventForRole(update, role, concealedCombatantIds),
+    );
   }
 
   publishCharacterStateUpdate(update: CharacterStateUpdate): void {
@@ -491,6 +520,31 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
   private broadcast(room: SessionRoomState, update: SessionStreamEvent): void {
     for (const subscriber of room.subscribers.values()) {
       subscriber.send(this.clone(update));
+    }
+  }
+
+  /**
+   * Per-role fan-out for events carrying concealed identities. Mirrors
+   * `InMemorySessionStore.broadcastByRole`; an unresolvable subscriber is
+   * treated as a player so an unknown viewer never receives the DM payload.
+   */
+  private broadcastByRole(
+    room: SessionRoomState,
+    project: (role: ParticipantRole) => SessionStreamEvent,
+  ): void {
+    const projectedByRole = new Map<ParticipantRole, SessionStreamEvent>();
+
+    for (const [participantId, subscriber] of room.subscribers) {
+      const role =
+        this.findParticipant(room.snapshot, participantId)?.role ?? 'player';
+      let projected = projectedByRole.get(role);
+
+      if (!projected) {
+        projected = project(role);
+        projectedByRole.set(role, projected);
+      }
+
+      subscriber.send(this.clone(projected));
     }
   }
 

@@ -40,6 +40,7 @@ import {
   characterInputFromDraft,
   characterUpdateInputFromDraft,
   cockpitStorageKey,
+  CONCEALED_COMBATANT_LABEL,
   createCharacterDraftFormFromResource,
   createDefaultCharacterDraftForm,
   createDefaultCombatantDraftForm,
@@ -164,6 +165,21 @@ type LastResponse = {
 
 type TurnUsageDraft = Encounter['currentTurnUsage'];
 type RuntimeTranslator = ReturnType<typeof useI18n>['t'];
+
+/**
+ * Swaps the pure helpers' concealed-combatant sentinel for localized copy.
+ *
+ * The helper module has no translator by design, so it marks an unidentifiable
+ * actor and the label is resolved here, at render time.
+ */
+function localizeActorLabel(
+  label: string | null,
+  t: RuntimeTranslator,
+): string | null {
+  return label === CONCEALED_COMBATANT_LABEL
+    ? t('runtime.turn.concealedCombatant')
+    : label;
+}
 
 function getLocalizedSceneEntityTypeLabel(
   type: (typeof sceneEntityTypeOptions)[number],
@@ -1315,19 +1331,26 @@ export function RuntimeCockpit() {
         }));
         break;
       case 'combat_event':
-        if (event.targetCharacterId) {
+        // `targetHp` is withheld when the viewer may not identify the target,
+        // so there is nothing to reconcile locally in that case. The server
+        // stays the authority either way.
+        if (event.targetHp && event.targetCharacterId) {
+          const targetCharacterHp = event.targetHp;
+
           patchCharacter(event.targetCharacterId, (resource) => ({
             ...resource,
             character: {
               ...resource.character,
               hp: {
                 ...resource.character.hp,
-                current: event.targetHp.current,
+                current: targetCharacterHp.current,
               },
             },
           }));
         }
-        if (event.targetCombatantId) {
+        if (event.targetHp && event.targetCombatantId) {
+          const targetHp = event.targetHp;
+
           setScene((currentScene) => {
             if (!currentScene) {
               return currentScene;
@@ -1343,7 +1366,7 @@ export function RuntimeCockpit() {
                         ...entity.combatant,
                         hp: {
                           ...entity.combatant.hp,
-                          current: event.targetHp.current,
+                          current: targetHp.current,
                         },
                       },
                     }
@@ -5800,9 +5823,10 @@ function RuntimeStatusOverviewPanel({
     overview.mode === 'dm'
       ? t('runtime.statusOverview.dmReadiness')
       : t('runtime.statusOverview.playerReadiness');
-  const turnLabel = overview.turn.actorLabel
+  const overviewActorLabel = localizeActorLabel(overview.turn.actorLabel, t);
+  const turnLabel = overviewActorLabel
     ? t('runtime.statusOverview.turnActive', {
-        actor: overview.turn.actorLabel,
+        actor: overviewActorLabel,
       })
     : t('runtime.statusOverview.turnInactive');
   const turnProgress =
@@ -5976,7 +6000,8 @@ function getRuntimeStatusOverviewNextActionDetail(
       totalCount: 0,
       turn: {
         attackReady: false,
-        currentActorLabel: overview.turn.actorLabel ?? t('common.none'),
+        currentActorLabel:
+          localizeActorLabel(overview.turn.actorLabel, t) ?? t('common.none'),
         isCurrentTurn: false,
         moveReady: false,
         readyActionCount: 0,
@@ -6708,7 +6733,7 @@ function MovementFeedback({
           {t('runtime.movementFeedback.title')}
         </p>
         <p className="mt-1 truncate text-sm font-black text-white">
-          {summary.actorLabel}
+          {localizeActorLabel(summary.actorLabel, t)}
         </p>
         {summary.moveBlockedReason ? (
           <p className="mt-1 text-amber-100/80">{summary.moveBlockedReason}</p>
@@ -6999,7 +7024,7 @@ function ActionEconomyFeedback({
   const actorLabel =
     summary.overallStatus === 'no_encounter'
       ? t('runtime.actionEconomy.noEncounter')
-      : summary.actorLabel;
+      : localizeActorLabel(summary.actorLabel, t);
 
   return (
     <div className="grid gap-2 rounded-xl border border-amber-300/15 bg-amber-950/10 p-3 text-xs text-amber-50">

@@ -751,6 +751,7 @@ const messages = {
     'runtime.statePanel.sceneName': 'Scene name',
     'runtime.statePanel.session': 'Session',
     'runtime.statePanel.title': 'State',
+    'runtime.turn.concealedCombatant': 'Unknown combatant',
     'runtime.turnTarget.advanceTurn': 'Advance Turn',
     'runtime.turnTarget.attackTarget': 'Attack Target',
     'runtime.turnTarget.description':
@@ -1732,6 +1733,7 @@ const messages = {
     'runtime.statePanel.sceneName': 'نام صحنه',
     'runtime.statePanel.session': 'نشست',
     'runtime.statePanel.title': 'وضعیت',
+    'runtime.turn.concealedCombatant': 'موجود ناشناس',
     'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
     'runtime.turnTarget.attackTarget': 'حمله به هدف',
     'runtime.turnTarget.description':

@@ -16,6 +16,8 @@ import {
   isCombatantDefeated,
   isOccupancyWithinBaselineMeleeReach,
   isWithinBaselineMeleeReach,
+  collectConcealedCombatantIds,
+  projectEncounterForRole,
   projectSceneForRole,
   resolveAttackRoll,
   rollAttackDamage,
@@ -2199,10 +2201,47 @@ export class InMemoryGameRuntime<
     );
   }
 
+  // The read a player can issue directly, so concealment is applied on the way
+  // out. Note this projects the *response* only: every mutation path reads
+  // `getEncounterStateForParticipant` and keeps the authoritative encounter, so
+  // turn resolution and attack validation never see a projected view.
   getEncounterState(command: GetEncounterStateCommand): Encounter {
-    return this.getEncounterStateForParticipant(
-      command.payload.sessionId,
-      command.actor.participantId,
+    return this.resolveRepositoryResult(
+      this.getEncounterStateForParticipant(
+        command.payload.sessionId,
+        command.actor.participantId,
+      ),
+      (encounter) =>
+        this.projectEncounterForParticipant(
+          encounter,
+          command.payload.sessionId,
+          command.actor.participantId,
+        ),
+    );
+  }
+
+  /**
+   * Applies concealment to an encounter about to be returned to one client.
+   *
+   * Kept separate from `getEncounterStateForParticipant` on purpose: that
+   * method is the authoritative read used by every mutation, and projecting
+   * inside it would let a redacted encounter be written back as real state.
+   */
+  private projectEncounterForParticipant(
+    encounter: Encounter,
+    sessionId: SessionId,
+    participantId: ParticipantId,
+  ): Encounter {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      sessionId,
+      participantId,
+    );
+    const actor = this.requireParticipant(snapshot, participantId);
+
+    return projectEncounterForRole(
+      encounter,
+      actor.role,
+      this.resolveConcealedCombatantIds(encounter),
     );
   }
 
@@ -2213,11 +2252,15 @@ export class InMemoryGameRuntime<
         command.actor.participantId,
       ),
       ({ encounter }) =>
-        this.saveAndPublishEncounter({
-          sessionId: command.payload.sessionId,
-          encounter: markEncounterActionUsed(encounter),
-          reason: 'action_used',
-        }),
+        this.projectEncounterForParticipant(
+          this.saveAndPublishEncounter({
+            sessionId: command.payload.sessionId,
+            encounter: markEncounterActionUsed(encounter),
+            reason: 'action_used',
+          }),
+          command.payload.sessionId,
+          command.actor.participantId,
+        ),
     );
   }
 
@@ -2228,11 +2271,15 @@ export class InMemoryGameRuntime<
         command.actor.participantId,
       ),
       ({ encounter }) =>
-        this.saveAndPublishEncounter({
-          sessionId: command.payload.sessionId,
-          encounter: markEncounterBonusActionUsed(encounter),
-          reason: 'bonus_action_used',
-        }),
+        this.projectEncounterForParticipant(
+          this.saveAndPublishEncounter({
+            sessionId: command.payload.sessionId,
+            encounter: markEncounterBonusActionUsed(encounter),
+            reason: 'bonus_action_used',
+          }),
+          command.payload.sessionId,
+          command.actor.participantId,
+        ),
     );
   }
 
@@ -2243,11 +2290,15 @@ export class InMemoryGameRuntime<
         command.actor.participantId,
       ),
       ({ encounter }) =>
-        this.saveAndPublishEncounter({
-          sessionId: command.payload.sessionId,
-          encounter: markEncounterReactionUsed(encounter),
-          reason: 'reaction_used',
-        }),
+        this.projectEncounterForParticipant(
+          this.saveAndPublishEncounter({
+            sessionId: command.payload.sessionId,
+            encounter: markEncounterReactionUsed(encounter),
+            reason: 'reaction_used',
+          }),
+          command.payload.sessionId,
+          command.actor.participantId,
+        ),
     );
   }
 
@@ -2258,15 +2309,19 @@ export class InMemoryGameRuntime<
         command.actor.participantId,
       ),
       ({ encounter, movementAllowanceFeet }) =>
-        this.saveAndPublishEncounter({
-          sessionId: command.payload.sessionId,
-          encounter: recordEncounterMovementUsage({
-            encounter,
-            additionalMovementFeet: command.payload.amountFeet,
-            movementAllowanceFeet,
+        this.projectEncounterForParticipant(
+          this.saveAndPublishEncounter({
+            sessionId: command.payload.sessionId,
+            encounter: recordEncounterMovementUsage({
+              encounter,
+              additionalMovementFeet: command.payload.amountFeet,
+              movementAllowanceFeet,
+            }),
+            reason: 'movement_used',
           }),
-          reason: 'movement_used',
-        }),
+          command.payload.sessionId,
+          command.actor.participantId,
+        ),
     );
   }
 
@@ -2325,7 +2380,15 @@ export class InMemoryGameRuntime<
       (context) => {
         const resolution = this.resolveAttack(context);
 
-        return this.persistResolvedAttack(context, resolution);
+        // Uses the scene and actor already resolved during preparation rather
+        // than re-reading them. Besides being cheaper, this path also runs
+        // inside a transaction boundary whose stores are scoped to the
+        // transaction, so a fresh lookup here is not guaranteed to resolve.
+        return projectEncounterForRole(
+          this.persistResolvedAttack(context, resolution),
+          prepared.actor.role,
+          collectConcealedCombatantIds(prepared.scene),
+        );
       },
     );
   }
@@ -2756,9 +2819,18 @@ export class InMemoryGameRuntime<
         );
 
         if (!isCharacterEncounterParticipant(attackerEncounterParticipant)) {
+          // The authoritative encounter never holds a concealed participant -
+          // that variant is produced only when projecting a view for a player -
+          // so this narrows to a real combatant in practice.
+          const attackerCombatantId = isCombatantEncounterParticipant(
+            attackerEncounterParticipant,
+          )
+            ? attackerEncounterParticipant.combatantId
+            : 'unknown';
+
           throw new EncounterRuntimeError(
             'invalid_turn_actor',
-            `Participant "${actor.id}" cannot use the player attack command for combatant "${attackerEncounterParticipant.combatantId}".`,
+            `Participant "${actor.id}" cannot use the player attack command for combatant "${attackerCombatantId}".`,
           );
         }
 
@@ -3900,7 +3972,10 @@ export class InMemoryGameRuntime<
       return;
     }
 
-    this.sessions.publishEncounterStateUpdate(update);
+    this.sessions.publishEncounterStateUpdate(
+      update,
+      this.resolveConcealedCombatantIds(params.encounter),
+    );
   }
 
   private publishCombatEvent(update: CombatEvent): void {
@@ -3909,7 +3984,42 @@ export class InMemoryGameRuntime<
       return;
     }
 
-    this.sessions.publishCombatEvent(update);
+    this.sessions.publishCombatEvent(
+      update,
+      this.resolveConcealedCombatantIdsForSession(update.sessionId),
+    );
+  }
+
+  /**
+   * Scene entity IDs of combatants the DM has concealed in this encounter's
+   * scene.
+   *
+   * Resolved from the scene on every publish rather than cached on the
+   * encounter, so revealing or hiding a creature mid-combat takes effect on the
+   * next event with no invalidation step.
+   */
+  private resolveConcealedCombatantIds(
+    encounter: Encounter,
+  ): ReadonlySet<SceneEntityId> {
+    return collectConcealedCombatantIds(
+      this.scenes.getScene(encounter.sceneId),
+    );
+  }
+
+  /**
+   * Public so the outbox dispatcher can project events it replays from
+   * persisted rows. Those rows hold the authoritative payload and the
+   * dispatcher has no scene access of its own, so without this the DB-mode
+   * delivery path would broadcast unprojected encounter and combat events.
+   */
+  resolveConcealedCombatantIdsForSession(
+    sessionId: SessionId,
+  ): ReadonlySet<SceneEntityId> {
+    const encounter = this.encounters.findEncounterBySession(sessionId);
+
+    return encounter
+      ? this.resolveConcealedCombatantIds(encounter)
+      : new Set<SceneEntityId>();
   }
 
   private saveAndPublishEncounter(params: {
@@ -3998,6 +4108,17 @@ export class InMemoryGameRuntime<
             encounter,
             movementAllowanceFeet: combatant.combatant?.speed ?? 0,
           };
+        }
+
+        // Concealment is applied when projecting a view for a client, never to
+        // the stored encounter this mutation path reads. Reaching here with a
+        // concealed participant would mean a projected view was written back as
+        // authoritative state, which is a bug worth failing loudly on.
+        if (!isCharacterEncounterParticipant(currentTurnParticipant)) {
+          throw new EncounterRuntimeError(
+            'internal_server_error',
+            `Encounter "${encounter.id}" holds a concealed participant in authoritative state.`,
+          );
         }
 
         const currentTurnSessionParticipant = this.requireParticipant(

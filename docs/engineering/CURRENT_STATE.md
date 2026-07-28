@@ -295,14 +295,24 @@ Current runtime is intentionally narrow:
   terrain movement cost, no hazard damage (lava and deep water simply block
   movement), and terrain `blocksVision` is recorded but not yet consumed by any
   visibility system.
-- Role projection currently covers scene entities only. `get_scene` strips
-  hidden entities for players, but encounter state is not projected: a hidden
-  combatant that the DM adds to an encounter still appears in the shared
-  initiative order. It leaks only its entity ID and initiative - no name,
-  position, HP, or stat block - and the cockpit falls back to rendering the raw
-  ID, since the player's scene no longer carries the entity to resolve a name
-  from. Whether a concealed creature belongs in a shared initiative order at all
-  is an open product question, not just a filtering gap.
+- Role projection covers scene entities, encounter state, and combat events.
+  `get_scene` strips hidden entities for players; `get_encounter_state`, the
+  `encounter_state` stream, and the `combat_event` stream replace a concealed
+  combatant's identity with a `concealed_combatant` entry that keeps its slot
+  and initiative but carries no scene entity ID, and withhold its HP. The
+  product decision behind the shape: a concealed creature stays in the shared
+  initiative order, because `currentTurnIndex` is a positional index the client
+  reads directly and because players at a table do learn that something unseen
+  acted. What they must not learn is which creature it was.
+- Concealment is derived from the scene's `hidden` flag on every read and
+  publish, never denormalized onto the encounter, so revealing or hiding a
+  creature mid-combat takes effect on the next event with no invalidation step.
+  The authoritative encounter never holds a `concealed_combatant` entry: every
+  mutation path reads unprojected state, and the runtime throws
+  `internal_server_error` if a projected view is ever seen in stored state.
+- Still not covered: a player can infer that _some_ concealed creature exists
+  and its initiative, because the slot and its initiative value remain. Removing
+  those would break turn-index alignment between the DM and player views.
 - Because a player's scene omits hidden blocking entities, the client movement
   preview can offer a cell the server rejects on submit. That is intended - the
   alternative reveals concealed blockers as holes in the reachable-cell overlay
