@@ -251,6 +251,13 @@ Library, auth, transactions, idempotency, or database behavior.
   `fa` maps and `{placeholder}` interpolation. `type Messages = typeof
 messages.en` means **every key added to `en` must also be added to `fa`** or
   typecheck fails.
+- **Character Builder SRD content uses a different, untyped mechanism.** The
+  phrase book in `app/characters/simple-builder/localization.ts` is keyed on the
+  English source string and falls back to that string on a miss, so an
+  untranslated trait renders English inside the RTL Persian page without failing
+  typecheck. `apps/web/lib/simple-builder-phrase-coverage.test.ts` is what
+  catches it: new content in `simple-builder/data/` needs a Persian entry or that
+  test fails with the exact field path.
 - **Never store a localized label as a canonical ID.** `rulesProfileId`, class /
   species / background / spell IDs, ability keys, command types, and database
   IDs stay stable and untranslated. Never auto-translate user-entered character

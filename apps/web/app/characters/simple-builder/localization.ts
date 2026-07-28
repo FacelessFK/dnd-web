@@ -1001,19 +1001,37 @@ const extraPhraseFa: Record<string, string> = {
     'تمرین هنرهای رزمی به تو در سبک‌های نبرد چیرگی می‌دهد. برای سلاح‌های مانک می‌توانی به‌جای قدرت از چابکی استفاده کنی، ضربه‌های بی‌سلاح تو 1d4 آسیب می‌زنند و وقتی کنش حمله را انجام می‌دهی، می‌توانی با کنش اضافه یک ضربه بی‌سلاح هم بزنی.',
 };
 
+// The builder's Persian copy is a phrase book keyed on the English source
+// string, so a missing entry does not fail loudly the way a missing `messages`
+// key does - it silently renders English inside an RTL Persian page, and
+// Persian is the default locale. These resolvers return `undefined` on a miss
+// instead of falling back, which is what lets the phrase book be covered by a
+// test; the hook below applies the English fallback for rendering. See
+// apps/web/lib/simple-builder-phrase-coverage.test.ts.
+
+export function resolveBuilderPhraseFa(value: string): string | undefined {
+  return (
+    phraseFa[value] ??
+    descriptionFa[value] ??
+    extraPhraseFa[value] ??
+    namesFa[value]
+  );
+}
+
+export function resolveBuilderTaglineFa(
+  id: string,
+  tagline: string,
+): string | undefined {
+  return taglineFa[id] ?? resolveBuilderPhraseFa(tagline);
+}
+
 export function useBuilderI18n() {
   const { locale } = useI18n();
   const isFa = locale === 'fa';
   const t = copy[locale];
 
   const phrase = (value: string): string =>
-    isFa
-      ? (phraseFa[value] ??
-        descriptionFa[value] ??
-        extraPhraseFa[value] ??
-        namesFa[value] ??
-        value)
-      : value;
+    isFa ? (resolveBuilderPhraseFa(value) ?? value) : value;
 
   const list = (values: string[]): string =>
     values.map(phrase).join(isFa ? '، ' : ', ');
@@ -1043,6 +1061,8 @@ export function useBuilderI18n() {
     skill: (value: SkillName) => phrase(value),
     source: (value: string) => phrase(value),
     tagline: (entity: { id: string; tagline: string }) =>
-      isFa ? (taglineFa[entity.id] ?? phrase(entity.tagline)) : entity.tagline,
+      isFa
+        ? (resolveBuilderTaglineFa(entity.id, entity.tagline) ?? entity.tagline)
+        : entity.tagline,
   };
 }

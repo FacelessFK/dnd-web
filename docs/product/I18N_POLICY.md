@@ -31,6 +31,28 @@ adding isolated hardcoded strings.
   translation.
 - Avoid English-only UI assumptions in future product/UX docs and prompts.
 
+## Two Translation Mechanisms
+
+The app localizes copy two different ways, and they fail differently.
+
+**UI chrome** uses the `messages` map in `apps/web/lib/i18n.tsx`, keyed on dotted
+paths. Because `type Messages = typeof messages.en`, a key added to `en` without
+a `fa` counterpart is a type error. Missing translations cannot ship.
+
+**Character Builder SRD-style content** — race traits, class features,
+background features, equipment, proficiencies, languages, spell names — uses the
+phrase book in `apps/web/app/characters/simple-builder/localization.ts`, keyed on
+the English source string. This one is not type-checked: a missing entry falls
+back to the English input, so it renders English text inside an RTL Persian page
+without any build or test failure.
+
+`apps/web/lib/simple-builder-phrase-coverage.test.ts` closes that gap. It walks
+`simple-builder/data/` and asserts every string that reaches the translator has a
+Persian entry, listing the exact field path of any miss. Adding SRD content
+without Persian copy fails this test. It covers only strings that are actually
+rendered; `ideals`, `bonds`, and `flaws` are declared on `Background` but read by
+no component, so they are deliberately excluded.
+
 ## Player And DM Surfaces
 
 Both Player and DM surfaces must preserve bilingual support.
