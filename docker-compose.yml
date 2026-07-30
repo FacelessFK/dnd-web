@@ -1,3 +1,27 @@
+# Demo deployment stack. Not a production posture - see README.md,
+# "Deployment status".
+#
+# Everything the browser and the server need to agree on is derived from one
+# variable:
+#
+#   WEB_PUBLIC_HOST   host or IP the browser will use   (default: localhost)
+#   WEB_PUBLIC_PORT   host port the web app is on       (default: 8099)
+#   API_PUBLIC_PORT   host port the server is on        (default: 2567)
+#
+#   WEB_PUBLIC_HOST=203.0.113.10 docker compose up --build
+#
+# They used to be three independently hardcoded values, and they had drifted:
+# the web image was built against a hardcoded public IP while the server still
+# allowed only `http://localhost:3000` as a CORS origin, so every request from
+# the deployed app was blocked. Deriving all three from one host means that
+# cannot silently recur.
+#
+# AUTH_COOKIE_SECURE is pinned to `false` because this stack serves plain HTTP.
+# The server otherwise turns `Secure` on whenever NODE_ENV=production, which the
+# runtime image sets - and a `Secure` cookie over HTTP is silently dropped by the
+# browser, which makes login appear to succeed and then not work at all. Put TLS
+# in front of this and set it back to `true`.
+
 services:
   db:
     image: postgres:16-alpine
@@ -5,6 +29,9 @@ services:
       POSTGRES_DB: dnd_web
       POSTGRES_PASSWORD: dnd_web_password
       POSTGRES_USER: dnd_web
+      # Persian character data depends on this end to end, and
+      # `@dnd/db check:readiness` verifies it.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8'
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U dnd_web -d dnd_web']
       interval: 5s
@@ -48,8 +75,12 @@ services:
       SERVER_HOST: 0.0.0.0
       SERVER_PERSISTENCE_MODE: db
       SERVER_PORT: 2567
+      # The CORS allowlist. Must be the origin the browser actually sends, which
+      # is the web app's published host and port - not the container's.
+      NEXT_PUBLIC_APP_URL: http://${WEB_PUBLIC_HOST:-localhost}:${WEB_PUBLIC_PORT:-8099}
+      AUTH_COOKIE_SECURE: 'false'
     ports:
-      - '2567:2567'
+      - '${API_PUBLIC_PORT:-2567}:2567'
     restart: unless-stopped
     volumes:
       - character-portrait-uploads:/app/data/character-portraits
@@ -57,17 +88,19 @@ services:
   web:
     build:
       args:
-        NEXT_PUBLIC_SERVER_URL: http://130.185.72.72:2567
+        # Baked into the client bundle at build time, so changing the host
+        # requires a rebuild, not just a restart.
+        NEXT_PUBLIC_SERVER_URL: http://${WEB_PUBLIC_HOST:-localhost}:${API_PUBLIC_PORT:-2567}
       context: .
     command: ['pnpm', '--filter', '@dnd/web', 'start']
     depends_on:
       server:
         condition: service_started
     environment:
-      NEXT_PUBLIC_SERVER_URL: http://130.185.72.72:2567
+      NEXT_PUBLIC_SERVER_URL: http://${WEB_PUBLIC_HOST:-localhost}:${API_PUBLIC_PORT:-2567}
       PORT: 3000
     ports:
-      - '8099:3000'
+      - '${WEB_PUBLIC_PORT:-8099}:3000'
     restart: unless-stopped
 
 volumes:

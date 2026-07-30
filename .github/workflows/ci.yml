@@ -62,3 +62,52 @@ jobs:
       - name: Build web
         if: ${{ !cancelled() }}
         run: pnpm --filter @dnd/web build
+
+  # The browser harnesses are the only automated evidence that the product loop
+  # actually works: they start real server and web processes and drive headless
+  # Chrome through session setup, placement, an encounter, and recovery. Unit
+  # tests cannot catch a cockpit that renders but cannot be operated.
+  #
+  # A separate job because these are slow and need a browser, so a fast unit
+  # failure is not stuck behind them.
+  #
+  # The DB-mode smokes are deliberately not here. They need a provisioned,
+  # migrated, UTF8-verified Postgres, and running them without that would report
+  # a false pass. They stay local - see README.md.
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ubuntu-latest ships Chrome, but the harnesses look for it by name. Point
+      # them at it explicitly rather than relying on auto-discovery.
+      - name: Resolve Chrome
+        run: echo "RUNTIME_SMOKE_BROWSER=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+
+      - name: Runtime smoke
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web test:smoke
+
+      - name: Two-profile runtime smoke
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web test:smoke:two-profile
+
+      - name: Map builder smoke
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web test:smoke:map-builder
