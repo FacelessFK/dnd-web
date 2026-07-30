@@ -40,13 +40,7 @@ function isRootMarkdown(normalizedPath) {
 function isDocsOnlyPath(filePath) {
   const normalized = normalizePath(filePath);
 
-  return (
-    normalized.startsWith('docs/') ||
-    normalized.startsWith('.agents/') ||
-    normalized === 'AGENTS.md' ||
-    normalized === 'CODEX_CONTEXT.md' ||
-    isRootMarkdown(normalized)
-  );
+  return normalized.startsWith('.claude/skills/') || isRootMarkdown(normalized);
 }
 
 const changedPaths = getChangedPaths();

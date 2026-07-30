@@ -28,7 +28,8 @@ yarn-error.log*
 .vscode
 .codex
 
-# Keep raw design/concept drops local unless a file is promoted into docs.
-docs/concept
-docs/design
+# Private rules references and raw art drops stay local. The 2014 Player's
+# Handbook PDF is copyrighted and must never be committed - see README.md,
+# "Rules source policy".
+local-reference/
 apps/web/.visual-capture/

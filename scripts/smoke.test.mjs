@@ -22,9 +22,11 @@ const requiredPaths = [
   'packages/protocol',
   'packages/rules',
   'packages/db',
-  'docs/decisions/0001-initial-stack.md',
   '.env.example',
   'pnpm-workspace.yaml',
+  'README.md',
+  'PRD.md',
+  'ROADMAP.md',
 ];
 
 for (const relativePath of requiredPaths) {

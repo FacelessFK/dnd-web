@@ -49,10 +49,6 @@ Common non-bugs:
 
 ## Manual Playtest
 
-Reference scripts: `docs/manual-validation.md`,
-`docs/delivery/TRAINING_ROOM_SKIRMISH_PLAYTEST_CHECKLIST.md`, and
-`docs/delivery/RUNTIME_VISUAL_QA_CHECKLIST.md`.
-
 ```bash
 corepack pnpm dev   # web :3000, server :2567
 ```
@@ -91,6 +87,6 @@ State the exact command, whether it passed, and the session ID for a manual run.
 When a smoke was not run, say so and why. Never describe a skipped harness as
 passing.
 
-Dated evidence packets live in `docs/delivery/`. They are a historical record of
-what was validated when — read them for context, but do not treat them as a
-backlog, and only add a new one when a human asks for reviewer evidence.
+Report the result in the pull request or to the user. Do not write a dated
+evidence file — this repository does not keep those (see CLAUDE.md, "Source of
+truth").

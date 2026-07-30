@@ -1,243 +1,451 @@
-# Product Roadmap
-
-## Purpose
-
-This roadmap aligns current implementation reality with the product direction:
-a DM-first, top-down, rules-assisted D&D tabletop runtime and character product
-surface.
-
-Historical phase/task files and raw context are implementation history or input
-material. They do not override the current handoff, API surface, persistence
-notes, or source code.
-
-## Roadmap Principles
-
-- Keep the DM authoritative.
-- Treat players as intent submitters, not sources of truth.
-- Prioritize top-down tactical readability.
-- Keep reusable character/content records separate from live runtime overlays.
-- Preserve English/Persian i18n support.
-- Build product-operable vertical slices.
-- Expand rules only after the DM/player loop is usable and validated.
-- Avoid claiming durability, replay, or auth guarantees that do not exist.
-
-## Current Baseline
-
-Already implemented:
-
-- pnpm TypeScript monorepo foundation;
-- authoritative Node runtime and Zod protocol schemas;
-- `/runtime` DM and Player cockpit;
-- session create/join/reconnect and SSE stream;
-- read-model recovery after refresh;
-- scene creation/activation, passive entities, and transition nodes;
-- active-scene placement and movement;
-- mixed player/combatant encounters;
-- turn usage and narrow melee attacks;
-- explicit DM controls for HP, condition tags, repositioning, combatants,
-  current turn, turn usage, and encounter end;
-- `/characters` Character Library and Builder surface;
-- `/login` auth surface for DB-backed Character Library ownership;
-- server-side Character Library -> runtime pending-assignment bridge;
-- Player-mode runtime UI for submitting finalized saved library entries into
-  live pending assignment;
-- local SRD-style builder data and derived previews;
-- English/Persian UI direction through `I18nProvider`;
-- local portrait handling, generated builder assets, and PDF export;
-- DB-backed slices for character records, Character Library entries,
-  auth users/sessions, session snapshots, scene records, active encounters,
-  command idempotency records/claims, covered transaction boundaries, and
-  single-process outbox dispatch for covered live-command paths.
+# Roadmap
+
+Milestones are named, not numbered by phase. Each one is a vertical slice that
+leaves the product more playable than before. Breadth of rules coverage comes
+after depth of playability.
+
+Ordering principles:
+
+- A slice that makes the game playable beats a slice that makes it complete.
+- Security and correctness before cosmetic expansion.
+- The GM stays authoritative; the server stays the only source of truth.
+- Nothing ships claiming a guarantee it does not implement.
+- Every milestone can be tested.
+
+## Status summary
+
+| Milestone                      | State       |
+| ------------------------------ | ----------- |
+| M0 — Foundation repair         | In progress |
+| M1 — First playable table      | Next        |
+| M2 — Game HUD                  | Planned     |
+| M3 — Fog of war and lighting   | Planned     |
+| M4 — Renderer quality          | Planned     |
+| M5 — Map builder completion    | Planned     |
+| M6 — Character foundations     | Planned     |
+| M7 — Combat breadth            | Planned     |
+| M8 — Spellcasting architecture | Planned     |
+| M9 — Equipment and resources   | Planned     |
+| M10 — Progression              | Planned     |
+| M11 — Campaigns                | Planned     |
+| M12 — Content packs            | Planned     |
+| M13 — Polish                   | Planned     |
+| M14 — Production               | Planned     |
+
+---
+
+## M0 — Foundation repair
+
+Fix what makes the rest unsafe or unbuildable. No new player-facing features.
 
-Still missing before a stronger MVP:
+**User-visible outcome.** Nothing new, and that is intentional. A player can no
+longer be impersonated, and a player can no longer act as the GM.
 
-- tighter Training Room Skirmish presentation and manual playtest guidance for
-  the first playable DM-player flow;
-- fuller product UX around session setup and assignment;
-- full adventure/content authoring;
-- production-grade visibility filtering;
-- reliable replay/cursor/catch-up semantics;
-- production auth/account security;
-- multi-process coordination;
-- broader D&D rules systems.
+**Technical outcome.**
 
-## Immediate Next Milestone: Training Room Skirmish Presentation Polish
+- Server-issued participant credentials; a claimed `participantId` proves
+  nothing on its own. Commands and stream subscriptions both verify.
+- Request bodies bounded in size and time.
+- Operational endpoints require authorization; no endpoint materializes an
+  unbounded row set.
+- Deployment configuration where cookie flags, CORS allowlist, and public
+  server URL are derived together instead of drifting apart.
+- Frontend requests have timeouts.
+- The event feed goes through i18n.
+- Documentation reduced to README, PRD, ROADMAP, CLAUDE.
+- Browser smoke tests run in CI.
 
-### Goal
+**Acceptance criteria.** PRD A1, A2, A3, F3, I1. A test proves that a caller
+holding only public session data — including the GM's participant ID, which the
+session snapshot broadcasts — cannot act as another participant or subscribe to
+their stream.
 
-Make the first named demo scenario feel like a coherent playable tabletop
-slice. Polish the Training Room Skirmish presentation and manual playtest script
-using existing runtime commands, current local sample data, and the current
-read-model recovery contract.
+**Tests.** Unit tests for the credential store; HTTP tests for missing, wrong,
+and cross-participant tokens on every command category and on the stream; body
+limit and timeout tests; an outbox aggregate-query test; i18n parity at
+typecheck.
 
-### Exit Criteria
+**Dependencies.** None.
 
-- A DM can run the named Training Room Skirmish scenario without protocol
-  inspection.
-- The scenario clearly communicates session setup, scene state, player
-  readiness, current turn, encounter status, and recovery status.
-- Player and DM copy remains localization-aware for English/Persian.
-- No new runtime protocol, combat automation, replay/cursor/catch-up semantics,
-  or production auth scope is introduced.
-- Character Library entries remain reusable records; live HP, movement,
-  conditions, encounter membership, and DM overrides stay in runtime state.
+**Excludes.** Any new gameplay. Any renderer work. Refactoring the runtime
+cockpit. Converting rules content to 2014.
 
-See `docs/delivery/NEXT_MILESTONE.md`.
+---
 
-## Milestone 2: Session Setup And Assignment UX Polish
+## M1 — First playable table
 
-### Goal
+The vertical slice from PRD §24. One GM, one player, one map, one fight, end to
+end, with nothing faked.
 
-Make session creation, player join, pending assignment, and DM assignment feel
-like a coherent product flow rather than a cockpit/debug workflow.
+**User-visible outcome.** A GM authenticates, publishes a map, and activates it.
+A player joins with a code, brings a character from their library, and is
+assigned it. Both see the same scene through their own visibility projection.
+The GM places a monster and moves it. The player moves their character. A hidden
+creature stays hidden. The GM calls for a saving throw and the player rolls it.
+The player attacks and deals damage. Initiative advances. HP changes and a
+condition applies and _means something_. Either side refreshes mid-fight and
+continues. In DB mode all of it survives a server restart.
 
-### Scope
+**Technical outcome.**
 
-- clearer DM session setup flow;
-- participant state and pending character review;
-- assignment confirmation and error states;
-- recovery states after refresh;
-- i18n-aware copy.
+- Ability checks and saving throws as a first-class resolution: request,
+  resolve, publish, with a full audit record (dice, modifiers, sources, DC,
+  outcome).
+- At least one condition with mechanical effect, not just a tag.
+- A dice resolution record shared by the resolver, the stream, and the UI.
+- Free-form player intent submitted to the GM.
+- Visual feedback for movement, attack, damage, and dice.
 
-### Non-Goals
+**Acceptance criteria.** PRD P1–P4, V1–V3, L1, L2, R1 for the profile in use.
 
-- production lobby/matchmaking;
-- broad account management;
-- full campaign management.
+**Tests.** Rules unit tests for check and save maths including advantage and
+proficiency; server tests for the request/resolve flow and its projections; a
+two-profile browser smoke covering the whole loop with a refresh in the middle;
+a DB-mode smoke proving the same loop persists.
 
-## Milestone 3: Tactical Exploration UX
+**Dependencies.** M0.
 
-### Goal
+**Excludes.** Fog of war. Spellcasting. Inventory. Multiple simultaneous
+players. The HUD redesign — this milestone may ship inside the existing cockpit.
 
-Improve top-down scene play so players and the DM can understand active scene
-state, placement, movement, blockers, and transitions quickly.
+---
 
-### Scope
+## M2 — Game HUD
 
-- readable grid and token state;
-- movement affordances and server result feedback;
-- scene entity readability;
-- transition marker clarity;
-- DM/player mode differences;
-- i18n-aware validation and empty states.
+Separate the game from the cockpit. This is the largest single risk in the
+product (PRD §27.1) and it is deliberately its own milestone.
 
-### Non-Goals
+**User-visible outcome.** A player opens a session and sees a game: the map
+dominates, their character sheet and actions frame it, and there is no debug
+panel anywhere. The GM gets a distinct interface built for authority and speed.
 
-- full fog of war;
-- LOS/lighting simulation;
-- automatic traps/locks/scripts.
+**Technical outcome.** `apps/web/app/runtime/runtime-cockpit.tsx` decomposed
+along the seams in PRD §13: rendering, HUD, GM tools, player tools, session
+state, command orchestration, recovery, character management, map editing,
+diagnostics. A client state model with selectors and hooks rather than one
+component owning every variable. Diagnostics behind a GM or development surface.
 
-## Milestone 4: DM Operability
+**Acceptance criteria.** No component over 500 lines. The player bundle contains
+no diagnostic panel. Every existing runtime behaviour still passes its tests. A
+player-mode screenshot contains no raw identifier or protocol field name.
 
-### Goal
+**Tests.** Existing helper tests preserved and extended per extracted module;
+browser smokes updated to the new surfaces; both locales verified for RTL.
 
-Make existing DM controls practical for repeated live operation.
+**Dependencies.** M1.
 
-### Scope
+**Excludes.** Renderer replacement. New gameplay.
 
-- selection and inspector polish;
-- HP/condition/reposition workflows;
-- combatant controls;
-- turn usage/current turn controls;
-- encounter end and recovery states;
-- readable feedback.
+---
 
-### Non-Goals
+## M3 — Fog of war and lighting
 
-- generic unsafe admin console;
-- monster AI;
-- full rules automation.
+**User-visible outcome.** Players see only what their characters can see.
+Explored-but-not-visible areas are remembered dimly. Light sources matter.
+Opening a door changes what everyone can see. The GM controls all of it and can
+reveal or conceal at will.
 
-## Milestone 5: Simple Encounter UX
+**Technical outcome.** Server-side visibility computation consuming the
+`blocksVision` flag that terrain and entities already store. Per-viewer
+visibility projection on scene reads and streams. Persisted per-character
+explored state. Light sources as scene data.
 
-### Goal
+**Acceptance criteria.** PRD V4. A player's scene payload contains no
+unrevealed map state — verified by inspecting the payload, not the render.
+Visibility recomputation stays within frame budget on a 100×100 map.
 
-Make a narrow combat encounter playable through the product surface without
-manual protocol inspection.
+**Tests.** Rules unit tests for line of sight and light falloff; server tests
+that a player payload omits unrevealed cells and entities; a browser smoke where
+the player's view changes when the GM opens a door.
 
-### Scope
+**Dependencies.** M2 (needs a renderer surface that can express fog).
 
-- turn order and current actor display;
-- action/bonus/reaction/movement usage display;
-- narrow attack UI;
-- combat result feed;
-- downed/defeated feedback;
-- DM corrections.
+**Excludes.** Dynamic shadows. Coloured lighting. Vision types such as
+darkvision — deferred to M7's condition and sense work.
 
-### Non-Goals
+---
 
-- full spellcasting;
-- full weapons/ranged system;
-- opportunity attacks;
-- death-save engine;
-- full monster stat blocks.
+## M4 — Renderer quality
 
-## Milestone 6: Adventure And Content Authoring Foundation
+**User-visible outcome.** The map looks and feels like a game. Tokens animate
+between cells rather than snapping. Attacks, damage, healing, and conditions have
+visible effects. Doors and traps animate. It holds 60 fps with a busy scene.
 
-### Goal
+**Technical outcome.** Decide, on evidence, whether the current canvas renderer
+can reach the bar. Keep the renderer behind an interface either way. If it
+cannot, adopt a dedicated 2D renderer (PixiJS or equivalent) incrementally
+behind that interface, one layer at a time, with the server contract untouched.
 
-Move from runtime-only scenes toward reusable prepared content.
+**Acceptance criteria.** PRD F1 and §17. A documented benchmark on a 100×100 map
+with 50 tokens. No change to `packages/protocol`.
 
-### Scope
+**Tests.** Deterministic unit tests for camera and projection maths; a benchmark
+script with a recorded baseline; visual capture diffs.
 
-- reusable scene metadata;
-- asset metadata direction;
-- scene grouping into future adventures;
-- transition graph readability;
-- session setup from prepared content.
+**Dependencies.** M2. Informed by M3.
 
-### Non-Goals
+**Excludes.** 3D. Isometric-only commitment — projection stays a camera mode.
 
-- marketplace;
-- production asset storage;
-- large map editor before runtime UX is stable.
+---
 
-## Milestone 7: Durable MVP Hardening
+## M5 — Map builder completion
 
-### Goal
+**User-visible outcome.** A GM can author a real dungeon: rooms, walls, doors,
+stairs, portals, zones, hidden objects, traps, spawn points, lighting, and
+layers. Copy, paste, group, select, delete. Reusable presets. Save drafts,
+publish, and re-edit a published map without breaking a running session.
 
-Strengthen persistence, recovery, and operational honesty for repeated real
-play within documented limits.
+**Technical outcome.** The remainder of PRD §10. Scene versioning: a live scene
+is a snapshot, and republishing is explicit and versioned. Server-side map
+records that the builder can reopen.
 
-### Scope
+**Acceptance criteria.** Every PRD §10 capability present. Editing and
+republishing a map used by a live session does not mutate that session in place.
 
-- close documented persistence gaps in small slices;
-- clarify transaction and outbox behavior;
-- decide when replay/cursor/catch-up becomes a product requirement;
-- improve validation and manual QA docs.
+**Tests.** `map-builder-state` unit tests per tool and per undo path; a smoke
+covering paint, publish, re-edit, republish, and verification that the live scene
+is unchanged until the GM adopts the new version.
 
-### Non-Goals
+**Dependencies.** M3 for vision and lighting authoring.
 
-- claiming exactly-once delivery;
-- distributed scaling;
-- event-sourced rewrite;
-- production auth expansion unless explicitly scoped.
+**Excludes.** Procedural generation. Asset import pipelines.
 
-## Milestone 8: Broader Rules And Tactical Systems
+---
 
-### Goal
+## M6 — Character foundations
 
-Expand D&D assistance only after the core runtime and product surfaces are
-usable.
+**User-visible outcome.** A complete, correct level-1 character under the
+declared ruleset, built through a guided flow that explains each choice.
 
-### Candidate Slices
+**Technical outcome.** Resolve the 2014/2024 mixing defect (PRD §27.3). Build
+the 2014 content pack: races with ability score increases, 2014 backgrounds,
+2014 class features. Explicit choice UI where the current build only previews an
+automatic assignment. Rules-profile validation that refuses cross-edition
+content.
 
-- selected ranged/weapon behavior;
-- selected condition effects;
-- selected spellcasting foundations;
-- opportunity/reaction windows;
-- death saves and recovery;
-- visibility/LOS/cover.
+**Acceptance criteria.** PRD R1. A character built under `dnd-5e-2014` contains
+no 2024-only species, background boost, or class feature. Every builder choice
+is a stored decision, not an inferred preview.
 
-Each slice must be narrow, testable, DM-overridable, and localization-aware.
+**Tests.** Content-pack legality tests per profile; a test that no profile can
+resolve content from another edition; Persian phrase coverage for all new
+content.
 
-## Things To Avoid
+**Dependencies.** M1.
 
-- Treating frontend state as authoritative.
-- Mutating reusable library entries with live runtime state.
-- Expanding spells/conditions before assignment and runtime UX are usable.
-- Building advanced 3D/isometric visuals before top-down readability is proven.
-- Hiding product gaps behind backend-only flows.
-- Splitting Character Builder/Library into separate services prematurely.
-- Claiming replay, durable catch-up, or production auth before implemented.
-- Adding English-only UI copy.
+**Excludes.** Multiclassing. Levels above 1 (that is M10).
+
+---
+
+## M7 — Combat breadth
+
+**User-visible outcome.** Combat that resembles playing D&D: weapons that
+differ, ranged attacks, reach, cover, opportunity attacks, reactions,
+advantage and disadvantage, damage types, resistance, temporary HP, death saves,
+and conditions that actually do something.
+
+**Technical outcome.** A weapon and damage model. Reach and range with cover.
+The reaction window. A real condition engine — conditions as effects with
+mechanical consequences and durations. Senses, including darkvision, feeding
+M3's visibility.
+
+**Acceptance criteria.** Every rule in the 2014 combat chapter that this
+milestone claims is unit-tested against the book. Each result's audit record
+names the rule applied.
+
+**Tests.** Rules unit tests per mechanic; server tests for reaction timing and
+turn-order interaction; a browser smoke for a ranged attack with cover and an
+opportunity attack.
+
+**Dependencies.** M6.
+
+**Excludes.** Spells. Monster stat blocks beyond what the GM authors by hand.
+
+---
+
+## M8 — Spellcasting architecture
+
+**User-visible outcome.** A caster can prepare, cast, and track spells; slots
+are spent; concentration is tracked; areas of effect appear on the map.
+
+**Technical outcome.** The extensibility test for the rules engine. Spells as
+content-pack data plus a small set of composable effect primitives — targeting,
+area, save-or-effect, damage, healing, condition application, duration,
+concentration — registered rather than switched on. Explicitly _not_ a universal
+scripting engine.
+
+**Acceptance criteria.** Adding a new SRD spell that composes existing
+primitives requires a data entry and no engine change. Spells that do not
+compose are declared unsupported rather than special-cased.
+
+**Tests.** Effect-primitive unit tests; per-spell data tests for a
+representative set; concentration interruption tests.
+
+**Dependencies.** M7.
+
+**Excludes.** Every spell in the book. Ritual timing. Wild magic.
+
+---
+
+## M9 — Equipment and resources
+
+**User-visible outcome.** Inventory, equipment with real effects, attunement,
+currency, encumbrance where the table wants it, short and long rests, hit dice,
+and class resources that recover on the right schedule.
+
+**Technical outcome.** An item model in the content pack. Equipped-state effects
+feeding AC and attacks. The rest system driving resource recovery.
+
+**Acceptance criteria.** Equipping armour changes AC through the rules engine,
+not the UI. A long rest restores exactly what the 2014 rules say.
+
+**Tests.** Rules unit tests for AC derivation, encumbrance, and rest recovery;
+a browser smoke for equip, rest, and resource recovery.
+
+**Dependencies.** M7.
+
+---
+
+## M10 — Progression
+
+**User-visible outcome.** Characters level up: hit points, proficiency,
+features, subclasses, ability score improvements, feats, and spell progression.
+
+**Technical outcome.** Class progression tables in the content pack. A level-up
+flow that records choices as decisions. Migration of existing level-1 library
+entries.
+
+**Acceptance criteria.** A character can advance 1→5 with correct derived stats
+at each level. An existing library entry survives the migration unchanged in
+meaning.
+
+**Dependencies.** M6, M8, M9.
+
+**Excludes.** Multiclassing, unless it falls out for free.
+
+---
+
+## M11 — Campaigns
+
+**User-visible outcome.** A GM runs a campaign, not isolated sessions: multiple
+maps, persistent world state, session history, party state carried forward, and
+prepared content ready to drop in.
+
+**Technical outcome.** A campaign aggregate above sessions. Persistent character
+progress across sessions, still respecting the library boundary. Prepared
+encounter and scene libraries.
+
+**Acceptance criteria.** PRD L1 holds across a whole campaign, not just one
+session.
+
+**Dependencies.** M5, M10.
+
+---
+
+## M12 — Content packs
+
+**User-visible outcome.** A table installs additional legally usable content and
+the GM authors their own creatures, items, and spells.
+
+**Technical outcome.** A content pack format with declared source, licence, and
+ruleset version. Loading, validation, and per-session enabling. GM-authored
+content as a first-class pack. Distributable SRD data shipped separately from any
+private reference material.
+
+**Acceptance criteria.** No pack can inject content from a ruleset the session
+did not declare. Removing a pack degrades gracefully rather than corrupting saved
+characters.
+
+**Dependencies.** M6.
+
+**Excludes.** A marketplace, paid content, or any hosting of third-party
+copyrighted text.
+
+---
+
+## M13 — Polish
+
+**User-visible outcome.** It feels finished. Consistent visual identity,
+animation and audio feedback, empty and loading states, onboarding, and full
+accessibility.
+
+**Technical outcome.** A design system. Motion honouring `prefers-reduced-motion`.
+Complete keyboard paths and screen-reader coverage. Full Persian coverage
+including RTL layout on every surface.
+
+**Acceptance criteria.** PRD §22 in full, PRD I1–I3, and a WCAG AA audit.
+
+**Dependencies.** M4.
+
+---
+
+## M14 — Production
+
+**User-visible outcome.** Someone who is not the maintainer can host a game
+their group actually plays on.
+
+**Technical outcome.** Compiled server build rather than `tsx`. TLS and a
+reverse proxy. Shared rate limiting and shared SSE fan-out, so more than one
+process is safe. Cold-boot outbox redelivery. Health checks, structured logging,
+metrics, and backups. Documented upgrade and migration procedure.
+
+**Acceptance criteria.** Two server processes behave identically to one for rate
+limiting, event delivery, and outbox dispatch. A documented restore from backup.
+
+**Dependencies.** M1 at minimum; realistically after M13.
+
+**Excludes.** Autoscaling, multi-region, multi-tenancy, billing.
+
+---
+
+## Rules coverage model
+
+Per PHB (2014) rule domain. **Target ruleset is `dnd-5e-2014` exclusively.**
+
+Levels: **None** — nothing exists. **Data** — content is present but the engine
+does not act on it. **Partial** — some rules act, with named gaps. **Solid** —
+the domain works for normal play with documented exclusions.
+
+| Domain                       | Coverage | Reality                                                                                  | Milestone |
+| ---------------------------- | -------- | ---------------------------------------------------------------------------------------- | --------- |
+| Ability scores and modifiers | Solid    | Scores, modifiers, derived stats. Standard array, point buy, manual.                     | done      |
+| Proficiency bonus            | Partial  | By level in the builder; not consumed by every resolution path.                          | M6, M7    |
+| Skills                       | Data     | All 18 present as data. No check resolution.                                             | M1        |
+| Saving throws                | Data     | Class proficiencies stored. No save resolution.                                          | M1        |
+| Races and subraces           | Data     | **2024 species data, not 2014 races.** The mixing defect.                                | M6        |
+| Classes                      | Data     | Level-1 metadata for 12 classes. No features acting.                                     | M6, M10   |
+| Class progression            | None     | Level 1 only.                                                                            | M10       |
+| Backgrounds                  | Data     | 2024-style background ability boosts. Cross-edition.                                     | M6        |
+| Equipment                    | Data     | Starting-equipment labels and simple AC metadata.                                        | M9        |
+| Armor and weapons            | None     | No weapon model at all; attacks use a fixed `1d8`.                                       | M7        |
+| Adventuring and movement     | Partial  | Grid movement, budget, blocking terrain. No difficult terrain, travel pace, or climbing. | M1, M7    |
+| Rests                        | None     | No short or long rest.                                                                   | M9        |
+| Combat structure             | Partial  | Initiative, rounds, turns, action economy. No reaction window.                           | M7        |
+| Actions and reactions        | Partial  | Action, bonus action, and reaction are tracked as budget only.                           | M7        |
+| Attacks                      | Partial  | Melee d20 vs AC, crit and crit-miss. No range, reach, cover, or advantage.               | M7        |
+| Damage and healing           | Partial  | `1d8 + STR`, doubled dice on crit. No damage types, resistance, or temp HP.              | M7        |
+| Death and dying              | None     | Downed only. No death saves or stabilization.                                            | M7        |
+| Conditions                   | Data     | Tags with no mechanical effect.                                                          | M7        |
+| Spellcasting                 | Data     | Level-1 spell lists and slot metadata. No casting.                                       | M8        |
+| Spells                       | Data     | SRD cantrips and level-1 spells as data only.                                            | M8        |
+| Vision, light, and stealth   | None     | `blocksVision` is stored and consumed by nothing.                                        | M3        |
+| Monsters and stat blocks     | None     | Combatants are GM-controlled actors. Out of PHB scope anyway.                            | M7, M12   |
+| Magic items                  | None     | Out of PHB scope. Needs another source.                                                  | M12       |
+| Encounter building           | None     | Out of PHB scope. Needs another source.                                                  | M12       |
+
+The PHB is not the whole corpus. Monsters, magic items, and encounter-building
+rules are not in it, and the architecture must not pretend one book covers
+everything.
+
+## Known defects tracked as work
+
+| Defect                                               | Severity | Milestone |
+| ---------------------------------------------------- | -------- | --------- |
+| Runtime cockpit is one ~8,800-line component         | High     | M2        |
+| 2014/2024 rules content mixing                       | High     | M6        |
+| Rate limits, SSE fan-out, and outbox are per-process | Medium   | M14       |
+| Server runs via `tsx` in the container image         | Medium   | M14       |
+| No cold-boot outbox redelivery                       | Medium   | M14       |
+| `/maps` cannot re-edit a published scene             | Medium   | M5        |
+| Movement preview can offer a cell the server rejects | Low      | M3        |
+| Auth MVP lacks reset, verification, and MFA          | Low      | M14       |
