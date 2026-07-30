@@ -1245,8 +1245,9 @@ export function RuntimeCockpit() {
     // credential here would make that recovery impossible and turn a UI reset
     // into leaving the session.
     //
-    // Clearing a credential is `clearParticipantCredentials()`; nothing in the
-    // cockpit calls it today, which is a deliberate gap noted in ROADMAP M0.
+    // Giving up a seat is `clearParticipantCredentials()`. Nothing calls it
+    // yet - there is no explicit "leave table" action - which ROADMAP M0 records
+    // as a known gap.
     setDmParticipantId(defaultDm.participantId);
     setDmDisplayName(defaultDm.displayName);
     setMode('dm');

@@ -70,6 +70,18 @@ typecheck.
 **Excludes.** Any new gameplay. Any renderer work. Refactoring the runtime
 cockpit. Converting rules content to 2014.
 
+**Known gaps left open, deliberately.**
+
+- Credentials are per-process and in-memory, so a server restart forces a
+  rejoin and a second process would not recognise them. Shared storage is M14.
+- Credentials live in `localStorage`, readable by any script on the origin,
+  because the web app and the server are different origins and an HttpOnly
+  cookie would need `SameSite=None; Secure`. Same-origin proxying is M14.
+- No UI calls `clearParticipantCredentials()` - there is no explicit "leave
+  table" action yet. It belongs with the HUD work in M2.
+- An occupied _player_ seat is re-claimable with the session code. The GM seat
+  is not. Binding a seat to an authenticated account is M1.
+
 ---
 
 ## M1 — First playable table
