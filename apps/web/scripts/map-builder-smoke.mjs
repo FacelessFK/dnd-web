@@ -284,10 +284,15 @@ async function main() {
     step('verifying the published scene on the server');
 
     // Session-scoped commands need the participant credential the server issued
-    // to this browser at create/join time. Read it out of the tab rather than
-    // asserting `dm-001`: the server no longer takes a participant ID on trust,
-    // which is the point of the credential.
-    const participantToken = await runtimePage.evaluate(
+    // to this browser at create/join time. Read it out of the browser rather
+    // than asserting `dm-001`: the server no longer takes a participant ID on
+    // trust, which is the point of the credential.
+    //
+    // Read from the map builder page, not the runtime page - that one was closed
+    // before the builder opened. Credentials live in `localStorage`, shared
+    // across the origin, which is exactly why a DM can paint in `/maps` and
+    // publish to the table they created in `/runtime`.
+    const participantToken = await page.evaluate(
       `(() => {
         const stored = JSON.parse(
           localStorage.getItem('dnd-participant-credential') ?? '[]',
