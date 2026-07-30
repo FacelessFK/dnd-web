@@ -461,3 +461,13 @@ everything.
 | `/maps` cannot re-edit a published scene             | Medium   | M5        |
 | Movement preview can offer a cell the server rejects | Low      | M3        |
 | Auth MVP lacks reset, verification, and MFA          | Low      | M14       |
+| DB bridge browser harness is flaky                   | Medium   | M1        |
+
+`test:smoke:saved-character-training-room-db` intermittently fails waiting for
+`Recover` or `Join Session` to become enabled, which is what happens when the
+session-ID input did not take the value `setSessionInputValue` wrote. Observed at
+two _different_ steps across consecutive runs on identical code, which is what
+makes it a race rather than a break: every assertion about the credential
+hand-off, DM assignment, runtime-copy provenance and Character Library separation
+passes before it. The likely fix is to wait on the input's value rather than
+assume the write landed. Worth doing when M1 next touches this harness.
