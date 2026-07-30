@@ -10,9 +10,13 @@ import {
 import {
   fetchOutboxStatus,
   buildSessionStreamUrl,
+  clearParticipantCredentials,
   createCommandId,
+  describeRequestFailure,
+  getParticipantCredential,
   parseOutboxStatusResponse,
   parseRuntimeCommandResponse,
+  setParticipantCredential,
 } from './runtime-api';
 
 describe('runtime-api helpers', () => {
@@ -22,6 +26,92 @@ describe('runtime-api helpers', () => {
     assert.equal(
       url,
       'http://localhost:2567/api/sessions/SESSION%2FONE/stream?participantId=player+001',
+    );
+  });
+
+  it('carries the participant credential on the stream URL it belongs to', () => {
+    // `EventSource` cannot set headers, so the stream takes the token as a query
+    // parameter. It must only be attached for the session and participant it was
+    // actually issued to.
+    setParticipantCredential({
+      participantId: 'dm-001',
+      sessionId: 'ABC123',
+      token: 'x2Yk9Qm4Rt7Wz1Bv6Nd3Hj8Lp0Sf5Cg2Ae4Ui7Ok9Qs',
+    });
+
+    try {
+      assert.match(
+        buildSessionStreamUrl('ABC123', 'dm-001'),
+        /participantToken=x2Yk9Qm4Rt7Wz1Bv6Nd3Hj8Lp0Sf5Cg2Ae4Ui7Ok9Qs/,
+      );
+
+      // A stale credential from another table must never be offered to a new
+      // one, or to a different participant in the same one.
+      assert.doesNotMatch(
+        buildSessionStreamUrl('XYZ789', 'dm-001'),
+        /participantToken/,
+      );
+      assert.doesNotMatch(
+        buildSessionStreamUrl('ABC123', 'player-001'),
+        /participantToken/,
+      );
+    } finally {
+      clearParticipantCredentials();
+    }
+  });
+
+  it('holds one credential per participant so a tab can act as several', () => {
+    // The runtime cockpit creates a session as the DM and then joins players
+    // into it. Keeping only the newest credential used to revoke the tab's
+    // ability to act as the DM the moment a player joined.
+    setParticipantCredential({
+      participantId: 'dm-001',
+      sessionId: 'ABC123',
+      token: 'x2Yk9Qm4Rt7Wz1Bv6Nd3Hj8Lp0Sf5Cg2Ae4Ui7Ok9Qs',
+    });
+    setParticipantCredential({
+      participantId: 'player-001',
+      sessionId: 'ABC123',
+      token: 'p9Lm2Zx5Vt8Wq1Br6Ny3Hk8Jd0Sf5Cg2Ae4Ui7Ok3Ts',
+    });
+
+    try {
+      assert.equal(
+        getParticipantCredential('ABC123', 'dm-001')?.token,
+        'x2Yk9Qm4Rt7Wz1Bv6Nd3Hj8Lp0Sf5Cg2Ae4Ui7Ok9Qs',
+      );
+      assert.equal(
+        getParticipantCredential('ABC123', 'player-001')?.token,
+        'p9Lm2Zx5Vt8Wq1Br6Ny3Hk8Jd0Sf5Cg2Ae4Ui7Ok3Ts',
+      );
+      assert.equal(getParticipantCredential('ABC123', 'player-002'), null);
+    } finally {
+      clearParticipantCredentials();
+    }
+
+    assert.equal(getParticipantCredential('ABC123', 'dm-001'), null);
+    assert.doesNotMatch(
+      buildSessionStreamUrl('ABC123', 'dm-001'),
+      /participantToken/,
+    );
+  });
+
+  it('names a request timeout instead of surfacing a bare abort', () => {
+    // `AbortSignal.timeout` rejects with a browser-specific TimeoutError whose
+    // own message tells a player nothing.
+    assert.equal(
+      describeRequestFailure(
+        new DOMException('signal timed out', 'TimeoutError'),
+      ),
+      'The runtime server did not respond in time.',
+    );
+    assert.equal(
+      describeRequestFailure(new Error('Failed to fetch')),
+      'Failed to fetch',
+    );
+    assert.equal(
+      describeRequestFailure('not an error'),
+      'Unable to reach the runtime server.',
     );
   });
 
@@ -253,6 +343,7 @@ describe('runtime-api helpers', () => {
         ok: true,
         data: {
           participantId: 'dm-001',
+          participantToken: 'x2Yk9Qm4Rt7Wz1Bv6Nd3Hj8Lp0Sf5Cg2Ae4Ui7Ok9Qs',
           sessionId: 'ABC123',
           state: {
             participants: [

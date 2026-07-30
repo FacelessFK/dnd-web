@@ -220,6 +220,9 @@ async function main() {
     await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session', 'پیوستن به نشست']);
+    // The player joined in the browser, so the browser holds that credential.
+    // Copy it out so the harness can also read player state over HTTP.
+    await captureBrowserCredential(playerPage, 'Player runtime tab');
     await waitForAnyText(
       playerPage,
       ['Saved Character Library', 'کتابخانه کاراکترهای ذخیره‌شده'],
@@ -252,6 +255,9 @@ async function main() {
     await waitForNoStoredSession(dmPage);
     await clickButton(dmPage, ['DM Mode', 'حالت DM']);
     await setSessionInputValue(dmPage, sessionId);
+    // Local Reset above cleared any credential in this tab, and the DM session
+    // was created by the harness rather than by this browser.
+    await injectBrowserCredential(dmPage, sessionId, 'dm-001');
     await clickButton(dmPage, ['Recover', 'بازیابی']);
     await waitForAnyText(
       dmPage,
@@ -583,16 +589,117 @@ async function registerUser(serverUrl, body) {
   };
 }
 
+/**
+ * Participant credentials this harness holds, keyed by session and participant.
+ *
+ * The server no longer takes a claimed `participantId` on trust, so acting as
+ * `dm-001` or `player-001` out of band requires the token that participant was
+ * issued. Tokens arrive from two places: this harness's own session command
+ * responses, and the browser tabs, via `captureBrowserCredential`.
+ */
+const participantTokens = new Map();
+
+function participantTokenKey(sessionId, participantId) {
+  return `${sessionId} ${participantId}`;
+}
+
+function rememberParticipantToken(sessionId, participantId, token) {
+  if (sessionId && participantId && token) {
+    participantTokens.set(participantTokenKey(sessionId, participantId), token);
+  }
+}
+
+/**
+ * Copies the credential a browser tab was issued into this harness, so the same
+ * participant can also be driven over HTTP.
+ */
+async function captureBrowserCredential(page, label) {
+  const raw = await page.evaluate(
+    `localStorage.getItem('dnd-participant-credential') ?? '[]'`,
+  );
+  const credentials = JSON.parse(raw);
+
+  if (!Array.isArray(credentials) || credentials.length === 0) {
+    throw new Error(`${label} holds no participant credential.`);
+  }
+
+  for (const credential of credentials) {
+    rememberParticipantToken(
+      credential.sessionId,
+      credential.participantId,
+      credential.token,
+    );
+  }
+
+  return credentials;
+}
+
+/**
+ * Hands a credential this harness holds to a browser tab.
+ *
+ * Needed because the harness creates the session over HTTP and a *different*
+ * client - the DM browser tab - then continues it. The server will not let a tab
+ * reconnect as `dm-001` just because it says so, which is the whole point of the
+ * credential, so the harness has to pass on the one it was issued. A real DM
+ * creates the session in their own browser and never needs this.
+ */
+async function injectBrowserCredential(page, sessionId, participantId) {
+  const token = participantTokens.get(
+    participantTokenKey(sessionId, participantId),
+  );
+
+  if (!token) {
+    throw new Error(
+      `No participant credential held for ${participantId} in ${sessionId}.`,
+    );
+  }
+
+  await page.evaluate(
+    `(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('dnd-participant-credential') ?? '[]',
+      );
+      const credential = ${JSON.stringify(JSON.stringify({ participantId, sessionId, token }))};
+
+      localStorage.setItem(
+        'dnd-participant-credential',
+        JSON.stringify([
+          ...stored.filter(
+            (candidate) =>
+              candidate.sessionId !== JSON.parse(credential).sessionId ||
+              candidate.participantId !== JSON.parse(credential).participantId,
+          ),
+          JSON.parse(credential),
+        ]),
+      );
+      return true;
+    })()`,
+  );
+}
+
 async function postCommand({ body, cookie, path, serverUrl }) {
+  const token = participantTokens.get(
+    participantTokenKey(body?.payload?.sessionId, body?.actor?.participantId),
+  );
   const response = await fetch(`${serverUrl}${path}`, {
     body: JSON.stringify(body),
     headers: {
       ...(cookie ? { cookie } : {}),
+      ...(token ? { 'x-dnd-participant-token': token } : {}),
       'content-type': 'application/json',
     },
     method: 'POST',
   });
   const payload = await response.json();
+
+  // create/join/reconnect hand back a credential; keep it for later commands.
+  if (payload?.ok && payload.data?.participantToken) {
+    rememberParticipantToken(
+      payload.data.sessionId,
+      payload.data.participantId,
+      payload.data.participantToken,
+    );
+  }
 
   return {
     ...payload,

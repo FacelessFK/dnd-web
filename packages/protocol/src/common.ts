@@ -22,6 +22,21 @@ export const participantIdSchema = z
     'Participant ID must be 2-64 characters and use letters, numbers, "_" or "-".',
   );
 
+/**
+ * Server-issued proof of participant identity, returned by create/join/reconnect
+ * and required on every session-scoped command and stream subscription.
+ *
+ * A participant ID is a public name - session snapshots publish every one of
+ * them, including the GM's - so it cannot double as a bearer secret. This can.
+ * Never log it, never put it in an error message, and never derive a display
+ * value from it.
+ */
+export const participantTokenSchema = z
+  .string()
+  .trim()
+  .min(32, 'Participant token is too short to be a server-issued credential.')
+  .max(256, 'Participant token is too long.');
+
 export const rulesProfileIdSchema = z
   .string()
   .trim()
