@@ -5,6 +5,7 @@ import type {
   CommandEventOutboxDatabase,
   CommandEventOutboxRecordWrite,
   CommandEventOutboxRow,
+  CommandEventOutboxBacklog,
 } from '@dnd/db';
 import type { SessionStreamEvent } from '@dnd/protocol';
 
@@ -52,10 +53,29 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
     return structuredClone(row);
   }
 
-  async listUnpublishedCommandEventOutboxRecords(): Promise<
-    CommandEventOutboxRow[]
-  > {
-    return [...this.rows.values()]
+  async getUnpublishedCommandEventOutboxBacklog(): Promise<CommandEventOutboxBacklog> {
+    const rows = await this.listUnpublishedCommandEventOutboxRecords();
+    const countsByEventType: Partial<
+      Record<CommandEventOutboxRow['eventType'], number>
+    > = {};
+    let oldestCreatedAt: Date | null = null;
+
+    for (const row of rows) {
+      countsByEventType[row.eventType] =
+        (countsByEventType[row.eventType] ?? 0) + 1;
+
+      if (!oldestCreatedAt || row.createdAt < oldestCreatedAt) {
+        oldestCreatedAt = row.createdAt;
+      }
+    }
+
+    return { countsByEventType, oldestCreatedAt, totalCount: rows.length };
+  }
+
+  async listUnpublishedCommandEventOutboxRecords(
+    limit?: number,
+  ): Promise<CommandEventOutboxRow[]> {
+    const rows = [...this.rows.values()]
       .filter((row) => row.publishedAt === null)
       .sort((left, right) => {
         const createdAtDiff =
@@ -82,6 +102,8 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
         return left.outboxId.localeCompare(right.outboxId);
       })
       .map((row) => structuredClone(row));
+
+    return limit === undefined ? rows : rows.slice(0, limit);
   }
 
   async listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
@@ -376,6 +398,8 @@ test('concurrent drain requests do not double-publish the same row', async () =>
   const instrumentedDatabase: CommandEventOutboxDatabase = {
     insertCommandEventOutboxRecord: (write) =>
       database.insertCommandEventOutboxRecord(write),
+    getUnpublishedCommandEventOutboxBacklog: () =>
+      database.getUnpublishedCommandEventOutboxBacklog(),
     listUnpublishedCommandEventOutboxRecords: () =>
       database.listUnpublishedCommandEventOutboxRecords(),
     listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
@@ -426,9 +450,13 @@ test('createSessionServer startup leaves targeted outbox drains unchanged', asyn
   const instrumentedDatabase: CommandEventOutboxDatabase = {
     insertCommandEventOutboxRecord: (write) =>
       database.insertCommandEventOutboxRecord(write),
-    listUnpublishedCommandEventOutboxRecords: async () => {
+    getUnpublishedCommandEventOutboxBacklog: async () => {
+      callLog.push('backlog');
+      return database.getUnpublishedCommandEventOutboxBacklog();
+    },
+    listUnpublishedCommandEventOutboxRecords: async (limit) => {
       callLog.push('list-all');
-      return database.listUnpublishedCommandEventOutboxRecords();
+      return database.listUnpublishedCommandEventOutboxRecords(limit);
     },
     listUnpublishedCommandEventOutboxRecordsByIdempotencyKey: async (
       idempotencyKey,

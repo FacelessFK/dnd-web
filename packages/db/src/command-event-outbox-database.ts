@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, eq, isNull, min } from 'drizzle-orm';
 
 import type { SessionId } from '@dnd/shared';
 
@@ -24,11 +24,31 @@ export type CommandEventOutboxRecordWrite = {
   sessionId: SessionId;
 };
 
+/**
+ * Aggregate view of the unpublished backlog, computed in the database.
+ *
+ * Exists so that reporting backlog size never materializes the backlog. Counting
+ * rows in JavaScript meant an operational read got slower and heavier exactly as
+ * the thing it reports on got worse.
+ */
+export type CommandEventOutboxBacklog = {
+  countsByEventType: Partial<Record<CommandEventOutboxEventType, number>>;
+  oldestCreatedAt: Date | null;
+  totalCount: number;
+};
+
 export interface CommandEventOutboxDatabase {
   insertCommandEventOutboxRecord(
     write: CommandEventOutboxRecordWrite,
   ): Promise<CommandEventOutboxRow | null>;
-  listUnpublishedCommandEventOutboxRecords(): Promise<CommandEventOutboxRow[]>;
+  getUnpublishedCommandEventOutboxBacklog(): Promise<CommandEventOutboxBacklog>;
+  /**
+   * @param limit Maximum rows to return. Draining is a loop over bounded pages,
+   * not one unbounded read, so a large backlog cannot exhaust memory.
+   */
+  listUnpublishedCommandEventOutboxRecords(
+    limit?: number,
+  ): Promise<CommandEventOutboxRow[]>;
   listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(
     idempotencyKey: string,
   ): Promise<CommandEventOutboxRow[]>;
@@ -64,10 +84,47 @@ export class DrizzleCommandEventOutboxDatabase implements CommandEventOutboxData
     return row ?? null;
   }
 
-  async listUnpublishedCommandEventOutboxRecords(): Promise<
-    CommandEventOutboxRow[]
-  > {
-    return this.db
+  async getUnpublishedCommandEventOutboxBacklog(): Promise<CommandEventOutboxBacklog> {
+    const rows = await this.db
+      .select({
+        eventType: commandEventOutboxRecords.eventType,
+        oldestCreatedAt: min(commandEventOutboxRecords.createdAt),
+        rowCount: count(),
+      })
+      .from(commandEventOutboxRecords)
+      .where(isNull(commandEventOutboxRecords.publishedAt))
+      .groupBy(commandEventOutboxRecords.eventType);
+
+    const countsByEventType: Partial<
+      Record<CommandEventOutboxEventType, number>
+    > = {};
+    let totalCount = 0;
+    let oldestCreatedAt: Date | null = null;
+
+    // One row per event type present, so this loop is bounded by the number of
+    // event types rather than by the backlog.
+    for (const row of rows) {
+      const rowCount = Number(row.rowCount);
+      const eventType = row.eventType as CommandEventOutboxEventType;
+
+      countsByEventType[eventType] = rowCount;
+      totalCount += rowCount;
+
+      const rowOldest =
+        row.oldestCreatedAt === null ? null : new Date(row.oldestCreatedAt);
+
+      if (rowOldest && (!oldestCreatedAt || rowOldest < oldestCreatedAt)) {
+        oldestCreatedAt = rowOldest;
+      }
+    }
+
+    return { countsByEventType, oldestCreatedAt, totalCount };
+  }
+
+  async listUnpublishedCommandEventOutboxRecords(
+    limit?: number,
+  ): Promise<CommandEventOutboxRow[]> {
+    const query = this.db
       .select()
       .from(commandEventOutboxRecords)
       .where(isNull(commandEventOutboxRecords.publishedAt))
@@ -77,6 +134,8 @@ export class DrizzleCommandEventOutboxDatabase implements CommandEventOutboxData
         asc(commandEventOutboxRecords.eventOrder),
         asc(commandEventOutboxRecords.outboxId),
       );
+
+    return limit === undefined ? query : query.limit(limit);
   }
 
   async listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(

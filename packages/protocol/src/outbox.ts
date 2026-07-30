@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { commandErrorSchema } from './errors.js';
+
 export const outboxEventTypeSchema = z.enum([
   'character_state',
   'combat_event',
@@ -26,6 +28,15 @@ export const outboxStatusSuccessSchema = z.object({
   }),
 });
 
+export const outboxStatusErrorSchema = commandErrorSchema;
+
+export const outboxStatusResponseSchema = z.union([
+  outboxStatusSuccessSchema,
+  outboxStatusErrorSchema,
+]);
+
 export type OutboxEventType = z.infer<typeof outboxEventTypeSchema>;
 export type OutboxEventTypeCounts = z.infer<typeof outboxEventTypeCountsSchema>;
 export type OutboxStatusSuccess = z.infer<typeof outboxStatusSuccessSchema>;
+export type OutboxStatusError = z.infer<typeof outboxStatusErrorSchema>;
+export type OutboxStatusResponse = z.infer<typeof outboxStatusResponseSchema>;

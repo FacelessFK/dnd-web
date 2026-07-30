@@ -22,6 +22,15 @@ export interface CommandEventOutboxDispatcherLike {
   getUnpublishedStatus(): Promise<OutboxStatusSuccess['data']>;
 }
 
+/**
+ * How many unpublished rows one drain pass reads at a time.
+ *
+ * Draining loops over pages instead of selecting the whole backlog, so a
+ * backlog that grew while the process was down cannot be loaded into memory all
+ * at once.
+ */
+const DRAIN_PAGE_SIZE = 500;
+
 export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatcherLike {
   private serializedDrains: Promise<void> = Promise.resolve();
 
@@ -44,9 +53,25 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
 
   async drainAllUnpublished(): Promise<void> {
     await this.enqueueDrain(async () => {
-      await this.publishRows(
-        await this.outbox.listUnpublishedCommandEventOutboxRecords(),
-      );
+      // Each pass marks what it publishes, so the next page is always fresh
+      // unpublished rows. A short page means an interrupted drain has published
+      // less to redo, and a huge backlog never becomes one huge result set.
+      for (;;) {
+        const rows =
+          await this.outbox.listUnpublishedCommandEventOutboxRecords(
+            DRAIN_PAGE_SIZE,
+          );
+
+        if (rows.length === 0) {
+          return;
+        }
+
+        await this.publishRows(rows);
+
+        if (rows.length < DRAIN_PAGE_SIZE) {
+          return;
+        }
+      }
     });
   }
 
@@ -62,31 +87,36 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     });
   }
 
+  /**
+   * Reports backlog size from a grouped aggregate rather than by counting rows
+   * in memory.
+   *
+   * This endpoint is reachable over HTTP, so the old implementation - select
+   * every unpublished row, then count and scan them here - got heavier exactly
+   * when the backlog it reports on got worse, and could be triggered repeatedly
+   * from outside.
+   */
   async getUnpublishedStatus(): Promise<OutboxStatusSuccess['data']> {
-    const rows = await this.outbox.listUnpublishedCommandEventOutboxRecords();
+    const backlog = await this.outbox.getUnpublishedCommandEventOutboxBacklog();
     const eventTypeCounts = this.createEmptyEventTypeCounts();
 
-    for (const row of rows) {
-      if (!(row.eventType in eventTypeCounts)) {
-        throw new Error(`Unsupported outbox event type "${row.eventType}".`);
+    for (const [eventType, rowCount] of Object.entries(
+      backlog.countsByEventType,
+    )) {
+      if (!(eventType in eventTypeCounts)) {
+        throw new Error(`Unsupported outbox event type "${eventType}".`);
       }
 
-      const eventType = row.eventType as keyof OutboxEventTypeCounts;
-      eventTypeCounts[eventType] += 1;
+      eventTypeCounts[eventType as keyof OutboxEventTypeCounts] = rowCount ?? 0;
     }
 
     return {
       configured: true,
       eventTypeCounts,
-      oldestCreatedAt:
-        rows.length > 0
-          ? rows
-              .reduce((oldest, row) =>
-                row.createdAt < oldest.createdAt ? row : oldest,
-              )
-              .createdAt.toISOString()
-          : null,
-      unpublishedCount: rows.length,
+      oldestCreatedAt: backlog.oldestCreatedAt
+        ? backlog.oldestCreatedAt.toISOString()
+        : null,
+      unpublishedCount: backlog.totalCount,
     };
   }
 

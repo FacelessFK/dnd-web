@@ -30,6 +30,7 @@ import type {
   SessionSnapshotDatabase,
   SessionSnapshotRow,
   SessionSnapshotWrite,
+  CommandEventOutboxBacklog,
 } from '@dnd/db';
 
 import { InMemoryCommandIdempotencyStore } from './command-idempotency-store.js';
@@ -228,6 +229,10 @@ class EmptyCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
       publishedAt: null,
       sessionId: write.sessionId,
     };
+  }
+
+  async getUnpublishedCommandEventOutboxBacklog(): Promise<CommandEventOutboxBacklog> {
+    return { countsByEventType: {}, oldestCreatedAt: null, totalCount: 0 };
   }
 
   async listUnpublishedCommandEventOutboxRecords(): Promise<
