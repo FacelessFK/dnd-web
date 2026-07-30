@@ -614,6 +614,19 @@ function rememberParticipantToken(sessionId, participantId, token) {
  * participant can also be driven over HTTP.
  */
 async function captureBrowserCredential(page, label) {
+  // Waits, because the credential only lands once the join command has round
+  // tripped. Reading straight after the click is a race the click does not lose
+  // often enough to be obvious.
+  await waitFor(page, {
+    label: `${label} participant credential`,
+    predicate: `(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('dnd-participant-credential') ?? '[]',
+      );
+      return Array.isArray(stored) && stored.length > 0;
+    })()`,
+  });
+
   const raw = await page.evaluate(
     `localStorage.getItem('dnd-participant-credential') ?? '[]'`,
   );
