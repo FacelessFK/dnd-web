@@ -34,7 +34,7 @@ import {
   type OutboxStatusSuccessResponse,
   type RuntimeApiResult,
 } from '../../lib/runtime-api';
-import { LanguageSwitcher, useI18n } from '../../lib/i18n';
+import { LanguageSwitcher, useI18n, type MessageKey } from '../../lib/i18n';
 import {
   abilityKeys,
   characterInputFromDraft,
@@ -127,6 +127,7 @@ import {
   type OutboxStatusView,
   type PlayerReadinessSummary,
   type RecoveryReliabilitySummary,
+  type RuntimeEventDescriptor,
   type RuntimeEventSummary,
   type RuntimeMode,
   type RuntimeNoticeTone,
@@ -179,6 +180,40 @@ function localizeActorLabel(
   return label === CONCEALED_COMBATANT_LABEL
     ? t('runtime.turn.concealedCombatant')
     : label;
+}
+
+/**
+ * Turns a stream event descriptor into the finished, localized summary the feed
+ * renders.
+ *
+ * Nested keys - `resultKey` and `reasonKey` - are translated first and passed in
+ * as values, so a detail string stays one catalogue entry per locale instead of
+ * being assembled from fragments in an order Persian would not use.
+ */
+function localizeRuntimeEventDescriptor(
+  descriptor: RuntimeEventDescriptor,
+  t: RuntimeTranslator,
+): RuntimeEventSummary {
+  const { resultKey, reasonKey, ...values } = descriptor.detailValues;
+  const resolved: Record<string, string> = {
+    ...values,
+    attacker: localizeActorLabel(values.attacker ?? null, t) ?? '',
+    target: localizeActorLabel(values.target ?? null, t) ?? '',
+  };
+
+  if (resultKey) {
+    resolved.result = t(resultKey as MessageKey, values);
+  }
+
+  if (reasonKey) {
+    resolved.reason = t(reasonKey as MessageKey);
+  }
+
+  return {
+    detail: t(descriptor.detailKey, resolved),
+    title: t(descriptor.titleKey),
+    tone: descriptor.tone,
+  };
 }
 
 function getLocalizedSceneEntityTypeLabel(
@@ -1203,6 +1238,15 @@ export function RuntimeCockpit() {
 
   function resetLocalCockpit(): void {
     localStorage.removeItem(cockpitStorageKey);
+    // Deliberately keeps the participant credential. Local Reset means "clear
+    // this browser's view of the table", not "give up my seat": the documented
+    // behaviour, and what the smoke harnesses assert, is that re-entering the
+    // session ID and recovering brings back the same participant. Dropping the
+    // credential here would make that recovery impossible and turn a UI reset
+    // into leaving the session.
+    //
+    // Clearing a credential is `clearParticipantCredentials()`; nothing in the
+    // cockpit calls it today, which is a deliberate gap noted in ROADMAP M0.
     setDmParticipantId(defaultDm.participantId);
     setDmDisplayName(defaultDm.displayName);
     setMode('dm');
@@ -4160,7 +4204,10 @@ export function RuntimeCockpit() {
         ? [
             {
               ...entry,
-              summary: describeSessionStreamEvent(entry.payload),
+              summary: localizeRuntimeEventDescriptor(
+                describeSessionStreamEvent(entry.payload),
+                t,
+              ),
             },
           ]
         : [],
