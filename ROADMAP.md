@@ -461,13 +461,29 @@ everything.
 | `/maps` cannot re-edit a published scene             | Medium   | M5        |
 | Movement preview can offer a cell the server rejects | Low      | M3        |
 | Auth MVP lacks reset, verification, and MFA          | Low      | M14       |
-| DB bridge browser harness is flaky                   | Medium   | M1        |
+| Cockpit local state is replayed over live UI state   | Low      | M2        |
+| Demo scenario copy is hardcoded English              | Low      | M1        |
 
-`test:smoke:saved-character-training-room-db` intermittently fails waiting for
-`Recover` or `Join Session` to become enabled, which is what happens when the
-session-ID input did not take the value `setSessionInputValue` wrote. Observed at
-two _different_ steps across consecutive runs on identical code, which is what
-makes it a race rather than a break: every assertion about the credential
-hand-off, DM assignment, runtime-copy provenance and Character Library separation
-passes before it. The likely fix is to wait on the input's value rather than
-assume the write landed. Worth doing when M1 next touches this harness.
+`demoScenarios` in `apps/web/lib/runtime-cockpit-helpers.ts` carries its
+`description` as a literal, so the Persian surface renders the English sentence
+"Training Room Skirmish uses Training Room with Aria and Borin for a short
+two-player encounter." verbatim. The `Messages` type cannot catch this: the
+string never enters `messages`, so typecheck sees nothing to compare. Scenario
+names and IDs are canonical and stay untranslated - the prose is the bug.
+
+The DB bridge harness flake is fixed. It was not the session-ID write: the
+cockpit re-reads its persisted state in a mount effect, and Next's dev server
+compiles `/runtime` on demand, so a compile landing while the harness was
+already driving the page remounted the cockpit and replayed the stored mode over
+the click it had just made. The page fell back to DM mode and the run died much
+later waiting for `Join Session`, which only renders for a player - which is why
+it surfaced at two different steps on identical code. The failing run showed
+`Compiled /runtime in 2.2s` mid-run and took 137s against ~39s for the passing
+runs either side of it. The harnesses now confirm the mode against stored state
+and re-click if it reverts, and re-apply the session-ID write until it sticks.
+
+The product-side half is left as the defect above: because that hydration lives
+in a `useEffect(..., [])`, any remount replays stored local state over whatever
+the surface currently shows. In dev this is a compile; in production the window
+is small but the shape is wrong, and it belongs with the M2 cockpit split rather
+than a spot fix inside an 8,800-line component.
