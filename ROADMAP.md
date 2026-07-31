@@ -72,8 +72,10 @@ cockpit. Converting rules content to 2014.
 
 **Known gaps left open, deliberately.**
 
-- Credentials are per-process and in-memory, so a server restart forces a
-  rejoin and a second process would not recognise them. Shared storage is M14.
+- Credentials are per-process and in-memory, so a second process would not
+  recognise them. Shared storage is M14. A restart no longer forces a rejoin:
+  the durable seat binding lets the owning account `reconnect_session` and be
+  issued a new credential, while the old one stays unverifiable.
 - Credentials live in `localStorage`, readable by any script on the origin,
   because the web app and the server are different origins and an HttpOnly
   cookie would need `SameSite=None; Secure`. Same-origin proxying is M14.
