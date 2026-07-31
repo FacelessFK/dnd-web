@@ -17,6 +17,36 @@ export const sceneEntityTypes = [
   'terrain',
 ] as const;
 export const sceneCombatantKinds = ['monster', 'npc'] as const;
+
+export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
+
+/**
+ * Advantage and disadvantage describe the dice, not the total: they change how
+ * many d20s are rolled and which one counts. They are kept out of the modifier
+ * list so a second source of the same stance cannot be counted twice.
+ */
+export const rollStances = ['normal', 'advantage', 'disadvantage'] as const;
+
+export const resolutionKinds = [
+  'ability_check',
+  'saving_throw',
+  'attack_roll',
+] as const;
+
+/** Canonical, untranslated. The UI maps these to localized copy. */
+export const modifierSourceKinds = [
+  'ability',
+  'proficiency',
+  'condition',
+  'gm_adjustment',
+] as const;
+
+/**
+ * Conditions the rules engine actually applies, as opposed to the free-form
+ * tags a GM can attach for their own notes. A condition listed here changes
+ * resolution; anything else is display only.
+ */
+export const mechanicalConditions = ['poisoned'] as const;
 export const sceneTransitionKinds = [
   'door',
   'stairs',
@@ -55,6 +85,11 @@ export type SceneEntityId = string;
 export type EncounterId = string;
 export type SessionStateRevision = number;
 export type ParticipantRole = (typeof participantRoles)[number];
+export type AbilityKey = (typeof abilityKeys)[number];
+export type RollStance = (typeof rollStances)[number];
+export type ResolutionKind = (typeof resolutionKinds)[number];
+export type ModifierSourceKind = (typeof modifierSourceKinds)[number];
+export type MechanicalCondition = (typeof mechanicalConditions)[number];
 export type ConnectionStatus = (typeof connectionStatuses)[number];
 export type SessionStatus = (typeof sessionStatuses)[number];
 export type BaseRuleset = (typeof baseRulesets)[number];
