@@ -5690,8 +5690,14 @@ test('db-backed missed realtime delivery is recovered through read models withou
     10,
   );
   assert.equal(targetCharacterRead.body.data.character.hp.current, 29);
-  assert.equal(lateStreamUpdates.length, 1);
-  assert.equal(lateStreamUpdates[0]?.type, 'session_state');
+  // Connecting replays what the subscriber is entitled to know *now*: the
+  // session snapshot plus the M1 table as it stands. What it must never replay
+  // is the combat event it missed, which is the point of this test.
+  assert.deepEqual(lateStreamUpdates.map((update) => update.type).sort(), [
+    'player_intent_state',
+    'resolution_state',
+    'session_state',
+  ]);
   assert.equal(
     lateStreamUpdates.some((update) => update.type === 'combat_event'),
     false,
@@ -11163,9 +11169,15 @@ test('reconnected SSE subscribers receive current session state without combat e
     },
   });
 
-  assert.equal(reconnectUpdates.length, 1);
-  assert.equal(reconnectUpdates[0]?.type, 'session_state');
-  assert.equal(reconnectUpdates[0]?.reason, 'initial_sync');
+  // Session snapshot first, then the M1 table, all as `initial_sync`. A
+  // reconnecting client rebuilds from state rather than from replayed events.
+  assert.deepEqual(
+    reconnectUpdates.map((update) => update.type),
+    ['session_state', 'resolution_state', 'player_intent_state'],
+  );
+  assert.ok(
+    reconnectUpdates.every((update) => update.reason === 'initial_sync'),
+  );
 
   if (reconnectUpdates[0]?.type !== 'session_state') {
     return;

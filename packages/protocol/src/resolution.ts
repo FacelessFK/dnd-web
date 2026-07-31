@@ -212,6 +212,10 @@ export const resolutionCommandResponseSchema = z.union([
 ]);
 
 export const resolutionStateUpdateReasonSchema = z.enum([
+  // Sent to a subscriber the moment it connects, so a refresh or a reconnect
+  // rebuilds the panel from authoritative state instead of waiting for the
+  // next request to happen to arrive.
+  'initial_sync',
   'resolution_requested',
   'resolution_submitted',
   'resolution_request_cancelled',

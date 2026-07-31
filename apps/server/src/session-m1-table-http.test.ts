@@ -1487,21 +1487,25 @@ test('a pending request reaches the GM and the addressed player only', async () 
     const addressedFrames = framesNamed(addressed, 'resolution_state');
     const bystanderFrames = framesNamed(bystander, 'resolution_state');
 
-    assert.equal(dmFrames.length, 1);
-    assert.equal(addressedFrames.length, 1);
+    // Each stream opens with an `initial_sync` frame and then receives the
+    // request itself, so the interesting one is always the last.
+    assert.equal(dmFrames.length, 2);
+    assert.equal(addressedFrames.length, 2);
     assert.equal(
       bystanderFrames.length,
-      1,
+      2,
       'every seat is told the table changed',
     );
 
-    const dmState = dmFrames[0]!.state as { requests: unknown[] };
-    const addressedState = addressedFrames[0]!.state as {
+    const dmState = dmFrames.at(-1)!.state as { requests: unknown[] };
+    const addressedState = addressedFrames.at(-1)!.state as {
       requests: Array<{ dc: number; reason?: string }>;
     };
-    const bystanderState = bystanderFrames[0]!.state as { requests: unknown[] };
+    const bystanderState = bystanderFrames.at(-1)!.state as {
+      requests: unknown[];
+    };
 
-    assert.equal(dmFrames[0]!.reason, 'resolution_requested');
+    assert.equal(dmFrames.at(-1)!.reason, 'resolution_requested');
     assert.equal(dmState.requests.length, 1);
     assert.equal(addressedState.requests.length, 1);
     assert.equal(addressedState.requests[0]?.dc, 15);

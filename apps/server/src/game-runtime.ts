@@ -106,6 +106,7 @@ import type {
   EncounterOverlay,
   Participant,
   ParticipantId,
+  ParticipantRole,
   RulesProfile,
   Scene,
   SceneCombatant,
@@ -433,12 +434,69 @@ export class InMemoryGameRuntime<
     );
   }
 
+  /**
+   * Subscribe, then hand the new subscriber the table as it stands.
+   *
+   * The session snapshot has always been replayed on connect; the M1 table was
+   * not, so a refresh or a reconnect rebuilt an empty resolution panel and
+   * stayed empty until the GM happened to ask for something new. A pending
+   * request the player had not answered simply vanished from their screen while
+   * remaining authoritative on the server.
+   *
+   * Sent to this subscriber only, and projected for their role first - a
+   * reconnecting player must not be caught up on requests addressed elsewhere.
+   */
   connectParticipant(
     sessionId: string,
     participantId: string,
     subscriber: SessionSubscriber,
   ): void {
     this.sessions.connectParticipant(sessionId, participantId, subscriber);
+    this.sendTableStateSnapshot(sessionId, participantId, subscriber);
+  }
+
+  private sendTableStateSnapshot(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    subscriber: SessionSubscriber,
+  ): void {
+    let role: ParticipantRole;
+
+    try {
+      role = this.requireParticipant(
+        this.sessions.getSessionSnapshotForParticipant(
+          sessionId,
+          participantId,
+        ),
+        participantId,
+      ).role;
+    } catch {
+      // The subscription itself already failed or the participant is unknown.
+      // Failing closed here means sending nothing rather than guessing a role.
+      return;
+    }
+
+    const projected = projectTableStateForRole(
+      this.tableStates.get(sessionId),
+      role,
+      participantId,
+    );
+
+    subscriber.send({
+      reason: 'initial_sync',
+      sessionId,
+      state: {
+        requests: projected.requests,
+        resolutions: projected.resolutions,
+      },
+      type: 'resolution_state',
+    });
+    subscriber.send({
+      reason: 'initial_sync',
+      sessionId,
+      state: { intents: projected.intents },
+      type: 'player_intent_state',
+    });
   }
 
   disconnectParticipant(

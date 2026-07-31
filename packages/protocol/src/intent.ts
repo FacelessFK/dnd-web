@@ -101,6 +101,7 @@ export const playerIntentCommandResponseSchema = z.union([
 ]);
 
 export const playerIntentStateUpdateReasonSchema = z.enum([
+  'initial_sync',
   'intent_submitted',
   'intent_status_changed',
 ]);
