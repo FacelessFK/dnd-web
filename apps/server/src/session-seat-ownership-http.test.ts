@@ -102,7 +102,11 @@ async function send(
 
   return {
     body: JSON.parse(response.body || '{}') as {
-      data?: { participantId: string; participantToken: string };
+      data?: {
+        participantId: string;
+        participantToken: string;
+        sessionId: string;
+      };
       error?: { code: string; message: string };
       ok?: boolean;
     },
@@ -194,7 +198,7 @@ async function seatTable() {
   );
 
   const created = await createSession(context, gmCookie);
-  const sessionId = (created.body.data as { sessionId: string }).sessionId;
+  const sessionId = created.body.data!.sessionId;
 
   const joined = await joinAs(context, sessionId, 'player-001', playerCookie);
   assert.equal(joined.status, 200, 'legitimate player join');
