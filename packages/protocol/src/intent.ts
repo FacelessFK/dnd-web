@@ -128,6 +128,9 @@ export type PlayerIntentCommandSuccess = z.infer<
 export type PlayerIntentCommandError = z.infer<
   typeof playerIntentCommandErrorSchema
 >;
+export type PlayerIntentCommandResponse = z.infer<
+  typeof playerIntentCommandResponseSchema
+>;
 export type PlayerIntentStateUpdate = z.infer<
   typeof playerIntentStateUpdateSchema
 >;

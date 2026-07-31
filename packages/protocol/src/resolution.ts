@@ -248,6 +248,9 @@ export type ResolutionCommandSuccess = z.infer<
 export type ResolutionCommandError = z.infer<
   typeof resolutionCommandErrorSchema
 >;
+export type ResolutionCommandResponse = z.infer<
+  typeof resolutionCommandResponseSchema
+>;
 export type ResolutionStateUpdate = z.infer<typeof resolutionStateUpdateSchema>;
 export type ResolutionStateUpdateReason = z.infer<
   typeof resolutionStateUpdateReasonSchema

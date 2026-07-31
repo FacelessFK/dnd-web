@@ -9,12 +9,22 @@ import {
 
 import { buildSessionStreamUrl } from './runtime-api';
 
+/**
+ * The named frames this client subscribes to.
+ *
+ * `EventSource` only delivers an event whose `event:` name has a listener, so a
+ * type missing from this list is silently never received - the stream looks
+ * healthy and the panel simply never updates. Adding a protocol event type
+ * means adding it here.
+ */
 const streamEventTypes: SessionStreamEvent['type'][] = [
   'session_state',
   'movement_state',
   'encounter_state',
   'combat_event',
   'character_state',
+  'resolution_state',
+  'player_intent_state',
 ];
 
 export type SessionStreamStatus = 'connected' | 'idle' | 'reconnecting';

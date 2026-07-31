@@ -144,6 +144,11 @@ import {
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
 import { useSessionStream } from '../../lib/use-session-stream';
+import { describeStreamStatus } from '../../lib/m1-feedback';
+import { useM1Table } from '../../lib/use-m1-table';
+import { M1FeedbackLayer, usePrefersReducedMotion } from './m1-feedback-layer';
+import { M1GmPanel, type M1ResolutionTarget } from './m1-gm-panel';
+import { M1PlayerPanel } from './m1-player-panel';
 import { TacticalMap } from './tactical-map';
 
 type SimpleEncounterCommandType =
@@ -859,10 +864,19 @@ export function RuntimeCockpit() {
         ]),
   ];
 
+  // M1 table state and commands live in their own hook so this component keeps
+  // only the wiring: which participant, which session, and where the panels go.
+  const m1 = useM1Table({
+    participantId: streamParticipantId,
+    sessionId,
+  });
+  const prefersReducedMotion = usePrefersReducedMotion();
+
   const stream = useSessionStream({
     enabled: streamEnabled,
     onEvent: (event) => {
       applyStreamEvent(event);
+      m1.ingestStreamEvent(event);
       pushLog(event.type, event);
     },
     participantId: streamParticipantId,
@@ -1082,6 +1096,108 @@ export function RuntimeCockpit() {
     sceneId,
     sessionId,
   ]);
+
+  // Seats the GM may address: a participant with an assigned runtime character.
+  // A request aimed anywhere else would create a pending row nobody can answer.
+  const m1ResolutionTargets: M1ResolutionTarget[] =
+    playerParticipantIds.flatMap((candidateId) => {
+      const resource = charactersByParticipant[candidateId];
+
+      if (!resource) {
+        return [];
+      }
+
+      return [
+        {
+          activeConditions: resource.overlay.activeConditions,
+          characterId: resource.character.id,
+          displayName: resource.character.name,
+          participantId: candidateId,
+        },
+      ];
+    });
+
+  // Whatever the *server* sent in this role's scene projection. A concealed
+  // creature is already absent from a player's copy, so nothing is filtered
+  // here - the list is simply shorter for them, which is the point.
+  const m1SceneCombatants = (scene?.entities ?? []).filter(
+    (entity) => entity.combatant,
+  );
+  const m1PlayerActiveConditions =
+    charactersByParticipant[streamParticipantId]?.overlay.activeConditions ??
+    [];
+
+  /**
+   * Concealment goes through the authoritative command, then the panel re-reads
+   * the scene the server returned. Nothing is hidden locally, so a player's
+   * projection changes because their next read is different - not because this
+   * browser drew it differently.
+   */
+  async function handleSetCombatantHidden(
+    combatantId: string,
+    hidden: boolean,
+  ): Promise<void> {
+    await runTask('dm_set_combatant_hidden', async () => {
+      const response = await unwrap(
+        'dm_set_combatant_hidden',
+        sendDmCommand({
+          actor: { participantId: streamParticipantId },
+          commandId: createCommandId('m1-combatant-hidden'),
+          payload: { combatantId, hidden, sessionId },
+          type: 'dm_set_combatant_hidden',
+        }),
+      );
+
+      if ('scene' in response.data) {
+        setScene(response.data.scene);
+      }
+
+      return response;
+    });
+  }
+
+  /**
+   * Poisoned is applied by replacing the whole condition list, which is the
+   * command the server offers. Building the next list from the authoritative
+   * one - rather than from a local toggle - is what makes applying it twice a
+   * no-op instead of two stacked entries.
+   */
+  async function handleSetPoisoned(
+    target: M1ResolutionTarget,
+    poisoned: boolean,
+  ): Promise<void> {
+    const withoutPoisoned = target.activeConditions.filter(
+      (condition) => condition !== 'poisoned',
+    );
+
+    await runTask('dm_set_character_active_conditions', async () => {
+      const response = await unwrap(
+        'dm_set_character_active_conditions',
+        sendDmCommand({
+          actor: { participantId: streamParticipantId },
+          commandId: createCommandId('m1-condition'),
+          payload: {
+            activeConditions: poisoned
+              ? [...withoutPoisoned, 'poisoned']
+              : withoutPoisoned,
+            characterId: target.characterId,
+            participantId: target.participantId,
+            sessionId,
+          },
+          type: 'dm_set_character_active_conditions',
+        }),
+      );
+
+      if ('character' in response.data) {
+        setCharactersByParticipant((current) => ({
+          ...current,
+          [target.participantId]: response.data as CharacterResource,
+        }));
+      }
+
+      return response;
+    });
+  }
 
   async function runTask<T>(label: string, task: () => Promise<T>) {
     setBusyLabel(label);
@@ -4777,6 +4893,49 @@ export function RuntimeCockpit() {
               summary={recoveryReliabilitySummary}
               t={t}
             />
+            <M1FeedbackLayer
+              items={m1.feedback}
+              onDismiss={m1.clearFeedback}
+              prefersReducedMotion={prefersReducedMotion}
+              statusKey={
+                describeStreamStatus(stream.status, Boolean(sessionState))
+                  .messageKey
+              }
+            />
+
+            {mode === 'dm' ? (
+              <M1GmPanel
+                busyLabel={m1.busyLabel}
+                combatants={m1SceneCombatants}
+                errorKey={m1.errorKey}
+                onCancelRequest={(request) => void m1.cancelRequest(request)}
+                onRequestResolution={(input) =>
+                  void m1.requestResolution(input)
+                }
+                onSetCombatantHidden={handleSetCombatantHidden}
+                onSetPoisoned={handleSetPoisoned}
+                onUpdateIntentStatus={(intentId, status) =>
+                  void m1.updateIntentStatus(intentId, status)
+                }
+                participantId={streamParticipantId}
+                table={m1.table}
+                targets={m1ResolutionTargets}
+              />
+            ) : (
+              <M1PlayerPanel
+                activeConditions={m1PlayerActiveConditions}
+                busyRequestId={m1.busyRequestId}
+                errorKey={m1.errorKey}
+                intentBusy={m1.busyLabel === 'submit_player_intent'}
+                onSubmitIntent={(text) => void m1.submitIntent(text)}
+                onSubmitResolution={(request) =>
+                  void m1.submitResolution(request)
+                }
+                participantId={streamParticipantId}
+                table={m1.table}
+              />
+            )}
+
             <RuntimeStatusOverviewPanel
               overview={runtimeStatusOverview}
               t={t}

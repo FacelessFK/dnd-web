@@ -25,6 +25,8 @@ import type {
   RuntimeErrorCode,
   StanceSource,
 } from '@dnd/protocol';
+
+import type { MessageKey } from './i18n';
 // `@dnd/shared` is not a direct dependency of the web app; the protocol package
 // re-exports the primitives the browser needs.
 type ParticipantId = string;
@@ -32,8 +34,17 @@ type ParticipantRole = 'dm' | 'player';
 
 export type ResolutionViewerRole = ParticipantRole;
 
+/**
+ * `key` is a real message key, not a free string.
+ *
+ * Several are assembled from a canonical ID - `runtime.m1.kind.${kind}` - which
+ * TypeScript cannot narrow on its own, so those construction sites assert the
+ * type. The assertion is not taken on trust: `m1-resolution-view.test.ts`
+ * asserts that every key a descriptor can emit resolves in both locales, which
+ * is the check the cast would otherwise have removed.
+ */
 export type LocalizedDescriptor = {
-  key: string;
+  key: MessageKey;
   values?: Record<string, string>;
 };
 
@@ -50,10 +61,10 @@ export type ModifierView = LocalizedDescriptor & {
 
 export type DiceResolutionView = {
   id: string;
-  kindKey: string;
-  abilityKey: string;
-  skillKey: string | null;
-  stanceKey: string;
+  kindKey: MessageKey;
+  abilityKey: MessageKey;
+  skillKey: MessageKey | null;
+  stanceKey: MessageKey;
   dice: DiceFaceView[];
   selectedDie: number;
   stanceSources: LocalizedDescriptor[];
@@ -61,8 +72,8 @@ export type DiceResolutionView = {
   modifierTotalSigned: string;
   total: number;
   /** `null` when the record has no pass/fail semantics. */
-  outcomeKey: string | null;
-  thresholdKey: string | null;
+  outcomeKey: MessageKey | null;
+  thresholdKey: MessageKey | null;
   thresholdValue: number | null;
   proficiency: ModifierView | null;
   resolvedAt: string;
@@ -70,11 +81,11 @@ export type DiceResolutionView = {
 
 export type ResolutionRequestView = {
   id: string;
-  kindKey: string;
-  abilityKey: string;
-  skillKey: string | null;
-  statusKey: string;
-  stanceKey: string;
+  kindKey: MessageKey;
+  abilityKey: MessageKey;
+  skillKey: MessageKey | null;
+  statusKey: MessageKey;
+  stanceKey: MessageKey;
   dc: number;
   /** GM-authored prose. Rendered as text, never translated. */
   reason: string | null;
@@ -89,20 +100,20 @@ const SKILL_KEY_PREFIX = 'runtime.m1.skill.';
 const STANCE_KEY_PREFIX = 'runtime.m1.stance.';
 const CONDITION_KEY_PREFIX = 'runtime.m1.condition.';
 
-export function abilityLabelKey(ability: string): string {
-  return `${ABILITY_KEY_PREFIX}${ability}`;
+export function abilityLabelKey(ability: string): MessageKey {
+  return `${ABILITY_KEY_PREFIX}${ability}` as MessageKey;
 }
 
-export function skillLabelKey(skill: string): string {
-  return `${SKILL_KEY_PREFIX}${skill}`;
+export function skillLabelKey(skill: string): MessageKey {
+  return `${SKILL_KEY_PREFIX}${skill}` as MessageKey;
 }
 
-export function stanceLabelKey(stance: RollStance): string {
-  return `${STANCE_KEY_PREFIX}${stance}`;
+export function stanceLabelKey(stance: RollStance): MessageKey {
+  return `${STANCE_KEY_PREFIX}${stance}` as MessageKey;
 }
 
-export function conditionLabelKey(condition: string): string {
-  return `${CONDITION_KEY_PREFIX}${condition}`;
+export function conditionLabelKey(condition: string): MessageKey {
+  return `${CONDITION_KEY_PREFIX}${condition}` as MessageKey;
 }
 
 /**
@@ -187,7 +198,7 @@ export function describeDiceResolution(
     abilityKey: abilityLabelKey(resolution.ability),
     dice: describeDiceFaces(resolution),
     id: resolution.id,
-    kindKey: `runtime.m1.kind.${resolution.kind}`,
+    kindKey: `runtime.m1.kind.${resolution.kind}` as MessageKey,
     modifiers: resolution.modifiers.map((modifier) =>
       describeModifier(modifier),
     ),
@@ -235,7 +246,7 @@ function describeDiceFaces(resolution: DiceResolution): DiceFaceView[] {
   });
 }
 
-function describeOutcomeKey(resolution: DiceResolution): string | null {
+function describeOutcomeKey(resolution: DiceResolution): MessageKey | null {
   if (resolution.success === undefined) {
     return null;
   }
@@ -276,11 +287,12 @@ export function describeResolutionRequest(params: {
     consequence: params.request.consequence ?? null,
     dc: params.request.dc,
     id: params.request.id,
-    kindKey: `runtime.m1.kind.${params.request.kind}`,
+    kindKey: `runtime.m1.kind.${params.request.kind}` as MessageKey,
     reason: params.request.reason ?? null,
     skillKey: params.request.skill ? skillLabelKey(params.request.skill) : null,
     stanceKey: stanceLabelKey(params.request.stance),
-    statusKey: `runtime.m1.requestStatus.${params.request.status}`,
+    statusKey:
+      `runtime.m1.requestStatus.${params.request.status}` as MessageKey,
   };
 }
 
@@ -289,7 +301,7 @@ export type PlayerIntentView = {
   /** Author-written prose. Never translated, never interpreted. */
   text: string;
   gmNote: string | null;
-  statusKey: string;
+  statusKey: MessageKey;
   authoredByViewer: boolean;
   isTerminal: boolean;
   availableTransitions: Exclude<PlayerIntentStatus, 'pending'>[];
@@ -322,7 +334,7 @@ export function describePlayerIntent(params: {
     gmNote: params.intent.gmNote ?? null,
     id: params.intent.id,
     isTerminal,
-    statusKey: `runtime.m1.intentStatus.${params.intent.status}`,
+    statusKey: `runtime.m1.intentStatus.${params.intent.status}` as MessageKey,
     text: params.intent.text,
     updatedAt: params.intent.updatedAt,
   };
