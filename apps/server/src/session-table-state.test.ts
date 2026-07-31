@@ -183,6 +183,51 @@ test('an intent moves through GM outcomes and keeps its note', () => {
   );
 });
 
+test('acknowledging an intent leaves it open for a later outcome', () => {
+  const acknowledged = updatePlayerIntentStatus(
+    addPlayerIntent(createSessionTableState(), makeIntent()),
+    {
+      intentId,
+      status: 'acknowledged',
+      updatedAt: '2026-07-31T12:01:00.000Z',
+    },
+  );
+  const resolved = updatePlayerIntentStatus(acknowledged, {
+    intentId,
+    status: 'resolved',
+    updatedAt: '2026-07-31T12:02:00.000Z',
+  });
+
+  assert.equal(resolved.intents[0]!.status, 'resolved');
+});
+
+// A terminal intent is the GM's final word. A second click, or a stale tab
+// replaying an old decision under a fresh command ID, must not rewrite it.
+test('a terminal intent cannot transition again', () => {
+  for (const terminal of ['resolved', 'dismissed'] as const) {
+    const state = updatePlayerIntentStatus(
+      addPlayerIntent(createSessionTableState(), makeIntent()),
+      {
+        intentId,
+        status: terminal,
+        updatedAt: '2026-07-31T12:01:00.000Z',
+      },
+    );
+
+    assert.throws(
+      () =>
+        updatePlayerIntentStatus(state, {
+          intentId,
+          status: 'acknowledged',
+          updatedAt: '2026-07-31T12:02:00.000Z',
+        }),
+      (error: SessionTableStateError) =>
+        error.code === 'invalid_intent_status_transition',
+      `a ${terminal} intent must refuse a further transition`,
+    );
+  }
+});
+
 test('an unknown intent is reported', () => {
   assert.throws(
     () =>
