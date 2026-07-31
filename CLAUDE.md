@@ -130,6 +130,24 @@ idempotency record commit together through
 `packages/db/src/dnd-database-unit-of-work.ts`. Events go to the outbox inside
 that transaction and dispatch after commit.
 
+**A repository result is a promise in DB mode and a value in memory.** The
+`RuntimeRepositoryResult` pattern lets `game-runtime.ts` declare `Encounter`
+where DB mode actually returns `Promise<Encounter>`, so TypeScript will not
+catch you reading a field off it. Two shipped bugs came from exactly that: a
+combat event built with `encounter.id` from an unresolved promise wrote
+`encounterId: undefined` into the outbox, and projecting an unresolved promise
+read `participants` off a `Promise`. Neither reproduces in memory, and the DM
+path masked both. Always pass a repository result through
+`resolveRepositoryResult` before touching its fields - never through a bare
+`const`.
+
+**Participant credentials never become durable.** They are per-process bearer
+tokens and a restart must invalidate them. The durable fact is the _seat
+binding_ in `session_seat_ownership`, and `reconnect_session` accepts it in
+place of a credential only when `isOwnedBy` matches - never `isAvailableTo`,
+which is true for any unbound seat and would hand an anonymous table's GM chair
+to anyone with the session code.
+
 **No unbounded query.** Anything that can grow gets a `LIMIT` or a database-side
 aggregate. Never `SELECT *` a whole table to count it in JavaScript.
 

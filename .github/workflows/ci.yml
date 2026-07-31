@@ -114,3 +114,80 @@ jobs:
       - name: Map builder smoke
         if: ${{ !cancelled() }}
         run: pnpm --filter @dnd/web test:smoke:map-builder
+
+  # The one DB-mode slice CI runs, and the only automated proof that M1 state
+  # survives a process it outlived. Everything else about M1 is provable in
+  # memory; "does it come back" is not.
+  #
+  # Deliberately narrow. The browser DB smokes need Chrome as well as Postgres
+  # and stay local (see README) - running every historical DB harness here would
+  # buy little and cost every pull request several minutes.
+  #
+  # The credentials below are ephemeral and belong to a container that exists
+  # for the length of this job. They are not secrets and must never be pointed
+  # at anything that outlives the runner.
+  m1-db-recovery:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dnd_web_ci
+          POSTGRES_PASSWORD: dnd_web_ci_password
+          POSTGRES_USER: dnd_web_ci
+          # Persian character data is stored here; a non-UTF8 database corrupts
+          # it silently, and `check:readiness` fails the job rather than let it.
+          POSTGRES_INITDB_ARGS: '--encoding=UTF8'
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dnd_web_ci -d dnd_web_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://dnd_web_ci:dnd_web_ci_password@127.0.0.1:5432/dnd_web_ci
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm --filter @dnd/db db:migrate
+
+      # Not optional bureaucracy: it verifies UTF8 on both server and client and
+      # round-trips a Persian string, which is the failure this repo has already
+      # been through once.
+      - name: Verify database readiness
+        run: pnpm --filter @dnd/db check:readiness
+
+      - name: M1 persistence tests
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/server test:db
+
+      # Provisions its own database per run, starts and kills a real server
+      # process, then starts a second one against the same data. A failure here
+      # means recovery is broken, which is the whole point of the job.
+      - name: M1 DB restart recovery smoke
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/server test:smoke:m1-db-restart
+
+      - name: Capture PostgreSQL logs on failure
+        if: ${{ failure() }}
+        run: docker logs "$(docker ps -aqf ancestor=postgres:16-alpine)" 2>&1 | tail -200

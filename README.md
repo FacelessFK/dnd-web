@@ -221,9 +221,14 @@ A local Postgres is available via `docker compose -f docker-compose.dev.yml up`.
 
 ### Migrations
 
-Apply everything in `packages/db/migrations/` in numeric order before DB-mode
-work. Auth needs at least `0008`, `0009`, and `0010`. Never edit an applied
-migration; add a new numbered one.
+```bash
+corepack pnpm --filter @dnd/db db:migrate
+```
+
+Applies everything in `packages/db/migrations/` in numeric order, each file in
+its own transaction. Every migration is `IF NOT EXISTS` style, so re-running is
+a no-op. Auth needs at least `0008`, `0009`, and `0010`; M1 persistence needs
+`0011`. Never edit an applied migration; add a new numbered one.
 
 Then run the readiness preflight. It is not optional bureaucracy — a non-UTF8
 database silently corrupts Persian character data, and this repo has already
@@ -287,19 +292,53 @@ corepack pnpm --filter @dnd/web test:smoke:map-builder    # paint -> publish -> 
 node apps/web/scripts/visual-capture.mjs                  # screenshots, no assertions
 ```
 
-DB mode (run `check:readiness` first):
+DB mode (run `db:migrate` and `check:readiness` first):
 
 ```bash
 corepack pnpm --filter @dnd/web test:smoke:builder-export-db
 corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
 ```
 
+## Database persistence and recovery
+
+M1 backend state is durable. Session snapshots, runtime characters (HP, active
+conditions, position), scenes (including combatant concealment), encounters
+(participants, initiative, current turn), resolution requests, the dice audit,
+player intents, command idempotency records and the outbox all live in
+Postgres.
+
+Participant credentials deliberately do **not**. They are per-process bearer
+tokens, so a restart invalidates every one of them. What survives is the
+_seat binding_ - which authenticated account was sitting in which chair - and
+that is what lets the rightful account `reconnect_session` after a restart and
+be issued a fresh credential. An account that never held the seat cannot.
+
+SSE is still live delivery only. There is no replay, no stream cursor, and no
+cold-boot redelivery of unpublished outbox rows: recovery is by reading state
+back, not by replaying events.
+
+Two commands verify all of it against a real database:
+
+```bash
+corepack pnpm --filter @dnd/server test:db                    # constraints, rollback, round-trip
+corepack pnpm --filter @dnd/server test:smoke:m1-db-restart   # real process restart
+```
+
+`test:smoke:m1-db-restart` provisions its own database, runs the migrations,
+drives the HTTP command routes through a full M1 table, kills the server, starts
+a second process against the same data, and verifies recovery. It needs a
+`DATABASE_URL` whose role may create and drop databases. Both run in the
+`m1-db-recovery` CI job.
+
 Set `RUNTIME_SMOKE_BROWSER=/path/to/chrome` if auto-discovery fails, and
 `RUNTIME_SMOKE_TIMEOUT_MS` (default `120000`) on a slow machine.
 
 CI runs format, lint, typecheck, unit tests, and the web build on every pull
-request, plus the in-memory browser smokes in a separate job. The DB-mode smokes
-are local-only because they need a provisioned Postgres instance.
+request, plus the in-memory browser smokes in a separate job, plus an
+`m1-db-recovery` job that migrates a throwaway Postgres service container and
+runs the M1 persistence tests and the restart smoke. The DB-mode _browser_
+smokes stay local: they need Chrome as well as Postgres, and the recovery job
+covers what CI actually has to guard.
 
 ### Environment gotchas
 
