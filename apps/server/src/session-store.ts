@@ -8,7 +8,9 @@ import type {
   JoinSessionCommand,
   MovementStateUpdate,
   MovementStateUpdateReason,
+  PlayerIntentStateUpdateReason,
   ReconnectSessionCommand,
+  ResolutionStateUpdateReason,
   SessionErrorCode,
   SessionStreamEvent,
   SessionStateUpdate,
@@ -31,7 +33,10 @@ import type {
 import {
   publishCombatEventToRoom,
   publishEncounterStateUpdateToRoom,
+  publishPlayerIntentStateUpdateToRoom,
+  publishResolutionStateUpdateToRoom,
 } from './session-event-fanout.js';
+import type { SessionTableState } from './session-table-state.js';
 
 type ParticipantCreationCommand = CreateSessionCommand | JoinSessionCommand;
 
@@ -116,6 +121,22 @@ export interface RuntimeSessionStore {
     concealedCombatantIds?: ReadonlySet<SceneEntityId>,
   ): void;
   publishCharacterStateUpdate(update: CharacterStateUpdate): void;
+  /**
+   * The whole table state goes in and a per-participant projection comes out.
+   * The caller passes authoritative state and never a pre-filtered view: which
+   * seat may see which request is a property of the data, decided once in
+   * `session-table-state.ts`, not something each transport re-derives.
+   */
+  publishResolutionStateUpdate(params: {
+    sessionId: SessionId;
+    reason: ResolutionStateUpdateReason;
+    state: SessionTableState;
+  }): void;
+  publishPlayerIntentStateUpdate(params: {
+    sessionId: SessionId;
+    reason: PlayerIntentStateUpdateReason;
+    state: SessionTableState;
+  }): void;
 }
 
 const SESSION_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -414,6 +435,28 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       this.requireRoom(update.sessionId),
       update,
       concealedCombatantIds,
+    );
+  }
+
+  publishResolutionStateUpdate(params: {
+    sessionId: SessionId;
+    reason: ResolutionStateUpdateReason;
+    state: SessionTableState;
+  }): void {
+    publishResolutionStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
+    );
+  }
+
+  publishPlayerIntentStateUpdate(params: {
+    sessionId: SessionId;
+    reason: PlayerIntentStateUpdateReason;
+    state: SessionTableState;
+  }): void {
+    publishPlayerIntentStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
     );
   }
 

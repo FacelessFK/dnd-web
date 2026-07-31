@@ -14,7 +14,9 @@ export type CommandIdempotencyCategory =
   | 'character-library'
   | 'dm'
   | 'encounter'
+  | 'intent'
   | 'movement'
+  | 'resolution'
   | 'scene'
   | 'session';
 

@@ -32,7 +32,13 @@ import {
   outboxStatusResponseSchema,
   outboxStatusSuccessSchema,
   participantIdSchema,
+  playerIntentCommandErrorSchema,
+  playerIntentCommandSchema,
+  playerIntentCommandSuccessSchema,
   registerAuthRequestSchema,
+  resolutionCommandErrorSchema,
+  resolutionCommandSchema,
+  resolutionCommandSuccessSchema,
   sceneActivationSuccessSchema,
   sceneCommandErrorSchema,
   sceneCommandSchema,
@@ -52,6 +58,10 @@ import {
   type EncounterCommandSuccess,
   type MovementCommandError,
   type MovementCommandSuccess,
+  type PlayerIntentCommandError,
+  type PlayerIntentCommandSuccess,
+  type ResolutionCommandError,
+  type ResolutionCommandSuccess,
   type RuntimeErrorCode,
   type SceneActivationSuccess,
   type SceneCommandError,
@@ -112,6 +122,7 @@ import {
   SessionStoreError,
   type RuntimeSessionStore,
 } from './session-store.js';
+import { SessionTableStateError } from './session-table-state.js';
 
 const defaultWebOrigin = 'http://localhost:3000';
 
@@ -132,7 +143,8 @@ type RuntimeStoreError =
   | MovementRuntimeError
   | RulesProfileStoreError
   | SceneStoreError
-  | SessionStoreError;
+  | SessionStoreError
+  | SessionTableStateError;
 
 type GameRuntime = InMemoryGameRuntime<
   RuntimeCharacterRepository,
@@ -417,6 +429,31 @@ export async function handleRequest(
       encounterCommandTransaction,
       combatCommandTransaction,
       sceneCommandTransaction,
+    );
+    return;
+  }
+
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/api/resolutions/command'
+  ) {
+    await handleResolutionCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      participantCredentials,
+    );
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/intents/command') {
+    await handlePlayerIntentCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      participantCredentials,
     );
     return;
   }
@@ -2356,6 +2393,11 @@ async function handleDmCommandRequest(
           scene: await runtime.dmSetCombatantCurrentHp(command),
         };
         break;
+      case 'dm_set_combatant_hidden':
+        data = {
+          scene: await runtime.dmSetCombatantHidden(command),
+        };
+        break;
       case 'dm_combatant_attack':
         data = {
           encounter: await runtime.dmCombatantAttack(command),
@@ -2393,6 +2435,184 @@ async function handleDmCommandRequest(
     sendJson(response, 200, success, dmCommandSuccessSchema);
   } catch (error) {
     handleRuntimeError(response, error, dmCommandErrorSchema);
+  }
+}
+
+/**
+ * The three resolution commands share one route because they share one
+ * authoritative object: a request, and the roll that answers it. Splitting them
+ * would mean three copies of the same schema parse, credential check and
+ * idempotency lookup, and three places for those to drift apart.
+ *
+ * There is no transaction boundary here. M1's table state is per-process, so a
+ * DB-mode transaction would be a comment claiming durability that does not
+ * exist; persistence is the next wave, and it plugs in where the other
+ * `*CommandTransaction` boundaries already do.
+ */
+async function handleResolutionCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: GameRuntime,
+  idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    sendBodyReadError(response, error, resolutionCommandErrorSchema);
+    return;
+  }
+
+  const commandResult = resolutionCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies ResolutionCommandError);
+    return;
+  }
+
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      resolutionCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const cachedSuccess =
+      await idempotency.getCachedSuccess<ResolutionCommandSuccess>({
+        category: 'resolution',
+        command,
+      });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, resolutionCommandSuccessSchema);
+      return;
+    }
+
+    let data: ResolutionCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'request_resolution':
+        data = await runtime.requestResolution(command);
+        break;
+      case 'submit_resolution':
+        data = await runtime.submitResolution(command);
+        break;
+      case 'cancel_resolution_request':
+        data = await runtime.cancelResolutionRequest(command);
+        break;
+      default:
+        throw new Error('Unsupported resolution command type.');
+    }
+
+    const success: ResolutionCommandSuccess = { ok: true, data };
+
+    await idempotency.cacheSuccess({
+      category: 'resolution',
+      command,
+      response: success,
+    });
+    sendJson(response, 200, success, resolutionCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, resolutionCommandErrorSchema);
+  }
+}
+
+async function handlePlayerIntentCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: GameRuntime,
+  idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    sendBodyReadError(response, error, playerIntentCommandErrorSchema);
+    return;
+  }
+
+  const commandResult = playerIntentCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies PlayerIntentCommandError);
+    return;
+  }
+
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      playerIntentCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const cachedSuccess =
+      await idempotency.getCachedSuccess<PlayerIntentCommandSuccess>({
+        category: 'intent',
+        command,
+      });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, playerIntentCommandSuccessSchema);
+      return;
+    }
+
+    let data: PlayerIntentCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'submit_player_intent':
+        data = await runtime.submitPlayerIntent(command);
+        break;
+      case 'update_player_intent_status':
+        data = await runtime.updatePlayerIntentStatus(command);
+        break;
+      default:
+        throw new Error('Unsupported player intent command type.');
+    }
+
+    const success: PlayerIntentCommandSuccess = { ok: true, data };
+
+    await idempotency.cacheSuccess({
+      category: 'intent',
+      command,
+      response: success,
+    });
+    sendJson(response, 200, success, playerIntentCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, playerIntentCommandErrorSchema);
   }
 }
 
@@ -2800,6 +3020,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'character_not_found':
     case 'character_library_entry_not_found':
     case 'participant_not_found':
+    case 'player_intent_not_found':
+    case 'resolution_request_not_found':
     case 'rules_profile_not_found':
     case 'scene_not_found':
     case 'session_not_found':
@@ -2816,6 +3038,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'attack_target_out_of_reach':
     case 'bonus_action_already_used':
     case 'invalid_encounter_participant':
+    case 'invalid_intent_status_transition':
+    case 'resolution_request_already_resolved':
     case 'invalid_attack_target':
     case 'invalid_encounter_session_association':
     case 'invalid_turn_actor':
@@ -2855,6 +3079,10 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'scene_entity_out_of_bounds':
     case 'scene_terrain_out_of_bounds':
       return 400;
+    // Answering a request addressed to another seat is a permission failure,
+    // not a malformed one: the payload is valid and the caller simply does not
+    // own what they are trying to act on.
+    case 'invalid_resolution_target':
     case 'invalid_role_assumption':
     case 'seat_owned_by_another_account':
       return 403;
@@ -2876,7 +3104,8 @@ function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
     error instanceof MovementRuntimeError ||
     error instanceof RulesProfileStoreError ||
     error instanceof SceneStoreError ||
-    error instanceof SessionStoreError
+    error instanceof SessionStoreError ||
+    error instanceof SessionTableStateError
   );
 }
 

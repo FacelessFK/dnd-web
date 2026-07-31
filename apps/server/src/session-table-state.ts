@@ -16,7 +16,7 @@ import type {
   PlayerIntentStatus,
   ResolutionRequest,
 } from '@dnd/protocol';
-import type { ParticipantId, ParticipantRole } from '@dnd/shared';
+import type { ParticipantId, ParticipantRole, SessionId } from '@dnd/shared';
 
 /**
  * Bounds. A table that runs all night must not grow an unbounded audit array
@@ -42,6 +42,7 @@ export class SessionTableStateError extends Error {
     | 'resolution_request_not_found'
     | 'resolution_request_already_resolved'
     | 'player_intent_not_found'
+    | 'invalid_intent_status_transition'
     | 'invalid_resolution_target';
 
   constructor(code: SessionTableStateError['code'], message: string) {
@@ -177,6 +178,33 @@ export function addPlayerIntent(
   };
 }
 
+/**
+ * Statuses an intent can never leave.
+ *
+ * `pending` is unreachable as a destination because the command schema does not
+ * offer it, and `resolved`/`dismissed` are the GM's final word. Without this a
+ * second GM click - or a stale tab replaying an old decision under a fresh
+ * command ID - would quietly overwrite the outcome the table already saw.
+ */
+const TERMINAL_INTENT_STATUSES: readonly PlayerIntentStatus[] = [
+  'resolved',
+  'dismissed',
+];
+
+export function assertPlayerIntentStatusTransition(
+  intent: PlayerIntent,
+  next: Exclude<PlayerIntentStatus, 'pending'>,
+): void {
+  if (!TERMINAL_INTENT_STATUSES.includes(intent.status)) {
+    return;
+  }
+
+  throw new SessionTableStateError(
+    'invalid_intent_status_transition',
+    `Player intent "${intent.id}" is already ${intent.status} and cannot become "${next}".`,
+  );
+}
+
 export function updatePlayerIntentStatus(
   state: SessionTableState,
   params: {
@@ -196,6 +224,8 @@ export function updatePlayerIntentStatus(
       `Player intent "${params.intentId}" does not exist in this session.`,
     );
   }
+
+  assertPlayerIntentStatusTransition(intent, params.status);
 
   return {
     ...state,
@@ -239,4 +269,29 @@ export function projectTableStateForRole(
     ),
     resolutions: state.resolutions,
   });
+}
+
+/**
+ * One table state per session, held for the life of the process.
+ *
+ * A session with nothing recorded yet reads as empty rather than missing, so a
+ * projection never has to distinguish "no requests" from "no table". Writes go
+ * through `set` with the value the transitions above returned, which keeps the
+ * whole mutation path immutable and makes the store itself trivial enough to
+ * swap for a DB-backed one without moving any rules.
+ */
+export class InMemorySessionTableStateStore {
+  private readonly states = new Map<SessionId, SessionTableState>();
+
+  get(sessionId: SessionId): SessionTableState {
+    return this.states.get(sessionId) ?? createSessionTableState();
+  }
+
+  set(sessionId: SessionId, state: SessionTableState): void {
+    this.states.set(sessionId, state);
+  }
+
+  forgetSession(sessionId: SessionId): void {
+    this.states.delete(sessionId);
+  }
 }
