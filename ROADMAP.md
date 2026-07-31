@@ -16,8 +16,8 @@ Ordering principles:
 
 | Milestone                      | State       |
 | ------------------------------ | ----------- |
-| M0 — Foundation repair         | In progress |
-| M1 — First playable table      | Next        |
+| M0 — Foundation repair         | Complete    |
+| M1 — First playable table      | In progress |
 | M2 — Game HUD                  | Planned     |
 | M3 — Fog of war and lighting   | Planned     |
 | M4 — Renderer quality          | Planned     |
@@ -79,8 +79,9 @@ cockpit. Converting rules content to 2014.
   cookie would need `SameSite=None; Secure`. Same-origin proxying is M14.
 - No UI calls `clearParticipantCredentials()` - there is no explicit "leave
   table" action yet. It belongs with the HUD work in M2.
-- An occupied _player_ seat is re-claimable with the session code. The GM seat
-  is not. Binding a seat to an authenticated account is M1.
+- ~~An occupied _player_ seat is re-claimable with the session code.~~ Closed in
+  M1: a seat is now bound to the authenticated account that took it, and the
+  binding is checked before any credential is minted.
 
 ---
 
@@ -119,6 +120,24 @@ a DB-mode smoke proving the same loop persists.
 
 **Excludes.** Fog of war. Spellcasting. Inventory. Multiple simultaneous
 players. The HUD redesign — this milestone may ship inside the existing cockpit.
+
+**Landed so far.** The contracts and the pure rules, plus the seat fix M0
+deferred:
+
+- One `diceResolution` record shared by checks, saves and attacks, with stance
+  and named modifier sources, in `packages/protocol`.
+- Request/submit/cancel commands for checks and saves, free-form player intent,
+  and `dm_set_combatant_hidden` — the conceal/reveal command whose absence a
+  pre-merge verification confirmed.
+- `packages/rules` resolves checks and saves, folds advantage/disadvantage
+  without stacking, and applies `poisoned` to attack rolls and ability checks
+  but not saving throws.
+- Session seats bind to authenticated accounts.
+
+**Still open.** The server command handlers that persist and project these
+contracts, the player-facing UI, the full-loop and DB-restart smokes, and the
+Postgres CI job. Until those land the loop is not playable end to end, so this
+milestone stays In progress regardless of how much of the foundation is in.
 
 ---
 
