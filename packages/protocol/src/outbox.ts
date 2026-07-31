@@ -8,6 +8,8 @@ export const outboxEventTypeSchema = z.enum([
   'encounter_state',
   'movement_state',
   'session_state',
+  'resolution_state',
+  'player_intent_state',
 ]);
 
 export const outboxEventTypeCountsSchema = z.object({
@@ -16,6 +18,8 @@ export const outboxEventTypeCountsSchema = z.object({
   encounter_state: z.number().int().nonnegative(),
   movement_state: z.number().int().nonnegative(),
   session_state: z.number().int().nonnegative(),
+  resolution_state: z.number().int().nonnegative(),
+  player_intent_state: z.number().int().nonnegative(),
 });
 
 export const outboxStatusSuccessSchema = z.object({

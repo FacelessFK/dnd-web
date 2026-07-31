@@ -1,8 +1,10 @@
 import {
   boolean,
+  index,
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -51,12 +53,26 @@ export type PersistedSessionSnapshotDocument = {
 
 export type StoredSceneRecordDocument = Scene;
 export type StoredActiveEncounterRecordDocument = Encounter;
+/**
+ * The canonical protocol objects, stored opaquely.
+ *
+ * Modelled like `StoredCharacterLibraryEntryDocument` rather than by importing
+ * the protocol types: `packages/protocol` owns those shapes, and a structural
+ * copy here would be a second definition free to drift from the Zod schema that
+ * the server and the browser actually agree on. The server validates on the way
+ * out of the database, which is where a shape mismatch should surface.
+ */
+export type StoredResolutionRequestDocument = { [key: string]: unknown };
+export type StoredDiceResolutionDocument = { [key: string]: unknown };
+export type StoredPlayerIntentDocument = { [key: string]: unknown };
 export type CommandEventOutboxEventType =
   | 'session_state'
   | 'character_state'
   | 'combat_event'
   | 'encounter_state'
-  | 'movement_state';
+  | 'movement_state'
+  | 'resolution_state'
+  | 'player_intent_state';
 export type StoredCommandEventOutboxPayloadDocument = {
   sessionId: SessionId;
   type: CommandEventOutboxEventType;
@@ -215,6 +231,127 @@ export const commandEventOutboxRecords = pgTable(
   }),
 );
 
+export const sessionSeatOwnership = pgTable(
+  'session_seat_ownership',
+  {
+    sessionId: text('session_id').$type<SessionId>().notNull(),
+    participantId: text('participant_id').$type<ParticipantId>().notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.userId, { onDelete: 'cascade' }),
+    boundAt: timestamp('bound_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    seatPrimaryKey: primaryKey({
+      columns: [table.sessionId, table.participantId],
+    }),
+  }),
+);
+
+export const sessionResolutionRequests = pgTable(
+  'session_resolution_requests',
+  {
+    requestId: text('request_id').primaryKey(),
+    sessionId: text('session_id').$type<SessionId>().notNull(),
+    requestedByParticipantId: text('requested_by_participant_id')
+      .$type<ParticipantId>()
+      .notNull(),
+    targetParticipantId: text('target_participant_id')
+      .$type<ParticipantId>()
+      .notNull(),
+    targetCharacterId: text('target_character_id').$type<CharacterId>(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    resolutionId: text('resolution_id'),
+    request: jsonb('request')
+      .$type<StoredResolutionRequestDocument>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionCreatedIdx: index(
+      'session_resolution_requests_session_created_idx',
+    ).on(table.sessionId, table.createdAt, table.requestId),
+  }),
+);
+
+export const sessionDiceResolutions = pgTable(
+  'session_dice_resolutions',
+  {
+    resolutionId: text('resolution_id').primaryKey(),
+    sessionId: text('session_id').$type<SessionId>().notNull(),
+    requestId: text('request_id').references(
+      () => sessionResolutionRequests.requestId,
+      { onDelete: 'set null' },
+    ),
+    actorParticipantId: text('actor_participant_id')
+      .$type<ParticipantId>()
+      .notNull(),
+    actorCharacterId: text('actor_character_id').$type<CharacterId>(),
+    kind: text('kind').notNull(),
+    commandId: text('command_id').notNull(),
+    rulesProfileId: text('rules_profile_id').notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }).notNull(),
+    resolution: jsonb('resolution')
+      .$type<StoredDiceResolutionDocument>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionOrderIdx: index('session_dice_resolutions_session_order_idx').on(
+      table.sessionId,
+      table.resolvedAt,
+      table.resolutionId,
+    ),
+  }),
+);
+
+export const sessionPlayerIntents = pgTable(
+  'session_player_intents',
+  {
+    intentId: text('intent_id').primaryKey(),
+    sessionId: text('session_id').$type<SessionId>().notNull(),
+    authorParticipantId: text('author_participant_id')
+      .$type<ParticipantId>()
+      .notNull(),
+    authorCharacterId: text('author_character_id').$type<CharacterId>(),
+    status: text('status').notNull(),
+    intent: jsonb('intent').$type<StoredPlayerIntentDocument>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    sessionCreatedIdx: index('session_player_intents_session_created_idx').on(
+      table.sessionId,
+      table.createdAt,
+      table.intentId,
+    ),
+    sessionAuthorIdx: index('session_player_intents_session_author_idx').on(
+      table.sessionId,
+      table.authorParticipantId,
+    ),
+  }),
+);
+
 export const dbSchema = {
   activeEncounterRecords,
   authSessions,
@@ -225,6 +362,10 @@ export const dbSchema = {
   commandEventOutboxRecords,
   completedCommandIdempotencyRecords,
   sceneRecords,
+  sessionDiceResolutions,
+  sessionPlayerIntents,
+  sessionResolutionRequests,
+  sessionSeatOwnership,
   sessionSnapshots,
 };
 
@@ -243,4 +384,10 @@ export type CommandIdempotencyClaimRecordRow =
 export type CompletedCommandIdempotencyRecordRow =
   typeof completedCommandIdempotencyRecords.$inferSelect;
 export type SceneRecordRow = typeof sceneRecords.$inferSelect;
+export type SessionDiceResolutionRow =
+  typeof sessionDiceResolutions.$inferSelect;
+export type SessionPlayerIntentRow = typeof sessionPlayerIntents.$inferSelect;
+export type SessionResolutionRequestRow =
+  typeof sessionResolutionRequests.$inferSelect;
+export type SessionSeatOwnershipRow = typeof sessionSeatOwnership.$inferSelect;
 export type SessionSnapshotRow = typeof sessionSnapshots.$inferSelect;

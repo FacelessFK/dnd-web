@@ -32,9 +32,17 @@ import {
   type SceneRecordDatabase,
 } from './scene-record-database.js';
 import {
+  DrizzleSessionSeatOwnershipDatabase,
+  type SessionSeatOwnershipDatabase,
+} from './session-seat-ownership-database.js';
+import {
   DrizzleSessionSnapshotDatabase,
   type SessionSnapshotDatabase,
 } from './session-snapshot-database.js';
+import {
+  DrizzleSessionTableStateDatabase,
+  type SessionTableStateDatabase,
+} from './session-table-state-database.js';
 
 export type DndDatabaseUnitOfWorkContext = {
   auth?: AuthUserDatabase;
@@ -45,7 +53,9 @@ export type DndDatabaseUnitOfWorkContext = {
   encounters: ActiveEncounterRecordDatabase;
   outbox: CommandEventOutboxDatabase;
   scenes: SceneRecordDatabase;
+  seatOwnership: SessionSeatOwnershipDatabase;
   sessions: SessionSnapshotDatabase;
+  tableState: SessionTableStateDatabase;
 };
 
 export interface DndDatabaseUnitOfWork {
@@ -71,7 +81,9 @@ export class DrizzleDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         encounters: new DrizzleActiveEncounterRecordDatabase(tx),
         outbox: new DrizzleCommandEventOutboxDatabase(tx),
         scenes: new DrizzleSceneRecordDatabase(tx),
+        seatOwnership: new DrizzleSessionSeatOwnershipDatabase(tx),
         sessions: new DrizzleSessionSnapshotDatabase(tx),
+        tableState: new DrizzleSessionTableStateDatabase(tx),
       }),
     );
   }
