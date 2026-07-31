@@ -98,7 +98,7 @@ single-process post-commit outbox dispatch for covered live-command paths.
 
 ## Schema Or Migration Changes
 
-High-effort work. Expect a `dnd-boundary-review` pass.
+High-effort work. Re-read the non-negotiable boundaries in CLAUDE.md first.
 
 - Add a new numbered migration; do not edit an applied one.
 - Update `packages/db/src/schema.ts` and the matching `*-database.ts` adapter.

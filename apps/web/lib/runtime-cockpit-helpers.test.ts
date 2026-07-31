@@ -865,35 +865,53 @@ describe('runtime cockpit helpers', () => {
       type: 'combat_event',
     });
 
-    assert.equal(summary.title, 'Attack resolved');
+    // The feed is described as message keys, not English sentences, so the
+    // Persian default locale does not render English. The keys are resolved in
+    // the view; here we assert the descriptor a translator would be handed.
+    assert.equal(summary.titleKey, 'runtime.events.title.combat');
     assert.equal(summary.tone, 'danger');
-    assert.match(summary.detail, /player-001 rolled 17/);
-    assert.match(
-      describeSessionStreamEvent({
-        attackerCharacterId: 'CHAR-001',
-        attackerKind: 'character',
-        attackerParticipantId: 'player-001',
-        damage: 1,
-        encounterId: 'ENC-001',
-        hit: true,
-        reason: 'attack_resolved',
-        roll: {
-          d20: 20,
-          modifier: 5,
-          total: 25,
-        },
-        sessionId: 'SESSION-001',
-        targetArmorClass: 12,
-        targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
-        targetHp: {
-          current: 7,
-          previous: 8,
-        },
-        targetKind: 'combatant',
-        targetParticipantId: 'dm-001',
-        type: 'combat_event',
-      }).detail,
-      /scene_entity_11111111-1111-4111-8111-111111111111 HP 8 -> 7/,
+    assert.equal(summary.detailKey, 'runtime.events.detail.combatWithHp');
+    assert.equal(summary.detailValues.attacker, 'player-001');
+    assert.equal(summary.detailValues.roll, '17');
+    assert.equal(summary.detailValues.armorClass, '13');
+    assert.equal(summary.detailValues.resultKey, 'runtime.events.attack.hit');
+
+    const againstCombatant = describeSessionStreamEvent({
+      attackerCharacterId: 'CHAR-001',
+      attackerKind: 'character',
+      attackerParticipantId: 'player-001',
+      damage: 1,
+      encounterId: 'ENC-001',
+      hit: true,
+      reason: 'attack_resolved',
+      roll: {
+        d20: 20,
+        modifier: 5,
+        total: 25,
+      },
+      sessionId: 'SESSION-001',
+      targetArmorClass: 12,
+      targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+      targetHp: {
+        current: 7,
+        previous: 8,
+      },
+      targetKind: 'combatant',
+      targetParticipantId: 'dm-001',
+      type: 'combat_event',
+    });
+
+    assert.equal(
+      againstCombatant.detailValues.target,
+      'scene_entity_11111111-1111-4111-8111-111111111111',
+    );
+    assert.equal(againstCombatant.detailValues.previousHp, '8');
+    assert.equal(againstCombatant.detailValues.currentHp, '7');
+    // A natural 20 with no `critical` flag on the roll is not a critical: the
+    // server sets that flag, and the client must not infer it from the die.
+    assert.equal(
+      againstCombatant.detailValues.resultKey,
+      'runtime.events.attack.hit',
     );
     assert.equal(
       isSessionStreamEvent({
@@ -905,6 +923,8 @@ describe('runtime cockpit helpers', () => {
   });
 
   it('reports the rolled damage breakdown for resolved attacks', () => {
+    // Returns a message key plus values rather than English text, so the feed
+    // reads correctly in the Persian default locale.
     const baseEvent = {
       attackerCharacterId: 'CHAR-001',
       attackerParticipantId: 'player-001',
@@ -917,7 +937,7 @@ describe('runtime cockpit helpers', () => {
       type: 'combat_event',
     } as const;
 
-    assert.equal(
+    assert.deepEqual(
       describeCombatAttackResult({
         ...baseEvent,
         damage: 7,
@@ -939,9 +959,12 @@ describe('runtime cockpit helpers', () => {
         },
         targetHp: { current: 20, previous: 27 },
       }),
-      'hit for 7 (1d8+2)',
+      {
+        key: 'runtime.events.attack.hitWithRoll',
+        values: { damage: '7', notation: '1d8+2' },
+      },
     );
-    assert.equal(
+    assert.deepEqual(
       describeCombatAttackResult({
         ...baseEvent,
         damage: 13,
@@ -963,9 +986,12 @@ describe('runtime cockpit helpers', () => {
         },
         targetHp: { current: 14, previous: 27 },
       }),
-      'critical hit for 13 (2d8+2)',
+      {
+        key: 'runtime.events.attack.criticalHitWithRoll',
+        values: { damage: '13', notation: '2d8+2' },
+      },
     );
-    assert.equal(
+    assert.deepEqual(
       describeCombatAttackResult({
         ...baseEvent,
         damage: 0,
@@ -979,9 +1005,9 @@ describe('runtime cockpit helpers', () => {
         },
         targetHp: { current: 27, previous: 27 },
       }),
-      'critical miss',
+      { key: 'runtime.events.attack.criticalMiss', values: {} },
     );
-    assert.equal(
+    assert.deepEqual(
       describeCombatAttackResult({
         ...baseEvent,
         damage: 0,
@@ -995,10 +1021,10 @@ describe('runtime cockpit helpers', () => {
         },
         targetHp: { current: 27, previous: 27 },
       }),
-      'missed',
+      { key: 'runtime.events.attack.miss', values: {} },
     );
     // Events without a damage breakdown still render a usable summary.
-    assert.equal(
+    assert.deepEqual(
       describeCombatAttackResult({
         ...baseEvent,
         damage: 3,
@@ -1006,7 +1032,7 @@ describe('runtime cockpit helpers', () => {
         roll: { d20: 15, modifier: 5, total: 20 },
         targetHp: { current: 24, previous: 27 },
       }),
-      'hit for 3',
+      { key: 'runtime.events.attack.hit', values: { damage: '3' } },
     );
   });
 

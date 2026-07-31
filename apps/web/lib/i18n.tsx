@@ -751,6 +751,63 @@ const messages = {
     'runtime.statePanel.sceneName': 'Scene name',
     'runtime.statePanel.session': 'Session',
     'runtime.statePanel.title': 'State',
+    // Event feed. `detail` strings are whole sentences per locale rather than
+    // fragments joined in code, so Persian can order the clauses its own way.
+    'runtime.events.title.combat': 'Attack resolved',
+    'runtime.events.title.encounter': 'Encounter state',
+    'runtime.events.title.movement': 'Token movement',
+    'runtime.events.title.character': 'Character state',
+    'runtime.events.title.session': 'Session state',
+    'runtime.events.detail.combat':
+      '{attacker} rolled {roll} against AC {armorClass} and {result} ({target}).',
+    'runtime.events.detail.combatWithHp':
+      '{attacker} rolled {roll} against AC {armorClass} and {result} ({target} HP {previousHp} to {currentHp}).',
+    'runtime.events.detail.encounter': '{reason}. Round {round}, turn {turn}.',
+    'runtime.events.detail.movement': '{participant} {reason} to {x},{y}.',
+    'runtime.events.detail.character':
+      '{character} HP is now {currentHp}/{maxHp}.',
+    'runtime.events.detail.characterWithConditions':
+      '{character} HP is now {currentHp}/{maxHp}, with {conditions}.',
+    'runtime.events.detail.session': '{reason}. Revision {revision}.',
+    'runtime.events.attack.hit': 'hit for {damage}',
+    'runtime.events.attack.hitWithRoll': 'hit for {damage} ({notation})',
+    'runtime.events.attack.criticalHit': 'scored a critical hit for {damage}',
+    'runtime.events.attack.criticalHitWithRoll':
+      'scored a critical hit for {damage} ({notation})',
+    'runtime.events.attack.miss': 'missed',
+    'runtime.events.attack.criticalMiss': 'critically missed',
+    'runtime.events.reason.session_state.active_scene_changed':
+      'The active scene changed',
+    'runtime.events.reason.session_state.initial_sync': 'Initial sync',
+    'runtime.events.reason.session_state.participant_character_assigned':
+      'A character was assigned',
+    'runtime.events.reason.session_state.participant_character_submitted':
+      'A character was submitted',
+    'runtime.events.reason.session_state.participant_connected':
+      'A participant connected',
+    'runtime.events.reason.session_state.participant_disconnected':
+      'A participant disconnected',
+    'runtime.events.reason.session_state.participant_joined':
+      'A participant joined',
+    'runtime.events.reason.movement_state.character_moved': 'moved',
+    'runtime.events.reason.movement_state.character_placed': 'was placed',
+    'runtime.events.reason.movement_state.dm_character_repositioned':
+      'was repositioned by the DM',
+    'runtime.events.reason.encounter_state.encounter_started':
+      'The encounter started',
+    'runtime.events.reason.encounter_state.encounter_ended':
+      'The encounter ended',
+    'runtime.events.reason.encounter_state.turn_advanced': 'The turn advanced',
+    'runtime.events.reason.encounter_state.action_used': 'An action was used',
+    'runtime.events.reason.encounter_state.bonus_action_used':
+      'A bonus action was used',
+    'runtime.events.reason.encounter_state.reaction_used':
+      'A reaction was used',
+    'runtime.events.reason.encounter_state.movement_used': 'Movement was spent',
+    'runtime.events.reason.encounter_state.dm_turn_usage_changed':
+      'The DM changed turn usage',
+    'runtime.events.reason.encounter_state.dm_current_turn_changed':
+      'The DM changed the current turn',
     'runtime.turn.concealedCombatant': 'Unknown combatant',
     'runtime.turnTarget.advanceTurn': 'Advance Turn',
     'runtime.turnTarget.attackTarget': 'Attack Target',
@@ -1733,6 +1790,61 @@ const messages = {
     'runtime.statePanel.sceneName': 'نام صحنه',
     'runtime.statePanel.session': 'نشست',
     'runtime.statePanel.title': 'وضعیت',
+    'runtime.events.title.combat': 'حمله انجام شد',
+    'runtime.events.title.encounter': 'وضعیت رویارویی',
+    'runtime.events.title.movement': 'جابه‌جایی مهره',
+    'runtime.events.title.character': 'وضعیت کاراکتر',
+    'runtime.events.title.session': 'وضعیت نشست',
+    'runtime.events.detail.combat':
+      '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} ({target}).',
+    'runtime.events.detail.combatWithHp':
+      '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} (HP {target} از {previousHp} به {currentHp}).',
+    'runtime.events.detail.encounter': '{reason}. دور {round}، نوبت {turn}.',
+    'runtime.events.detail.movement': '{participant} {reason} به {x}،{y}.',
+    'runtime.events.detail.character':
+      'HP {character} اکنون {currentHp}/{maxHp} است.',
+    'runtime.events.detail.characterWithConditions':
+      'HP {character} اکنون {currentHp}/{maxHp} است، با {conditions}.',
+    'runtime.events.detail.session': '{reason}. بازنگری {revision}.',
+    'runtime.events.attack.hit': '{damage} آسیب زد',
+    'runtime.events.attack.hitWithRoll': '{damage} آسیب زد ({notation})',
+    'runtime.events.attack.criticalHit': 'ضربه بحرانی با {damage} آسیب زد',
+    'runtime.events.attack.criticalHitWithRoll':
+      'ضربه بحرانی با {damage} آسیب زد ({notation})',
+    'runtime.events.attack.miss': 'خطا رفت',
+    'runtime.events.attack.criticalMiss': 'خطای بحرانی داشت',
+    'runtime.events.reason.session_state.active_scene_changed':
+      'صحنه فعال تغییر کرد',
+    'runtime.events.reason.session_state.initial_sync': 'همگام‌سازی اولیه',
+    'runtime.events.reason.session_state.participant_character_assigned':
+      'یک کاراکتر تخصیص داده شد',
+    'runtime.events.reason.session_state.participant_character_submitted':
+      'یک کاراکتر ارسال شد',
+    'runtime.events.reason.session_state.participant_connected':
+      'یک شرکت‌کننده متصل شد',
+    'runtime.events.reason.session_state.participant_disconnected':
+      'یک شرکت‌کننده قطع شد',
+    'runtime.events.reason.session_state.participant_joined':
+      'یک شرکت‌کننده پیوست',
+    'runtime.events.reason.movement_state.character_moved': 'حرکت کرد',
+    'runtime.events.reason.movement_state.character_placed': 'قرار داده شد',
+    'runtime.events.reason.movement_state.dm_character_repositioned':
+      'توسط DM جابه‌جا شد',
+    'runtime.events.reason.encounter_state.encounter_started':
+      'رویارویی آغاز شد',
+    'runtime.events.reason.encounter_state.encounter_ended':
+      'رویارویی پایان یافت',
+    'runtime.events.reason.encounter_state.turn_advanced': 'نوبت جلو رفت',
+    'runtime.events.reason.encounter_state.action_used': 'یک کنش استفاده شد',
+    'runtime.events.reason.encounter_state.bonus_action_used':
+      'یک کنش امتیازی استفاده شد',
+    'runtime.events.reason.encounter_state.reaction_used':
+      'یک واکنش استفاده شد',
+    'runtime.events.reason.encounter_state.movement_used': 'حرکت مصرف شد',
+    'runtime.events.reason.encounter_state.dm_turn_usage_changed':
+      'DM مصرف نوبت را تغییر داد',
+    'runtime.events.reason.encounter_state.dm_current_turn_changed':
+      'DM نوبت جاری را تغییر داد',
     'runtime.turn.concealedCombatant': 'موجود ناشناس',
     'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
     'runtime.turnTarget.attackTarget': 'حمله به هدف',

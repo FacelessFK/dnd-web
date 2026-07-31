@@ -13,8 +13,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  assertWebUiTargetsServer,
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getChromeDisplayArgs,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
 
@@ -128,6 +130,9 @@ async function main() {
     label: '/characters',
     timeoutMs: smokeTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(charactersUrl, serverUrl);
 
   logSmokeStep('creating authenticated Persian draft entry');
   const registered = await registerUser(serverUrl, {
@@ -562,7 +567,7 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   profileDirs.push(userDataDir);
 
   return startProcess(name, browserPath, [
-    '--headless=new',
+    ...getChromeDisplayArgs({ windowSize: { height: 1000, width: 1400 } }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',

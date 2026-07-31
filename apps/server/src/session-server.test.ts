@@ -18,6 +18,7 @@ import {
   type CommandIdempotencyClaimRecordRow,
   type CommandIdempotencyClaimRecordWrite,
   type CommandIdempotencyRecordDatabase,
+  type CommandEventOutboxBacklog,
   type CommandEventOutboxDatabase,
   type CommandEventOutboxRecordWrite,
   type CommandEventOutboxRow,
@@ -81,6 +82,10 @@ import {
   type RuntimeCharacterRepository,
 } from './game-runtime.js';
 import { DbBackedSessionStore } from './db-session-store.js';
+import {
+  PARTICIPANT_TOKEN_HEADER,
+  ParticipantCredentialStore,
+} from './participant-credential-store.js';
 import { handleRequest } from './session-server.js';
 import {
   InMemorySessionStore,
@@ -108,6 +113,86 @@ type OutboxStatusResponse = {
   ok: true;
 };
 
+/**
+ * One credential store for the whole file, plus the plaintext tokens it issued.
+ *
+ * The store itself only keeps hashes, so a test client has to remember what it
+ * was handed - exactly like a real browser. `postJson` records tokens from
+ * session responses and replays them on later commands, which makes it an
+ * authenticated client by default. That is what the several hundred tests below
+ * intend to be: they exercise HTTP, transaction, idempotency and projection
+ * behaviour, not the credential gate.
+ *
+ * The credential gate has its own adversarial tests, which pass tokens (or the
+ * wrong ones, or none) explicitly. Those are the tests that would catch the gate
+ * being removed.
+ */
+const testParticipantCredentials = new ParticipantCredentialStore();
+const issuedTestTokens = new Map<string, string>();
+
+function testTokenKey(sessionId: string, participantId: string): string {
+  return `${sessionId} ${participantId}`;
+}
+
+function rememberIssuedToken(responseBody: unknown): void {
+  const data = (
+    responseBody as {
+      ok?: boolean;
+      data?: {
+        sessionId?: string;
+        participantId?: string;
+        participantToken?: string;
+      };
+    }
+  )?.data;
+
+  if (data?.sessionId && data.participantId && data.participantToken) {
+    issuedTestTokens.set(
+      testTokenKey(data.sessionId, data.participantId),
+      data.participantToken,
+    );
+  }
+}
+
+/**
+ * Resolves the credential `postJson` should present for a command, minting one
+ * if the pair has none.
+ *
+ * Minting is what makes `postJson` behave as an already-joined client. Most
+ * tests below build their session by calling the runtime directly rather than
+ * through `/api/session/command`, so no credential was ever issued over HTTP -
+ * and those tests are about movement, encounters, idempotency and transactions,
+ * not about the gate.
+ *
+ * Because this never fails, `postJson` cannot observe a rejection. The gate's own
+ * tests therefore use `postJsonWithToken`, which mints nothing.
+ */
+function resolveIssuedToken(body: unknown): string | undefined {
+  const command = body as {
+    actor?: { participantId?: string };
+    payload?: { sessionId?: string };
+  };
+  const participantId = command?.actor?.participantId;
+  const sessionId = command?.payload?.sessionId;
+
+  if (!participantId || !sessionId) {
+    return undefined;
+  }
+
+  const key = testTokenKey(sessionId, participantId);
+  const existing = issuedTestTokens.get(key);
+
+  if (existing) {
+    return existing;
+  }
+
+  const minted = testParticipantCredentials.issue(sessionId, participantId);
+
+  issuedTestTokens.set(key, minted);
+
+  return minted;
+}
+
 async function postJson<TResponse>(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   idempotency: CommandIdempotencyStore,
@@ -120,6 +205,7 @@ async function postJson<TResponse>(
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
   characterLibrary?: CharacterLibraryService,
   auth?: AuthService,
+  participantToken: string | undefined = resolveIssuedToken(body),
 ): Promise<JsonResponse<TResponse>> {
   const request = Readable.from([JSON.stringify(body)]) as Readable & {
     headers: IncomingHttpHeaders;
@@ -131,6 +217,9 @@ async function postJson<TResponse>(
   request.headers = {
     'content-type': 'application/json',
     host: '127.0.0.1',
+    ...(participantToken
+      ? { [PARTICIPANT_TOKEN_HEADER]: participantToken }
+      : {}),
   };
   request.method = 'POST';
   request.url = path;
@@ -147,11 +236,18 @@ async function postJson<TResponse>(
     sceneCommandTransaction,
     characterLibrary,
     auth,
+    undefined,
+    undefined,
+    testParticipantCredentials,
   );
+
+  const parsedBody = JSON.parse(response.body) as TResponse;
+
+  rememberIssuedToken(parsedBody);
 
   return {
     status: response.statusCode,
-    body: JSON.parse(response.body) as TResponse,
+    body: parsedBody,
   };
 }
 
@@ -187,6 +283,8 @@ async function getJson<TResponse>(
     undefined,
     undefined,
     commandEventOutboxDispatcher,
+    undefined,
+    testParticipantCredentials,
   );
 
   return {
@@ -194,6 +292,789 @@ async function getJson<TResponse>(
     body: JSON.parse(response.body) as TResponse,
   };
 }
+
+/**
+ * Posts a command with exactly the credential given - or none - and mints
+ * nothing.
+ *
+ * This is the client the credential-gate tests need: `postJson` always arrives
+ * authenticated, so it can never demonstrate a rejection.
+ */
+async function postJsonWithToken<TResponse>(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  idempotency: CommandIdempotencyStore,
+  path: string,
+  body: unknown,
+  participantToken: string | null,
+): Promise<JsonResponse<TResponse>> {
+  const request = Readable.from([JSON.stringify(body)]) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+  };
+  const response = createMockResponse();
+
+  request.headers = {
+    'content-type': 'application/json',
+    host: '127.0.0.1',
+    ...(participantToken
+      ? { [PARTICIPANT_TOKEN_HEADER]: participantToken }
+      : {}),
+  };
+  request.method = 'POST';
+  request.url = path;
+
+  await handleRequest(
+    request as never,
+    response as never,
+    runtime,
+    idempotency,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    testParticipantCredentials,
+  );
+
+  return {
+    status: response.statusCode,
+    body: JSON.parse(response.body) as TResponse,
+  };
+}
+
+/**
+ * Opens an SSE subscription over HTTP with the credential given, so the stream
+ * gate can be tested the way a browser reaches it.
+ */
+async function getStream(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  sessionId: string,
+  participantId: string,
+  participantToken: string | null,
+): Promise<{ status: number; body: string }> {
+  const request = Readable.from([]) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+    on: (event: string, listener: () => void) => unknown;
+  };
+  const response = createMockResponse();
+  const query = new URLSearchParams({ participantId });
+
+  if (participantToken) {
+    query.set('participantToken', participantToken);
+  }
+
+  request.headers = { host: '127.0.0.1' };
+  request.method = 'GET';
+  request.url = `/api/sessions/${sessionId}/stream?${query.toString()}`;
+
+  await handleRequest(
+    request as never,
+    response as never,
+    runtime,
+    new InMemoryCommandIdempotencyStore(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    testParticipantCredentials,
+  );
+
+  const result = { status: response.statusCode, body: response.body };
+
+  // A successful subscription owns a heartbeat interval and a runtime
+  // subscriber. Close it, or the timer outlives the test and the run never
+  // exits.
+  response.emitClose();
+
+  return result;
+}
+
+/**
+ * Creates a session and joins one player over HTTP, returning both credentials.
+ *
+ * Deliberately goes through HTTP rather than the runtime: the point is to end up
+ * holding exactly what a real client holds, and to observe exactly what a real
+ * client is told - including the fact that the session snapshot hands the player
+ * the GM's participant ID.
+ */
+async function createTableOverHttp(): Promise<{
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>;
+  idempotency: CommandIdempotencyStore;
+  sessionId: string;
+  dmToken: string;
+  playerToken: string;
+}> {
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+
+  const created = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-create-1',
+      type: 'create_session',
+      actor: {
+        participantId: 'dm-001',
+        displayName: 'Dungeon Master',
+        role: 'dm',
+      },
+      payload: { rulesProfileId: 'dnd5e-2024-core' },
+    },
+    null,
+  );
+
+  assert.equal(created.status, 200);
+  assert.equal(created.body.ok, true);
+
+  if (!created.body.ok) {
+    throw new Error('create_session should succeed without a credential.');
+  }
+
+  const sessionId = created.body.data.sessionId;
+
+  const joined = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-join-1',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-001',
+        displayName: 'Player One',
+        role: 'player',
+      },
+      payload: { sessionId },
+    },
+    null,
+  );
+
+  assert.equal(joined.status, 200);
+  assert.equal(joined.body.ok, true);
+
+  if (!joined.body.ok) {
+    throw new Error('join_session should succeed without a credential.');
+  }
+
+  return {
+    runtime,
+    idempotency,
+    sessionId,
+    dmToken: created.body.data.participantToken,
+    playerToken: joined.body.data.participantToken,
+  };
+}
+
+/**
+ * Posts a raw body, so the size and time guards can be tested without a valid
+ * command in the way.
+ */
+async function postRawBody(
+  runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
+  path: string,
+  body: string,
+  contentLength?: string,
+): Promise<JsonResponse<{ ok: boolean; error?: { code: string } }>> {
+  const request = Readable.from([body]) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+  };
+  const response = createMockResponse();
+
+  request.headers = {
+    'content-type': 'application/json',
+    host: '127.0.0.1',
+    ...(contentLength ? { 'content-length': contentLength } : {}),
+  };
+  request.method = 'POST';
+  request.url = path;
+
+  await handleRequest(
+    request as never,
+    response as never,
+    runtime,
+    new InMemoryCommandIdempotencyStore(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    testParticipantCredentials,
+  );
+
+  return {
+    status: response.statusCode,
+    body: JSON.parse(response.body) as {
+      ok: boolean;
+      error?: { code: string };
+    },
+  };
+}
+
+test('an oversized request body is refused with 413 rather than buffered', async () => {
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
+  const previousLimit = process.env.SERVER_MAX_REQUEST_BODY_BYTES;
+
+  process.env.SERVER_MAX_REQUEST_BODY_BYTES = '64';
+
+  try {
+    // Declared length over the limit: rejected before a byte is read.
+    const declared = await postRawBody(
+      runtime,
+      '/api/session/command',
+      '{}',
+      '65',
+    );
+
+    assert.equal(declared.status, 413);
+    assert.equal(declared.body.error?.code, 'invalid_command');
+
+    // `content-length` is client-supplied, so a body that lies about its size
+    // must still be stopped by the running total.
+    const undeclared = await postRawBody(
+      runtime,
+      '/api/session/command',
+      `{"padding":"${'a'.repeat(500)}"}`,
+    );
+
+    assert.equal(undeclared.status, 413);
+    assert.equal(undeclared.body.error?.code, 'invalid_command');
+  } finally {
+    if (previousLimit === undefined) {
+      delete process.env.SERVER_MAX_REQUEST_BODY_BYTES;
+    } else {
+      process.env.SERVER_MAX_REQUEST_BODY_BYTES = previousLimit;
+    }
+  }
+});
+
+test('a body within the limit is still parsed normally', async () => {
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
+
+  // Malformed JSON, so this asserts the guard did not change the ordinary
+  // parse-failure answer from 400 to 413.
+  const malformed = await postRawBody(
+    runtime,
+    '/api/session/command',
+    '{ not json',
+  );
+
+  assert.equal(malformed.status, 400);
+  assert.equal(malformed.body.error?.code, 'invalid_command');
+});
+
+test('a stalled request body is refused with 408', async () => {
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
+  const previousTimeout = process.env.SERVER_REQUEST_BODY_TIMEOUT_MS;
+
+  process.env.SERVER_REQUEST_BODY_TIMEOUT_MS = '20';
+
+  // A body that never finishes: the slow-loris shape. Node applies no default
+  // request-body timeout, so without the guard this would hold the connection
+  // and its buffer open indefinitely.
+  const stalled = new Readable({ read() {} }) as Readable & {
+    headers: IncomingHttpHeaders;
+    method?: string;
+    url?: string;
+  };
+  const response = createMockResponse();
+
+  stalled.headers = { 'content-type': 'application/json', host: '127.0.0.1' };
+  stalled.method = 'POST';
+  stalled.url = '/api/session/command';
+  stalled.push('{"comm');
+
+  try {
+    await handleRequest(
+      stalled as never,
+      response as never,
+      runtime,
+      new InMemoryCommandIdempotencyStore(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      testParticipantCredentials,
+    );
+
+    assert.equal(response.statusCode, 408);
+    assert.match(response.body, /invalid_command/);
+  } finally {
+    if (previousTimeout === undefined) {
+      delete process.env.SERVER_REQUEST_BODY_TIMEOUT_MS;
+    } else {
+      process.env.SERVER_REQUEST_BODY_TIMEOUT_MS = previousTimeout;
+    }
+  }
+});
+
+test('the liveness endpoint reports nothing about the server build or config', async () => {
+  const runtime = new InMemoryGameRuntime().withRollers(TEST_ROLLERS);
+  const root = await getJson<Record<string, unknown>>(
+    runtime,
+    new InMemoryCommandIdempotencyStore(),
+    '/',
+  );
+
+  assert.equal(root.status, 200);
+  // It used to advertise an internal phase name and a description of which
+  // persistence and transaction paths were wired, unauthenticated.
+  assert.deepEqual(root.body, { name: 'dnd-web-server', status: 'ok' });
+});
+
+test('create_session and join_session issue a participant credential', async () => {
+  const { dmToken, playerToken } = await createTableOverHttp();
+
+  assert.notEqual(dmToken, playerToken);
+  // 32 random bytes as base64url. Short enough to check, long enough that the
+  // check would catch a placeholder or a participant ID leaking into the field.
+  assert.match(dmToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(playerToken, /^[A-Za-z0-9_-]{43}$/);
+});
+
+test('a session snapshot still publishes the GM participant ID to players', async () => {
+  const { runtime, idempotency, sessionId, playerToken } =
+    await createTableOverHttp();
+
+  const reconnect = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-player-reconnect-1',
+      type: 'reconnect_session',
+      actor: { participantId: 'player-001' },
+      payload: { sessionId },
+    },
+    playerToken,
+  );
+
+  assert.equal(reconnect.body.ok, true);
+
+  if (!reconnect.body.ok) {
+    return;
+  }
+
+  // This is why a participant ID cannot be the credential: the player is handed
+  // the GM's identifier as ordinary session state. Every test below assumes an
+  // attacker knows it.
+  assert.equal(reconnect.body.data.state.session.dmParticipantId, 'dm-001');
+});
+
+test('a player holding the GM participant ID cannot issue a GM command', async () => {
+  const { runtime, idempotency, sessionId, playerToken } =
+    await createTableOverHttp();
+
+  const command = {
+    commandId: 'credential-gate-dm-escalation-1',
+    type: 'dm_end_active_encounter' as const,
+    actor: { participantId: 'dm-001' },
+    payload: { sessionId },
+  };
+
+  const withNoToken = await postJsonWithToken<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    command,
+    null,
+  );
+
+  assert.equal(withNoToken.status, 401);
+  assert.equal(withNoToken.body.ok, false);
+
+  if (!withNoToken.body.ok) {
+    assert.equal(withNoToken.body.error.code, 'unauthenticated');
+  }
+
+  // The player's own credential is valid - for the player. Presenting it
+  // alongside the GM's participant ID must not promote it.
+  const withPlayerToken = await postJsonWithToken<DmCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/dm/command',
+    { ...command, commandId: 'credential-gate-dm-escalation-2' },
+    playerToken,
+  );
+
+  assert.equal(withPlayerToken.status, 401);
+  assert.equal(withPlayerToken.body.ok, false);
+
+  if (!withPlayerToken.body.ok) {
+    assert.equal(withPlayerToken.body.error.code, 'unauthenticated');
+  }
+});
+
+test('every session-scoped command route rejects a missing or wrong credential', async () => {
+  const { runtime, idempotency, sessionId, playerToken } =
+    await createTableOverHttp();
+
+  const routes = [
+    {
+      path: '/api/characters/command',
+      command: {
+        commandId: 'credential-gate-characters-1',
+        type: 'get_character',
+        actor: { participantId: 'dm-001' },
+        payload: {
+          sessionId,
+          characterId: `char_${'0'.repeat(8)}-0000-0000-0000-${'0'.repeat(12)}`,
+        },
+      },
+    },
+    {
+      path: '/api/scenes/command',
+      command: {
+        commandId: 'credential-gate-scenes-1',
+        type: 'get_scene',
+        actor: { participantId: 'dm-001' },
+        payload: {
+          sessionId,
+          sceneId: `scene_${'0'.repeat(8)}-0000-0000-0000-${'0'.repeat(12)}`,
+        },
+      },
+    },
+    {
+      path: '/api/movement/command',
+      command: {
+        commandId: 'credential-gate-movement-1',
+        type: 'get_active_scene_state',
+        actor: { participantId: 'dm-001' },
+        payload: { sessionId },
+      },
+    },
+    {
+      path: '/api/encounters/command',
+      command: {
+        commandId: 'credential-gate-encounters-1',
+        type: 'get_encounter_state',
+        actor: { participantId: 'dm-001' },
+        payload: { sessionId },
+      },
+    },
+    {
+      path: '/api/dm/command',
+      command: {
+        commandId: 'credential-gate-dm-1',
+        type: 'dm_end_active_encounter',
+        actor: { participantId: 'dm-001' },
+        payload: { sessionId },
+      },
+    },
+  ];
+
+  for (const route of routes) {
+    const missing = await postJsonWithToken<{
+      ok: boolean;
+      error?: { code: string };
+    }>(runtime, idempotency, route.path, route.command, null);
+
+    assert.equal(
+      missing.status,
+      401,
+      `${route.path} should reject a missing credential`,
+    );
+    assert.equal(missing.body.error?.code, 'unauthenticated');
+
+    const wrong = await postJsonWithToken<{
+      ok: boolean;
+      error?: { code: string };
+    }>(
+      runtime,
+      idempotency,
+      route.path,
+      route.command,
+      // A structurally valid credential belonging to a different participant.
+      playerToken,
+    );
+
+    assert.equal(
+      wrong.status,
+      401,
+      `${route.path} should reject another participant's credential`,
+    );
+    assert.equal(wrong.body.error?.code, 'unauthenticated');
+  }
+});
+
+test('reconnect_session requires the credential it was originally issued', async () => {
+  const { runtime, idempotency, sessionId, dmToken, playerToken } =
+    await createTableOverHttp();
+
+  const command = {
+    commandId: 'credential-gate-reconnect-1',
+    type: 'reconnect_session' as const,
+    actor: { participantId: 'dm-001' },
+    payload: { sessionId },
+  };
+
+  const missing = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    command,
+    null,
+  );
+
+  assert.equal(missing.status, 401);
+
+  const wrong = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    { ...command, commandId: 'credential-gate-reconnect-2' },
+    playerToken,
+  );
+
+  assert.equal(wrong.status, 401);
+
+  const correct = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    { ...command, commandId: 'credential-gate-reconnect-3' },
+    dmToken,
+  );
+
+  assert.equal(correct.status, 200);
+  assert.equal(correct.body.ok, true);
+
+  if (correct.body.ok) {
+    // Echoed rather than rotated, so an idempotent retry of this same command
+    // does not hand back a token that has already been invalidated.
+    assert.equal(correct.body.data.participantToken, dmToken);
+  }
+});
+
+test('a player seat can be re-claimed with the session code but the GM seat cannot', async () => {
+  const { runtime, idempotency, sessionId, dmToken } =
+    await createTableOverHttp();
+
+  // A player whose tab closed lost their credential, and the server still holds
+  // one for them - so reconnect refuses. Re-joining is how they get back in.
+  const reclaimed = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'seat-reclaim-1',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-001',
+        displayName: 'Player One',
+        role: 'player',
+      },
+      payload: { sessionId },
+    },
+    null,
+  );
+
+  assert.equal(reclaimed.status, 200);
+  assert.equal(reclaimed.body.ok, true);
+
+  if (!reclaimed.body.ok) {
+    return;
+  }
+
+  const reclaimedToken = reclaimed.body.data.participantToken;
+
+  assert.equal(reclaimed.body.data.participantId, 'player-001');
+
+  // The re-claim works: the new credential can act as that player.
+  const asPlayer = await postJsonWithToken<{ ok: boolean }>(
+    runtime,
+    idempotency,
+    '/api/movement/command',
+    {
+      commandId: 'seat-reclaim-2',
+      type: 'get_active_scene_state',
+      actor: { participantId: 'player-001' },
+      payload: { sessionId },
+    },
+    reclaimedToken,
+  );
+
+  assert.notEqual(asPlayer.status, 401);
+
+  // The GM seat is not claimable. `join_session` asserts the player role, so
+  // this cannot become the DM no matter what role is asked for.
+  const asDm = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'seat-reclaim-3',
+      type: 'join_session',
+      actor: {
+        participantId: 'dm-001',
+        displayName: 'Not The DM',
+        role: 'dm',
+      },
+      payload: { sessionId },
+    },
+    null,
+  );
+
+  assert.equal(asDm.body.ok, false);
+
+  if (!asDm.body.ok) {
+    assert.equal(asDm.body.error.code, 'invalid_role_assumption');
+  }
+
+  // And the DM's own credential is untouched by any of it.
+  const dmStillWorks = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'seat-reclaim-4',
+      type: 'reconnect_session',
+      actor: { participantId: 'dm-001' },
+      payload: { sessionId },
+    },
+    dmToken,
+  );
+
+  assert.equal(dmStillWorks.status, 200);
+});
+
+test('the SSE stream rejects a missing, wrong, or foreign credential', async () => {
+  const { runtime, sessionId, dmToken, playerToken } =
+    await createTableOverHttp();
+
+  const missing = await getStream(runtime, sessionId, 'dm-001', null);
+
+  assert.equal(missing.status, 401);
+  assert.match(missing.body, /unauthenticated/);
+
+  const garbage = await getStream(runtime, sessionId, 'dm-001', 'a'.repeat(43));
+
+  assert.equal(garbage.status, 401);
+
+  // The exact escalation the old stream allowed: a player who read
+  // `dmParticipantId` out of a session snapshot subscribing to the omniscient
+  // GM stream.
+  const foreign = await getStream(runtime, sessionId, 'dm-001', playerToken);
+
+  assert.equal(foreign.status, 401);
+
+  const allowed = await getStream(runtime, sessionId, 'dm-001', dmToken);
+
+  assert.equal(allowed.status, 200);
+  assert.match(allowed.body, /session_state/);
+});
+
+test('rejoining a session invalidates the previous credential', async () => {
+  const { runtime, idempotency, sessionId, playerToken } =
+    await createTableOverHttp();
+
+  const rejoined = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-rejoin-1',
+      type: 'reconnect_session',
+      actor: { participantId: 'player-001', displayName: 'Player One' },
+      payload: { sessionId },
+    },
+    playerToken,
+  );
+
+  assert.equal(rejoined.status, 200);
+
+  // A fresh join replaces the stored hash, so a token captured earlier stops
+  // working. Reconnect echoes instead of replacing, which is why the token above
+  // still works and this one - issued by a second join - supersedes it.
+  const secondJoin = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-rejoin-2',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-002',
+        displayName: 'Player Two',
+        role: 'player',
+      },
+      payload: { sessionId },
+    },
+    null,
+  );
+
+  assert.equal(secondJoin.body.ok, true);
+
+  if (!secondJoin.body.ok) {
+    return;
+  }
+
+  const firstToken = secondJoin.body.data.participantToken;
+
+  const rejoin = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-rejoin-3',
+      type: 'join_session',
+      actor: {
+        participantId: 'player-002',
+        displayName: 'Player Two',
+        role: 'player',
+      },
+      payload: { sessionId },
+    },
+    null,
+  );
+
+  if (!rejoin.body.ok) {
+    // A duplicate join is refused by the runtime; nothing to assert about
+    // rotation in that case.
+    return;
+  }
+
+  assert.notEqual(rejoin.body.data.participantToken, firstToken);
+
+  const staleReconnect = await postJsonWithToken<SessionCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/session/command',
+    {
+      commandId: 'credential-gate-rejoin-4',
+      type: 'reconnect_session',
+      actor: { participantId: 'player-002' },
+      payload: { sessionId },
+    },
+    firstToken,
+  );
+
+  assert.equal(staleReconnect.status, 401);
+});
 
 // Initiative and damage are rolled server-side. These tests exercise HTTP,
 // transaction, idempotency, and SSE plumbing rather than combat math, so they
@@ -213,6 +1094,22 @@ function createMockResponse() {
     headersSent: false,
     statusCode: 200,
     writableEnded: false,
+    // `handleStreamRequest` registers a close listener and starts a heartbeat
+    // interval. Without somewhere to register, it throws after the interval is
+    // already running, and the leaked timer keeps the test process alive.
+    closeListeners: [] as Array<() => void>,
+    on(event: string, listener: () => void) {
+      if (event === 'close') {
+        this.closeListeners.push(listener);
+      }
+
+      return this;
+    },
+    emitClose() {
+      for (const listener of this.closeListeners) {
+        listener();
+      }
+    },
     end(chunk?: unknown) {
       if (chunk != null) {
         this.body += String(chunk);
@@ -758,10 +1655,29 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
     return this.clone(row);
   }
 
-  async listUnpublishedCommandEventOutboxRecords(): Promise<
-    CommandEventOutboxRow[]
-  > {
-    return [...this.rows.values()]
+  async getUnpublishedCommandEventOutboxBacklog(): Promise<CommandEventOutboxBacklog> {
+    const rows = await this.listUnpublishedCommandEventOutboxRecords();
+    const countsByEventType: Partial<
+      Record<CommandEventOutboxRow['eventType'], number>
+    > = {};
+    let oldestCreatedAt: Date | null = null;
+
+    for (const row of rows) {
+      countsByEventType[row.eventType] =
+        (countsByEventType[row.eventType] ?? 0) + 1;
+
+      if (!oldestCreatedAt || row.createdAt < oldestCreatedAt) {
+        oldestCreatedAt = row.createdAt;
+      }
+    }
+
+    return { countsByEventType, oldestCreatedAt, totalCount: rows.length };
+  }
+
+  async listUnpublishedCommandEventOutboxRecords(
+    limit?: number,
+  ): Promise<CommandEventOutboxRow[]> {
+    const rows = [...this.rows.values()]
       .filter((row) => row.publishedAt === null)
       .sort((left, right) => {
         const createdAtDiff =
@@ -788,6 +1704,8 @@ class InMemoryCommandEventOutboxDatabase implements CommandEventOutboxDatabase {
         return left.outboxId.localeCompare(right.outboxId);
       })
       .map((row) => this.clone(row));
+
+    return limit === undefined ? rows : rows.slice(0, limit);
   }
 
   async listUnpublishedCommandEventOutboxRecordsByIdempotencyKey(

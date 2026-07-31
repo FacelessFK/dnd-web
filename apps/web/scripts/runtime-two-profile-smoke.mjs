@@ -7,8 +7,11 @@ import { dirname, resolve } from 'node:path';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import {
+  assertWebUiTargetsServer,
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getChromeDisplayArgs,
+  getCockpitModeSelectionExpression,
   getPageDiagnosticsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
@@ -107,6 +110,9 @@ async function main() {
     label: '/runtime',
     timeoutMs: smokeTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(runtimeUrl, serverUrl);
 
   logSmokeStep('launching separate DM and Player browser profiles');
   launchBrowserProfile('dm-chrome', browserPath, dmDebugPort);
@@ -132,7 +138,7 @@ async function main() {
     await waitForCockpitHydrated(dmPage);
     await clickButtonIfEnabled(dmPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(dmPage);
-    await clickButton(dmPage, ['DM Mode', 'حالت DM']);
+    await selectCockpitMode(dmPage, ['DM Mode', 'حالت DM'], 'dm');
 
     logSmokeStep('building Training Room in DM profile');
     await waitForAnyText(
@@ -186,7 +192,11 @@ async function main() {
     await waitForCockpitHydrated(playerPage);
     await clickButtonIfEnabled(playerPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(playerPage);
-    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session', 'پیوستن به نشست']);
     await waitForCockpitState(playerPage, (state) => Boolean(state?.sessionId));
@@ -319,7 +329,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   profileDirs.push(userDataDir);
 
   return startProcess(name, browserPath, [
-    '--headless=new',
+    // Headed runs put the DM on the left and the player on the right so both
+    // seats stay visible side by side.
+    ...getChromeDisplayArgs({
+      windowPosition: { x: name.startsWith('dm') ? 0 : 960, y: 0 },
+      windowSize: { height: 1040, width: 950 },
+    }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -711,14 +726,25 @@ async function getStoredCockpitSessionId(page) {
   return storedSessionId;
 }
 
+// A single write here reports success as soon as the DOM value changes, which
+// says nothing about the value surviving a cockpit remount (see
+// `getCockpitModeSelectionExpression`). Re-apply until it sticks.
 async function setSessionInputValue(page, sessionId) {
-  const assigned = await page.evaluate(
-    getSessionInputAssignmentExpression(sessionId),
-  );
+  await waitFor(page, {
+    label: `session ID input to hold ${sessionId}`,
+    predicate: getSessionInputAssignmentExpression(sessionId),
+  });
+}
 
-  if (!assigned) {
-    throw new Error('Unable to assign the session ID input.');
-  }
+async function selectCockpitMode(page, modeLabels, expectedMode) {
+  await waitFor(page, {
+    label: `cockpit mode "${expectedMode}"`,
+    predicate: getCockpitModeSelectionExpression(
+      storageKey,
+      modeLabels,
+      expectedMode,
+    ),
+  });
 }
 
 async function waitFor(page, { label, predicate, timeoutMs = smokeTimeoutMs }) {

@@ -7,8 +7,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  assertWebUiTargetsServer,
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getChromeDisplayArgs,
+  getCockpitModeSelectionExpression,
   getPageDiagnosticsExpression,
   getSessionInputAssignmentExpression,
   normalizePageDiagnostics,
@@ -128,6 +131,9 @@ async function main() {
     label: '/runtime',
     timeoutMs: smokeTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(runtimeUrl, serverUrl);
 
   logSmokeStep('seeding authenticated finalized saved character');
   const registered = await registerUser(serverUrl, {
@@ -217,9 +223,16 @@ async function main() {
     await waitForCockpitHydrated(playerPage);
     await clickButtonIfEnabled(playerPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(playerPage);
-    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session', 'پیوستن به نشست']);
+    // The player joined in the browser, so the browser holds that credential.
+    // Copy it out so the harness can also read player state over HTTP.
+    await captureBrowserCredential(playerPage, 'Player runtime tab');
     await waitForAnyText(
       playerPage,
       ['Saved Character Library', 'کتابخانه کاراکترهای ذخیره‌شده'],
@@ -250,8 +263,11 @@ async function main() {
     await waitForCockpitHydrated(dmPage);
     await clickButtonIfEnabled(dmPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(dmPage);
-    await clickButton(dmPage, ['DM Mode', 'حالت DM']);
+    await selectCockpitMode(dmPage, ['DM Mode', 'حالت DM'], 'dm');
     await setSessionInputValue(dmPage, sessionId);
+    // Local Reset above cleared any credential in this tab, and the DM session
+    // was created by the harness rather than by this browser.
+    await injectBrowserCredential(dmPage, sessionId, 'dm-001');
     await clickButton(dmPage, ['Recover', 'بازیابی']);
     await waitForAnyText(
       dmPage,
@@ -365,6 +381,7 @@ async function main() {
 
     logSmokeStep('recovering Training Room evidence in DM and Player browsers');
     await recoverRuntimeSession(dmPage, {
+      expectedMode: 'dm',
       modeLabels: ['DM Mode', 'حالت DM'],
       runtimeUrl,
       sessionId,
@@ -387,6 +404,7 @@ async function main() {
     );
 
     await recoverRuntimeSession(playerPage, {
+      expectedMode: 'player',
       modeLabels: ['Player Mode', 'حالت بازیکن'],
       runtimeUrl,
       sessionId,
@@ -439,7 +457,11 @@ async function main() {
       'DM Training Room after Player local reset',
     );
 
-    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Recover', 'بازیابی']);
     await waitForStoredCockpitSessionId(playerPage, sessionId);
@@ -583,16 +605,130 @@ async function registerUser(serverUrl, body) {
   };
 }
 
+/**
+ * Participant credentials this harness holds, keyed by session and participant.
+ *
+ * The server no longer takes a claimed `participantId` on trust, so acting as
+ * `dm-001` or `player-001` out of band requires the token that participant was
+ * issued. Tokens arrive from two places: this harness's own session command
+ * responses, and the browser tabs, via `captureBrowserCredential`.
+ */
+const participantTokens = new Map();
+
+function participantTokenKey(sessionId, participantId) {
+  return `${sessionId} ${participantId}`;
+}
+
+function rememberParticipantToken(sessionId, participantId, token) {
+  if (sessionId && participantId && token) {
+    participantTokens.set(participantTokenKey(sessionId, participantId), token);
+  }
+}
+
+/**
+ * Copies the credential a browser tab was issued into this harness, so the same
+ * participant can also be driven over HTTP.
+ */
+async function captureBrowserCredential(page, label) {
+  // Waits, because the credential only lands once the join command has round
+  // tripped. Reading straight after the click is a race the click does not lose
+  // often enough to be obvious.
+  await waitFor(page, {
+    label: `${label} participant credential`,
+    predicate: `(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('dnd-participant-credential') ?? '[]',
+      );
+      return Array.isArray(stored) && stored.length > 0;
+    })()`,
+  });
+
+  const raw = await page.evaluate(
+    `localStorage.getItem('dnd-participant-credential') ?? '[]'`,
+  );
+  const credentials = JSON.parse(raw);
+
+  if (!Array.isArray(credentials) || credentials.length === 0) {
+    throw new Error(`${label} holds no participant credential.`);
+  }
+
+  for (const credential of credentials) {
+    rememberParticipantToken(
+      credential.sessionId,
+      credential.participantId,
+      credential.token,
+    );
+  }
+
+  return credentials;
+}
+
+/**
+ * Hands a credential this harness holds to a browser tab.
+ *
+ * Needed because the harness creates the session over HTTP and a *different*
+ * client - the DM browser tab - then continues it. The server will not let a tab
+ * reconnect as `dm-001` just because it says so, which is the whole point of the
+ * credential, so the harness has to pass on the one it was issued. A real DM
+ * creates the session in their own browser and never needs this.
+ */
+async function injectBrowserCredential(page, sessionId, participantId) {
+  const token = participantTokens.get(
+    participantTokenKey(sessionId, participantId),
+  );
+
+  if (!token) {
+    throw new Error(
+      `No participant credential held for ${participantId} in ${sessionId}.`,
+    );
+  }
+
+  await page.evaluate(
+    `(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('dnd-participant-credential') ?? '[]',
+      );
+      const credential = ${JSON.stringify(JSON.stringify({ participantId, sessionId, token }))};
+
+      localStorage.setItem(
+        'dnd-participant-credential',
+        JSON.stringify([
+          ...stored.filter(
+            (candidate) =>
+              candidate.sessionId !== JSON.parse(credential).sessionId ||
+              candidate.participantId !== JSON.parse(credential).participantId,
+          ),
+          JSON.parse(credential),
+        ]),
+      );
+      return true;
+    })()`,
+  );
+}
+
 async function postCommand({ body, cookie, path, serverUrl }) {
+  const token = participantTokens.get(
+    participantTokenKey(body?.payload?.sessionId, body?.actor?.participantId),
+  );
   const response = await fetch(`${serverUrl}${path}`, {
     body: JSON.stringify(body),
     headers: {
       ...(cookie ? { cookie } : {}),
+      ...(token ? { 'x-dnd-participant-token': token } : {}),
       'content-type': 'application/json',
     },
     method: 'POST',
   });
   const payload = await response.json();
+
+  // create/join/reconnect hand back a credential; keep it for later commands.
+  if (payload?.ok && payload.data?.participantToken) {
+    rememberParticipantToken(
+      payload.data.sessionId,
+      payload.data.participantId,
+      payload.data.participantToken,
+    );
+  }
 
   return {
     ...payload,
@@ -897,7 +1033,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   profileDirs.push(userDataDir);
 
   return startProcess(name, browserPath, [
-    '--headless=new',
+    // Headed runs put the DM on the left and the player on the right so both
+    // seats stay visible side by side.
+    ...getChromeDisplayArgs({
+      windowPosition: { x: name.startsWith('dm') ? 0 : 960, y: 0 },
+      windowSize: { height: 1040, width: 950 },
+    }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -1187,24 +1328,37 @@ async function waitForNoStoredSession(page) {
   });
 }
 
+// A single write here was not enough: the expression reports success as soon as
+// the DOM value changes, which says nothing about the value surviving a
+// cockpit remount (see `getCockpitModeSelectionExpression`). Re-applying until
+// it sticks costs nothing on the common path and removes the race on the slow
+// one.
 async function setSessionInputValue(page, sessionId) {
-  const assigned = await page.evaluate(
-    getSessionInputAssignmentExpression(sessionId),
-  );
+  await waitFor(page, {
+    label: `session ID input to hold ${sessionId}`,
+    predicate: getSessionInputAssignmentExpression(sessionId),
+  });
+}
 
-  if (!assigned) {
-    throw new Error('Unable to assign the session ID input.');
-  }
+async function selectCockpitMode(page, modeLabels, expectedMode) {
+  await waitFor(page, {
+    label: `cockpit mode "${expectedMode}"`,
+    predicate: getCockpitModeSelectionExpression(
+      storageKey,
+      modeLabels,
+      expectedMode,
+    ),
+  });
 }
 
 async function recoverRuntimeSession(
   page,
-  { modeLabels, runtimeUrl, sessionId },
+  { expectedMode, modeLabels, runtimeUrl, sessionId },
 ) {
   await navigate(page, runtimeUrl);
   await waitForRuntimeShell(page, 'runtime shell before recovery');
   await waitForCockpitHydrated(page);
-  await clickButton(page, modeLabels);
+  await selectCockpitMode(page, modeLabels, expectedMode);
   await setSessionInputValue(page, sessionId);
   await clickButton(page, ['Recover', 'بازیابی']);
   await waitForStoredCockpitSessionId(page, sessionId);

@@ -11,6 +11,7 @@ import {
   commandIdSchema,
   displayNameSchema,
   participantIdSchema,
+  participantTokenSchema,
   revisionSchema,
   rulesProfileIdSchema,
   sceneIdSchema,
@@ -100,7 +101,16 @@ export const sessionCommandSuccessSchema = z.object({
   data: z.object({
     sessionId: sessionIdSchema,
     participantId: participantIdSchema,
+    /**
+     * The caller's credential for this session. Store it, send it on every
+     * subsequent command, and keep it out of logs and URLs that get recorded.
+     */
+    participantToken: participantTokenSchema,
     state: sessionSnapshotSchema,
+    /**
+     * Path only. It deliberately does not embed the token, so that a stream
+     * path can be logged. The client appends the token when it subscribes.
+     */
     streamPath: z.string().min(1),
   }),
 });

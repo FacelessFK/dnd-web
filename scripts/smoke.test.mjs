@@ -7,6 +7,10 @@ import {
   formatSmokeWaitFailure,
   getAbsentVisibleTextsExpression,
   getAbsentVisibleTextsOutsideSelectorExpression,
+  findMismatchedHarnessServerUrl,
+  formatHarnessServerUrlMismatch,
+  getChromeDisplayArgs,
+  getCockpitModeSelectionExpression,
   getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
@@ -22,9 +26,11 @@ const requiredPaths = [
   'packages/protocol',
   'packages/rules',
   'packages/db',
-  'docs/decisions/0001-initial-stack.md',
   '.env.example',
   'pnpm-workspace.yaml',
+  'README.md',
+  'PRD.md',
+  'ROADMAP.md',
 ];
 
 for (const relativePath of requiredPaths) {
@@ -73,6 +79,164 @@ test('the pinned .nvmrc version satisfies the declared engine range', () => {
   assert.ok(
     Number(nvmrc) >= engineFloor,
     `.nvmrc pins Node ${nvmrc} but engines.node requires >=${engineFloor}`,
+  );
+});
+
+// CI and the plain `test:smoke*` commands must keep launching Chrome headless.
+// Only an explicit RUNTIME_SMOKE_HEADED opt-in may open a real window, so the
+// default has to stay pinned by a test rather than by reviewer memory.
+test('browser harnesses launch headless unless explicitly opted out', () => {
+  assert.deepEqual(getChromeDisplayArgs({ env: {} }), ['--headless=new']);
+  assert.deepEqual(
+    getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: '' } }),
+    ['--headless=new'],
+  );
+  assert.deepEqual(
+    getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: '0' } }),
+    ['--headless=new'],
+  );
+  // A window size must never leak into a headless launch as a stray extra flag.
+  assert.deepEqual(
+    getChromeDisplayArgs({
+      env: {},
+      windowPosition: { x: 960, y: 0 },
+      windowSize: { height: 1040, width: 950 },
+    }),
+    ['--headless=new'],
+  );
+});
+
+test('an explicit headed opt-in drops headless and places the window', () => {
+  for (const raw of ['1', 'true', 'yes', 'YES', ' true ']) {
+    assert.deepEqual(
+      getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: raw } }),
+      [],
+      `RUNTIME_SMOKE_HEADED=${JSON.stringify(raw)} should launch headed`,
+    );
+  }
+
+  assert.deepEqual(
+    getChromeDisplayArgs({
+      env: { RUNTIME_SMOKE_HEADED: '1' },
+      windowPosition: { x: 960, y: 0 },
+      windowSize: { height: 1040, width: 950 },
+    }),
+    ['--window-size=950,1040', '--window-position=960,0'],
+  );
+});
+
+// Next inlines NEXT_PUBLIC_SERVER_URL into the client chunks, and every harness
+// compiles into the same apps/web/.next. A second `next dev` on this working
+// tree - a leftover from a killed run, a developer's `pnpm dev`, or a second
+// harness - recompiles those chunks against ITS server URL, so the harness's
+// browser posts commands to a port owned by a different (or dead) server. That
+// surfaced as "Failed to fetch" and a wait timing out on state that was never
+// coming. The harness must name that mis-wiring instead of flaking on it.
+test('a harness detects a web UI wired to a different server', () => {
+  const expected = 'http://127.0.0.1:47311';
+
+  assert.equal(
+    findMismatchedHarnessServerUrl(`<div>Server ${expected}</div>`, expected),
+    null,
+    'the run’s own server URL is not a mismatch',
+  );
+
+  assert.equal(
+    findMismatchedHarnessServerUrl(
+      '<div>Server http://127.0.0.1:35513</div>',
+      expected,
+    ),
+    'http://127.0.0.1:35513',
+    'a foreign server URL is reported',
+  );
+
+  // A page that renders no origin at all cannot contradict the expectation, and
+  // must not fail the run.
+  assert.equal(
+    findMismatchedHarnessServerUrl('<div>loading</div>', expected),
+    null,
+  );
+
+  // The expected URL being present wins even when other origins also appear.
+  assert.equal(
+    findMismatchedHarnessServerUrl(
+      `<div>${expected}</div><div>http://127.0.0.1:1234</div>`,
+      expected,
+    ),
+    null,
+  );
+});
+
+test('the harness server mismatch message names both servers', () => {
+  const message = formatHarnessServerUrlMismatch(
+    'http://127.0.0.1:47311',
+    'http://127.0.0.1:35513',
+  );
+
+  assert.match(message, /127\.0\.0\.1:47311/);
+  assert.match(message, /127\.0\.0\.1:35513/);
+  assert.match(message, /NEXT_PUBLIC_SERVER_URL/);
+});
+
+// The observed flake: the cockpit re-reads its persisted state in a mount
+// effect, so a Next dev on-demand compile that remounts the page mid-run
+// replays the stored mode over the harness's click. The run then died far
+// later, waiting for a "Join Session" button that only renders in player mode.
+// The selection expression must therefore report success only from stored
+// state, and must re-click whenever that state disagrees.
+test('cockpit mode selection is confirmed against stored state', () => {
+  const expression = getCockpitModeSelectionExpression(
+    'dnd-runtime-cockpit',
+    ['Player Mode', 'حالت بازیکن'],
+    'player',
+  );
+
+  // Success is read from the persisted mode, never from the click landing.
+  assert.match(expression, /localStorage\.getItem\("dnd-runtime-cockpit"\)/);
+  assert.match(expression, /\.mode === "player"/);
+  // It re-clicks rather than giving up, which is what survives a remount.
+  assert.match(expression, /button\.click\(\)/);
+  // Both locales reach the same control.
+  assert.match(expression, /Player Mode/);
+  assert.match(expression, /حالت بازیکن/);
+});
+
+test('cockpit mode selection re-clicks when storage disagrees', () => {
+  const expression = getCockpitModeSelectionExpression(
+    'dnd-runtime-cockpit',
+    ['DM Mode'],
+    'dm',
+  );
+  const clicked = [];
+  const evaluate = (storedMode) =>
+    new Function('localStorage', 'document', `return ${expression};`)(
+      {
+        getItem: () =>
+          storedMode === undefined
+            ? null
+            : JSON.stringify({ mode: storedMode }),
+      },
+      {
+        querySelectorAll: () => [
+          {
+            click: () => clicked.push(storedMode ?? 'none'),
+            disabled: false,
+            offsetParent: {},
+            textContent: 'DM Mode',
+          },
+        ],
+      },
+    );
+
+  assert.equal(evaluate('dm'), true, 'already in the requested mode');
+  assert.deepEqual(clicked, [], 'no redundant click when storage agrees');
+
+  assert.equal(evaluate('player'), false, 'reverted mode is not success');
+  assert.equal(evaluate(undefined), false, 'absent state is not success');
+  assert.deepEqual(
+    clicked,
+    ['player', 'none'],
+    're-clicks whenever stored mode disagrees',
   );
 });
 

@@ -11,6 +11,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getChromeDisplayArgs } from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 
@@ -104,7 +105,7 @@ export function launchBrowser(browserPath, debugPort, { width, height }) {
   chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-visual-'));
 
   return startProcess('chrome', browserPath, [
-    '--headless=new',
+    ...getChromeDisplayArgs(),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${chromeUserDataDir}`,
     `--window-size=${width},${height}`,

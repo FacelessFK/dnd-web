@@ -25,6 +25,7 @@ import {
   sceneTransitionKindSchema,
 } from '@dnd/protocol';
 
+import type { MessageKey } from './i18n';
 import type { RuntimeApiFailure } from './runtime-api';
 import { buildTrainingRoomLayout } from './scene-terrain-presets';
 
@@ -3629,68 +3630,149 @@ export function isSessionStreamEvent(
 // Describes the hit/miss half of a resolved attack, including the server-rolled
 // damage breakdown when the attack landed. A natural 20 is reported as a
 // critical hit and a natural 1 as a critical miss.
+/**
+ * A stream event described as message keys plus interpolation values, rather
+ * than as a finished English sentence.
+ *
+ * The event feed is the most-read text in the runtime, and it was hardcoded
+ * English - so the Persian UI, which is the default locale, rendered "Attack
+ * resolved" and "turn advanced" inside an RTL layout. Returning keys keeps this
+ * module free of React and of the message catalogue while letting the view
+ * translate, and it keeps these functions unit-testable without a provider.
+ */
+export type RuntimeEventDescriptor = {
+  detailKey: MessageKey;
+  detailValues: Record<string, string>;
+  titleKey: MessageKey;
+  tone: RuntimeNoticeTone;
+};
+
+/**
+ * Message key for a stream event's `reason` enum.
+ *
+ * The enums are closed and small, so every value gets a real key. Interpolating
+ * `reason.replaceAll('_', ' ')` was what leaked raw protocol identifiers such as
+ * "dm_turn_usage_changed" into the UI in both locales.
+ */
+export function runtimeEventReasonKey(
+  eventType: SessionStreamEvent['type'],
+  reason: string,
+): MessageKey {
+  return `runtime.events.reason.${eventType}.${reason}` as MessageKey;
+}
+
 export function describeCombatAttackResult(
   event: Extract<SessionStreamEvent, { type: 'combat_event' }>,
-): string {
+): { key: MessageKey; values: Record<string, string> } {
   if (!event.hit) {
-    return event.roll.criticalMiss ? 'critical miss' : 'missed';
+    return {
+      key: event.roll.criticalMiss
+        ? 'runtime.events.attack.criticalMiss'
+        : 'runtime.events.attack.miss',
+      values: {},
+    };
   }
 
-  const verb = event.roll.critical ? 'critical hit for' : 'hit for';
+  const damage = String(event.damage);
+
+  if (event.roll.critical) {
+    return event.damageRoll
+      ? {
+          key: 'runtime.events.attack.criticalHitWithRoll',
+          values: { damage, notation: event.damageRoll.notation },
+        }
+      : { key: 'runtime.events.attack.criticalHit', values: { damage } };
+  }
 
   return event.damageRoll
-    ? `${verb} ${event.damage} (${event.damageRoll.notation})`
-    : `${verb} ${event.damage}`;
+    ? {
+        key: 'runtime.events.attack.hitWithRoll',
+        values: { damage, notation: event.damageRoll.notation },
+      }
+    : { key: 'runtime.events.attack.hit', values: { damage } };
 }
 
 export function describeSessionStreamEvent(
   event: SessionStreamEvent,
-): RuntimeEventSummary {
+): RuntimeEventDescriptor {
   switch (event.type) {
     case 'combat_event': {
       // A concealed combatant arrives without its ID and, when it is the
       // target, without its health. Fall back to an unnamed label and drop the
       // HP clause rather than rendering "undefined".
       const targetLabel = event.targetConcealed
-        ? 'Unknown combatant'
+        ? CONCEALED_COMBATANT_LABEL
         : event.targetKind === 'combatant' && event.targetCombatantId
           ? event.targetCombatantId
           : event.targetParticipantId;
       const attackerLabel = event.attackerConcealed
-        ? 'Unknown combatant'
+        ? CONCEALED_COMBATANT_LABEL
         : (event.attackerCombatantId ?? event.attackerParticipantId);
-      const hpClause = event.targetHp
-        ? ` (${targetLabel} HP ${event.targetHp.previous} -> ${event.targetHp.current})`
-        : ` (${targetLabel})`;
+      const result = describeCombatAttackResult(event);
 
       return {
-        detail: `${attackerLabel} rolled ${event.roll.total} vs AC ${event.targetArmorClass}; ${describeCombatAttackResult(event)}${hpClause}.`,
-        title: 'Attack resolved',
+        detailKey: event.targetHp
+          ? 'runtime.events.detail.combatWithHp'
+          : 'runtime.events.detail.combat',
+        detailValues: {
+          attacker: attackerLabel,
+          armorClass: String(event.targetArmorClass),
+          currentHp: String(event.targetHp?.current ?? ''),
+          previousHp: String(event.targetHp?.previous ?? ''),
+          resultKey: result.key,
+          roll: String(event.roll.total),
+          target: targetLabel,
+          ...result.values,
+        },
+        titleKey: 'runtime.events.title.combat',
         tone: event.hit ? 'danger' : 'warning',
       };
     }
     case 'encounter_state':
       return {
-        detail: `${event.reason.replaceAll('_', ' ')}. Round ${event.encounter.roundNumber}, turn ${event.encounter.currentTurnIndex + 1}.`,
-        title: 'Encounter state',
+        detailKey: 'runtime.events.detail.encounter',
+        detailValues: {
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+          round: String(event.encounter.roundNumber),
+          turn: String(event.encounter.currentTurnIndex + 1),
+        },
+        titleKey: 'runtime.events.title.encounter',
         tone: 'info',
       };
     case 'movement_state':
       return {
-        detail: `${event.participantId} ${event.reason.replaceAll('_', ' ')} to ${event.position.x},${event.position.y}.`,
-        title: 'Token movement',
+        detailKey: 'runtime.events.detail.movement',
+        detailValues: {
+          participant: event.participantId,
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+          x: String(event.position.x),
+          y: String(event.position.y),
+        },
+        titleKey: 'runtime.events.title.movement',
         tone: 'success',
       };
     case 'character_state':
       return {
-        detail: `${event.characterId} HP is now ${event.hp.current}/${event.hp.max}${event.activeConditions?.length ? ` with ${event.activeConditions.join(', ')}` : ''}.`,
-        title: 'Character state',
+        detailKey: event.activeConditions?.length
+          ? 'runtime.events.detail.characterWithConditions'
+          : 'runtime.events.detail.character',
+        detailValues: {
+          character: event.characterId,
+          conditions: event.activeConditions?.join(', ') ?? '',
+          currentHp: String(event.hp.current),
+          maxHp: String(event.hp.max),
+        },
+        titleKey: 'runtime.events.title.character',
         tone: 'warning',
       };
     case 'session_state':
       return {
-        detail: `${event.reason.replaceAll('_', ' ')}. Revision ${event.revision}.`,
-        title: 'Session state',
+        detailKey: 'runtime.events.detail.session',
+        detailValues: {
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+          revision: String(event.revision),
+        },
+        titleKey: 'runtime.events.title.session',
         tone: 'info',
       };
   }

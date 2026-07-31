@@ -25,6 +25,7 @@ import {
   waitFor,
   waitForHttp,
 } from './harness-lib.mjs';
+import { assertWebUiTargetsServer } from './runtime-smoke-diagnostics.mjs';
 
 const args = process.argv.slice(2);
 const outDir = resolve(
@@ -104,6 +105,9 @@ async function main() {
     label: '/runtime',
     timeoutMs: bootTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(`${webOrigin}/runtime`, serverUrl);
 
   console.log('[visual-capture] launching headless browser');
   launchBrowser(browserPath, debugPort, {

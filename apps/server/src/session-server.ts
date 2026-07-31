@@ -29,6 +29,7 @@ import {
   movementCommandErrorSchema,
   movementCommandSchema,
   movementCommandSuccessSchema,
+  outboxStatusResponseSchema,
   outboxStatusSuccessSchema,
   participantIdSchema,
   registerAuthRequestSchema,
@@ -41,6 +42,7 @@ import {
   sessionIdSchema,
   sessionStreamEventSchema,
   type CharacterAssignmentSuccess,
+  type ClientCommand,
   type CharacterCommandError,
   type CharacterCommandSuccess,
   type CharacterLibraryCommandSuccess,
@@ -95,6 +97,11 @@ import {
   type RuntimeCharacterRepository,
 } from './game-runtime.js';
 import { MovementRuntimeError } from './movement-runtime.js';
+import {
+  PARTICIPANT_TOKEN_HEADER,
+  PARTICIPANT_TOKEN_QUERY_PARAM,
+  ParticipantCredentialStore,
+} from './participant-credential-store.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
 import {
@@ -105,7 +112,7 @@ import {
 const defaultWebOrigin = 'http://localhost:3000';
 
 const baseCorsHeaders = {
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-headers': `content-type,${PARTICIPANT_TOKEN_HEADER}`,
   'access-control-allow-credentials': 'true',
   'access-control-allow-methods': 'GET,POST,OPTIONS',
   vary: 'Origin',
@@ -155,6 +162,13 @@ export function createAuthThrottle(): AuthThrottle {
  */
 const defaultAuthThrottle = createAuthThrottle();
 
+/**
+ * Shared by any `handleRequest` call that does not supply its own store, for the
+ * same reason as `defaultAuthThrottle`: a credential issued on one request has
+ * to be verifiable on the next.
+ */
+const defaultParticipantCredentials = new ParticipantCredentialStore();
+
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
   idempotency: CommandIdempotencyStore = new InMemoryCommandIdempotencyStore(),
@@ -174,6 +188,7 @@ export function createSessionServer(
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike;
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
+  participantCredentials: ParticipantCredentialStore;
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary;
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary;
   server: Server;
@@ -181,8 +196,11 @@ export function createSessionServer(
   runtime: GameRuntime;
   store: GameRuntime['sessions'];
 } {
-  // One throttle per server instance, shared by every request it serves.
+  // One throttle and one credential store per server instance, shared by every
+  // request it serves. Both only mean anything if consecutive requests hit the
+  // same instance.
   const authThrottle = createAuthThrottle();
+  const participantCredentials = new ParticipantCredentialStore();
   const server = createServer(async (request, response) => {
     try {
       await handleRequest(
@@ -199,6 +217,7 @@ export function createSessionServer(
         auth,
         commandEventOutboxDispatcher,
         authThrottle,
+        participantCredentials,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -213,6 +232,7 @@ export function createSessionServer(
     commandEventOutboxDispatcher,
     encounterCommandTransaction,
     idempotency,
+    participantCredentials,
     sceneCommandTransaction,
     sessionCommandTransaction,
     server,
@@ -236,6 +256,7 @@ export async function handleRequest(
   auth?: AuthService,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
   authThrottle: AuthThrottle = defaultAuthThrottle,
+  participantCredentials: ParticipantCredentialStore = defaultParticipantCredentials,
 ): Promise<void> {
   setCorsHeaders(response, request);
 
@@ -247,12 +268,14 @@ export async function handleRequest(
 
   const url = new URL(request.url ?? '/', getBaseUrl(request));
 
+  // Liveness only. It deliberately reports nothing about configuration,
+  // persistence mode, or feature state: this endpoint is unauthenticated, and
+  // the previous payload advertised the server's internal build phase to anyone
+  // who asked.
   if (request.method === 'GET' && url.pathname === '/') {
     sendJson(response, 200, {
-      name: 'dnd-dm-platform-server',
-      phase: 'phase-12',
-      status:
-        'db-idempotency-claim-plus-scene-transaction-and-session-character-movement-encounter-combat-outbox-foundation',
+      name: 'dnd-web-server',
+      status: 'ok',
     });
     return;
   }
@@ -263,7 +286,12 @@ export async function handleRequest(
   }
 
   if (request.method === 'GET' && url.pathname === '/api/outbox/status') {
-    await handleOutboxStatusRequest(response, commandEventOutboxDispatcher);
+    await handleOutboxStatusRequest(
+      request,
+      response,
+      auth,
+      commandEventOutboxDispatcher,
+    );
     return;
   }
 
@@ -288,6 +316,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       sessionCommandTransaction,
     );
     return;
@@ -299,6 +328,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       characterCommandTransaction,
       sessionCommandTransaction,
       characterLibrary,
@@ -342,6 +372,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       sessionCommandTransaction,
       sceneCommandTransaction,
     );
@@ -354,6 +385,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       characterCommandTransaction,
       combatCommandTransaction,
     );
@@ -366,6 +398,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       characterCommandTransaction,
       encounterCommandTransaction,
       combatCommandTransaction,
@@ -380,6 +413,7 @@ export async function handleRequest(
       response,
       runtime,
       idempotency,
+      participantCredentials,
       encounterCommandTransaction,
       combatCommandTransaction,
     );
@@ -408,6 +442,7 @@ export async function handleRequest(
       url,
       decodeURIComponent(sessionIdFromPath),
       runtime,
+      participantCredentials,
     );
     return;
   }
@@ -448,10 +483,33 @@ async function handleAuthMeRequest(
   }
 }
 
+/**
+ * Operator visibility into the unpublished outbox backlog.
+ *
+ * Authenticated because it is an operational endpoint, and because it used to be
+ * an unauthenticated way to make the server run a query over an unbounded table.
+ * It now reports database-side aggregates and never materializes rows.
+ *
+ * Any authenticated user passes. That is deliberately coarse: this repository
+ * has no operator role yet, and inventing one here would be a data model change
+ * smuggled into a security fix. It is a real narrowing from "anyone on the
+ * network" and the endpoint exposes counts, never row contents.
+ */
 async function handleOutboxStatusRequest(
+  request: IncomingMessage,
   response: ServerResponse,
+  auth: AuthService | undefined,
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
 ): Promise<void> {
+  if (auth) {
+    try {
+      await requireAuthenticatedUser(request, auth);
+    } catch (error) {
+      handleRuntimeError(response, error, outboxStatusResponseSchema);
+      return;
+    }
+  }
+
   const data = commandEventOutboxDispatcher
     ? await commandEventOutboxDispatcher.getUnpublishedStatus()
     : {
@@ -488,12 +546,8 @@ async function handleAuthRegisterRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(
-      response,
-      400,
-      invalidAuthRequest('Request body must be valid JSON.'),
-    );
+  } catch (error) {
+    sendBodyReadError(response, error, authResponseSchema);
     return;
   }
 
@@ -565,12 +619,8 @@ async function handleAuthLoginRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(
-      response,
-      400,
-      invalidAuthRequest('Request body must be valid JSON.'),
-    );
+  } catch (error) {
+    sendBodyReadError(response, error, authResponseSchema);
     return;
   }
 
@@ -682,20 +732,15 @@ async function handleSessionCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
 ): Promise<void> {
   let body: unknown;
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies SessionCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, sessionCommandErrorSchema);
     return;
   }
 
@@ -713,9 +758,26 @@ async function handleSessionCommandRequest(
     return;
   }
 
-  try {
-    const command = commandResult.data;
+  const command = commandResult.data;
 
+  // `create_session` and `join_session` mint a credential, so they cannot
+  // require one. `reconnect_session` must: without this check, anyone holding a
+  // session code plus a participant ID from a published snapshot could reconnect
+  // as the GM.
+  if (
+    command.type === 'reconnect_session' &&
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      sessionCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
     if (
       sessionCommandTransaction?.supports({
         category: 'session',
@@ -746,6 +808,10 @@ async function handleSessionCommandRequest(
             return {
               sessionId: result.sessionId,
               participantId: result.participantId,
+              participantToken: participantCredentials.issue(
+                result.sessionId,
+                result.participantId,
+              ),
               state: result.state,
               streamPath: buildStreamPath(
                 result.sessionId,
@@ -779,7 +845,7 @@ async function handleSessionCommandRequest(
         result = await runtime.createSession(command);
         break;
       case 'join_session':
-        result = await runtime.joinSession(command);
+        result = await claimPlayerSeat(runtime, command);
         break;
       case 'reconnect_session':
         result = await runtime.reconnectSession(command);
@@ -788,11 +854,20 @@ async function handleSessionCommandRequest(
         throw new Error('Unsupported session command type.');
     }
 
+    // Reconnect echoes the credential the caller just proved it holds rather
+    // than rotating it. Rotating would invalidate the token embedded in this
+    // command's cached idempotent response, so a legitimate retry would fail.
+    const participantToken =
+      command.type === 'reconnect_session'
+        ? (readParticipantToken(request) ?? '')
+        : participantCredentials.issue(result.sessionId, result.participantId);
+
     const success: SessionCommandSuccess = {
       ok: true,
       data: {
         sessionId: result.sessionId,
         participantId: result.participantId,
+        participantToken,
         state: result.state,
         streamPath: buildStreamPath(result.sessionId, result.participantId),
       },
@@ -814,6 +889,7 @@ async function handleCharacterCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
@@ -823,14 +899,8 @@ async function handleCharacterCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies CharacterCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, characterCommandErrorSchema);
     return;
   }
 
@@ -848,8 +918,21 @@ async function handleCharacterCommandRequest(
     return;
   }
 
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      characterCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
   try {
-    const command = commandResult.data;
     const authenticatedUser =
       command.type === 'submit_character_library_entry_for_assignment' && auth
         ? await requireAuthenticatedUser(request, auth)
@@ -1118,19 +1201,8 @@ async function handleCharacterLibraryCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(
-      response,
-      400,
-      {
-        ok: false,
-        error: {
-          code: 'invalid_command',
-          message: 'Request body must be valid JSON.',
-        },
-      },
-      characterLibraryCommandErrorSchema,
-    );
+  } catch (error) {
+    sendBodyReadError(response, error, characterLibraryCommandErrorSchema);
     return;
   }
 
@@ -1289,6 +1361,7 @@ async function handleSceneCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
 ): Promise<void> {
@@ -1296,14 +1369,8 @@ async function handleSceneCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies SceneCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, sceneCommandErrorSchema);
     return;
   }
 
@@ -1321,8 +1388,21 @@ async function handleSceneCommandRequest(
     return;
   }
 
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      sceneCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
   try {
-    const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_scene' ? null : 'scene';
 
@@ -1490,6 +1570,7 @@ async function handleMovementCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
@@ -1497,14 +1578,8 @@ async function handleMovementCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies MovementCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, movementCommandErrorSchema);
     return;
   }
 
@@ -1522,8 +1597,21 @@ async function handleMovementCommandRequest(
     return;
   }
 
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      movementCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
   try {
-    const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_active_scene_state' ? null : 'movement';
     const runCombatMovementTransaction =
@@ -1707,6 +1795,7 @@ async function handleEncounterCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
 ): Promise<void> {
@@ -1714,14 +1803,8 @@ async function handleEncounterCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies EncounterCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, encounterCommandErrorSchema);
     return;
   }
 
@@ -1739,8 +1822,21 @@ async function handleEncounterCommandRequest(
     return;
   }
 
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      encounterCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
   try {
-    const command = commandResult.data;
     const idempotencyCategory: CommandIdempotencyCategory | null =
       command.type === 'get_encounter_state' ? null : 'encounter';
 
@@ -1912,6 +2008,7 @@ async function handleDmCommandRequest(
   response: ServerResponse,
   runtime: GameRuntime,
   idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary,
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary,
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary,
@@ -1921,14 +2018,8 @@ async function handleDmCommandRequest(
 
   try {
     body = await readJson(request);
-  } catch {
-    sendJson(response, 400, {
-      ok: false,
-      error: {
-        code: 'invalid_command',
-        message: 'Request body must be valid JSON.',
-      },
-    } satisfies DmCommandError);
+  } catch (error) {
+    sendBodyReadError(response, error, dmCommandErrorSchema);
     return;
   }
 
@@ -1946,9 +2037,21 @@ async function handleDmCommandRequest(
     return;
   }
 
-  try {
-    const command = commandResult.data;
+  const command = commandResult.data;
 
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      dmCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
     if (
       characterCommandTransaction?.supports({
         category: 'dm',
@@ -2222,6 +2325,7 @@ function handleStreamRequest(
   url: URL,
   rawSessionId: string,
   runtime: GameRuntime,
+  participantCredentials: ParticipantCredentialStore,
 ): void {
   const sessionIdResult = sessionIdSchema.safeParse(rawSessionId);
 
@@ -2249,6 +2353,27 @@ function handleStreamRequest(
         message:
           participantIdResult.error.issues[0]?.message ??
           'participantId query parameter is required.',
+      },
+    } satisfies SessionCommandError);
+    return;
+  }
+
+  // `EventSource` cannot send request headers, so the stream takes the same
+  // credential as a query parameter. Checked before the session lookup so that a
+  // caller without a token learns nothing about whether the session exists.
+  if (
+    !participantCredentials.verify(
+      sessionIdResult.data,
+      participantIdResult.data,
+      url.searchParams.get(PARTICIPANT_TOKEN_QUERY_PARAM),
+    )
+  ) {
+    sendJson(response, 401, {
+      ok: false,
+      error: {
+        code: 'unauthenticated',
+        message:
+          'A valid participant token is required to subscribe to this session stream.',
       },
     } satisfies SessionCommandError);
     return;
@@ -2440,11 +2565,102 @@ function sendJson(
   response.end(JSON.stringify(payload));
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
+/**
+ * Raised when a request body is refused before it is fully read, so the caller
+ * can answer 413 or 408 instead of the generic 400 that a JSON parse error gets.
+ */
+class RequestBodyError extends Error {
+  constructor(
+    readonly statusCode: 408 | 413,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RequestBodyError';
+  }
+}
 
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+const DEFAULT_MAX_REQUEST_BODY_BYTES = 1_048_576;
+const DEFAULT_REQUEST_BODY_TIMEOUT_MS = 15_000;
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Reads and parses a JSON request body under a size ceiling and a wall-clock
+ * deadline.
+ *
+ * Both bounds are load-bearing. Without the ceiling, a single request could
+ * stream unbounded data into an in-memory array until the process died; the
+ * portrait upload path means bodies are legitimately large, so "it is only
+ * commands" was never true. Without the deadline, a client that opens a request
+ * and dribbles one byte at a time holds a connection and a buffer open
+ * indefinitely - the classic slow-loris shape - and Node applies no default
+ * timeout to a request body.
+ *
+ * `content-length` is checked first as a cheap rejection, but it is
+ * client-supplied, so the running total is enforced regardless.
+ */
+async function readJson(request: IncomingMessage): Promise<unknown> {
+  const maxBytes = readPositiveIntegerEnv(
+    'SERVER_MAX_REQUEST_BODY_BYTES',
+    DEFAULT_MAX_REQUEST_BODY_BYTES,
+  );
+  const timeoutMs = readPositiveIntegerEnv(
+    'SERVER_REQUEST_BODY_TIMEOUT_MS',
+    DEFAULT_REQUEST_BODY_TIMEOUT_MS,
+  );
+
+  const declaredLength = Number(request.headers['content-length']);
+
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new RequestBodyError(
+      413,
+      `Request body exceeds the ${maxBytes} byte limit.`,
+    );
+  }
+
+  const chunks: Buffer[] = [];
+  let receivedBytes = 0;
+  let timedOut = false;
+
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    request.destroy();
+  }, timeoutMs);
+
+  try {
+    for await (const chunk of request) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+
+      receivedBytes += buffer.byteLength;
+
+      if (receivedBytes > maxBytes) {
+        // Stop reading immediately rather than draining the rest: continuing to
+        // consume a body already known to be over the limit is the resource
+        // exhaustion this guard exists to prevent.
+        request.destroy();
+        throw new RequestBodyError(
+          413,
+          `Request body exceeds the ${maxBytes} byte limit.`,
+        );
+      }
+
+      chunks.push(buffer);
+    }
+  } catch (error) {
+    if (timedOut) {
+      throw new RequestBodyError(
+        408,
+        `Request body was not received within ${timeoutMs}ms.`,
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(deadline);
   }
 
   const body = Buffer.concat(chunks).toString('utf8');
@@ -2454,6 +2670,45 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   }
 
   return JSON.parse(body) as unknown;
+}
+
+/**
+ * Answers a refused body with its own status code, and anything else - a JSON
+ * syntax error - with the 400 the callers already expected.
+ */
+function sendBodyReadError(
+  response: ServerResponse,
+  error: unknown,
+  errorSchema: ErrorResponseSchema,
+): void {
+  if (error instanceof RequestBodyError) {
+    sendJson(
+      response,
+      error.statusCode,
+      {
+        ok: false,
+        error: {
+          code: 'invalid_command',
+          message: error.message,
+        },
+      },
+      errorSchema,
+    );
+    return;
+  }
+
+  sendJson(
+    response,
+    400,
+    {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message: 'Request body must be valid JSON.',
+      },
+    },
+    errorSchema,
+  );
 }
 
 function buildStreamPath(sessionId: string, participantId: string): string {
@@ -2609,6 +2864,117 @@ function readClientIp(request: IncomingMessage): string {
   }
 
   return request.socket?.remoteAddress ?? 'unknown';
+}
+
+function readParticipantToken(request: IncomingMessage): string | null {
+  const header = request.headers[PARTICIPANT_TOKEN_HEADER];
+  const value = Array.isArray(header) ? header[0] : header;
+
+  return value?.trim() ? value.trim() : null;
+}
+
+/**
+ * Gate for every session-scoped command.
+ *
+ * The runtime's role checks read `command.actor.participantId` and assert a role
+ * against the stored participant record. Those checks are only worth anything if
+ * the caller actually is that participant, and a participant ID is public - a
+ * session snapshot hands every subscriber the GM's. So the caller has to present
+ * the credential issued to it at create/join time.
+ *
+ * Returns `true` when the request may proceed. On failure it has already written
+ * the response, so callers must return immediately.
+ *
+ * The failure is deliberately indistinguishable between "no such session",
+ * "no such participant" and "wrong token": distinguishing them would turn this
+ * into an oracle for enumerating live sessions and their participants.
+ */
+function requireParticipantCredential(
+  request: IncomingMessage,
+  response: ServerResponse,
+  participantCredentials: ParticipantCredentialStore,
+  command: { actor: { participantId: string }; payload: { sessionId: string } },
+  errorSchema: ErrorResponseSchema,
+): boolean {
+  if (
+    participantCredentials.verify(
+      command.payload.sessionId,
+      command.actor.participantId,
+      readParticipantToken(request),
+    )
+  ) {
+    return true;
+  }
+
+  sendJson(
+    response,
+    401,
+    {
+      ok: false,
+      error: {
+        code: 'unauthenticated',
+        message:
+          'A valid participant token is required. Join or reconnect to the session to obtain one.',
+      },
+    },
+    errorSchema,
+  );
+
+  return false;
+}
+
+/**
+ * Joins a session, treating an already-occupied player seat as a re-claim.
+ *
+ * The session code is the table's shared secret, and a player seat is claimable
+ * with it. That matters for two flows that would otherwise be dead ends:
+ *
+ * - A player closes their tab. Their credential lived in `sessionStorage` and is
+ *   gone, but the server still holds one for that participant, so
+ *   `reconnect_session` refuses them - and a plain re-join used to fail with
+ *   `duplicate_join`. They could never get back to the table.
+ * - The DM prepares seats for sample players during demo setup, which issues
+ *   credentials to the DM's browser. A real player then needs to take one of
+ *   those seats from their own browser.
+ *
+ * What this deliberately does **not** allow: claiming the DM seat.
+ * `joinSession` asserts the actor's role is `player` before anything else, so a
+ * caller can never join as the DM, and `reconnect_session` still demands the
+ * credential issued at `create_session`. Every command and stream endpoint
+ * demands a credential too.
+ *
+ * So the residual exposure is: someone holding the session code can take over a
+ * *player* seat, seeing that player's character and view. They cannot gain GM
+ * omniscience, which is what a broadcast `dmParticipantId` used to hand them.
+ */
+async function claimPlayerSeat(
+  runtime: GameRuntime,
+  command: Extract<ClientCommand, { type: 'join_session' }>,
+) {
+  try {
+    return await runtime.joinSession(command);
+  } catch (error) {
+    if (
+      !(error instanceof SessionStoreError) ||
+      error.code !== 'duplicate_join'
+    ) {
+      throw error;
+    }
+
+    // Re-claiming the seat: the snapshot read is the same one reconnect
+    // performs, and the caller is issued a fresh credential by the caller of
+    // this function. The previous holder's token stops working.
+    return runtime.reconnectSession({
+      actor: {
+        displayName: command.actor.displayName,
+        participantId: command.actor.participantId,
+        role: 'player',
+      },
+      commandId: command.commandId,
+      payload: command.payload,
+      type: 'reconnect_session',
+    });
+  }
 }
 
 function invalidAuthRequest(message: string) {

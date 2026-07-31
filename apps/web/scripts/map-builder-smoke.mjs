@@ -23,6 +23,7 @@ import {
   waitFor,
   waitForHttp,
 } from './harness-lib.mjs';
+import { assertWebUiTargetsServer } from './runtime-smoke-diagnostics.mjs';
 
 const args = process.argv.slice(2);
 const outDir = resolve(
@@ -101,6 +102,9 @@ async function main() {
     label: '/maps',
     timeoutMs: bootTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(`${webOrigin}/maps`, serverUrl);
 
   step('launching headless browser');
   launchBrowser(browserPath, debugPort, {
@@ -282,6 +286,36 @@ async function main() {
     }
 
     step('verifying the published scene on the server');
+
+    // Session-scoped commands need the participant credential the server issued
+    // to this browser at create/join time. Read it out of the browser rather
+    // than asserting `dm-001`: the server no longer takes a participant ID on
+    // trust, which is the point of the credential.
+    //
+    // Read from the map builder page, not the runtime page - that one was closed
+    // before the builder opened. Credentials live in `localStorage`, shared
+    // across the origin, which is exactly why a DM can paint in `/maps` and
+    // publish to the table they created in `/runtime`.
+    const participantToken = await page.evaluate(
+      `(() => {
+        const stored = JSON.parse(
+          localStorage.getItem('dnd-participant-credential') ?? '[]',
+        );
+        const match = stored.find(
+          (candidate) =>
+            candidate.sessionId === ${JSON.stringify(sessionId)} &&
+            candidate.participantId === 'dm-001',
+        );
+        return match?.token ?? '';
+      })()`,
+    );
+
+    if (!participantToken) {
+      throw new Error(
+        'The runtime tab holds no participant credential, so the published scene cannot be verified as the DM.',
+      );
+    }
+
     const sceneResponse = await fetch(`${serverUrl}/api/scenes/command`, {
       body: JSON.stringify({
         actor: { participantId: 'dm-001' },
@@ -289,7 +323,10 @@ async function main() {
         payload: { sceneId, sessionId },
         type: 'get_scene',
       }),
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        'x-dnd-participant-token': participantToken,
+      },
       method: 'POST',
     });
     const scenePayload = await sceneResponse.json();

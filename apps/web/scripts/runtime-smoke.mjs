@@ -7,9 +7,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 import {
+  assertWebUiTargetsServer,
   formatSmokeStep,
   formatSmokeWaitFailure,
   getAbsentVisibleTextsOutsideSelectorExpression,
+  getChromeDisplayArgs,
   getPageDiagnosticsExpression,
   getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
@@ -114,6 +116,9 @@ async function main() {
     label: '/runtime',
     timeoutMs: smokeTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(runtimeUrl, serverUrl);
 
   logSmokeStep('launching headless browser');
   const browserProcess = launchBrowser(browserPath, debugPort);
@@ -429,7 +434,7 @@ function launchBrowser(browserPath, debugPort) {
   chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-runtime-smoke-'));
 
   return startProcess('chrome', browserPath, [
-    '--headless=new',
+    ...getChromeDisplayArgs({ windowSize: { height: 1000, width: 1600 } }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${chromeUserDataDir}`,
     '--no-first-run',
