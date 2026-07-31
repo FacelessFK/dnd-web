@@ -7,8 +7,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  assertWebUiTargetsServer,
   formatSmokeStep,
   formatSmokeWaitFailure,
+  getChromeDisplayArgs,
+  getCockpitModeSelectionExpression,
   getPageDiagnosticsExpression,
   getSessionInputAssignmentExpression,
   normalizePageDiagnostics,
@@ -128,6 +131,9 @@ async function main() {
     label: '/runtime',
     timeoutMs: smokeTimeoutMs,
   });
+  // A second `next dev` on this tree would have recompiled the client chunks
+  // against its own server URL; fail now instead of on a mystery timeout.
+  await assertWebUiTargetsServer(runtimeUrl, serverUrl);
 
   logSmokeStep('seeding authenticated finalized saved character');
   const registered = await registerUser(serverUrl, {
@@ -217,7 +223,11 @@ async function main() {
     await waitForCockpitHydrated(playerPage);
     await clickButtonIfEnabled(playerPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(playerPage);
-    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session', 'پیوستن به نشست']);
     // The player joined in the browser, so the browser holds that credential.
@@ -253,7 +263,7 @@ async function main() {
     await waitForCockpitHydrated(dmPage);
     await clickButtonIfEnabled(dmPage, ['Local Reset', 'بازنشانی محلی']);
     await waitForNoStoredSession(dmPage);
-    await clickButton(dmPage, ['DM Mode', 'حالت DM']);
+    await selectCockpitMode(dmPage, ['DM Mode', 'حالت DM'], 'dm');
     await setSessionInputValue(dmPage, sessionId);
     // Local Reset above cleared any credential in this tab, and the DM session
     // was created by the harness rather than by this browser.
@@ -371,6 +381,7 @@ async function main() {
 
     logSmokeStep('recovering Training Room evidence in DM and Player browsers');
     await recoverRuntimeSession(dmPage, {
+      expectedMode: 'dm',
       modeLabels: ['DM Mode', 'حالت DM'],
       runtimeUrl,
       sessionId,
@@ -393,6 +404,7 @@ async function main() {
     );
 
     await recoverRuntimeSession(playerPage, {
+      expectedMode: 'player',
       modeLabels: ['Player Mode', 'حالت بازیکن'],
       runtimeUrl,
       sessionId,
@@ -445,7 +457,11 @@ async function main() {
       'DM Training Room after Player local reset',
     );
 
-    await clickButton(playerPage, ['Player Mode', 'حالت بازیکن']);
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Recover', 'بازیابی']);
     await waitForStoredCockpitSessionId(playerPage, sessionId);
@@ -1017,7 +1033,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   profileDirs.push(userDataDir);
 
   return startProcess(name, browserPath, [
-    '--headless=new',
+    // Headed runs put the DM on the left and the player on the right so both
+    // seats stay visible side by side.
+    ...getChromeDisplayArgs({
+      windowPosition: { x: name.startsWith('dm') ? 0 : 960, y: 0 },
+      windowSize: { height: 1040, width: 950 },
+    }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
     '--no-first-run',
@@ -1307,24 +1328,37 @@ async function waitForNoStoredSession(page) {
   });
 }
 
+// A single write here was not enough: the expression reports success as soon as
+// the DOM value changes, which says nothing about the value surviving a
+// cockpit remount (see `getCockpitModeSelectionExpression`). Re-applying until
+// it sticks costs nothing on the common path and removes the race on the slow
+// one.
 async function setSessionInputValue(page, sessionId) {
-  const assigned = await page.evaluate(
-    getSessionInputAssignmentExpression(sessionId),
-  );
+  await waitFor(page, {
+    label: `session ID input to hold ${sessionId}`,
+    predicate: getSessionInputAssignmentExpression(sessionId),
+  });
+}
 
-  if (!assigned) {
-    throw new Error('Unable to assign the session ID input.');
-  }
+async function selectCockpitMode(page, modeLabels, expectedMode) {
+  await waitFor(page, {
+    label: `cockpit mode "${expectedMode}"`,
+    predicate: getCockpitModeSelectionExpression(
+      storageKey,
+      modeLabels,
+      expectedMode,
+    ),
+  });
 }
 
 async function recoverRuntimeSession(
   page,
-  { modeLabels, runtimeUrl, sessionId },
+  { expectedMode, modeLabels, runtimeUrl, sessionId },
 ) {
   await navigate(page, runtimeUrl);
   await waitForRuntimeShell(page, 'runtime shell before recovery');
   await waitForCockpitHydrated(page);
-  await clickButton(page, modeLabels);
+  await selectCockpitMode(page, modeLabels, expectedMode);
   await setSessionInputValue(page, sessionId);
   await clickButton(page, ['Recover', 'بازیابی']);
   await waitForStoredCockpitSessionId(page, sessionId);
