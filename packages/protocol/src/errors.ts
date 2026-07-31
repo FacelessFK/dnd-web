@@ -25,9 +25,18 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_encounter_session_association',
   'invalid_entity_position',
   'invalid_grid_size',
+  // A GM tried to move a player intent to a status the protocol does not allow
+  // from where it currently is - including back to `pending`, which would let a
+  // resubmission overwrite a decision the GM already made.
+  'invalid_intent_status_transition',
   'invalid_movement_usage_amount',
   'invalid_participant_session_association',
+  // A participant tried to answer a resolution request addressed to a different
+  // seat. Distinct from `invalid_role_assumption`: the role may be correct and
+  // the seat still wrong.
+  'invalid_resolution_target',
   'invalid_role_assumption',
+  'player_intent_not_found',
   // The seat exists but belongs to a different authenticated account.
   'seat_owned_by_another_account',
   'invalid_scene_id',
@@ -45,6 +54,10 @@ export const runtimeErrorCodeSchema = z.enum([
   'no_assigned_character',
   'participant_not_found',
   'reaction_already_used',
+  // The request exists but has already been answered or cancelled. Re-rolling it
+  // under a fresh command ID is the attack this refuses.
+  'resolution_request_already_resolved',
+  'resolution_request_not_found',
   'rules_profile_not_found',
   'scene_entity_out_of_bounds',
   'scene_entity_overlap',

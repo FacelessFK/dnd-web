@@ -20,6 +20,7 @@ import {
   rulesProfileIdSchema,
   sessionIdSchema,
 } from './common.js';
+import { commandErrorSchema } from './errors.js';
 
 export const resolutionIdPattern = /^resolution_[a-f0-9-]{36}$/;
 
@@ -202,6 +203,13 @@ export const resolutionCommandSuccessSchema = z.object({
   }),
 });
 
+export const resolutionCommandErrorSchema = commandErrorSchema;
+
+export const resolutionCommandResponseSchema = z.union([
+  resolutionCommandSuccessSchema,
+  resolutionCommandErrorSchema,
+]);
+
 export const resolutionStateUpdateReasonSchema = z.enum([
   'resolution_requested',
   'resolution_submitted',
@@ -224,4 +232,22 @@ export type DiceResolution = z.infer<typeof diceResolutionSchema>;
 export type ResolutionRequest = z.infer<typeof resolutionRequestSchema>;
 export type ResolutionState = z.infer<typeof resolutionStateSchema>;
 export type ResolutionCommand = z.infer<typeof resolutionCommandSchema>;
+export type RequestResolutionCommand = z.infer<
+  typeof requestResolutionCommandSchema
+>;
+export type SubmitResolutionCommand = z.infer<
+  typeof submitResolutionCommandSchema
+>;
+export type CancelResolutionRequestCommand = z.infer<
+  typeof cancelResolutionRequestCommandSchema
+>;
+export type ResolutionCommandSuccess = z.infer<
+  typeof resolutionCommandSuccessSchema
+>;
+export type ResolutionCommandError = z.infer<
+  typeof resolutionCommandErrorSchema
+>;
 export type ResolutionStateUpdate = z.infer<typeof resolutionStateUpdateSchema>;
+export type ResolutionStateUpdateReason = z.infer<
+  typeof resolutionStateUpdateReasonSchema
+>;

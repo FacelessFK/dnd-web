@@ -19,6 +19,7 @@ import {
   participantIdSchema,
   sessionIdSchema,
 } from './common.js';
+import { commandErrorSchema } from './errors.js';
 
 export const playerIntentIdPattern = /^intent_[a-f0-9-]{36}$/;
 
@@ -92,6 +93,13 @@ export const playerIntentCommandSuccessSchema = z.object({
   }),
 });
 
+export const playerIntentCommandErrorSchema = commandErrorSchema;
+
+export const playerIntentCommandResponseSchema = z.union([
+  playerIntentCommandSuccessSchema,
+  playerIntentCommandErrorSchema,
+]);
+
 export const playerIntentStateUpdateReasonSchema = z.enum([
   'intent_submitted',
   'intent_status_changed',
@@ -108,6 +116,21 @@ export type PlayerIntent = z.infer<typeof playerIntentSchema>;
 export type PlayerIntentStatus = z.infer<typeof playerIntentStatusSchema>;
 export type PlayerIntentState = z.infer<typeof playerIntentStateSchema>;
 export type PlayerIntentCommand = z.infer<typeof playerIntentCommandSchema>;
+export type SubmitPlayerIntentCommand = z.infer<
+  typeof submitPlayerIntentCommandSchema
+>;
+export type UpdatePlayerIntentStatusCommand = z.infer<
+  typeof updatePlayerIntentStatusCommandSchema
+>;
+export type PlayerIntentCommandSuccess = z.infer<
+  typeof playerIntentCommandSuccessSchema
+>;
+export type PlayerIntentCommandError = z.infer<
+  typeof playerIntentCommandErrorSchema
+>;
 export type PlayerIntentStateUpdate = z.infer<
   typeof playerIntentStateUpdateSchema
+>;
+export type PlayerIntentStateUpdateReason = z.infer<
+  typeof playerIntentStateUpdateReasonSchema
 >;

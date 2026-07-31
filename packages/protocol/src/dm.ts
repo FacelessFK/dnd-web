@@ -253,6 +253,9 @@ export type DmCreateCombatantInActiveSceneCommand = z.infer<
 export type DmRepositionCombatantInActiveSceneCommand = z.infer<
   typeof dmRepositionCombatantInActiveSceneCommandSchema
 >;
+export type DmSetCombatantHiddenCommand = z.infer<
+  typeof dmSetCombatantHiddenCommandSchema
+>;
 export type DmSetCombatantCurrentHpCommand = z.infer<
   typeof dmSetCombatantCurrentHpCommandSchema
 >;
