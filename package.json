@@ -13,7 +13,7 @@
     "lint": "eslint . --ext .js,.mjs,.cjs,.ts,.tsx",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "pnpm --filter @dnd/rules test && pnpm --filter @dnd/server test && pnpm --filter @dnd/web test && node --test scripts/smoke.test.mjs",
+    "test": "pnpm --filter @dnd/rules test && pnpm --filter @dnd/protocol test && pnpm --filter @dnd/server test && pnpm --filter @dnd/web test && node --test scripts/smoke.test.mjs",
     "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
