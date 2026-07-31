@@ -5257,12 +5257,16 @@ test('current turn owner can resolve an attack that consumes action, rolls damag
   assert.equal(combatEvent?.targetCharacterId, secondCharacter.character.id);
   // A natural 20 is a critical hit, so the baseline 1d8 is rolled as 2d8 while
   // the flat damage modifier is still added once.
+  // An unafflicted attacker rolls one die at normal stance, and the event says
+  // so rather than leaving the client to assume it.
   assert.deepEqual(combatEvent?.roll, {
     d20: 20,
     modifier: 2,
     total: 22,
     critical: true,
     criticalMiss: false,
+    stance: 'normal',
+    dice: [20],
   });
   assert.equal(combatEvent?.targetArmorClass, 16);
   assert.equal(combatEvent?.hit, true);
@@ -5397,6 +5401,8 @@ test('a miss still consumes action and emits a combat event without changing tar
     total: 3,
     critical: false,
     criticalMiss: true,
+    stance: 'normal',
+    dice: [1],
   });
   assert.equal(combatEvent?.hit, false);
   assert.equal(combatEvent?.damage, 0);
