@@ -271,6 +271,74 @@ test('revealing a hidden entity makes it visible to a player', () => {
   );
 });
 
+// Reveal was covered; concealing again was not. The projection is derived from
+// `hidden` on every read rather than cached, so this is the assertion that would
+// catch a future memoised concealment set that never invalidates - the failure
+// mode being a creature the DM has hidden again staying visible to players for
+// the rest of the session. A visible sibling is present throughout so the test
+// distinguishes "re-hidden" from "projection dropped everything".
+test('concealing a revealed entity again hides it from the player', () => {
+  const { runtime, scene, sessionId } = createTable();
+
+  placeEntity(runtime, sessionId, scene.id, {
+    name: 'Corridor Brazier',
+    hidden: false,
+    position: { x: 1, y: 1 },
+  });
+  const withEntity = placeEntity(runtime, sessionId, scene.id, {
+    name: 'Lurking Ambusher',
+    hidden: true,
+    position: { x: 4, y: 3 },
+  });
+  const entityId = withEntity.entities.find(
+    (entity) => entity.name === 'Lurking Ambusher',
+  )!.id;
+
+  const setHidden = (hidden: boolean, commandId: string) => {
+    runtime.updateSceneEntity({
+      commandId,
+      type: 'update_scene_entity',
+      actor: { participantId: 'dm-001' },
+      payload: { sessionId, sceneId: scene.id, entityId, entity: { hidden } },
+    });
+  };
+  const playerEntityNames = () =>
+    getSceneAs(runtime, sessionId, scene.id, 'player-001')
+      .entities.map((entity) => entity.name)
+      .sort();
+
+  assert.deepEqual(playerEntityNames(), ['Corridor Brazier']);
+
+  setHidden(false, 'reveal-ambusher-again');
+  assert.deepEqual(playerEntityNames(), [
+    'Corridor Brazier',
+    'Lurking Ambusher',
+  ]);
+
+  setHidden(true, 'conceal-ambusher-again');
+  assert.deepEqual(
+    playerEntityNames(),
+    ['Corridor Brazier'],
+    'the re-concealed entity must disappear from the player projection again',
+  );
+
+  // Nothing about it may survive anywhere in the player payload.
+  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  assert.equal(JSON.stringify(playerScene).includes(entityId), false);
+  assert.equal(JSON.stringify(playerScene).includes('Lurking Ambusher'), false);
+
+  // The DM keeps the authoritative view across the whole round trip.
+  const dmScene = getSceneAs(runtime, sessionId, scene.id, 'dm-001');
+  assert.deepEqual(dmScene.entities.map((entity) => entity.name).sort(), [
+    'Corridor Brazier',
+    'Lurking Ambusher',
+  ]);
+  assert.equal(
+    dmScene.entities.find((entity) => entity.id === entityId)?.hidden,
+    true,
+  );
+});
+
 test('the player projection leaves the stored scene untouched for the DM', () => {
   const { runtime, scene, sessionId } = createTable();
 
