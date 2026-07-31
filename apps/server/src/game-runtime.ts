@@ -2839,10 +2839,20 @@ export class InMemoryGameRuntime<
         // than re-reading them. Besides being cheaper, this path also runs
         // inside a transaction boundary whose stores are scoped to the
         // transaction, so a fresh lookup here is not guaranteed to resolve.
-        return projectEncounterForRole(
+        //
+        // Persistence has to be unwrapped before projection. In DB mode the
+        // save is a promise, and projecting one reads `participants` off a
+        // Promise - which is `undefined`. The DM path hid it, because the
+        // projection returns early for the DM and handed the promise straight
+        // back; a player attacking while any combatant was concealed crashed.
+        return this.resolveRepositoryResult(
           this.persistResolvedAttack(context, resolution),
-          prepared.actor.role,
-          collectConcealedCombatantIds(prepared.scene),
+          (savedEncounter) =>
+            projectEncounterForRole(
+              savedEncounter,
+              prepared.actor.role,
+              collectConcealedCombatantIds(prepared.scene),
+            ),
         );
       },
     );
@@ -3768,20 +3778,31 @@ export class InMemoryGameRuntime<
     context: AttackContext,
     resolution: ResolvedAttack,
   ): Encounter {
-    const savedEncounter = this.saveAndPublishEncounter({
-      sessionId: context.sessionId,
-      encounter: resolution.updatedEncounter,
-      reason: 'action_used',
-    });
+    // The save is awaited before the event is built. In DB mode it is a
+    // promise, and reading `id` off one yields `undefined` - which produced a
+    // combat event with no `encounterId`, accepted silently into the outbox and
+    // only rejected later when the row was replayed onto a stream.
+    return this.resolveRepositoryResult(
+      this.saveAndPublishEncounter({
+        sessionId: context.sessionId,
+        encounter: resolution.updatedEncounter,
+        reason: 'action_used',
+      }),
+      (savedEncounter) => {
+        // Emit `encounter_state` first so clients observe the authoritative
+        // action consumption before the resolved attack payload. These remain
+        // separate authoritative updates and must not be merged client-side.
+        this.publishCombatEvent(
+          this.buildResolvedAttackCombatEvent(
+            context,
+            resolution,
+            savedEncounter,
+          ),
+        );
 
-    // Emit `encounter_state` first so clients observe the authoritative action
-    // consumption before the resolved attack payload. These remain separate
-    // authoritative updates and must not be merged client-side.
-    this.publishCombatEvent(
-      this.buildResolvedAttackCombatEvent(context, resolution, savedEncounter),
+        return savedEncounter;
+      },
     );
-
-    return savedEncounter;
   }
 
   private buildResolvedAttackCombatEvent(
@@ -3834,21 +3855,24 @@ export class InMemoryGameRuntime<
     context: CombatantAttackContext,
     resolution: ResolvedAttack,
   ): Encounter {
-    const savedEncounter = this.saveAndPublishEncounter({
-      sessionId: context.sessionId,
-      encounter: resolution.updatedEncounter,
-      reason: 'action_used',
-    });
+    return this.resolveRepositoryResult(
+      this.saveAndPublishEncounter({
+        sessionId: context.sessionId,
+        encounter: resolution.updatedEncounter,
+        reason: 'action_used',
+      }),
+      (savedEncounter) => {
+        this.publishCombatEvent(
+          this.buildResolvedCombatantAttackCombatEvent(
+            context,
+            resolution,
+            savedEncounter,
+          ),
+        );
 
-    this.publishCombatEvent(
-      this.buildResolvedCombatantAttackCombatEvent(
-        context,
-        resolution,
-        savedEncounter,
-      ),
+        return savedEncounter;
+      },
     );
-
-    return savedEncounter;
   }
 
   private buildResolvedCombatantAttackCombatEvent(

@@ -2284,6 +2284,13 @@ async function handleDmCommandRequest(
                     await transactionRuntime.dmSetCombatantCurrentHp(command),
                 },
               } satisfies DmCommandSuccess;
+            case 'dm_set_combatant_hidden':
+              return {
+                ok: true,
+                data: {
+                  scene: await transactionRuntime.dmSetCombatantHidden(command),
+                },
+              } satisfies DmCommandSuccess;
             default:
               throw new Error(
                 `Unsupported transactional DM scene command type "${command.type}".`,
