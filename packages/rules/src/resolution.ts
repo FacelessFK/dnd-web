@@ -16,6 +16,7 @@ import type {
   ModifierSourceKind,
   ResolutionKind,
   RollStance,
+  SkillId,
 } from '@dnd/shared';
 
 import {
@@ -44,7 +45,7 @@ export type D20Outcome = {
 export type ResolutionBreakdown = D20Outcome & {
   kind: ResolutionKind;
   ability: AbilityKey;
-  skill?: string;
+  skill?: SkillId;
   stanceSources: StanceContribution[];
   modifiers: ModifierContribution[];
   modifierTotal: number;
@@ -151,7 +152,7 @@ export type CheckActor = {
   activeConditions?: readonly string[];
   /** Ability and skill proficiencies the character actually has. */
   proficientAbilities?: readonly AbilityKey[];
-  proficientSkills?: readonly string[];
+  proficientSkills?: readonly SkillId[];
 };
 
 /**
@@ -163,7 +164,7 @@ export type CheckActor = {
 export function resolveAbilityResolution(params: {
   kind: Extract<ResolutionKind, 'ability_check' | 'saving_throw'>;
   ability: AbilityKey;
-  skill?: string;
+  skill?: SkillId;
   dc: number;
   actor: CheckActor;
   /** Stance the GM asked for, before conditions are considered. */
@@ -226,7 +227,7 @@ export function resolveAbilityResolution(params: {
 
 function isProficient(params: {
   ability: AbilityKey;
-  skill?: string;
+  skill?: SkillId;
   actor: CheckActor;
 }): boolean {
   if (params.skill) {

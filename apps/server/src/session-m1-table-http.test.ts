@@ -141,6 +141,12 @@ function createTable(d20Roller: () => number = () => 10): Table {
           speed: 30,
           notes: null,
           meta: {},
+          // One proficient save and one proficient skill, so the audit has
+          // something real to report rather than always reporting nothing.
+          proficiencies: {
+            savingThrows: ['con'],
+            skills: ['acrobatics'],
+          },
         },
       },
     });
@@ -376,6 +382,7 @@ function requestCommand(
     dc?: number;
     stance?: 'normal' | 'advantage' | 'disadvantage';
     reason?: string;
+    skill?: string;
   } = {},
 ) {
   return {
@@ -388,6 +395,7 @@ function requestCommand(
       targetParticipantId: overrides.targetParticipantId ?? 'player-001',
       ability: overrides.ability ?? 'dex',
       dc: overrides.dc ?? 15,
+      ...(overrides.skill ? { skill: overrides.skill } : {}),
       ...(overrides.stance ? { stance: overrides.stance } : {}),
       ...(overrides.reason ? { reason: overrides.reason } : {}),
     },
@@ -477,6 +485,112 @@ async function createIntent(
 function errorCode(body: unknown): string | undefined {
   return (body as { error?: { code?: string } }).error?.code;
 }
+
+// ------------------------------------------------------------ proficiency
+
+// The character is level 5, so the proficiency bonus is +3, and dex 14 is +2.
+// Those two numbers are what every assertion below is written against.
+test('a proficient skill check adds the proficiency bonus and names it', async () => {
+  const roller = fixedRoller(10);
+  const table = createTable(roller);
+  const requestId = await createPendingRequest(table, { skill: 'acrobatics' });
+  const response = await post<ResolutionCommandSuccess>(
+    table,
+    RESOLUTION_PATH,
+    submitCommand(table, requestId),
+    table.tokens['player-001'],
+  );
+  const resolution = response.body.data.state.resolutions.at(-1)!;
+
+  assert.equal(resolution.skill, 'acrobatics');
+  assert.deepEqual(resolution.modifiers, [
+    { kind: 'ability', detail: 'dex', value: 2 },
+    { kind: 'proficiency', detail: 'acrobatics', value: 3 },
+  ]);
+  assert.equal(resolution.modifierTotal, 5);
+  assert.equal(resolution.total, 15);
+});
+
+test('a skill the character is not trained in adds nothing', async () => {
+  const table = createTable(fixedRoller(10));
+  const requestId = await createPendingRequest(table, { skill: 'stealth' });
+  const response = await post<ResolutionCommandSuccess>(
+    table,
+    RESOLUTION_PATH,
+    submitCommand(table, requestId),
+    table.tokens['player-001'],
+  );
+  const resolution = response.body.data.state.resolutions.at(-1)!;
+
+  assert.deepEqual(resolution.modifiers, [
+    { kind: 'ability', detail: 'dex', value: 2 },
+  ]);
+  assert.equal(resolution.total, 12);
+});
+
+test('a proficient saving throw adds the proficiency bonus', async () => {
+  const table = createTable(fixedRoller(10));
+  const requestId = await createPendingRequest(table, {
+    kind: 'saving_throw',
+    ability: 'con',
+  });
+  const response = await post<ResolutionCommandSuccess>(
+    table,
+    RESOLUTION_PATH,
+    submitCommand(table, requestId),
+    table.tokens['player-001'],
+  );
+  const resolution = response.body.data.state.resolutions.at(-1)!;
+
+  // con 13 is a +1 modifier, plus the +3 proficiency bonus.
+  assert.deepEqual(resolution.modifiers, [
+    { kind: 'ability', detail: 'con', value: 1 },
+    { kind: 'proficiency', value: 3 },
+  ]);
+  assert.equal(resolution.total, 14);
+});
+
+test('a saving throw the character is not proficient in adds nothing', async () => {
+  const table = createTable(fixedRoller(10));
+  const requestId = await createPendingRequest(table, {
+    kind: 'saving_throw',
+    ability: 'wis',
+  });
+  const response = await post<ResolutionCommandSuccess>(
+    table,
+    RESOLUTION_PATH,
+    submitCommand(table, requestId),
+    table.tokens['player-001'],
+  );
+  const resolution = response.body.data.state.resolutions.at(-1)!;
+
+  assert.deepEqual(resolution.modifiers, [
+    { kind: 'ability', detail: 'wis', value: 1 },
+  ]);
+});
+
+test('a skill outside the canonical list is refused by the schema', async () => {
+  const table = createTable();
+  const response = await post(
+    table,
+    RESOLUTION_PATH,
+    {
+      ...requestCommand(table),
+      payload: {
+        sessionId: table.sessionId,
+        kind: 'ability_check',
+        targetParticipantId: 'player-001',
+        ability: 'dex',
+        dc: 15,
+        skill: 'Acrobatics',
+      },
+    },
+    table.tokens['dm-001'],
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(errorCode(response.body), 'invalid_command');
+});
 
 // --------------------------------------------------------- request_resolution
 

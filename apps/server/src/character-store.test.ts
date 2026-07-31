@@ -46,6 +46,7 @@ function createStoredCharacterRecord(): StoredCharacterRecord {
       meta: {
         focus: 'orb',
       },
+      proficiencies: { savingThrows: [], skills: [] },
       createdAt: '2026-04-17T00:00:00.000Z',
       updatedAt: '2026-04-17T00:00:00.000Z',
     },

@@ -186,6 +186,10 @@ function createFinalizedLibraryEntry(
     },
     id: 'charlib_00000000-0000-4000-8000-000000000001',
     level: 1,
+    proficiencies: {
+      savingThrows: ['wis' as const],
+      skills: ['religion' as const],
+    },
     meta: {},
     name: 'Seren',
     notes: 'Reusable library note',
@@ -1599,6 +1603,87 @@ test('player can submit own finalized character for DM assignment', () => {
   assert.equal(participant?.pendingCharacterId, character.character.id);
   assert.equal(participant?.characterId, null);
   assert.equal(updates.at(-1), 'participant_character_submitted');
+});
+
+// The runtime copy has to carry the training, or a check the player is
+// proficient in resolves as if they were not - which is the audit lying.
+test('the runtime copy carries the library entry proficiency choices', () => {
+  const runtime = createTestRuntime();
+  const session = createSession(runtime);
+  const libraryEntry = createFinalizedLibraryEntry();
+  const originalEntry = structuredClone(libraryEntry);
+
+  joinPlayer(runtime, session.sessionId);
+
+  const submitted = runtime.submitCharacterLibraryEntryForAssignment(
+    {
+      actor: { participantId: 'player-001' },
+      commandId: 'submit-library-entry-proficiency',
+      payload: {
+        entryId: libraryEntry.id,
+        ownerParticipantId: 'library-owner-001',
+        sessionId: session.sessionId,
+      },
+      type: 'submit_character_library_entry_for_assignment',
+    },
+    libraryEntry,
+  );
+  const runtimeCharacter = runtime.getCharacter({
+    actor: { participantId: 'player-001' },
+    commandId: 'get-runtime-character-proficiency',
+    payload: {
+      characterId: submitted.characterId,
+      sessionId: session.sessionId,
+    },
+    type: 'get_character',
+  });
+
+  assert.deepEqual(runtimeCharacter.character.proficiencies, {
+    savingThrows: ['wis'],
+    skills: ['religion'],
+  });
+  assert.deepEqual(
+    libraryEntry,
+    originalEntry,
+    'the reusable entry is untouched by the copy',
+  );
+});
+
+test('a library entry with no recorded proficiencies produces a trained-in-nothing runtime copy', () => {
+  const runtime = createTestRuntime();
+  const session = createSession(runtime);
+  const libraryEntry = createFinalizedLibraryEntry({
+    proficiencies: undefined,
+  });
+
+  joinPlayer(runtime, session.sessionId);
+
+  const submitted = runtime.submitCharacterLibraryEntryForAssignment(
+    {
+      actor: { participantId: 'player-001' },
+      commandId: 'submit-library-entry-no-proficiency',
+      payload: {
+        entryId: libraryEntry.id,
+        ownerParticipantId: 'library-owner-001',
+        sessionId: session.sessionId,
+      },
+      type: 'submit_character_library_entry_for_assignment',
+    },
+    libraryEntry,
+  );
+
+  assert.deepEqual(
+    runtime.getCharacter({
+      actor: { participantId: 'player-001' },
+      commandId: 'get-runtime-character-no-proficiency',
+      payload: {
+        characterId: submitted.characterId,
+        sessionId: session.sessionId,
+      },
+      type: 'get_character',
+    }).character.proficiencies,
+    { savingThrows: [], skills: [] },
+  );
 });
 
 test('player can submit a finalized library entry for DM assignment without mutating the reusable entry', () => {

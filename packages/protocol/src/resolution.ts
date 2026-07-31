@@ -19,6 +19,7 @@ import {
   participantIdSchema,
   rulesProfileIdSchema,
   sessionIdSchema,
+  skillIdSchema,
 } from './common.js';
 import { commandErrorSchema } from './errors.js';
 
@@ -89,7 +90,7 @@ export const diceResolutionSchema = z.object({
   actorParticipantId: participantIdSchema,
   actorCharacterId: characterIdSchema.optional(),
   ability: abilityKeySchema,
-  skill: z.string().trim().min(1).max(64).optional(),
+  skill: skillIdSchema.optional(),
   stance: rollStanceSchema,
   /** Every d20 face rolled: one normally, two under advantage/disadvantage. */
   dice: z.array(z.number().int().min(1).max(20)).min(1).max(2),
@@ -137,7 +138,7 @@ export const resolutionRequestSchema = z.object({
   targetParticipantId: participantIdSchema,
   targetCharacterId: characterIdSchema.optional(),
   ability: abilityKeySchema,
-  skill: z.string().trim().min(1).max(64).optional(),
+  skill: skillIdSchema.optional(),
   dc: z.number().int().min(1).max(50),
   stance: rollStanceSchema,
   reason: z.string().trim().max(240).optional(),
@@ -156,7 +157,7 @@ export const requestResolutionCommandSchema = z.object({
     kind: z.enum(['ability_check', 'saving_throw']),
     targetParticipantId: participantIdSchema,
     ability: abilityKeySchema,
-    skill: z.string().trim().min(1).max(64).optional(),
+    skill: skillIdSchema.optional(),
     dc: z.number().int().min(1).max(50),
     stance: rollStanceSchema.default('normal'),
     reason: z.string().trim().max(240).optional(),

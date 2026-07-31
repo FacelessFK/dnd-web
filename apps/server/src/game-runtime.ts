@@ -186,6 +186,7 @@ import {
   type SessionSubscriber,
   SessionStoreError,
 } from './session-store.js';
+import { normalizeCharacterProficiencies } from './character-proficiencies.js';
 import { withCombatantHidden } from './combatant-concealment.js';
 import {
   buildPlayerIntent,
@@ -1430,6 +1431,8 @@ export class InMemoryGameRuntime<
             abilities: record.character.abilities,
             level: record.character.level,
             activeConditions: record.overlay.activeConditions,
+            proficientAbilities: record.character.proficiencies.savingThrows,
+            proficientSkills: record.character.proficiencies.skills,
           },
           actorParticipantId: actor.id,
           actorCharacterId: record.character.id,
@@ -3135,6 +3138,9 @@ export class InMemoryGameRuntime<
       speed: params.character.speed,
       notes: params.character.notes ?? null,
       meta: structuredClone(params.character.meta ?? {}),
+      proficiencies: normalizeCharacterProficiencies(
+        params.character.proficiencies,
+      ),
       createdAt: now,
       updatedAt: now,
     };
@@ -3167,6 +3173,11 @@ export class InMemoryGameRuntime<
       name: params.entry.name,
       notes: params.entry.notes ?? null,
       ownerParticipantId: params.ownerParticipantId,
+      // Copied, not referenced. The runtime character is a separate record from
+      // here on; nothing it does may reach back into the library row.
+      proficiencies: normalizeCharacterProficiencies(
+        params.entry.proficiencies,
+      ),
       rulesProfileId: params.entry.rulesProfileId,
       speciesOrRace: params.entry.speciesOrRace,
       speed: params.entry.speed,
@@ -3198,6 +3209,9 @@ export class InMemoryGameRuntime<
         speed: characterUpdate.speed,
         notes: characterUpdate.notes ?? null,
         meta: structuredClone(characterUpdate.meta ?? ({} as CharacterMeta)),
+        // Not part of the update input, so editing a draft never silently
+        // discards what the character is trained in.
+        proficiencies: structuredClone(record.character.proficiencies),
         updatedAt: this.now(),
       },
       overlay: record.overlay,

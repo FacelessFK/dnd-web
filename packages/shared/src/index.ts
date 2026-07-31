@@ -21,6 +21,37 @@ export const sceneCombatantKinds = ['monster', 'npc'] as const;
 export const abilityKeys = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 
 /**
+ * The eighteen 5e skills, as canonical untranslated IDs.
+ *
+ * These exist because a proficiency has to be recorded as something stable. The
+ * character builder keys its own tables on English display names - `'Animal
+ * Handling'` - which is fine for a phrase book and unusable as an identifier:
+ * the moment the Persian UI is the source of a selection, a label-keyed
+ * proficiency either breaks or silently stops matching. Requests, audit records
+ * and stored proficiencies all use the IDs below; the UI maps them to copy.
+ */
+export const skillIds = [
+  'acrobatics',
+  'animal-handling',
+  'arcana',
+  'athletics',
+  'deception',
+  'history',
+  'insight',
+  'intimidation',
+  'investigation',
+  'medicine',
+  'nature',
+  'perception',
+  'performance',
+  'persuasion',
+  'religion',
+  'sleight-of-hand',
+  'stealth',
+  'survival',
+] as const;
+
+/**
  * Advantage and disadvantage describe the dice, not the total: they change how
  * many d20s are rolled and which one counts. They are kept out of the modifier
  * list so a second source of the same stance cannot be counted twice.
@@ -86,6 +117,7 @@ export type EncounterId = string;
 export type SessionStateRevision = number;
 export type ParticipantRole = (typeof participantRoles)[number];
 export type AbilityKey = (typeof abilityKeys)[number];
+export type SkillId = (typeof skillIds)[number];
 export type RollStance = (typeof rollStances)[number];
 export type ResolutionKind = (typeof resolutionKinds)[number];
 export type ModifierSourceKind = (typeof modifierSourceKinds)[number];
@@ -157,6 +189,11 @@ export interface CharacterHitPoints {
   temp: number;
 }
 
+export interface CharacterProficiencies {
+  savingThrows: AbilityKey[];
+  skills: SkillId[];
+}
+
 export interface Character {
   id: CharacterId;
   ownerParticipantId: ParticipantId;
@@ -174,6 +211,7 @@ export interface Character {
   speed: number;
   notes: string | null;
   meta: CharacterMeta;
+  proficiencies: CharacterProficiencies;
   createdAt: string;
   updatedAt: string;
 }
