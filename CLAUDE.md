@@ -20,6 +20,28 @@ handoff documents, evidence packets, or dated triage notes. The repository was
 buried in those once. If something is worth recording, it belongs in one of the
 four files, in a code comment, in a test, or in a commit message.
 
+## Branching and release workflow
+
+`main` is stable-only: milestones and releases land there and nothing else. No
+direct commits, no ordinary feature work.
+
+`development` is the long-lived integration branch. Every `feature/*`, `fix/*`,
+and `chore/*` branch starts from `development`, and its pull request targets
+`development`. Never branch ordinary work from `main`, and never merge a feature
+branch straight into `main`.
+
+`release/*` branches carry a functionally complete milestone from `development`
+to `main`. They accept stabilization and defect fixes only - release notes go in
+the four existing documents, not a new file.
+
+`hotfix/*` is the one exception that starts from `main`, and only for a defect
+already live there. A hotfix merges into `main` and must then be merged back
+into `development`, or the fix silently disappears at the next release.
+
+No direct feature commits to `main` or `development`. No force-pushing or
+history rewriting on any shared branch. CI runs on pushes to `main` and
+`development`, and on every pull request whatever its target.
+
 ## Non-negotiable boundaries
 
 Product rules, not style preferences. Violating one is a bug even if it compiles
