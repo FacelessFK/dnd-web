@@ -757,6 +757,8 @@ const messages = {
     'runtime.events.title.encounter': 'Encounter state',
     'runtime.events.title.movement': 'Token movement',
     'runtime.events.title.character': 'Character state',
+    'runtime.events.title.resolution': 'Dice request',
+    'runtime.events.title.playerIntent': 'Player intent',
     'runtime.events.title.session': 'Session state',
     'runtime.events.detail.combat':
       '{attacker} rolled {roll} against AC {armorClass} and {result} ({target}).',
@@ -768,6 +770,9 @@ const messages = {
       '{character} HP is now {currentHp}/{maxHp}.',
     'runtime.events.detail.characterWithConditions':
       '{character} HP is now {currentHp}/{maxHp}, with {conditions}.',
+    'runtime.events.detail.resolution': '{reason}. {pending} awaiting a roll.',
+    'runtime.events.detail.playerIntent':
+      '{reason}. {pending} awaiting the GM.',
     'runtime.events.detail.session': '{reason}. Revision {revision}.',
     'runtime.events.attack.hit': 'hit for {damage}',
     'runtime.events.attack.hitWithRoll': 'hit for {damage} ({notation})',
@@ -778,6 +783,16 @@ const messages = {
     'runtime.events.attack.criticalMiss': 'critically missed',
     'runtime.events.reason.session_state.active_scene_changed':
       'The active scene changed',
+    'runtime.events.reason.resolution_state.resolution_requested':
+      'The GM asked for a roll',
+    'runtime.events.reason.resolution_state.resolution_submitted':
+      'A roll was resolved',
+    'runtime.events.reason.resolution_state.resolution_request_cancelled':
+      'A roll request was withdrawn',
+    'runtime.events.reason.player_intent_state.intent_submitted':
+      'A player described what they want to do',
+    'runtime.events.reason.player_intent_state.intent_status_changed':
+      'The GM responded to a player intent',
     'runtime.events.reason.session_state.initial_sync': 'Initial sync',
     'runtime.events.reason.session_state.participant_character_assigned':
       'A character was assigned',
@@ -1794,6 +1809,8 @@ const messages = {
     'runtime.events.title.encounter': 'وضعیت رویارویی',
     'runtime.events.title.movement': 'جابه‌جایی مهره',
     'runtime.events.title.character': 'وضعیت کاراکتر',
+    'runtime.events.title.resolution': 'درخواست تاس',
+    'runtime.events.title.playerIntent': 'قصد بازیکن',
     'runtime.events.title.session': 'وضعیت نشست',
     'runtime.events.detail.combat':
       '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} ({target}).',
@@ -1805,6 +1822,8 @@ const messages = {
       'HP {character} اکنون {currentHp}/{maxHp} است.',
     'runtime.events.detail.characterWithConditions':
       'HP {character} اکنون {currentHp}/{maxHp} است، با {conditions}.',
+    'runtime.events.detail.resolution': '{reason}. {pending} منتظر پرتاب تاس.',
+    'runtime.events.detail.playerIntent': '{reason}. {pending} منتظر GM.',
     'runtime.events.detail.session': '{reason}. بازنگری {revision}.',
     'runtime.events.attack.hit': '{damage} آسیب زد',
     'runtime.events.attack.hitWithRoll': '{damage} آسیب زد ({notation})',
@@ -1815,6 +1834,16 @@ const messages = {
     'runtime.events.attack.criticalMiss': 'خطای بحرانی داشت',
     'runtime.events.reason.session_state.active_scene_changed':
       'صحنه فعال تغییر کرد',
+    'runtime.events.reason.resolution_state.resolution_requested':
+      'GM درخواست پرتاب تاس کرد',
+    'runtime.events.reason.resolution_state.resolution_submitted':
+      'یک پرتاب تاس انجام شد',
+    'runtime.events.reason.resolution_state.resolution_request_cancelled':
+      'درخواست پرتاب تاس پس گرفته شد',
+    'runtime.events.reason.player_intent_state.intent_submitted':
+      'یک بازیکن قصد خود را توضیح داد',
+    'runtime.events.reason.player_intent_state.intent_status_changed':
+      'GM به قصد بازیکن پاسخ داد',
     'runtime.events.reason.session_state.initial_sync': 'همگام‌سازی اولیه',
     'runtime.events.reason.session_state.participant_character_assigned':
       'یک کاراکتر تخصیص داده شد',
