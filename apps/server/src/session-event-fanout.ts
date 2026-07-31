@@ -14,8 +14,11 @@
  */
 import type {
   CombatEvent,
+  DiceResolution,
   EncounterStateUpdate,
+  PlayerIntent,
   PlayerIntentStateUpdateReason,
+  ResolutionRequest,
   ResolutionStateUpdateReason,
 } from '@dnd/protocol';
 import { projectEncounterForRole } from '@dnd/rules';
@@ -29,10 +32,28 @@ import type {
 import type { SessionStreamEvent } from '@dnd/protocol';
 
 import { projectCombatEventForRole } from './encounter-visibility.js';
-import {
-  projectTableStateForRole,
-  type SessionTableState,
-} from './session-table-state.js';
+import { projectTableStateForRole } from './session-table-state.js';
+
+/**
+ * The authoritative slice one M1 event describes.
+ *
+ * Carries the lists rather than a whole `SessionTableState` so the payload a
+ * caller hands in is exactly the payload that goes to the durable outbox and
+ * comes back out of it. A shape that had to be reassembled on replay would be
+ * one more place for the live path and the recovery path to diverge.
+ */
+export type ResolutionStateFanout = {
+  sessionId: SessionId;
+  reason: ResolutionStateUpdateReason;
+  requests: ResolutionRequest[];
+  resolutions: DiceResolution[];
+};
+
+export type PlayerIntentStateFanout = {
+  sessionId: SessionId;
+  reason: PlayerIntentStateUpdateReason;
+  intents: PlayerIntent[];
+};
 
 /** The minimum a subscriber has to offer to receive an event. */
 type FanoutSubscriber = {
@@ -96,15 +117,15 @@ export function publishCombatEventToRoom(
  */
 export function publishResolutionStateUpdateToRoom(
   room: SessionEventFanoutRoom,
-  params: {
-    sessionId: SessionId;
-    reason: ResolutionStateUpdateReason;
-    state: SessionTableState;
-  },
+  params: ResolutionStateFanout,
 ): void {
   for (const [participantId, subscriber] of room.subscribers) {
     const projected = projectTableStateForRole(
-      params.state,
+      {
+        intents: [],
+        requests: params.requests,
+        resolutions: params.resolutions,
+      },
       resolveSubscriberRole(room, participantId),
       participantId,
     );
@@ -130,15 +151,11 @@ export function publishResolutionStateUpdateToRoom(
  */
 export function publishPlayerIntentStateUpdateToRoom(
   room: SessionEventFanoutRoom,
-  params: {
-    sessionId: SessionId;
-    reason: PlayerIntentStateUpdateReason;
-    state: SessionTableState;
-  },
+  params: PlayerIntentStateFanout,
 ): void {
   for (const [participantId, subscriber] of room.subscribers) {
     const projected = projectTableStateForRole(
-      params.state,
+      { intents: params.intents, requests: [], resolutions: [] },
       resolveSubscriberRole(room, participantId),
       participantId,
     );

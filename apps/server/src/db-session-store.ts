@@ -8,9 +8,7 @@ import type {
   JoinSessionCommand,
   MovementStateUpdate,
   MovementStateUpdateReason,
-  PlayerIntentStateUpdateReason,
   ReconnectSessionCommand,
-  ResolutionStateUpdateReason,
   SessionStateUpdate,
   SessionStateUpdateReason,
   SessionStreamEvent,
@@ -38,8 +36,9 @@ import {
   publishEncounterStateUpdateToRoom,
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
+  type PlayerIntentStateFanout,
+  type ResolutionStateFanout,
 } from './session-event-fanout.js';
-import type { SessionTableState } from './session-table-state.js';
 
 import {
   SessionStoreError,
@@ -425,22 +424,14 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
     );
   }
 
-  publishResolutionStateUpdate(params: {
-    sessionId: SessionId;
-    reason: ResolutionStateUpdateReason;
-    state: SessionTableState;
-  }): void {
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void {
     publishResolutionStateUpdateToRoom(
       this.requireRoom(params.sessionId),
       params,
     );
   }
 
-  publishPlayerIntentStateUpdate(params: {
-    sessionId: SessionId;
-    reason: PlayerIntentStateUpdateReason;
-    state: SessionTableState;
-  }): void {
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void {
     publishPlayerIntentStateUpdateToRoom(
       this.requireRoom(params.sessionId),
       params,

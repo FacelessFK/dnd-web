@@ -272,6 +272,20 @@ export function projectTableStateForRole(
 }
 
 /**
+ * Where a table's state lives, without saying how long it lives.
+ *
+ * Reads are synchronous because the runtime's command methods are, and the
+ * DB-backed implementation answers them from a hydrated view. Writes are
+ * `void` for the same reason: the durable implementation records what changed
+ * and the transaction boundary flushes it, so the rules above never learn
+ * whether they are running against memory or Postgres.
+ */
+export interface SessionTableStateRepository {
+  get(sessionId: SessionId): SessionTableState;
+  set(sessionId: SessionId, state: SessionTableState): void;
+}
+
+/**
  * One table state per session, held for the life of the process.
  *
  * A session with nothing recorded yet reads as empty rather than missing, so a
@@ -280,7 +294,7 @@ export function projectTableStateForRole(
  * whole mutation path immutable and makes the store itself trivial enough to
  * swap for a DB-backed one without moving any rules.
  */
-export class InMemorySessionTableStateStore {
+export class InMemorySessionTableStateStore implements SessionTableStateRepository {
   private readonly states = new Map<SessionId, SessionTableState>();
 
   get(sessionId: SessionId): SessionTableState {

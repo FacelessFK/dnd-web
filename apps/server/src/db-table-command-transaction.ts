@@ -1,9 +1,31 @@
+/**
+ * One transaction per M1 table command.
+ *
+ * Follows the boundary the encounter and scene commands already use: claim the
+ * idempotency key, run the command against a runtime forked onto the
+ * transaction's database handle, write the completed record and the outbox
+ * rows, commit, then swap the in-process view and dispatch.
+ *
+ * What commits together is the point. A resolved check writes the request row,
+ * the dice audit row, the idempotency record and the `resolution_state` outbox
+ * row inside one transaction; a failure anywhere before the commit leaves none
+ * of them. The alternative - a roll recorded with no idempotency record - would
+ * let the same command ID roll a second, different die.
+ *
+ * `dm_set_combatant_hidden` is not here. It mutates the scene, so it belongs to
+ * the scene boundary, which now carries the encounter event that concealment
+ * produces.
+ */
 import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
+  CommandEventOutboxEventType,
 } from '@dnd/db';
-import type { EncounterStateUpdate } from '@dnd/protocol';
-import type { Scene, SceneId } from '@dnd/shared';
+import type {
+  PlayerIntentStateUpdate,
+  ResolutionStateUpdate,
+} from '@dnd/protocol';
+import type { SessionId } from '@dnd/shared';
 
 import {
   CommandIdempotencyError,
@@ -15,34 +37,26 @@ import {
 } from './command-idempotency-store.js';
 import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
-import { DbBackedSceneStore } from './db-scene-store.js';
+import { DbBackedSessionTableStateStore } from './db-session-table-state-store.js';
 import type {
   InMemoryGameRuntime,
   RuntimeCharacterRepository,
 } from './game-runtime.js';
+import type { SessionTableState } from './session-table-state.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
-export const DURABLE_SCENE_MUTATION_COMMAND_TYPES = [
-  'create_scene',
-  'place_entity_in_scene',
-  'update_scene_entity',
-  'reposition_scene_entity',
-  'delete_scene_entity',
-  'create_scene_transition',
-  'update_scene_transition',
-  'delete_scene_transition',
+export const DURABLE_RESOLUTION_COMMAND_TYPES = [
+  'request_resolution',
+  'submit_resolution',
+  'cancel_resolution_request',
 ] as const;
 
-export const DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES = [
-  'dm_create_combatant_in_active_scene',
-  'dm_reposition_combatant_in_active_scene',
-  'dm_set_combatant_current_hp',
-  // Concealment is a scene write, so it belongs to this boundary. Unlike the
-  // others it also republishes the encounter - the encounter did not change,
-  // but what each role may see of it did - so that event has to become an
-  // outbox row inside the same transaction as the flag it reports.
-  'dm_set_combatant_hidden',
+export const DURABLE_PLAYER_INTENT_COMMAND_TYPES = [
+  'submit_player_intent',
+  'update_player_intent_status',
 ] as const;
+
+type TableStateUpdate = ResolutionStateUpdate | PlayerIntentStateUpdate;
 
 type TransactionalCommandParams = {
   category: CommandIdempotencyCategory;
@@ -62,29 +76,29 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
 type TransactionalRunResult<TResponse> = {
   dispatchIdempotencyKey: string | null;
   response: TResponse;
-  sceneCache: Map<SceneId, Scene> | null;
+  tableStateCache: Map<SessionId, SessionTableState> | null;
 };
 
-export class DbBackedSceneCommandTransactionBoundary {
-  private readonly durableCommandTypes: ReadonlySet<string> = new Set(
-    DURABLE_SCENE_MUTATION_COMMAND_TYPES,
+export class DbBackedTableCommandTransactionBoundary {
+  private readonly durableResolutionCommandTypes: ReadonlySet<string> = new Set(
+    DURABLE_RESOLUTION_COMMAND_TYPES,
   );
-  private readonly durableDmCommandTypes: ReadonlySet<string> = new Set(
-    DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES,
+  private readonly durableIntentCommandTypes: ReadonlySet<string> = new Set(
+    DURABLE_PLAYER_INTENT_COMMAND_TYPES,
   );
 
   constructor(
     private readonly unitOfWork: DndDatabaseUnitOfWork,
-    private readonly outboxDispatcher?: CommandEventOutboxDispatcherLike,
+    private readonly outboxDispatcher: CommandEventOutboxDispatcherLike,
   ) {}
 
   supports(params: TransactionalCommandParams): boolean {
-    if (this.durableCommandTypes.has(params.command.type)) {
-      return params.category === 'scene';
+    if (this.durableResolutionCommandTypes.has(params.command.type)) {
+      return params.category === 'resolution';
     }
 
-    if (this.durableDmCommandTypes.has(params.command.type)) {
-      return params.category === 'dm';
+    if (this.durableIntentCommandTypes.has(params.command.type)) {
+      return params.category === 'intent';
     }
 
     return false;
@@ -95,32 +109,37 @@ export class DbBackedSceneCommandTransactionBoundary {
   ): Promise<TResponse> {
     if (!this.supports(params)) {
       throw new Error(
-        `Command "${params.command.type}" is not supported by the DB-backed scene transaction boundary.`,
+        `Command "${params.command.type}" is not supported by the DB-backed table transaction boundary.`,
       );
     }
 
-    if (!(params.runtime.scenes instanceof DbBackedSceneStore)) {
+    const tableStates = params.runtime.tableStates;
+
+    if (!(tableStates instanceof DbBackedSessionTableStateStore)) {
       throw new Error(
-        'The DB-backed scene transaction boundary requires the runtime to use DbBackedSceneStore.',
+        'The DB-backed table transaction boundary requires the runtime to use DbBackedSessionTableStateStore.',
       );
     }
 
     const result = await this.unitOfWork.transaction((context) =>
-      this.runInTransaction(context, params),
+      this.runInTransaction(context, params, tableStates),
     );
 
-    if (result.sceneCache) {
-      params.runtime.scenes.replaceScenes(result.sceneCache);
+    if (result.tableStateCache) {
+      tableStates.replaceStates(result.tableStateCache);
     }
 
-    if (result.dispatchIdempotencyKey && this.outboxDispatcher) {
+    // After the commit, never before. A subscriber that saw the event and then
+    // watched the transaction roll back would have observed state the server
+    // does not hold.
+    if (result.dispatchIdempotencyKey) {
       try {
         await this.outboxDispatcher.drainUnpublishedByIdempotencyKey(
           result.dispatchIdempotencyKey,
         );
       } catch (error) {
         console.error(
-          '[scene-transaction] failed to dispatch scene outbox rows after commit',
+          '[table-transaction] failed to dispatch M1 outbox rows after commit',
           error,
         );
       }
@@ -132,6 +151,7 @@ export class DbBackedSceneCommandTransactionBoundary {
   private async runInTransaction<TResponse>(
     context: DndDatabaseUnitOfWorkContext,
     params: TransactionalRunParams<TResponse>,
+    tableStates: DbBackedSessionTableStateStore,
   ): Promise<TransactionalRunResult<TResponse>> {
     const idempotencyKey = createCommandIdempotencyKey(params);
     const fingerprint = createCommandFingerprint(params.command);
@@ -148,29 +168,26 @@ export class DbBackedSceneCommandTransactionBoundary {
       return {
         dispatchIdempotencyKey: null,
         response: this.clone(claim.response),
-        sceneCache: null,
+        tableStateCache: null,
       };
     }
 
-    const runtimeScenes = params.runtime.scenes;
-
-    if (!(runtimeScenes instanceof DbBackedSceneStore)) {
-      throw new Error(
-        'The DB-backed scene transaction boundary requires the runtime to use DbBackedSceneStore.',
-      );
-    }
-
-    const encounterStateUpdates: EncounterStateUpdate[] = [];
-    const transactionScenes = runtimeScenes.forkForTransaction(context.scenes);
-    const transactionRuntime = params.runtime.withSceneRepository(
-      transactionScenes,
+    const updates: TableStateUpdate[] = [];
+    const transactionTableStates = tableStates.forkForTransaction(
+      context.tableState,
+    );
+    const transactionRuntime = params.runtime.withTableStateRepository(
+      transactionTableStates,
       {
-        encounterStateUpdateSink: (update) => {
-          encounterStateUpdates.push(update);
+        tableStateUpdateSink: (update) => {
+          updates.push(update);
         },
       },
     );
     const response = await params.execute(transactionRuntime);
+
+    await transactionTableStates.flushPendingWrites();
+
     const inserted =
       await context.commandIdempotency.insertCompletedCommandIdempotencyRecord({
         actorParticipantId: params.command.actor.participantId,
@@ -184,18 +201,12 @@ export class DbBackedSceneCommandTransactionBoundary {
       });
 
     if (inserted) {
-      await this.persistOutboxRows(
-        context,
-        idempotencyKey,
-        encounterStateUpdates,
-      );
+      await this.persistOutboxRows(context, idempotencyKey, updates);
 
       return {
-        dispatchIdempotencyKey: encounterStateUpdates.length
-          ? idempotencyKey
-          : null,
+        dispatchIdempotencyKey: idempotencyKey,
         response,
-        sceneCache: transactionScenes.cloneScenes(),
+        tableStateCache: transactionTableStates.cloneStates(),
       };
     }
 
@@ -219,19 +230,19 @@ export class DbBackedSceneCommandTransactionBoundary {
     return {
       dispatchIdempotencyKey: null,
       response: this.clone(concurrentRecord.response) as TResponse,
-      sceneCache: null,
+      tableStateCache: null,
     };
   }
 
   private async persistOutboxRows(
     context: DndDatabaseUnitOfWorkContext,
     idempotencyKey: string,
-    updates: EncounterStateUpdate[],
+    updates: TableStateUpdate[],
   ): Promise<void> {
     for (const [eventOrder, update] of updates.entries()) {
       const inserted = await context.outbox.insertCommandEventOutboxRecord({
         eventOrder,
-        eventType: update.type,
+        eventType: update.type satisfies CommandEventOutboxEventType,
         idempotencyKey,
         outboxId: `${idempotencyKey}:${eventOrder}`,
         payload: this.clone(update),
@@ -243,7 +254,7 @@ export class DbBackedSceneCommandTransactionBoundary {
       }
 
       throw new Error(
-        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for scene command "${idempotencyKey}".`,
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for table command "${idempotencyKey}".`,
       );
     }
   }

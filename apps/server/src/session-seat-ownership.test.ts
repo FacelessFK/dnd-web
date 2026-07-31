@@ -19,7 +19,7 @@ function createOwnership() {
   );
 }
 
-test('an unbound seat is available to any authenticated account', () => {
+test('an unbound seat is available to any authenticated account', async () => {
   const ownership = createOwnership();
 
   assert.equal(
@@ -29,9 +29,9 @@ test('an unbound seat is available to any authenticated account', () => {
   assert.equal(ownership.getOwner(sessionId, 'player-001'), undefined);
 });
 
-test('claiming a seat binds it to the account', () => {
+test('claiming a seat binds it to the account', async () => {
   const ownership = createOwnership();
-  const record = ownership.claim({
+  const record = await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
@@ -43,9 +43,9 @@ test('claiming a seat binds it to the account', () => {
 
 // The M0 gap: a public participant ID plus the session code was enough to take
 // an occupied seat and be issued a valid credential for it.
-test('another authenticated account cannot reclaim an occupied seat', () => {
+test('another authenticated account cannot reclaim an occupied seat', async () => {
   const ownership = createOwnership();
-  ownership.claim({
+  await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
@@ -55,7 +55,7 @@ test('another authenticated account cannot reclaim an occupied seat', () => {
     ownership.isAvailableTo(sessionId, 'player-001', 'user-b'),
     false,
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       ownership.claim({
         participantId: 'player-001',
@@ -72,9 +72,9 @@ test('another authenticated account cannot reclaim an occupied seat', () => {
   assert.equal(ownership.getOwner(sessionId, 'player-001'), 'user-a');
 });
 
-test('an anonymous caller cannot take a bound seat', () => {
+test('an anonymous caller cannot take a bound seat', async () => {
   const ownership = createOwnership();
-  ownership.claim({
+  await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
@@ -92,14 +92,14 @@ test('an anonymous caller cannot take a bound seat', () => {
 
 // A restart re-issues the credential but must not cost the player their seat,
 // so re-claiming as the owner has to be idempotent rather than a conflict.
-test('the owning account can reclaim its own seat repeatedly', () => {
+test('the owning account can reclaim its own seat repeatedly', async () => {
   const ownership = createOwnership();
-  const first = ownership.claim({
+  const first = await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
   });
-  const second = ownership.claim({
+  const second = await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
@@ -112,9 +112,13 @@ test('the owning account can reclaim its own seat repeatedly', () => {
   );
 });
 
-test('the GM seat binds like any other seat', () => {
+test('the GM seat binds like any other seat', async () => {
   const ownership = createOwnership();
-  ownership.claim({ participantId: 'dm-001', sessionId, userId: 'gm-user' });
+  await ownership.claim({
+    participantId: 'dm-001',
+    sessionId,
+    userId: 'gm-user',
+  });
 
   assert.throws(
     () => ownership.assertAvailableTo(sessionId, 'dm-001', 'player-user'),
@@ -125,9 +129,9 @@ test('the GM seat binds like any other seat', () => {
   );
 });
 
-test('seats are scoped per session', () => {
+test('seats are scoped per session', async () => {
   const ownership = createOwnership();
-  ownership.claim({
+  await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
@@ -141,14 +145,14 @@ test('seats are scoped per session', () => {
   assert.equal(ownership.getOwner(otherSession, 'player-001'), undefined);
 });
 
-test('forgetting a session releases only its seats', () => {
+test('forgetting a session releases only its seats', async () => {
   const ownership = createOwnership();
-  ownership.claim({
+  await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',
   });
-  ownership.claim({
+  await ownership.claim({
     participantId: 'player-001',
     sessionId: otherSession,
     userId: 'user-b',
@@ -160,10 +164,10 @@ test('forgetting a session releases only its seats', () => {
   assert.equal(ownership.getOwner(otherSession, 'player-001'), 'user-b');
 });
 
-test('stored records are copies, not live references', () => {
+test('stored records are copies, not live references', async () => {
   const storage = new InMemorySeatOwnershipStorage();
   const ownership = new SessionSeatOwnership(storage);
-  const record = ownership.claim({
+  const record = await ownership.claim({
     participantId: 'player-001',
     sessionId,
     userId: 'user-a',

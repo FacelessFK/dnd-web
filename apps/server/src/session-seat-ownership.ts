@@ -29,13 +29,24 @@ export type SeatOwnershipRecord = {
   boundAt: string;
 };
 
+export type SeatOwnershipStorageResult<T> = T | Promise<T>;
+
+/**
+ * Reads are synchronous and writes are not.
+ *
+ * That asymmetry is deliberate. `assertAvailableTo` runs on the hot path of
+ * every session command and answers from a hydrated view, while a claim has to
+ * be durable *before* a participant credential is minted against it - otherwise
+ * a crash between the two leaves a client holding a token for a seat the
+ * database never recorded as theirs.
+ */
 export type SeatOwnershipStorage = {
   get(
     sessionId: SessionId,
     participantId: ParticipantId,
   ): SeatOwnershipRecord | undefined;
-  set(record: SeatOwnershipRecord): void;
-  deleteSession(sessionId: SessionId): void;
+  set(record: SeatOwnershipRecord): SeatOwnershipStorageResult<void>;
+  deleteSession(sessionId: SessionId): SeatOwnershipStorageResult<void>;
 };
 
 export class SeatOwnershipError extends Error {
@@ -119,11 +130,11 @@ export class SessionSeatOwnership {
    * seat rather than failing, and a re-join by the same account is not a
    * conflict. Rebinding to a different account is refused: that is the attack.
    */
-  claim(params: {
+  async claim(params: {
     sessionId: SessionId;
     participantId: ParticipantId;
     userId: SeatOwnerUserId;
-  }): SeatOwnershipRecord {
+  }): Promise<SeatOwnershipRecord> {
     const existing = this.storage.get(params.sessionId, params.participantId);
 
     if (existing && existing.userId !== params.userId) {
@@ -143,9 +154,32 @@ export class SessionSeatOwnership {
       userId: params.userId,
     };
 
-    this.storage.set(record);
+    // Awaited, not fired and forgotten. The caller mints a credential against
+    // this binding on the next line.
+    await this.storage.set(record);
 
     return record;
+  }
+
+  /**
+   * Whether this account is the recorded owner of the seat.
+   *
+   * Stricter than `isAvailableTo`, and the two must not be confused. An
+   * *unbound* seat is available to anyone authenticated, which is how a player
+   * sits down; it is emphatically not proof of anything, and using availability
+   * to authorize a credential-less reconnect would let any account with the
+   * session code take over an anonymous table's GM seat after a restart.
+   */
+  isOwnedBy(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    userId: SeatOwnerUserId | undefined,
+  ): boolean {
+    if (!userId) {
+      return false;
+    }
+
+    return this.getOwner(sessionId, participantId) === userId;
   }
 
   /** Throws unless the account may occupy the seat. */
@@ -163,7 +197,7 @@ export class SessionSeatOwnership {
     );
   }
 
-  forgetSession(sessionId: SessionId): void {
-    this.storage.deleteSession(sessionId);
+  async forgetSession(sessionId: SessionId): Promise<void> {
+    await this.storage.deleteSession(sessionId);
   }
 }

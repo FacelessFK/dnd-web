@@ -10,6 +10,16 @@ import {
   type ActiveEncounterRecordWrite,
   type CharacterLibraryEntryDatabase,
   type CharacterLibraryEntryRow,
+  type SessionDiceResolutionRow,
+  type SessionDiceResolutionWrite,
+  type SessionPlayerIntentRow,
+  type SessionPlayerIntentWrite,
+  type SessionResolutionRequestRow,
+  type SessionResolutionRequestWrite,
+  type SessionSeatOwnershipDatabase,
+  type SessionSeatOwnershipRow,
+  type SessionSeatOwnershipWrite,
+  type SessionTableStateDatabase,
   type CharacterLibraryEntryWrite,
   type CharacterRecordDatabase,
   type CharacterRecordRow,
@@ -1921,6 +1931,281 @@ class InMemoryCharacterLibraryEntryDatabase implements CharacterLibraryEntryData
   }
 }
 
+class InMemorySessionSeatOwnershipDatabase implements SessionSeatOwnershipDatabase {
+  private readonly rows = new Map<string, SessionSeatOwnershipRow>();
+
+  private key(sessionId: string, participantId: string): string {
+    return `${sessionId}::${participantId}`;
+  }
+
+  async getSessionSeatOwnership(
+    sessionId: string,
+    participantId: string,
+  ): Promise<SessionSeatOwnershipRow | null> {
+    return this.rows.get(this.key(sessionId, participantId)) ?? null;
+  }
+
+  async listSessionSeatOwnership(): Promise<SessionSeatOwnershipRow[]> {
+    return [...this.rows.values()];
+  }
+
+  async listSessionSeatOwnershipBySession(
+    sessionId: string,
+  ): Promise<SessionSeatOwnershipRow[]> {
+    return [...this.rows.values()].filter((row) => row.sessionId === sessionId);
+  }
+
+  async claimSessionSeatOwnership(
+    write: SessionSeatOwnershipWrite,
+  ): Promise<SessionSeatOwnershipRow | null> {
+    const key = this.key(write.sessionId, write.participantId);
+    const existing = this.rows.get(key);
+
+    if (existing) {
+      return existing.userId === write.userId ? existing : null;
+    }
+
+    const row: SessionSeatOwnershipRow = {
+      boundAt: write.boundAt,
+      createdAt: write.boundAt,
+      participantId: write.participantId,
+      sessionId: write.sessionId,
+      updatedAt: write.boundAt,
+      userId: write.userId,
+    };
+
+    this.rows.set(key, row);
+
+    return row;
+  }
+
+  async deleteSessionSeatOwnershipBySession(
+    sessionId: string,
+  ): Promise<number> {
+    let deleted = 0;
+
+    for (const [key, row] of this.rows) {
+      if (row.sessionId === sessionId) {
+        this.rows.delete(key);
+        deleted += 1;
+      }
+    }
+
+    return deleted;
+  }
+
+  cloneRows(): SessionSeatOwnershipRow[] {
+    return [...this.rows.values()].map((row) => structuredClone(row));
+  }
+
+  replaceRows(rows: SessionSeatOwnershipRow[]): void {
+    this.rows.clear();
+
+    for (const row of rows) {
+      this.rows.set(
+        this.key(row.sessionId, row.participantId),
+        structuredClone(row),
+      );
+    }
+  }
+}
+
+class InMemorySessionTableStateDatabase implements SessionTableStateDatabase {
+  private readonly requests = new Map<string, SessionResolutionRequestRow>();
+  private readonly resolutions = new Map<string, SessionDiceResolutionRow>();
+  private readonly intents = new Map<string, SessionPlayerIntentRow>();
+
+  async listSessionResolutionRequests(
+    sessionId: string,
+    limit: number,
+  ): Promise<SessionResolutionRequestRow[]> {
+    return [...this.requests.values()]
+      .filter((row) => row.sessionId === sessionId)
+      .sort((left, right) => left.requestId.localeCompare(right.requestId))
+      .slice(-limit);
+  }
+
+  async listSessionDiceResolutions(
+    sessionId: string,
+    limit: number,
+  ): Promise<SessionDiceResolutionRow[]> {
+    return [...this.resolutions.values()]
+      .filter((row) => row.sessionId === sessionId)
+      .sort(
+        (left, right) =>
+          left.resolvedAt.getTime() - right.resolvedAt.getTime() ||
+          left.resolutionId.localeCompare(right.resolutionId),
+      )
+      .slice(-limit);
+  }
+
+  async listSessionPlayerIntents(
+    sessionId: string,
+    limit: number,
+  ): Promise<SessionPlayerIntentRow[]> {
+    return [...this.intents.values()]
+      .filter((row) => row.sessionId === sessionId)
+      .sort(
+        (left, right) =>
+          left.createdAt.getTime() - right.createdAt.getTime() ||
+          left.intentId.localeCompare(right.intentId),
+      )
+      .slice(-limit);
+  }
+
+  async listSessionIdsWithTableState(): Promise<string[]> {
+    return [
+      ...new Set(
+        [
+          ...this.requests.values(),
+          ...this.resolutions.values(),
+          ...this.intents.values(),
+        ].map((row) => row.sessionId),
+      ),
+    ];
+  }
+
+  async getSessionResolutionRequest(
+    requestId: string,
+  ): Promise<SessionResolutionRequestRow | null> {
+    return this.requests.get(requestId) ?? null;
+  }
+
+  async getSessionDiceResolutionByRequest(
+    requestId: string,
+  ): Promise<SessionDiceResolutionRow | null> {
+    return (
+      [...this.resolutions.values()].find(
+        (row) => row.requestId === requestId,
+      ) ?? null
+    );
+  }
+
+  async getSessionPlayerIntent(
+    intentId: string,
+  ): Promise<SessionPlayerIntentRow | null> {
+    return this.intents.get(intentId) ?? null;
+  }
+
+  async upsertSessionResolutionRequest(
+    write: SessionResolutionRequestWrite,
+  ): Promise<SessionResolutionRequestRow> {
+    const row: SessionResolutionRequestRow = {
+      createdAt: write.createdAt,
+      kind: write.kind,
+      request: write.request,
+      requestId: write.requestId,
+      requestedByParticipantId: write.requestedByParticipantId,
+      resolutionId: write.resolutionId,
+      sessionId: write.sessionId,
+      status: write.status,
+      targetCharacterId: write.targetCharacterId,
+      targetParticipantId: write.targetParticipantId,
+      updatedAt: new Date(),
+    };
+
+    this.requests.set(row.requestId, row);
+
+    return row;
+  }
+
+  async insertSessionDiceResolution(
+    write: SessionDiceResolutionWrite,
+  ): Promise<SessionDiceResolutionRow> {
+    const existing = this.resolutions.get(write.resolutionId);
+
+    if (existing) {
+      return existing;
+    }
+
+    // Mirrors the partial unique index: one roll per request, refused here
+    // rather than silently accepted.
+    if (
+      write.requestId &&
+      [...this.resolutions.values()].some(
+        (row) => row.requestId === write.requestId,
+      )
+    ) {
+      throw new Error(
+        `Resolution request "${write.requestId}" already has a recorded roll.`,
+      );
+    }
+
+    const row: SessionDiceResolutionRow = {
+      actorCharacterId: write.actorCharacterId,
+      actorParticipantId: write.actorParticipantId,
+      commandId: write.commandId,
+      createdAt: write.resolvedAt,
+      kind: write.kind,
+      requestId: write.requestId,
+      resolution: write.resolution,
+      resolutionId: write.resolutionId,
+      resolvedAt: write.resolvedAt,
+      rulesProfileId: write.rulesProfileId,
+      sessionId: write.sessionId,
+    };
+
+    this.resolutions.set(row.resolutionId, row);
+
+    return row;
+  }
+
+  async upsertSessionPlayerIntent(
+    write: SessionPlayerIntentWrite,
+  ): Promise<SessionPlayerIntentRow> {
+    const row: SessionPlayerIntentRow = {
+      authorCharacterId: write.authorCharacterId,
+      authorParticipantId: write.authorParticipantId,
+      createdAt: write.createdAt,
+      intent: write.intent,
+      intentId: write.intentId,
+      sessionId: write.sessionId,
+      status: write.status,
+      updatedAt: write.updatedAt,
+    };
+
+    this.intents.set(row.intentId, row);
+
+    return row;
+  }
+
+  cloneRows(): {
+    intents: SessionPlayerIntentRow[];
+    requests: SessionResolutionRequestRow[];
+    resolutions: SessionDiceResolutionRow[];
+  } {
+    return {
+      intents: [...this.intents.values()].map((row) => structuredClone(row)),
+      requests: [...this.requests.values()].map((row) => structuredClone(row)),
+      resolutions: [...this.resolutions.values()].map((row) =>
+        structuredClone(row),
+      ),
+    };
+  }
+
+  replaceRows(rows: {
+    intents: SessionPlayerIntentRow[];
+    requests: SessionResolutionRequestRow[];
+    resolutions: SessionDiceResolutionRow[];
+  }): void {
+    this.requests.clear();
+    this.resolutions.clear();
+    this.intents.clear();
+
+    for (const row of rows.requests) {
+      this.requests.set(row.requestId, structuredClone(row));
+    }
+
+    for (const row of rows.resolutions) {
+      this.resolutions.set(row.resolutionId, structuredClone(row));
+    }
+
+    for (const row of rows.intents) {
+      this.intents.set(row.intentId, structuredClone(row));
+    }
+  }
+}
+
 class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
   committedCount = 0;
   failBeforeCommit = false;
@@ -1935,6 +2220,8 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
     private readonly scenes: InMemorySceneRecordDatabase = new InMemorySceneRecordDatabase(),
     private readonly commandIdempotencyClaims: InMemoryCommandIdempotencyClaimRecordDatabase = new InMemoryCommandIdempotencyClaimRecordDatabase(),
     private readonly characterLibrary: InMemoryCharacterLibraryEntryDatabase = new InMemoryCharacterLibraryEntryDatabase(),
+    readonly seatOwnership: InMemorySessionSeatOwnershipDatabase = new InMemorySessionSeatOwnershipDatabase(),
+    readonly tableState: InMemorySessionTableStateDatabase = new InMemorySessionTableStateDatabase(),
   ) {}
 
   async transaction<T>(
@@ -1962,7 +2249,12 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
       const transactionalScenes = new InMemorySceneRecordDatabase();
       const transactionalCharacterLibrary =
         new InMemoryCharacterLibraryEntryDatabase();
+      const transactionalSeatOwnership =
+        new InMemorySessionSeatOwnershipDatabase();
+      const transactionalTableState = new InMemorySessionTableStateDatabase();
 
+      transactionalSeatOwnership.replaceRows(this.seatOwnership.cloneRows());
+      transactionalTableState.replaceRows(this.tableState.cloneRows());
       transactionalCharacters.replaceRows(this.characters.cloneRows());
       transactionalCommandIdempotencyClaims.replaceRows(
         this.commandIdempotencyClaims.cloneRows(),
@@ -1986,7 +2278,9 @@ class InMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         encounters: transactionalEncounters,
         outbox: transactionalOutbox,
         scenes: transactionalScenes,
+        seatOwnership: transactionalSeatOwnership,
         sessions: transactionalSessions,
+        tableState: transactionalTableState,
       });
 
       if (this.failBeforeCommit) {
@@ -2174,7 +2468,9 @@ class ConcurrentInMemoryDndDatabaseUnitOfWork implements DndDatabaseUnitOfWork {
         encounters: this.encounters,
         outbox: this.outbox,
         scenes: this.scenes,
+        seatOwnership: new InMemorySessionSeatOwnershipDatabase(),
         sessions: this.sessions,
+        tableState: new InMemorySessionTableStateDatabase(),
       });
 
       this.claimStore.commit(ownerId);
@@ -5700,6 +5996,8 @@ test('outbox status endpoint reports unpublished backlog without draining rows',
         combat_event: 0,
         encounter_state: 0,
         movement_state: 1,
+        player_intent_state: 0,
+        resolution_state: 0,
         session_state: 1,
       },
       oldestCreatedAt: null,

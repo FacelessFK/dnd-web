@@ -8,9 +8,7 @@ import type {
   JoinSessionCommand,
   MovementStateUpdate,
   MovementStateUpdateReason,
-  PlayerIntentStateUpdateReason,
   ReconnectSessionCommand,
-  ResolutionStateUpdateReason,
   SessionErrorCode,
   SessionStreamEvent,
   SessionStateUpdate,
@@ -35,8 +33,9 @@ import {
   publishEncounterStateUpdateToRoom,
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
+  type PlayerIntentStateFanout,
+  type ResolutionStateFanout,
 } from './session-event-fanout.js';
-import type { SessionTableState } from './session-table-state.js';
 
 type ParticipantCreationCommand = CreateSessionCommand | JoinSessionCommand;
 
@@ -127,16 +126,8 @@ export interface RuntimeSessionStore {
    * seat may see which request is a property of the data, decided once in
    * `session-table-state.ts`, not something each transport re-derives.
    */
-  publishResolutionStateUpdate(params: {
-    sessionId: SessionId;
-    reason: ResolutionStateUpdateReason;
-    state: SessionTableState;
-  }): void;
-  publishPlayerIntentStateUpdate(params: {
-    sessionId: SessionId;
-    reason: PlayerIntentStateUpdateReason;
-    state: SessionTableState;
-  }): void;
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void;
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void;
 }
 
 const SESSION_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -438,22 +429,14 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     );
   }
 
-  publishResolutionStateUpdate(params: {
-    sessionId: SessionId;
-    reason: ResolutionStateUpdateReason;
-    state: SessionTableState;
-  }): void {
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void {
     publishResolutionStateUpdateToRoom(
       this.requireRoom(params.sessionId),
       params,
     );
   }
 
-  publishPlayerIntentStateUpdate(params: {
-    sessionId: SessionId;
-    reason: PlayerIntentStateUpdateReason;
-    state: SessionTableState;
-  }): void {
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void {
     publishPlayerIntentStateUpdateToRoom(
       this.requireRoom(params.sessionId),
       params,

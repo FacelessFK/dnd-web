@@ -73,12 +73,14 @@ import type {
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
   PlayerIntentCommandSuccess,
+  PlayerIntentStateUpdate,
   PlayerIntentStateUpdateReason,
   RecordMovementUsageCommand,
   ReconnectSessionCommand,
   RepositionSceneEntityCommand,
   RequestResolutionCommand,
   ResolutionCommandSuccess,
+  ResolutionStateUpdate,
   ResolutionStateUpdateReason,
   SubmitPlayerIntentCommand,
   SubmitResolutionCommand,
@@ -205,7 +207,12 @@ import {
   requirePendingRequestFor,
   updatePlayerIntentStatus,
   type SessionTableState,
+  type SessionTableStateRepository,
 } from './session-table-state.js';
+import type {
+  PlayerIntentStateFanout,
+  ResolutionStateFanout,
+} from './session-event-fanout.js';
 
 export { createConnectionId };
 
@@ -353,8 +360,46 @@ export class InMemoryGameRuntime<
     // Resolution requests, the dice audit, and player intents for every table
     // this runtime serves. Held per runtime rather than per session store
     // because the transitions are the runtime's, not the transport's.
-    readonly tableStates = new InMemorySessionTableStateStore(),
+    readonly tableStates: SessionTableStateRepository = new InMemorySessionTableStateStore(),
+    // Set only in DB mode, by the transaction boundary, so an M1 event becomes
+    // an outbox row inside the same transaction as the state it describes.
+    private readonly tableStateUpdateSink?: (
+      update: ResolutionStateUpdate | PlayerIntentStateUpdate,
+    ) => void,
   ) {}
+
+  /**
+   * A runtime whose M1 writes and M1 events both land inside one transaction.
+   *
+   * Mirrors `withSceneRepository` and `withEncounterRepository`: the boundary
+   * forks the store onto the transaction's database handle, runs the command
+   * against this runtime, and discards everything if the commit fails.
+   */
+  withTableStateRepository(
+    tableStates: SessionTableStateRepository,
+    options: {
+      tableStateUpdateSink?: (
+        update: ResolutionStateUpdate | PlayerIntentStateUpdate,
+      ) => void;
+    } = {},
+  ): InMemoryGameRuntime<TCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      this.characters,
+      this.scenes,
+      this.encounters,
+      this.d20Roller,
+      this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
+      this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
+      tableStates,
+      options.tableStateUpdateSink ?? this.tableStateUpdateSink,
+    );
+  }
 
   createSession(
     command: CreateSessionCommand,
@@ -420,6 +465,7 @@ export class InMemoryGameRuntime<
       this.dieRoller,
       this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -446,6 +492,7 @@ export class InMemoryGameRuntime<
       rollers.dieRoller ?? this.dieRoller,
       rollers.initiativeRoller ?? this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -470,11 +517,15 @@ export class InMemoryGameRuntime<
       this.dieRoller,
       this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
   withSceneRepository(
     scenes: SceneRepository,
+    options: {
+      encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+    } = {},
   ): InMemoryGameRuntime<TCharacters, TSessions> {
     return new InMemoryGameRuntime(
       this.sessions,
@@ -484,12 +535,13 @@ export class InMemoryGameRuntime<
       this.encounters,
       this.d20Roller,
       this.characterStateUpdateSink,
-      this.encounterStateUpdateSink,
+      options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
       this.movementStateUpdateSink,
       this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -513,6 +565,7 @@ export class InMemoryGameRuntime<
       this.dieRoller,
       this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -541,6 +594,7 @@ export class InMemoryGameRuntime<
       this.dieRoller,
       this.initiativeRoller,
       this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -1513,10 +1567,11 @@ export class InMemoryGameRuntime<
     actor: Participant;
   }): ResolutionCommandSuccess['data'] {
     this.tableStates.set(params.sessionId, params.state);
-    this.sessions.publishResolutionStateUpdate({
+    this.publishResolutionStateUpdate({
       sessionId: params.sessionId,
       reason: params.reason,
-      state: params.state,
+      requests: params.state.requests,
+      resolutions: params.state.resolutions,
     });
 
     const projected = projectTableStateForRole(
@@ -1541,10 +1596,10 @@ export class InMemoryGameRuntime<
     actor: Participant;
   }): PlayerIntentCommandSuccess['data'] {
     this.tableStates.set(params.sessionId, params.state);
-    this.sessions.publishPlayerIntentStateUpdate({
+    this.publishPlayerIntentStateUpdate({
       sessionId: params.sessionId,
       reason: params.reason,
-      state: params.state,
+      intents: params.state.intents,
     });
 
     return {
@@ -4410,6 +4465,46 @@ export class InMemoryGameRuntime<
       update,
       this.resolveConcealedCombatantIds(params.encounter),
     );
+  }
+
+  /**
+   * In DB mode the sink diverts these into the command's transaction, so the
+   * outbox row and the state change commit together and the event is delivered
+   * only after the commit succeeds. With no sink configured - in-memory mode -
+   * they go straight to the room, which is the whole delivery guarantee that
+   * mode offers.
+   */
+  private publishResolutionStateUpdate(params: ResolutionStateFanout): void {
+    if (this.tableStateUpdateSink) {
+      this.tableStateUpdateSink({
+        type: 'resolution_state',
+        reason: params.reason,
+        sessionId: params.sessionId,
+        state: {
+          requests: structuredClone(params.requests),
+          resolutions: structuredClone(params.resolutions),
+        },
+      });
+      return;
+    }
+
+    this.sessions.publishResolutionStateUpdate(params);
+  }
+
+  private publishPlayerIntentStateUpdate(
+    params: PlayerIntentStateFanout,
+  ): void {
+    if (this.tableStateUpdateSink) {
+      this.tableStateUpdateSink({
+        type: 'player_intent_state',
+        reason: params.reason,
+        sessionId: params.sessionId,
+        state: { intents: structuredClone(params.intents) },
+      });
+      return;
+    }
+
+    this.sessions.publishPlayerIntentStateUpdate(params);
   }
 
   private publishCombatEvent(update: CombatEvent): void {
