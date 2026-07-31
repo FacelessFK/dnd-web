@@ -17,6 +17,10 @@ export const encounterIdPattern = /^encounter_[a-f0-9-]{36}$/;
  */
 export const skillIdSchema = z.enum(skillIds);
 
+// Re-exported so the browser can enumerate the canonical list without taking a
+// direct dependency on `@dnd/shared`, which it does not have.
+export { skillIds };
+
 export const sessionIdSchema = z
   .string()
   .trim()
