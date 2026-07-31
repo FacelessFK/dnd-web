@@ -68,6 +68,10 @@ import {
   type AuthThrottleDecision,
 } from './auth-rate-limiter.js';
 import { AuthService, AuthStoreError } from './auth-store.js';
+import {
+  SeatOwnershipError,
+  SessionSeatOwnership,
+} from './session-seat-ownership.js';
 import { CharacterStoreError } from './character-store.js';
 import {
   DbBackedCharacterLibraryRepository,
@@ -168,6 +172,7 @@ const defaultAuthThrottle = createAuthThrottle();
  * to be verifiable on the next.
  */
 const defaultParticipantCredentials = new ParticipantCredentialStore();
+const defaultSeatOwnership = new SessionSeatOwnership();
 
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
@@ -189,6 +194,7 @@ export function createSessionServer(
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
   participantCredentials: ParticipantCredentialStore;
+  seatOwnership: SessionSeatOwnership;
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary;
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary;
   server: Server;
@@ -201,6 +207,9 @@ export function createSessionServer(
   // same instance.
   const authThrottle = createAuthThrottle();
   const participantCredentials = new ParticipantCredentialStore();
+  // Seat bindings outlive credentials on purpose: a restart re-issues the
+  // token without costing the player their seat.
+  const seatOwnership = new SessionSeatOwnership();
   const server = createServer(async (request, response) => {
     try {
       await handleRequest(
@@ -218,6 +227,7 @@ export function createSessionServer(
         commandEventOutboxDispatcher,
         authThrottle,
         participantCredentials,
+        seatOwnership,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -234,6 +244,7 @@ export function createSessionServer(
     idempotency,
     participantCredentials,
     sceneCommandTransaction,
+    seatOwnership,
     sessionCommandTransaction,
     server,
     startup: async () => undefined,
@@ -257,6 +268,7 @@ export async function handleRequest(
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
   authThrottle: AuthThrottle = defaultAuthThrottle,
   participantCredentials: ParticipantCredentialStore = defaultParticipantCredentials,
+  seatOwnership: SessionSeatOwnership = defaultSeatOwnership,
 ): Promise<void> {
   setCorsHeaders(response, request);
 
@@ -318,6 +330,8 @@ export async function handleRequest(
       idempotency,
       participantCredentials,
       sessionCommandTransaction,
+      auth,
+      seatOwnership,
     );
     return;
   }
@@ -734,6 +748,8 @@ async function handleSessionCommandRequest(
   idempotency: CommandIdempotencyStore,
   participantCredentials: ParticipantCredentialStore,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
+  auth?: AuthService,
+  seatOwnership: SessionSeatOwnership = defaultSeatOwnership,
 ): Promise<void> {
   let body: unknown;
 
@@ -777,6 +793,48 @@ async function handleSessionCommandRequest(
     return;
   }
 
+  // Seat ownership. Participant IDs are public - the session snapshot
+  // broadcasts every one of them - so the session code plus a participant ID
+  // must not be enough to sit down in someone else's chair. The binding is
+  // checked here, before any seat is handed out or any credential is minted.
+  //
+  // When no auth service is configured the server has no accounts to bind to
+  // and this is a no-op, which keeps anonymous local play working. An
+  // unauthenticated caller can still take an *unbound* seat; what it can never
+  // do is take a seat that some account already owns.
+  let seatUserId: string | undefined;
+
+  if (auth) {
+    try {
+      seatUserId = (await auth.getUserByToken(readAuthCookie(request)))?.id;
+    } catch {
+      seatUserId = undefined;
+    }
+  }
+
+  if (command.type !== 'create_session') {
+    try {
+      seatOwnership.assertAvailableTo(
+        command.payload.sessionId,
+        command.actor.participantId,
+        seatUserId,
+      );
+    } catch (error) {
+      if (error instanceof SeatOwnershipError) {
+        sendJson(response, 403, {
+          ok: false,
+          error: {
+            code: 'seat_owned_by_another_account',
+            message: 'That seat belongs to another account.',
+          },
+        } satisfies SessionCommandError);
+        return;
+      }
+
+      throw error;
+    }
+  }
+
   try {
     if (
       sessionCommandTransaction?.supports({
@@ -803,6 +861,14 @@ async function handleSessionCommandRequest(
                 throw new Error(
                   `Unsupported transactional session command type "${command.type}".`,
                 );
+            }
+
+            if (seatUserId) {
+              seatOwnership.claim({
+                participantId: result.participantId,
+                sessionId: result.sessionId,
+                userId: seatUserId,
+              });
             }
 
             return {
@@ -852,6 +918,17 @@ async function handleSessionCommandRequest(
         break;
       default:
         throw new Error('Unsupported session command type.');
+    }
+
+    // Bind the seat to the account that just took it. Idempotent for the
+    // owner, so a reconnect after a restart re-affirms the same seat instead
+    // of failing.
+    if (seatUserId) {
+      seatOwnership.claim({
+        participantId: result.participantId,
+        sessionId: result.sessionId,
+        userId: seatUserId,
+      });
     }
 
     // Reconnect echoes the credential the caller just proved it holds rather
@@ -2779,6 +2856,7 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'scene_terrain_out_of_bounds':
       return 400;
     case 'invalid_role_assumption':
+    case 'seat_owned_by_another_account':
       return 403;
     case 'unauthenticated':
       return 401;

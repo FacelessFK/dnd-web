@@ -28,6 +28,8 @@ export const runtimeErrorCodeSchema = z.enum([
   'invalid_movement_usage_amount',
   'invalid_participant_session_association',
   'invalid_role_assumption',
+  // The seat exists but belongs to a different authenticated account.
+  'seat_owned_by_another_account',
   'invalid_scene_id',
   'invalid_scene_encounter_association',
   'invalid_scene_session_association',
