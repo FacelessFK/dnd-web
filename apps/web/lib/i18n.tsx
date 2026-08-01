@@ -254,11 +254,17 @@ export const messages = {
       'Runtime copy {characterId} is waiting in authoritative session state. The DM must assign it before it becomes your active table character.',
     'runtime.characterLibrary.waitingTitle':
       'Runtime copy pending DM assignment',
+    'runtime.characterSummary.armorClass': 'AC',
     'runtime.characterSummary.conditions': 'Conditions',
+    'runtime.characterSummary.emptyDetail':
+      'No character is loaded for {name}.',
+    'runtime.characterSummary.emptyTitle': 'No character',
+    'runtime.characterSummary.hitPoints': 'HP',
     'runtime.characterSummary.initiative': 'Init',
     'runtime.characterSummary.passivePerception': 'Passive',
     'runtime.characterSummary.proficiency': 'Prof',
     'runtime.characterSummary.speed': 'Speed',
+    'runtime.characterSummary.speedValue': '{feet} ft',
     'runtime.characterSummary.status.draft': 'Draft',
     'runtime.activeScene.buildDetail':
       'Create or activate a scene before placing tokens, entities, or starting an encounter.',
@@ -1485,11 +1491,17 @@ export const messages = {
       'نسخه runtime {characterId} در وضعیت مرجع نشست منتظر است. DM باید آن را تخصیص دهد تا کاراکتر فعال میز شما شود.',
     'runtime.characterLibrary.waitingTitle':
       'نسخه runtime در انتظار تخصیص توسط DM',
+    'runtime.characterSummary.armorClass': 'کلاس زره',
     'runtime.characterSummary.conditions': 'وضعیت‌ها',
+    'runtime.characterSummary.emptyDetail':
+      'شخصیتی برای {name} بارگذاری نشده است.',
+    'runtime.characterSummary.emptyTitle': 'بدون شخصیت',
+    'runtime.characterSummary.hitPoints': 'امتیاز ضربه',
     'runtime.characterSummary.initiative': 'ابتکار',
     'runtime.characterSummary.passivePerception': 'ادراک غیرفعال',
     'runtime.characterSummary.proficiency': 'مهارت',
     'runtime.characterSummary.speed': 'سرعت',
+    'runtime.characterSummary.speedValue': '{feet} فوت',
     'runtime.characterSummary.status.draft': 'پیش‌نویس',
     'runtime.activeScene.buildDetail':
       'قبل از قرار دادن توکن‌ها، موجودیت‌های صحنه یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
