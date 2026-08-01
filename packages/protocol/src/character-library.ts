@@ -6,12 +6,14 @@ import {
   levelSchema,
   participantIdSchema,
   rulesProfileIdSchema,
+  skillIdSchema,
 } from './common.js';
 import {
   abilityScoresSchema,
   hitPointsSchema,
   speciesOrRaceSchema,
 } from './character.js';
+import { abilityKeySchema } from './resolution.js';
 import { commandErrorSchema } from './errors.js';
 import { rulesConfigValueSchema } from './rules-profile.js';
 
@@ -88,6 +90,19 @@ export const characterLibraryPortraitReferenceSchema = z.union([
   assetPortraitReferenceSchema,
 ]);
 
+/**
+ * Canonical proficiency choices, stored beside the builder's own selections
+ * rather than derived from them.
+ *
+ * `builderSelections.skills` holds English display names, which is what the
+ * phrase-book builder keys on and exactly what must not become an identifier.
+ * These are the IDs the runtime copy carries and the resolution path consults.
+ */
+export const characterLibraryProficienciesSchema = z.object({
+  savingThrows: z.array(abilityKeySchema).max(6),
+  skills: z.array(skillIdSchema).max(18),
+});
+
 export const characterLibraryEntryInputSchema = z.object({
   abilityScoreMethod: characterAbilityScoreMethodSchema,
   abilities: abilityScoresSchema,
@@ -105,6 +120,9 @@ export const characterLibraryEntryInputSchema = z.object({
   portrait: characterLibraryPortraitReferenceSchema.nullable().optional(),
   pronouns: z.string().trim().max(80).nullable().optional(),
   rulesProfileId: rulesProfileIdSchema,
+  // Optional so an entry authored before proficiencies existed still parses.
+  // The bridge normalizes it into the runtime character, where it is required.
+  proficiencies: characterLibraryProficienciesSchema.optional(),
   speciesOrRace: speciesOrRaceSchema,
   speed: z.number().int().min(0).max(200),
 });

@@ -9,6 +9,8 @@
     "serve": "node --import tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "node --import tsx --test src/*.test.ts",
+    "test:db": "node --import tsx --test src/*.dbtest.ts",
+    "test:smoke:m1-db-restart": "node scripts/m1-db-restart-smoke.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "pg": "^8.13.1",
     "tsx": "^4.19.2"
   }
 }

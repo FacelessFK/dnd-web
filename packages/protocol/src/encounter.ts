@@ -82,6 +82,10 @@ export const encounterStateUpdateReasonSchema = z.enum([
   'movement_used',
   'dm_turn_usage_changed',
   'dm_current_turn_changed',
+  // A combatant was concealed or revealed. The encounter itself is unchanged;
+  // what changed is what each role is allowed to see of it, which is why this
+  // is republished rather than left for the next turn to carry.
+  'dm_combatant_visibility_changed',
 ]);
 
 export const encounterStateUpdateSchema = z.object({

@@ -2,6 +2,8 @@ import {
   characterCommandResponseSchema,
   characterLibraryCommandResponseSchema,
   dmCommandResponseSchema,
+  playerIntentCommandResponseSchema,
+  resolutionCommandResponseSchema,
   encounterCommandResponseSchema,
   movementCommandResponseSchema,
   outboxStatusSuccessSchema,
@@ -14,6 +16,10 @@ import {
   type ClientCommand,
   type DmCommand,
   type DmCommandResponse,
+  type PlayerIntentCommand,
+  type PlayerIntentCommandResponse,
+  type ResolutionCommand,
+  type ResolutionCommandResponse,
   type EncounterCommand,
   type EncounterCommandResponse,
   type MovementCommand,
@@ -93,6 +99,14 @@ export type CharacterLibraryCommandSuccessResponse = Extract<
   { ok: true }
 >;
 export type DmCommandSuccessResponse = Extract<DmCommandResponse, { ok: true }>;
+export type ResolutionCommandSuccessResponse = Extract<
+  ResolutionCommandResponse,
+  { ok: true }
+>;
+export type PlayerIntentCommandSuccessResponse = Extract<
+  PlayerIntentCommandResponse,
+  { ok: true }
+>;
 export type EncounterCommandSuccessResponse = Extract<
   EncounterCommandResponse,
   { ok: true }
@@ -378,6 +392,32 @@ export async function sendEncounterCommand(
     '/api/encounters/command',
     command,
     encounterCommandResponseSchema,
+  );
+}
+
+/**
+ * The three resolution commands share one route because they share one
+ * authoritative object. `postCommand` already attaches the participant
+ * credential, applies the request timeout, and parses the response through the
+ * protocol schema, so nothing here touches a token.
+ */
+export async function sendResolutionCommand(
+  command: ResolutionCommand,
+): Promise<RuntimeApiResult<ResolutionCommandSuccessResponse>> {
+  return postCommand(
+    '/api/resolutions/command',
+    command,
+    resolutionCommandResponseSchema,
+  );
+}
+
+export async function sendPlayerIntentCommand(
+  command: PlayerIntentCommand,
+): Promise<RuntimeApiResult<PlayerIntentCommandSuccessResponse>> {
+  return postCommand(
+    '/api/intents/command',
+    command,
+    playerIntentCommandResponseSchema,
   );
 }
 

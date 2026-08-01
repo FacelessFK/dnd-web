@@ -8,10 +8,15 @@
   },
   "types": "./src/index.ts",
   "scripts": {
+    "test": "node --import tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@dnd/shared": "workspace:*",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2"
   }
 }

@@ -20,6 +20,28 @@ handoff documents, evidence packets, or dated triage notes. The repository was
 buried in those once. If something is worth recording, it belongs in one of the
 four files, in a code comment, in a test, or in a commit message.
 
+## Branching and release workflow
+
+`main` is stable-only: milestones and releases land there and nothing else. No
+direct commits, no ordinary feature work.
+
+`development` is the long-lived integration branch. Every `feature/*`, `fix/*`,
+and `chore/*` branch starts from `development`, and its pull request targets
+`development`. Never branch ordinary work from `main`, and never merge a feature
+branch straight into `main`.
+
+`release/*` branches carry a functionally complete milestone from `development`
+to `main`. They accept stabilization and defect fixes only - release notes go in
+the four existing documents, not a new file.
+
+`hotfix/*` is the one exception that starts from `main`, and only for a defect
+already live there. A hotfix merges into `main` and must then be merged back
+into `development`, or the fix silently disappears at the next release.
+
+No direct feature commits to `main` or `development`. No force-pushing or
+history rewriting on any shared branch. CI runs on pushes to `main` and
+`development`, and on every pull request whatever its target.
+
 ## Non-negotiable boundaries
 
 Product rules, not style preferences. Violating one is a bug even if it compiles
@@ -108,6 +130,41 @@ idempotency record commit together through
 `packages/db/src/dnd-database-unit-of-work.ts`. Events go to the outbox inside
 that transaction and dispatch after commit.
 
+**A repository result is a promise in DB mode and a value in memory.** The
+`RuntimeRepositoryResult` pattern lets `game-runtime.ts` declare `Encounter`
+where DB mode actually returns `Promise<Encounter>`, so TypeScript will not
+catch you reading a field off it. Two shipped bugs came from exactly that: a
+combat event built with `encounter.id` from an unresolved promise wrote
+`encounterId: undefined` into the outbox, and projecting an unresolved promise
+read `participants` off a `Promise`. Neither reproduces in memory, and the DM
+path masked both. Always pass a repository result through
+`resolveRepositoryResult` before touching its fields - never through a bare
+`const`.
+
+**A session has one SSE subscriber per participant.** `connectParticipant`
+replaces the room's subscriber and closes the previous one. A second connection
+for the same seat does not observe that seat - it takes the stream away from
+whoever had it. Anything that wants to watch the traffic has to be the transport
+the client is already using, not a connection beside it.
+
+**The M1 table has no read command.** Resolution requests, the dice audit and
+player notes are only ever projected onto a live subscription, as `initial_sync`
+on connect. Anything that needs them back - `Recover`, a new panel, a harness -
+has to (re)open the stream. There is nothing to `get_`.
+
+**`reconnect_session` rotates the credential when the caller owns the seat.**
+`recoversOwnSeat` is true whenever the authenticated account holds the seat
+binding, restart or not, and that path mints a fresh token. Using reconnect as a
+convenient read therefore invalidates the token the browser is holding. Reads go
+through the real read commands.
+
+**Participant credentials never become durable.** They are per-process bearer
+tokens and a restart must invalidate them. The durable fact is the _seat
+binding_ in `session_seat_ownership`, and `reconnect_session` accepts it in
+place of a credential only when `isOwnedBy` matches - never `isAvailableTo`,
+which is true for any unbound seat and would hand an anonymous table's GM chair
+to anyone with the session code.
+
 **No unbounded query.** Anything that can grow gets a `LIMIT` or a database-side
 aggregate. Never `SELECT *` a whole table to count it in JavaScript.
 
@@ -143,6 +200,9 @@ stay stable and untranslated. Never auto-translate user-entered character data.
 - `apps/web/lib/*.test.ts` — helpers, renderers, mappers.
 - `scripts/smoke.test.mjs` — repository shape and smoke diagnostics.
 - `apps/web/scripts/*.mjs` — browser harnesses driving headless Chrome.
+  `m1-full-loop-smoke.mjs` and `m1-db-browser-restart-smoke.mjs` are the M1
+  acceptance pair; both need DB mode, because authentication and the Character
+  Library only exist there.
 
 A visibility or authorization property gets its own test that tries to break it.
 "The UI does not show it" is not a test.

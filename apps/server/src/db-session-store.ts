@@ -34,6 +34,10 @@ import type {
 import {
   publishCombatEventToRoom,
   publishEncounterStateUpdateToRoom,
+  publishPlayerIntentStateUpdateToRoom,
+  publishResolutionStateUpdateToRoom,
+  type PlayerIntentStateFanout,
+  type ResolutionStateFanout,
 } from './session-event-fanout.js';
 
 import {
@@ -417,6 +421,20 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
       this.requireRoom(update.sessionId),
       update,
       concealedCombatantIds,
+    );
+  }
+
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void {
+    publishResolutionStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
+    );
+  }
+
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void {
+    publishPlayerIntentStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
     );
   }
 

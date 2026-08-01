@@ -13,7 +13,9 @@
     "test:smoke": "node scripts/runtime-smoke.mjs",
     "test:smoke:two-profile": "node scripts/runtime-two-profile-smoke.mjs",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:smoke:m1-full-loop": "node scripts/m1-full-loop-smoke.mjs",
+    "test:smoke:m1-db-browser-restart": "node scripts/m1-db-browser-restart-smoke.mjs"
   },
   "dependencies": {
     "@dnd/protocol": "workspace:*",

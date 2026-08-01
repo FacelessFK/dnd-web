@@ -911,3 +911,5 @@ export function projectEncounterForRole(
 
   return changed ? { ...encounter, participants } : encounter;
 }
+
+export * from './resolution.js';

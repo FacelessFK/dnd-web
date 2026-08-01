@@ -9,6 +9,8 @@ import type {
   MovementStateUpdate,
   OutboxEventTypeCounts,
   OutboxStatusSuccess,
+  PlayerIntentStateUpdate,
+  ResolutionStateUpdate,
   SessionStateUpdate,
 } from '@dnd/protocol';
 
@@ -180,6 +182,29 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       return;
     }
 
+    if (row.eventType === 'resolution_state') {
+      const update = this.clone(row.payload as ResolutionStateUpdate);
+
+      this.sessions.publishResolutionStateUpdate({
+        reason: update.reason,
+        requests: update.state.requests,
+        resolutions: update.state.resolutions,
+        sessionId: update.sessionId,
+      });
+      return;
+    }
+
+    if (row.eventType === 'player_intent_state') {
+      const update = this.clone(row.payload as PlayerIntentStateUpdate);
+
+      this.sessions.publishPlayerIntentStateUpdate({
+        intents: update.state.intents,
+        reason: update.reason,
+        sessionId: update.sessionId,
+      });
+      return;
+    }
+
     if (row.eventType === 'combat_event') {
       const event = this.clone(row.payload as CombatEvent);
 
@@ -203,6 +228,8 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       combat_event: 0,
       encounter_state: 0,
       movement_state: 0,
+      player_intent_state: 0,
+      resolution_state: 0,
       session_state: 0,
     };
   }

@@ -7,8 +7,10 @@ import {
   sceneEntityIdSchema,
   sessionIdSchema,
 } from './common.js';
+import { rollStanceSchema, stanceSourceSchema } from './resolution.js';
 
 export const combatRollSchema = z.object({
+  /** The face that counted. Under a stance this is the kept die, not the first. */
   d20: z.number().int().min(1).max(20),
   modifier: z.number().int(),
   total: z.number().int(),
@@ -16,6 +18,14 @@ export const combatRollSchema = z.object({
   // misses. Both flags are optional so existing consumers stay compatible.
   critical: z.boolean().optional(),
   criticalMiss: z.boolean().optional(),
+  // How the attack was rolled, and why. Absence is not ambiguous: it means a
+  // single die at normal stance with nothing contributing, which `d20` already
+  // describes completely. The server emits `stance` and `dice` on every attack
+  // it resolves, and `stanceSources` only when something actually changed the
+  // dice - a condition, or a stance the GM asked for.
+  stance: rollStanceSchema.optional(),
+  dice: z.array(z.number().int().min(1).max(20)).min(1).max(2).optional(),
+  stanceSources: z.array(stanceSourceSchema).max(8).optional(),
 });
 
 // Present on resolved hits. Damage dice are rolled server-side; the breakdown

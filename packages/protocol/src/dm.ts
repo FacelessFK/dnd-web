@@ -102,6 +102,25 @@ export const dmRepositionCombatantInActiveSceneCommandSchema = z.object({
   }),
 });
 
+/**
+ * Conceal or reveal a combatant that already exists in the active scene.
+ *
+ * `hidden` was previously settable only at creation: `update_scene_entity`
+ * refuses combatants, so a GM who placed a creature in the open had no way to
+ * hide it again. Concealment is derived from this flag on every read, so the
+ * next projection reflects the change with no invalidation step (PRD V3).
+ */
+export const dmSetCombatantHiddenCommandSchema = z.object({
+  commandId: commandIdSchema,
+  type: z.literal('dm_set_combatant_hidden'),
+  actor: dmActorSchema,
+  payload: z.object({
+    sessionId: sessionIdSchema,
+    combatantId: sceneEntityIdSchema,
+    hidden: z.boolean(),
+  }),
+});
+
 export const dmSetCombatantCurrentHpCommandSchema = z.object({
   commandId: commandIdSchema,
   type: z.literal('dm_set_combatant_current_hp'),
@@ -171,6 +190,7 @@ export const dmCommandSchema = z.discriminatedUnion('type', [
   dmRepositionCharacterInActiveSceneCommandSchema,
   dmCreateCombatantInActiveSceneCommandSchema,
   dmRepositionCombatantInActiveSceneCommandSchema,
+  dmSetCombatantHiddenCommandSchema,
   dmSetCombatantCurrentHpCommandSchema,
   dmCombatantAttackCommandSchema,
   dmSetCurrentTurnUsageCommandSchema,
@@ -232,6 +252,9 @@ export type DmCreateCombatantInActiveSceneCommand = z.infer<
 >;
 export type DmRepositionCombatantInActiveSceneCommand = z.infer<
   typeof dmRepositionCombatantInActiveSceneCommandSchema
+>;
+export type DmSetCombatantHiddenCommand = z.infer<
+  typeof dmSetCombatantHiddenCommandSchema
 >;
 export type DmSetCombatantCurrentHpCommand = z.infer<
   typeof dmSetCombatantCurrentHpCommandSchema

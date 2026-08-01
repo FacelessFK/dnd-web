@@ -22,12 +22,14 @@ import {
   resolveAttackRoll,
   rollAttackDamage,
   rollD20,
+  rollD20WithStance,
   rollInitiative,
 } from '@dnd/rules';
 import type {
   ActiveSceneState,
   AttackCommand,
   AdvanceTurnCommand,
+  CancelResolutionRequestCommand,
   AssignCharacterToParticipantCommand,
   ActivateSceneForSessionCommand,
   CharacterAssignmentSuccess,
@@ -53,6 +55,7 @@ import type {
   DmSetCharacterActiveConditionsCommand,
   DmSetCharacterCurrentHpCommand,
   DmSetCombatantCurrentHpCommand,
+  DmSetCombatantHiddenCommand,
   DmSetCurrentTurnParticipantCommand,
   DmSetCurrentTurnUsageCommand,
   EncounterStateUpdate,
@@ -69,9 +72,19 @@ import type {
   PaintSceneTerrainCommand,
   PlaceEntityInSceneCommand,
   PlaceCharacterInActiveSceneCommand,
+  PlayerIntentCommandSuccess,
+  PlayerIntentStateUpdate,
+  PlayerIntentStateUpdateReason,
   RecordMovementUsageCommand,
   ReconnectSessionCommand,
   RepositionSceneEntityCommand,
+  RequestResolutionCommand,
+  ResolutionCommandSuccess,
+  ResolutionStateUpdate,
+  ResolutionStateUpdateReason,
+  SubmitPlayerIntentCommand,
+  SubmitResolutionCommand,
+  UpdatePlayerIntentStatusCommand,
   ActivateSceneTransitionCommand,
   UpdateSceneTransitionCommand,
   SceneActivationSuccess,
@@ -93,6 +106,7 @@ import type {
   EncounterOverlay,
   Participant,
   ParticipantId,
+  ParticipantRole,
   RulesProfile,
   Scene,
   SceneCombatant,
@@ -173,6 +187,34 @@ import {
   type SessionSubscriber,
   SessionStoreError,
 } from './session-store.js';
+import { normalizeCharacterProficiencies } from './character-proficiencies.js';
+import { withCombatantHidden } from './combatant-concealment.js';
+import {
+  buildPlayerIntent,
+  createPlayerIntentId,
+} from './player-intent-command-service.js';
+import {
+  buildResolutionRequest,
+  createResolutionId,
+  resolveResolutionRequest,
+} from './resolution-command-service.js';
+import { deriveRuntimeStance } from './runtime-condition-stance.js';
+import {
+  addPlayerIntent,
+  addResolutionRequest,
+  cancelResolutionRequest,
+  InMemorySessionTableStateStore,
+  projectTableStateForRole,
+  recordResolution,
+  requirePendingRequestFor,
+  updatePlayerIntentStatus,
+  type SessionTableState,
+  type SessionTableStateRepository,
+} from './session-table-state.js';
+import type {
+  PlayerIntentStateFanout,
+  ResolutionStateFanout,
+} from './session-event-fanout.js';
 
 export { createConnectionId };
 
@@ -317,7 +359,49 @@ export class InMemoryGameRuntime<
     // separate from d20Roller means tests can still assert that an illegal
     // attack consumed no attack RNG.
     readonly initiativeRoller: () => number = () => rollD20(),
+    // Resolution requests, the dice audit, and player intents for every table
+    // this runtime serves. Held per runtime rather than per session store
+    // because the transitions are the runtime's, not the transport's.
+    readonly tableStates: SessionTableStateRepository = new InMemorySessionTableStateStore(),
+    // Set only in DB mode, by the transaction boundary, so an M1 event becomes
+    // an outbox row inside the same transaction as the state it describes.
+    private readonly tableStateUpdateSink?: (
+      update: ResolutionStateUpdate | PlayerIntentStateUpdate,
+    ) => void,
   ) {}
+
+  /**
+   * A runtime whose M1 writes and M1 events both land inside one transaction.
+   *
+   * Mirrors `withSceneRepository` and `withEncounterRepository`: the boundary
+   * forks the store onto the transaction's database handle, runs the command
+   * against this runtime, and discards everything if the commit fails.
+   */
+  withTableStateRepository(
+    tableStates: SessionTableStateRepository,
+    options: {
+      tableStateUpdateSink?: (
+        update: ResolutionStateUpdate | PlayerIntentStateUpdate,
+      ) => void;
+    } = {},
+  ): InMemoryGameRuntime<TCharacters, TSessions> {
+    return new InMemoryGameRuntime(
+      this.sessions,
+      this.rulesProfiles,
+      this.characters,
+      this.scenes,
+      this.encounters,
+      this.d20Roller,
+      this.characterStateUpdateSink,
+      this.encounterStateUpdateSink,
+      this.movementStateUpdateSink,
+      this.combatEventSink,
+      this.dieRoller,
+      this.initiativeRoller,
+      tableStates,
+      options.tableStateUpdateSink ?? this.tableStateUpdateSink,
+    );
+  }
 
   createSession(
     command: CreateSessionCommand,
@@ -350,12 +434,69 @@ export class InMemoryGameRuntime<
     );
   }
 
+  /**
+   * Subscribe, then hand the new subscriber the table as it stands.
+   *
+   * The session snapshot has always been replayed on connect; the M1 table was
+   * not, so a refresh or a reconnect rebuilt an empty resolution panel and
+   * stayed empty until the GM happened to ask for something new. A pending
+   * request the player had not answered simply vanished from their screen while
+   * remaining authoritative on the server.
+   *
+   * Sent to this subscriber only, and projected for their role first - a
+   * reconnecting player must not be caught up on requests addressed elsewhere.
+   */
   connectParticipant(
     sessionId: string,
     participantId: string,
     subscriber: SessionSubscriber,
   ): void {
     this.sessions.connectParticipant(sessionId, participantId, subscriber);
+    this.sendTableStateSnapshot(sessionId, participantId, subscriber);
+  }
+
+  private sendTableStateSnapshot(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    subscriber: SessionSubscriber,
+  ): void {
+    let role: ParticipantRole;
+
+    try {
+      role = this.requireParticipant(
+        this.sessions.getSessionSnapshotForParticipant(
+          sessionId,
+          participantId,
+        ),
+        participantId,
+      ).role;
+    } catch {
+      // The subscription itself already failed or the participant is unknown.
+      // Failing closed here means sending nothing rather than guessing a role.
+      return;
+    }
+
+    const projected = projectTableStateForRole(
+      this.tableStates.get(sessionId),
+      role,
+      participantId,
+    );
+
+    subscriber.send({
+      reason: 'initial_sync',
+      sessionId,
+      state: {
+        requests: projected.requests,
+        resolutions: projected.resolutions,
+      },
+      type: 'resolution_state',
+    });
+    subscriber.send({
+      reason: 'initial_sync',
+      sessionId,
+      state: { intents: projected.intents },
+      type: 'player_intent_state',
+    });
   }
 
   disconnectParticipant(
@@ -382,6 +523,8 @@ export class InMemoryGameRuntime<
       this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -407,6 +550,8 @@ export class InMemoryGameRuntime<
       this.combatEventSink,
       rollers.dieRoller ?? this.dieRoller,
       rollers.initiativeRoller ?? this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -430,11 +575,16 @@ export class InMemoryGameRuntime<
       this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
   withSceneRepository(
     scenes: SceneRepository,
+    options: {
+      encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+    } = {},
   ): InMemoryGameRuntime<TCharacters, TSessions> {
     return new InMemoryGameRuntime(
       this.sessions,
@@ -444,11 +594,13 @@ export class InMemoryGameRuntime<
       this.encounters,
       this.d20Roller,
       this.characterStateUpdateSink,
-      this.encounterStateUpdateSink,
+      options.encounterStateUpdateSink ?? this.encounterStateUpdateSink,
       this.movementStateUpdateSink,
       this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -471,6 +623,8 @@ export class InMemoryGameRuntime<
       this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -498,6 +652,8 @@ export class InMemoryGameRuntime<
       options.combatEventSink ?? this.combatEventSink,
       this.dieRoller,
       this.initiativeRoller,
+      this.tableStates,
+      this.tableStateUpdateSink,
     );
   }
 
@@ -1157,6 +1313,366 @@ export class InMemoryGameRuntime<
       }),
       (updatedScene) => updatedScene,
     );
+  }
+
+  /**
+   * Conceal or reveal a combatant that is already on the map.
+   *
+   * The write is one boolean. What makes this a real command is everything that
+   * reads it: `projectSceneForRole` drops the entity from a player's scene, and
+   * `collectConcealedCombatantIds` strips its identity out of every encounter
+   * and combat event on the way out. Nothing is copied onto the encounter, so
+   * the slot count and `currentTurnIndex` are untouched and a reveal is
+   * immediate.
+   *
+   * Setting the value it already has is a no-op: no scene write, no event. That
+   * makes a double-click harmless without needing the idempotency layer to
+   * cover it.
+   */
+  dmSetCombatantHidden(command: DmSetCombatantHiddenCommand): Scene {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'conceal or reveal combatants');
+
+    const activeSceneId = requireActiveSceneId(snapshot);
+    const scene = this.scenes.getScene(activeSceneId);
+
+    assertSceneBelongsToSession(snapshot, scene);
+    this.requireSceneCombatant(scene, command.payload.combatantId);
+
+    const change = withCombatantHidden(
+      scene,
+      command.payload.combatantId,
+      command.payload.hidden,
+    );
+
+    if (!change.changed) {
+      return scene;
+    }
+
+    return this.resolveRepositoryResult(
+      this.scenes.saveScene({ ...change.scene, updatedAt: this.now() }),
+      (updatedScene) => {
+        this.republishEncounterForVisibilityChange(snapshot.session.id);
+
+        return updatedScene;
+      },
+    );
+  }
+
+  /**
+   * Re-send the encounter after concealment changed.
+   *
+   * The encounter itself did not change - what changed is what each role is
+   * allowed to see of it, and that is decided at publish time from the scene.
+   * Without this a player would keep the pre-reveal turn rail until the next
+   * turn happened to be taken.
+   */
+  private republishEncounterForVisibilityChange(sessionId: SessionId): void {
+    const encounter = this.encounters.findEncounterBySession(sessionId);
+
+    if (!encounter || encounter.status !== 'active') {
+      return;
+    }
+
+    this.publishEncounterStateUpdate({
+      sessionId,
+      encounter,
+      reason: 'dm_combatant_visibility_changed',
+    });
+  }
+
+  /**
+   * A GM asking one seat for a check or a save.
+   *
+   * The addressed seat is validated here rather than trusted from the payload:
+   * a request pointed at a participant with no runtime character would produce
+   * a pending row nobody could ever answer, and the GM would be left waiting on
+   * a dice roll that cannot happen.
+   */
+  requestResolution(
+    command: RequestResolutionCommand,
+  ): ResolutionCommandSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'request a check or a saving throw');
+
+    const target = this.requireParticipant(
+      snapshot,
+      command.payload.targetParticipantId,
+    );
+
+    return this.resolveRepositoryResult(
+      this.requireAssignedCharacterRecord(snapshot, target),
+      (targetRecord) => {
+        const request = buildResolutionRequest({
+          command,
+          requestId: createResolutionId(),
+          sessionId: snapshot.session.id,
+          requestedByParticipantId: actor.id,
+          targetParticipantId: target.id,
+          targetCharacterId: targetRecord.character.id,
+          createdAt: this.now(),
+        });
+
+        return this.commitTableState({
+          sessionId: snapshot.session.id,
+          state: addResolutionRequest(
+            this.tableStates.get(snapshot.session.id),
+            request,
+          ),
+          reason: 'resolution_requested',
+          actor,
+        });
+      },
+    );
+  }
+
+  /**
+   * The addressed player answering their own request.
+   *
+   * `requirePendingRequestFor` is the whole security surface: it refuses a
+   * request addressed to another seat - including the GM's - and refuses one
+   * already answered or cancelled. Both checks run before a die is rolled, so a
+   * rejected attempt consumes no randomness and leaves the request pending for
+   * the seat that actually owns it.
+   */
+  submitResolution(
+    command: SubmitResolutionCommand,
+  ): ResolutionCommandSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const tableState = this.tableStates.get(snapshot.session.id);
+    const request = requirePendingRequestFor(
+      tableState,
+      command.payload.requestId,
+      actor.id,
+    );
+
+    return this.resolveRepositoryResult(
+      this.requireAssignedCharacterRecord(snapshot, actor),
+      (record) => {
+        if (
+          request.targetCharacterId &&
+          request.targetCharacterId !== record.character.id
+        ) {
+          throw new CharacterStoreError(
+            'invalid_participant_session_association',
+            `Resolution request "${request.id}" was addressed to character "${request.targetCharacterId}", but participant "${actor.id}" is now assigned to "${record.character.id}".`,
+          );
+        }
+
+        const resolvedAt = this.now();
+        const resolution = resolveResolutionRequest({
+          request,
+          actor: {
+            abilities: record.character.abilities,
+            level: record.character.level,
+            activeConditions: record.overlay.activeConditions,
+            proficientAbilities: record.character.proficiencies.savingThrows,
+            proficientSkills: record.character.proficiencies.skills,
+          },
+          actorParticipantId: actor.id,
+          actorCharacterId: record.character.id,
+          rulesProfileId: snapshot.session.rulesProfileId,
+          sessionId: snapshot.session.id,
+          commandId: command.commandId,
+          resolutionId: createResolutionId(),
+          resolvedAt,
+          roller: () => rollD20(this.d20Roller),
+        });
+
+        return this.commitTableState({
+          sessionId: snapshot.session.id,
+          state: recordResolution(tableState, {
+            request,
+            resolution,
+            resolvedAt,
+          }),
+          reason: 'resolution_submitted',
+          actor,
+        });
+      },
+    );
+  }
+
+  /**
+   * The GM withdrawing a request nobody has answered yet.
+   *
+   * The request is marked `cancelled` rather than removed. A row that vanished
+   * would leave the addressed player's client showing a prompt with nothing on
+   * the server to explain it, and it would erase the fact that the GM asked at
+   * all - which is part of what the audit is for.
+   */
+  cancelResolutionRequest(
+    command: CancelResolutionRequestCommand,
+  ): ResolutionCommandSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'cancel a resolution request');
+
+    return this.commitTableState({
+      sessionId: snapshot.session.id,
+      state: cancelResolutionRequest(
+        this.tableStates.get(snapshot.session.id),
+        command.payload.requestId,
+      ),
+      reason: 'resolution_request_cancelled',
+      actor,
+    });
+  }
+
+  /** Store the actor's sentence. Nothing reads it but a human. */
+  submitPlayerIntent(
+    command: SubmitPlayerIntentCommand,
+  ): PlayerIntentCommandSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+    const intent = buildPlayerIntent({
+      command,
+      intentId: createPlayerIntentId(),
+      sessionId: snapshot.session.id,
+      authorParticipantId: actor.id,
+      ...(actor.characterId ? { authorCharacterId: actor.characterId } : {}),
+      createdAt: this.now(),
+    });
+
+    return this.commitIntentState({
+      sessionId: snapshot.session.id,
+      state: addPlayerIntent(this.tableStates.get(snapshot.session.id), intent),
+      reason: 'intent_submitted',
+      actor,
+    });
+  }
+
+  updatePlayerIntentStatus(
+    command: UpdatePlayerIntentStatusCommand,
+  ): PlayerIntentCommandSuccess['data'] {
+    const snapshot = this.sessions.getSessionSnapshotForParticipant(
+      command.payload.sessionId,
+      command.actor.participantId,
+    );
+    const actor = this.requireParticipant(
+      snapshot,
+      command.actor.participantId,
+    );
+
+    this.assertActorIsDm(actor, 'change a player intent status');
+
+    return this.commitIntentState({
+      sessionId: snapshot.session.id,
+      state: updatePlayerIntentStatus(
+        this.tableStates.get(snapshot.session.id),
+        {
+          intentId: command.payload.intentId,
+          status: command.payload.status,
+          ...(command.payload.gmNote === undefined
+            ? {}
+            : { gmNote: command.payload.gmNote }),
+          updatedAt: this.now(),
+        },
+      ),
+      reason: 'intent_status_changed',
+      actor,
+    });
+  }
+
+  /**
+   * Commit new table state, fan it out, and answer the caller with their own
+   * projection.
+   *
+   * The order matters. Authoritative state is stored first, then published -
+   * every subscriber and the HTTP responder read the same committed value, so a
+   * client cannot receive an event describing state the server has not adopted.
+   * The response is projected for the actor, not returned raw: it is cached by
+   * the idempotency layer and replayed verbatim, and a raw table state cached
+   * against a player's command ID would hand them the GM's view forever.
+   */
+  private commitTableState(params: {
+    sessionId: SessionId;
+    state: SessionTableState;
+    reason: ResolutionStateUpdateReason;
+    actor: Participant;
+  }): ResolutionCommandSuccess['data'] {
+    this.tableStates.set(params.sessionId, params.state);
+    this.publishResolutionStateUpdate({
+      sessionId: params.sessionId,
+      reason: params.reason,
+      requests: params.state.requests,
+      resolutions: params.state.resolutions,
+    });
+
+    const projected = projectTableStateForRole(
+      params.state,
+      params.actor.role,
+      params.actor.id,
+    );
+
+    return {
+      sessionId: params.sessionId,
+      state: {
+        requests: projected.requests,
+        resolutions: projected.resolutions,
+      },
+    };
+  }
+
+  private commitIntentState(params: {
+    sessionId: SessionId;
+    state: SessionTableState;
+    reason: PlayerIntentStateUpdateReason;
+    actor: Participant;
+  }): PlayerIntentCommandSuccess['data'] {
+    this.tableStates.set(params.sessionId, params.state);
+    this.publishPlayerIntentStateUpdate({
+      sessionId: params.sessionId,
+      reason: params.reason,
+      intents: params.state.intents,
+    });
+
+    return {
+      sessionId: params.sessionId,
+      state: {
+        intents: projectTableStateForRole(
+          params.state,
+          params.actor.role,
+          params.actor.id,
+        ).intents,
+      },
+    };
   }
 
   dmSetCurrentTurnUsage(command: DmSetCurrentTurnUsageCommand): Encounter {
@@ -2384,10 +2900,20 @@ export class InMemoryGameRuntime<
         // than re-reading them. Besides being cheaper, this path also runs
         // inside a transaction boundary whose stores are scoped to the
         // transaction, so a fresh lookup here is not guaranteed to resolve.
-        return projectEncounterForRole(
+        //
+        // Persistence has to be unwrapped before projection. In DB mode the
+        // save is a promise, and projecting one reads `participants` off a
+        // Promise - which is `undefined`. The DM path hid it, because the
+        // projection returns early for the DM and handed the promise straight
+        // back; a player attacking while any combatant was concealed crashed.
+        return this.resolveRepositoryResult(
           this.persistResolvedAttack(context, resolution),
-          prepared.actor.role,
-          collectConcealedCombatantIds(prepared.scene),
+          (savedEncounter) =>
+            projectEncounterForRole(
+              savedEncounter,
+              prepared.actor.role,
+              collectConcealedCombatantIds(prepared.scene),
+            ),
         );
       },
     );
@@ -2670,6 +3196,9 @@ export class InMemoryGameRuntime<
       speed: params.character.speed,
       notes: params.character.notes ?? null,
       meta: structuredClone(params.character.meta ?? {}),
+      proficiencies: normalizeCharacterProficiencies(
+        params.character.proficiencies,
+      ),
       createdAt: now,
       updatedAt: now,
     };
@@ -2702,6 +3231,11 @@ export class InMemoryGameRuntime<
       name: params.entry.name,
       notes: params.entry.notes ?? null,
       ownerParticipantId: params.ownerParticipantId,
+      // Copied, not referenced. The runtime character is a separate record from
+      // here on; nothing it does may reach back into the library row.
+      proficiencies: normalizeCharacterProficiencies(
+        params.entry.proficiencies,
+      ),
       rulesProfileId: params.entry.rulesProfileId,
       speciesOrRace: params.entry.speciesOrRace,
       speed: params.entry.speed,
@@ -2733,6 +3267,9 @@ export class InMemoryGameRuntime<
         speed: characterUpdate.speed,
         notes: characterUpdate.notes ?? null,
         meta: structuredClone(characterUpdate.meta ?? ({} as CharacterMeta)),
+        // Not part of the update input, so editing a draft never silently
+        // discards what the character is trained in.
+        proficiencies: structuredClone(record.character.proficiencies),
         updatedAt: this.now(),
       },
       overlay: record.overlay,
@@ -3111,7 +3648,19 @@ export class InMemoryGameRuntime<
 
   private resolveAttack(context: AttackContext): ResolvedAttack {
     const updatedEncounter = markEncounterActionUsed(context.encounter);
-    const d20 = rollD20(this.d20Roller);
+    // The attacker's live conditions decide how many dice are rolled and which
+    // one counts. This is the only place a `poisoned` tag becomes a mechanic
+    // rather than a label, and it happens before the roll - the browser never
+    // sees a die it could have influenced.
+    const derivedStance = deriveRuntimeStance({
+      kind: 'attack_roll',
+      activeConditions: context.attackerRecord.overlay.activeConditions,
+    });
+    const d20Outcome = rollD20WithStance({
+      stance: derivedStance.stance,
+      roller: () => rollD20(this.d20Roller),
+    });
+    const d20 = d20Outcome.selectedDie;
     const modifier = calculateAttackModifier(context.attackerRecord.character);
     const targetArmorClass =
       context.kind === 'character'
@@ -3143,6 +3692,11 @@ export class InMemoryGameRuntime<
         total: outcome.total,
         critical: outcome.critical,
         criticalMiss: outcome.criticalMiss,
+        stance: d20Outcome.stance,
+        dice: d20Outcome.dice,
+        ...(derivedStance.sources.length
+          ? { stanceSources: derivedStance.sources }
+          : {}),
       },
       hit,
       damage,
@@ -3187,7 +3741,19 @@ export class InMemoryGameRuntime<
     }
 
     const updatedEncounter = markEncounterActionUsed(context.encounter);
-    const d20 = rollD20(this.d20Roller);
+    // A `SceneCombatant` carries no conditions today, so this always folds to a
+    // normal roll. It goes through the same seam anyway: when combatants gain
+    // conditions there is one place to feed them in, and the reported roll
+    // already has the shape that explains itself.
+    const derivedStance = deriveRuntimeStance({
+      kind: 'attack_roll',
+      activeConditions: [],
+    });
+    const d20Outcome = rollD20WithStance({
+      stance: derivedStance.stance,
+      roller: () => rollD20(this.d20Roller),
+    });
+    const d20 = d20Outcome.selectedDie;
     const modifier = calculateAttackModifier({
       abilities: combatant.abilities,
       level: 1,
@@ -3216,6 +3782,11 @@ export class InMemoryGameRuntime<
         total: outcome.total,
         critical: outcome.critical,
         criticalMiss: outcome.criticalMiss,
+        stance: d20Outcome.stance,
+        dice: d20Outcome.dice,
+        ...(derivedStance.sources.length
+          ? { stanceSources: derivedStance.sources }
+          : {}),
       },
       hit,
       damage,
@@ -3279,20 +3850,31 @@ export class InMemoryGameRuntime<
     context: AttackContext,
     resolution: ResolvedAttack,
   ): Encounter {
-    const savedEncounter = this.saveAndPublishEncounter({
-      sessionId: context.sessionId,
-      encounter: resolution.updatedEncounter,
-      reason: 'action_used',
-    });
+    // The save is awaited before the event is built. In DB mode it is a
+    // promise, and reading `id` off one yields `undefined` - which produced a
+    // combat event with no `encounterId`, accepted silently into the outbox and
+    // only rejected later when the row was replayed onto a stream.
+    return this.resolveRepositoryResult(
+      this.saveAndPublishEncounter({
+        sessionId: context.sessionId,
+        encounter: resolution.updatedEncounter,
+        reason: 'action_used',
+      }),
+      (savedEncounter) => {
+        // Emit `encounter_state` first so clients observe the authoritative
+        // action consumption before the resolved attack payload. These remain
+        // separate authoritative updates and must not be merged client-side.
+        this.publishCombatEvent(
+          this.buildResolvedAttackCombatEvent(
+            context,
+            resolution,
+            savedEncounter,
+          ),
+        );
 
-    // Emit `encounter_state` first so clients observe the authoritative action
-    // consumption before the resolved attack payload. These remain separate
-    // authoritative updates and must not be merged client-side.
-    this.publishCombatEvent(
-      this.buildResolvedAttackCombatEvent(context, resolution, savedEncounter),
+        return savedEncounter;
+      },
     );
-
-    return savedEncounter;
   }
 
   private buildResolvedAttackCombatEvent(
@@ -3345,21 +3927,24 @@ export class InMemoryGameRuntime<
     context: CombatantAttackContext,
     resolution: ResolvedAttack,
   ): Encounter {
-    const savedEncounter = this.saveAndPublishEncounter({
-      sessionId: context.sessionId,
-      encounter: resolution.updatedEncounter,
-      reason: 'action_used',
-    });
+    return this.resolveRepositoryResult(
+      this.saveAndPublishEncounter({
+        sessionId: context.sessionId,
+        encounter: resolution.updatedEncounter,
+        reason: 'action_used',
+      }),
+      (savedEncounter) => {
+        this.publishCombatEvent(
+          this.buildResolvedCombatantAttackCombatEvent(
+            context,
+            resolution,
+            savedEncounter,
+          ),
+        );
 
-    this.publishCombatEvent(
-      this.buildResolvedCombatantAttackCombatEvent(
-        context,
-        resolution,
-        savedEncounter,
-      ),
+        return savedEncounter;
+      },
     );
-
-    return savedEncounter;
   }
 
   private buildResolvedCombatantAttackCombatEvent(
@@ -3976,6 +4561,46 @@ export class InMemoryGameRuntime<
       update,
       this.resolveConcealedCombatantIds(params.encounter),
     );
+  }
+
+  /**
+   * In DB mode the sink diverts these into the command's transaction, so the
+   * outbox row and the state change commit together and the event is delivered
+   * only after the commit succeeds. With no sink configured - in-memory mode -
+   * they go straight to the room, which is the whole delivery guarantee that
+   * mode offers.
+   */
+  private publishResolutionStateUpdate(params: ResolutionStateFanout): void {
+    if (this.tableStateUpdateSink) {
+      this.tableStateUpdateSink({
+        type: 'resolution_state',
+        reason: params.reason,
+        sessionId: params.sessionId,
+        state: {
+          requests: structuredClone(params.requests),
+          resolutions: structuredClone(params.resolutions),
+        },
+      });
+      return;
+    }
+
+    this.sessions.publishResolutionStateUpdate(params);
+  }
+
+  private publishPlayerIntentStateUpdate(
+    params: PlayerIntentStateFanout,
+  ): void {
+    if (this.tableStateUpdateSink) {
+      this.tableStateUpdateSink({
+        type: 'player_intent_state',
+        reason: params.reason,
+        sessionId: params.sessionId,
+        state: { intents: structuredClone(params.intents) },
+      });
+      return;
+    }
+
+    this.sessions.publishPlayerIntentStateUpdate(params);
   }
 
   private publishCombatEvent(update: CombatEvent): void {

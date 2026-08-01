@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { skillIds } from '@dnd/shared';
+
 export const sessionIdPattern = /^[A-Z0-9]{6}$/;
 export const participantIdPattern = /^[a-zA-Z0-9_-]{2,64}$/;
 export const rulesProfileIdPattern = /^[a-z0-9][a-z0-9_-]{2,63}$/;
@@ -8,6 +10,16 @@ export const characterLibraryEntryIdPattern = /^charlib_[a-f0-9-]{36}$/;
 export const sceneIdPattern = /^scene_[a-f0-9-]{36}$/;
 export const sceneEntityIdPattern = /^scene_entity_[a-f0-9-]{36}$/;
 export const encounterIdPattern = /^encounter_[a-f0-9-]{36}$/;
+
+/**
+ * A canonical skill ID. Never a display label - see `skillIds` in
+ * `@dnd/shared` for why that distinction is load-bearing.
+ */
+export const skillIdSchema = z.enum(skillIds);
+
+// Re-exported so the browser can enumerate the canonical list without taking a
+// direct dependency on `@dnd/shared`, which it does not have.
+export { skillIds };
 
 export const sessionIdSchema = z
   .string()

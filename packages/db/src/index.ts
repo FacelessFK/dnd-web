@@ -11,5 +11,7 @@ export * from './dnd-database-unit-of-work.js';
 export * from './encounter-record-database.js';
 export * from './node-postgres-database.js';
 export * from './scene-record-database.js';
+export * from './session-seat-ownership-database.js';
 export * from './session-snapshot-database.js';
+export * from './session-table-state-database.js';
 export * from './schema.js';

@@ -22,6 +22,10 @@ const requiredTables = [
   'scene_records',
   'active_encounter_records',
   'command_event_outbox_records',
+  'session_seat_ownership',
+  'session_resolution_requests',
+  'session_dice_resolutions',
+  'session_player_intents',
 ];
 
 loadRepoEnvironment();

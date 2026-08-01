@@ -31,6 +31,10 @@ import type {
 import {
   publishCombatEventToRoom,
   publishEncounterStateUpdateToRoom,
+  publishPlayerIntentStateUpdateToRoom,
+  publishResolutionStateUpdateToRoom,
+  type PlayerIntentStateFanout,
+  type ResolutionStateFanout,
 } from './session-event-fanout.js';
 
 type ParticipantCreationCommand = CreateSessionCommand | JoinSessionCommand;
@@ -116,6 +120,14 @@ export interface RuntimeSessionStore {
     concealedCombatantIds?: ReadonlySet<SceneEntityId>,
   ): void;
   publishCharacterStateUpdate(update: CharacterStateUpdate): void;
+  /**
+   * The whole table state goes in and a per-participant projection comes out.
+   * The caller passes authoritative state and never a pre-filtered view: which
+   * seat may see which request is a property of the data, decided once in
+   * `session-table-state.ts`, not something each transport re-derives.
+   */
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void;
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void;
 }
 
 const SESSION_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -414,6 +426,20 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       this.requireRoom(update.sessionId),
       update,
       concealedCombatantIds,
+    );
+  }
+
+  publishResolutionStateUpdate(params: ResolutionStateFanout): void {
+    publishResolutionStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
+    );
+  }
+
+  publishPlayerIntentStateUpdate(params: PlayerIntentStateFanout): void {
+    publishPlayerIntentStateUpdateToRoom(
+      this.requireRoom(params.sessionId),
+      params,
     );
   }
 

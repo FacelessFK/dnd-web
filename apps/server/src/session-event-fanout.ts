@@ -12,17 +12,48 @@
  * Both stores delegate here so there is exactly one place where the decision
  * "who is allowed to see which payload" is made.
  */
-import type { CombatEvent, EncounterStateUpdate } from '@dnd/protocol';
+import type {
+  CombatEvent,
+  DiceResolution,
+  EncounterStateUpdate,
+  PlayerIntent,
+  PlayerIntentStateUpdateReason,
+  ResolutionRequest,
+  ResolutionStateUpdateReason,
+} from '@dnd/protocol';
 import { projectEncounterForRole } from '@dnd/rules';
 import type {
   ParticipantId,
   ParticipantRole,
   SceneEntityId,
+  SessionId,
   SessionSnapshot,
 } from '@dnd/shared';
 import type { SessionStreamEvent } from '@dnd/protocol';
 
 import { projectCombatEventForRole } from './encounter-visibility.js';
+import { projectTableStateForRole } from './session-table-state.js';
+
+/**
+ * The authoritative slice one M1 event describes.
+ *
+ * Carries the lists rather than a whole `SessionTableState` so the payload a
+ * caller hands in is exactly the payload that goes to the durable outbox and
+ * comes back out of it. A shape that had to be reassembled on replay would be
+ * one more place for the live path and the recovery path to diverge.
+ */
+export type ResolutionStateFanout = {
+  sessionId: SessionId;
+  reason: ResolutionStateUpdateReason;
+  requests: ResolutionRequest[];
+  resolutions: DiceResolution[];
+};
+
+export type PlayerIntentStateFanout = {
+  sessionId: SessionId;
+  reason: PlayerIntentStateUpdateReason;
+  intents: PlayerIntent[];
+};
 
 /** The minimum a subscriber has to offer to receive an event. */
 type FanoutSubscriber = {
@@ -74,6 +105,85 @@ export function publishCombatEventToRoom(
   );
 }
 
+/**
+ * Fan out the table's resolution state, projected per subscriber.
+ *
+ * Unlike concealment, this cannot be decided by role alone. Two players at the
+ * same table are entitled to different payloads: a request addressed to one of
+ * them carries a DC and a GM reason that telegraphs what is coming to the
+ * other. So the projection is computed per participant, before serialization,
+ * and a subscriber the snapshot cannot identify is projected as a player under
+ * their own ID - which resolves to nothing addressed to them.
+ */
+export function publishResolutionStateUpdateToRoom(
+  room: SessionEventFanoutRoom,
+  params: ResolutionStateFanout,
+): void {
+  for (const [participantId, subscriber] of room.subscribers) {
+    const projected = projectTableStateForRole(
+      {
+        intents: [],
+        requests: params.requests,
+        resolutions: params.resolutions,
+      },
+      resolveSubscriberRole(room, participantId),
+      participantId,
+    );
+
+    subscriber.send({
+      type: 'resolution_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      state: {
+        requests: projected.requests,
+        resolutions: projected.resolutions,
+      },
+    });
+  }
+}
+
+/**
+ * Fan out the table's intents, projected per subscriber.
+ *
+ * An intent is a note between its author and the GM, so every other seat
+ * receives an update carrying none of them rather than no update at all - the
+ * stream stays a consistent description of what that client is allowed to know.
+ */
+export function publishPlayerIntentStateUpdateToRoom(
+  room: SessionEventFanoutRoom,
+  params: PlayerIntentStateFanout,
+): void {
+  for (const [participantId, subscriber] of room.subscribers) {
+    const projected = projectTableStateForRole(
+      { intents: params.intents, requests: [], resolutions: [] },
+      resolveSubscriberRole(room, participantId),
+      participantId,
+    );
+
+    subscriber.send({
+      type: 'player_intent_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      state: { intents: projected.intents },
+    });
+  }
+}
+
+/**
+ * A subscriber's role, failing closed. An unknown viewer is a player: the one
+ * mistake that must never be made here is handing out the omniscient payload.
+ */
+function resolveSubscriberRole(
+  room: SessionEventFanoutRoom,
+  participantId: ParticipantId,
+): ParticipantRole {
+  return (
+    room.snapshot.participants.find(
+      (participant) => participant.id === participantId,
+    )?.role ?? 'player'
+  );
+}
+
 function broadcast(
   room: SessionEventFanoutRoom,
   update: SessionStreamEvent,
@@ -101,10 +211,7 @@ function broadcastByRole(
   const projectedByRole = new Map<ParticipantRole, SessionStreamEvent>();
 
   for (const [participantId, subscriber] of room.subscribers) {
-    const role =
-      room.snapshot.participants.find(
-        (participant) => participant.id === participantId,
-      )?.role ?? 'player';
+    const role = resolveSubscriberRole(room, participantId);
     let projected = projectedByRole.get(role);
 
     if (!projected) {

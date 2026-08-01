@@ -2,6 +2,7 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
+import type { EncounterStateUpdate } from '@dnd/protocol';
 import type { Scene, SceneId } from '@dnd/shared';
 
 import {
@@ -12,6 +13,7 @@ import {
   type CommandIdempotencyCategory,
   type IdempotentCommand,
 } from './command-idempotency-store.js';
+import type { CommandEventOutboxDispatcherLike } from './command-event-outbox-dispatcher.js';
 import { acquireTransactionalIdempotencyClaim } from './db-transactional-idempotency-claim.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
 import type {
@@ -35,6 +37,11 @@ export const DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES = [
   'dm_create_combatant_in_active_scene',
   'dm_reposition_combatant_in_active_scene',
   'dm_set_combatant_current_hp',
+  // Concealment is a scene write, so it belongs to this boundary. Unlike the
+  // others it also republishes the encounter - the encounter did not change,
+  // but what each role may see of it did - so that event has to become an
+  // outbox row inside the same transaction as the flag it reports.
+  'dm_set_combatant_hidden',
 ] as const;
 
 type TransactionalCommandParams = {
@@ -53,6 +60,7 @@ type TransactionalRunParams<TResponse> = TransactionalCommandParams & {
 };
 
 type TransactionalRunResult<TResponse> = {
+  dispatchIdempotencyKey: string | null;
   response: TResponse;
   sceneCache: Map<SceneId, Scene> | null;
 };
@@ -65,7 +73,10 @@ export class DbBackedSceneCommandTransactionBoundary {
     DURABLE_DM_SCENE_MUTATION_COMMAND_TYPES,
   );
 
-  constructor(private readonly unitOfWork: DndDatabaseUnitOfWork) {}
+  constructor(
+    private readonly unitOfWork: DndDatabaseUnitOfWork,
+    private readonly outboxDispatcher?: CommandEventOutboxDispatcherLike,
+  ) {}
 
   supports(params: TransactionalCommandParams): boolean {
     if (this.durableCommandTypes.has(params.command.type)) {
@@ -102,6 +113,19 @@ export class DbBackedSceneCommandTransactionBoundary {
       params.runtime.scenes.replaceScenes(result.sceneCache);
     }
 
+    if (result.dispatchIdempotencyKey && this.outboxDispatcher) {
+      try {
+        await this.outboxDispatcher.drainUnpublishedByIdempotencyKey(
+          result.dispatchIdempotencyKey,
+        );
+      } catch (error) {
+        console.error(
+          '[scene-transaction] failed to dispatch scene outbox rows after commit',
+          error,
+        );
+      }
+    }
+
     return this.clone(result.response);
   }
 
@@ -122,6 +146,7 @@ export class DbBackedSceneCommandTransactionBoundary {
 
     if (claim.kind === 'cached') {
       return {
+        dispatchIdempotencyKey: null,
         response: this.clone(claim.response),
         sceneCache: null,
       };
@@ -135,9 +160,16 @@ export class DbBackedSceneCommandTransactionBoundary {
       );
     }
 
+    const encounterStateUpdates: EncounterStateUpdate[] = [];
     const transactionScenes = runtimeScenes.forkForTransaction(context.scenes);
-    const transactionRuntime =
-      params.runtime.withSceneRepository(transactionScenes);
+    const transactionRuntime = params.runtime.withSceneRepository(
+      transactionScenes,
+      {
+        encounterStateUpdateSink: (update) => {
+          encounterStateUpdates.push(update);
+        },
+      },
+    );
     const response = await params.execute(transactionRuntime);
     const inserted =
       await context.commandIdempotency.insertCompletedCommandIdempotencyRecord({
@@ -152,7 +184,16 @@ export class DbBackedSceneCommandTransactionBoundary {
       });
 
     if (inserted) {
+      await this.persistOutboxRows(
+        context,
+        idempotencyKey,
+        encounterStateUpdates,
+      );
+
       return {
+        dispatchIdempotencyKey: encounterStateUpdates.length
+          ? idempotencyKey
+          : null,
         response,
         sceneCache: transactionScenes.cloneScenes(),
       };
@@ -176,9 +217,35 @@ export class DbBackedSceneCommandTransactionBoundary {
     );
 
     return {
+      dispatchIdempotencyKey: null,
       response: this.clone(concurrentRecord.response) as TResponse,
       sceneCache: null,
     };
+  }
+
+  private async persistOutboxRows(
+    context: DndDatabaseUnitOfWorkContext,
+    idempotencyKey: string,
+    updates: EncounterStateUpdate[],
+  ): Promise<void> {
+    for (const [eventOrder, update] of updates.entries()) {
+      const inserted = await context.outbox.insertCommandEventOutboxRecord({
+        eventOrder,
+        eventType: update.type,
+        idempotencyKey,
+        outboxId: `${idempotencyKey}:${eventOrder}`,
+        payload: this.clone(update),
+        sessionId: update.sessionId,
+      });
+
+      if (inserted) {
+        continue;
+      }
+
+      throw new Error(
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for scene command "${idempotencyKey}".`,
+      );
+    }
   }
 
   private assertSameFingerprint(

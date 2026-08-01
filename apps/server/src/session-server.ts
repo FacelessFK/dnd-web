@@ -32,7 +32,13 @@ import {
   outboxStatusResponseSchema,
   outboxStatusSuccessSchema,
   participantIdSchema,
+  playerIntentCommandErrorSchema,
+  playerIntentCommandSchema,
+  playerIntentCommandSuccessSchema,
   registerAuthRequestSchema,
+  resolutionCommandErrorSchema,
+  resolutionCommandSchema,
+  resolutionCommandSuccessSchema,
   sceneActivationSuccessSchema,
   sceneCommandErrorSchema,
   sceneCommandSchema,
@@ -52,6 +58,10 @@ import {
   type EncounterCommandSuccess,
   type MovementCommandError,
   type MovementCommandSuccess,
+  type PlayerIntentCommandError,
+  type PlayerIntentCommandSuccess,
+  type ResolutionCommandError,
+  type ResolutionCommandSuccess,
   type RuntimeErrorCode,
   type SceneActivationSuccess,
   type SceneCommandError,
@@ -68,6 +78,10 @@ import {
   type AuthThrottleDecision,
 } from './auth-rate-limiter.js';
 import { AuthService, AuthStoreError } from './auth-store.js';
+import {
+  SeatOwnershipError,
+  SessionSeatOwnership,
+} from './session-seat-ownership.js';
 import { CharacterStoreError } from './character-store.js';
 import {
   DbBackedCharacterLibraryRepository,
@@ -104,10 +118,12 @@ import {
 } from './participant-credential-store.js';
 import { RulesProfileStoreError } from './rules-profile-store.js';
 import { SceneStoreError } from './scene-store.js';
+import { DbBackedTableCommandTransactionBoundary } from './db-table-command-transaction.js';
 import {
   SessionStoreError,
   type RuntimeSessionStore,
 } from './session-store.js';
+import { SessionTableStateError } from './session-table-state.js';
 
 const defaultWebOrigin = 'http://localhost:3000';
 
@@ -128,7 +144,8 @@ type RuntimeStoreError =
   | MovementRuntimeError
   | RulesProfileStoreError
   | SceneStoreError
-  | SessionStoreError;
+  | SessionStoreError
+  | SessionTableStateError;
 
 type GameRuntime = InMemoryGameRuntime<
   RuntimeCharacterRepository,
@@ -168,6 +185,7 @@ const defaultAuthThrottle = createAuthThrottle();
  * to be verifiable on the next.
  */
 const defaultParticipantCredentials = new ParticipantCredentialStore();
+const defaultSeatOwnership = new SessionSeatOwnership();
 
 export function createSessionServer(
   runtime: GameRuntime = new InMemoryGameRuntime(),
@@ -180,6 +198,10 @@ export function createSessionServer(
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary,
   characterLibrary: CharacterLibraryService = new CharacterLibraryService(),
   auth?: AuthService,
+  tableCommandTransaction?: DbBackedTableCommandTransactionBoundary,
+  // Supplied in DB mode so seat bindings survive the process. The default is
+  // per-server and in-memory, which is all anonymous local play needs.
+  seatOwnership: SessionSeatOwnership = new SessionSeatOwnership(),
 ): {
   combatCommandTransaction?: DbBackedCombatCommandTransactionBoundary;
   characterCommandTransaction?: DbBackedCharacterCommandTransactionBoundary;
@@ -189,8 +211,10 @@ export function createSessionServer(
   encounterCommandTransaction?: DbBackedEncounterCommandTransactionBoundary;
   idempotency: CommandIdempotencyStore;
   participantCredentials: ParticipantCredentialStore;
+  seatOwnership: SessionSeatOwnership;
   sceneCommandTransaction?: DbBackedSceneCommandTransactionBoundary;
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary;
+  tableCommandTransaction?: DbBackedTableCommandTransactionBoundary;
   server: Server;
   startup: () => Promise<void>;
   runtime: GameRuntime;
@@ -218,6 +242,8 @@ export function createSessionServer(
         commandEventOutboxDispatcher,
         authThrottle,
         participantCredentials,
+        seatOwnership,
+        tableCommandTransaction,
       );
     } catch (error) {
       handleUnexpectedError(response, error, sessionCommandErrorSchema);
@@ -234,7 +260,9 @@ export function createSessionServer(
     idempotency,
     participantCredentials,
     sceneCommandTransaction,
+    seatOwnership,
     sessionCommandTransaction,
+    tableCommandTransaction,
     server,
     startup: async () => undefined,
     runtime,
@@ -257,6 +285,8 @@ export async function handleRequest(
   commandEventOutboxDispatcher?: CommandEventOutboxDispatcherLike,
   authThrottle: AuthThrottle = defaultAuthThrottle,
   participantCredentials: ParticipantCredentialStore = defaultParticipantCredentials,
+  seatOwnership: SessionSeatOwnership = defaultSeatOwnership,
+  tableCommandTransaction?: DbBackedTableCommandTransactionBoundary,
 ): Promise<void> {
   setCorsHeaders(response, request);
 
@@ -318,6 +348,8 @@ export async function handleRequest(
       idempotency,
       participantCredentials,
       sessionCommandTransaction,
+      auth,
+      seatOwnership,
     );
     return;
   }
@@ -403,6 +435,33 @@ export async function handleRequest(
       encounterCommandTransaction,
       combatCommandTransaction,
       sceneCommandTransaction,
+    );
+    return;
+  }
+
+  if (
+    request.method === 'POST' &&
+    url.pathname === '/api/resolutions/command'
+  ) {
+    await handleResolutionCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      participantCredentials,
+      tableCommandTransaction,
+    );
+    return;
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/intents/command') {
+    await handlePlayerIntentCommandRequest(
+      request,
+      response,
+      runtime,
+      idempotency,
+      participantCredentials,
+      tableCommandTransaction,
     );
     return;
   }
@@ -734,6 +793,8 @@ async function handleSessionCommandRequest(
   idempotency: CommandIdempotencyStore,
   participantCredentials: ParticipantCredentialStore,
   sessionCommandTransaction?: DbBackedSessionCommandTransactionBoundary,
+  auth?: AuthService,
+  seatOwnership: SessionSeatOwnership = defaultSeatOwnership,
 ): Promise<void> {
   let body: unknown;
 
@@ -760,12 +821,53 @@ async function handleSessionCommandRequest(
 
   const command = commandResult.data;
 
+  // Seat ownership. Participant IDs are public - the session snapshot
+  // broadcasts every one of them - so the session code plus a participant ID
+  // must not be enough to sit down in someone else's chair. The binding is
+  // checked here, before any seat is handed out or any credential is minted.
+  //
+  // When no auth service is configured the server has no accounts to bind to
+  // and this is a no-op, which keeps anonymous local play working. An
+  // unauthenticated caller can still take an *unbound* seat; what it can never
+  // do is take a seat that some account already owns.
+  let seatUserId: string | undefined;
+
+  if (auth) {
+    try {
+      seatUserId = (await auth.getUserByToken(readAuthCookie(request)))?.id;
+    } catch {
+      seatUserId = undefined;
+    }
+  }
+
+  /**
+   * Whether this reconnect is an account recovering its own seat.
+   *
+   * Participant credentials are process-local and a restart destroys them, so a
+   * player whose server has been restarted holds a token nothing can verify.
+   * Their durable claim is the seat binding, and this is the only thing that
+   * substitutes for the credential.
+   *
+   * `isOwnedBy` and not `isAvailableTo`: an *unbound* seat is available to any
+   * authenticated caller, which is how someone sits down in the first place and
+   * is not proof of anything. Accepting availability here would let any account
+   * holding the session code take the GM chair of an anonymous table.
+   */
+  const recoversOwnSeat =
+    command.type === 'reconnect_session' &&
+    seatOwnership.isOwnedBy(
+      command.payload.sessionId,
+      command.actor.participantId,
+      seatUserId,
+    );
+
   // `create_session` and `join_session` mint a credential, so they cannot
   // require one. `reconnect_session` must: without this check, anyone holding a
   // session code plus a participant ID from a published snapshot could reconnect
   // as the GM.
   if (
     command.type === 'reconnect_session' &&
+    !recoversOwnSeat &&
     !requireParticipantCredential(
       request,
       response,
@@ -775,6 +877,29 @@ async function handleSessionCommandRequest(
     )
   ) {
     return;
+  }
+
+  if (command.type !== 'create_session') {
+    try {
+      seatOwnership.assertAvailableTo(
+        command.payload.sessionId,
+        command.actor.participantId,
+        seatUserId,
+      );
+    } catch (error) {
+      if (error instanceof SeatOwnershipError) {
+        sendJson(response, 403, {
+          ok: false,
+          error: {
+            code: 'seat_owned_by_another_account',
+            message: 'That seat belongs to another account.',
+          },
+        } satisfies SessionCommandError);
+        return;
+      }
+
+      throw error;
+    }
   }
 
   try {
@@ -803,6 +928,14 @@ async function handleSessionCommandRequest(
                 throw new Error(
                   `Unsupported transactional session command type "${command.type}".`,
                 );
+            }
+
+            if (seatUserId) {
+              await seatOwnership.claim({
+                participantId: result.participantId,
+                sessionId: result.sessionId,
+                userId: seatUserId,
+              });
             }
 
             return {
@@ -854,11 +987,27 @@ async function handleSessionCommandRequest(
         throw new Error('Unsupported session command type.');
     }
 
-    // Reconnect echoes the credential the caller just proved it holds rather
-    // than rotating it. Rotating would invalidate the token embedded in this
-    // command's cached idempotent response, so a legitimate retry would fail.
+    // Bind the seat to the account that just took it. Idempotent for the
+    // owner, so a reconnect after a restart re-affirms the same seat instead
+    // of failing.
+    if (seatUserId) {
+      await seatOwnership.claim({
+        participantId: result.participantId,
+        sessionId: result.sessionId,
+        userId: seatUserId,
+      });
+    }
+
+    // Reconnect normally echoes the credential the caller just proved it holds
+    // rather than rotating it. Rotating would invalidate the token embedded in
+    // this command's cached idempotent response, so a legitimate retry fails.
+    //
+    // Recovery is the exception, because there is nothing to echo: the process
+    // that issued the old token is gone. The account proved its claim through
+    // the durable seat binding, so it is handed a freshly minted token - and
+    // the one from before the restart stays unverifiable, which is the point.
     const participantToken =
-      command.type === 'reconnect_session'
+      command.type === 'reconnect_session' && !recoversOwnSeat
         ? (readParticipantToken(request) ?? '')
         : participantCredentials.issue(result.sessionId, result.participantId);
 
@@ -2135,6 +2284,13 @@ async function handleDmCommandRequest(
                     await transactionRuntime.dmSetCombatantCurrentHp(command),
                 },
               } satisfies DmCommandSuccess;
+            case 'dm_set_combatant_hidden':
+              return {
+                ok: true,
+                data: {
+                  scene: await transactionRuntime.dmSetCombatantHidden(command),
+                },
+              } satisfies DmCommandSuccess;
             default:
               throw new Error(
                 `Unsupported transactional DM scene command type "${command.type}".`,
@@ -2279,6 +2435,11 @@ async function handleDmCommandRequest(
           scene: await runtime.dmSetCombatantCurrentHp(command),
         };
         break;
+      case 'dm_set_combatant_hidden':
+        data = {
+          scene: await runtime.dmSetCombatantHidden(command),
+        };
+        break;
       case 'dm_combatant_attack':
         data = {
           encounter: await runtime.dmCombatantAttack(command),
@@ -2316,6 +2477,253 @@ async function handleDmCommandRequest(
     sendJson(response, 200, success, dmCommandSuccessSchema);
   } catch (error) {
     handleRuntimeError(response, error, dmCommandErrorSchema);
+  }
+}
+
+/**
+ * The three resolution commands share one route because they share one
+ * authoritative object: a request, and the roll that answers it. Splitting them
+ * would mean three copies of the same schema parse, credential check and
+ * idempotency lookup, and three places for those to drift apart.
+ *
+ * There is no transaction boundary here. M1's table state is per-process, so a
+ * DB-mode transaction would be a comment claiming durability that does not
+ * exist; persistence is the next wave, and it plugs in where the other
+ * `*CommandTransaction` boundaries already do.
+ */
+async function handleResolutionCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: GameRuntime,
+  idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
+  tableCommandTransaction?: DbBackedTableCommandTransactionBoundary,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    sendBodyReadError(response, error, resolutionCommandErrorSchema);
+    return;
+  }
+
+  const commandResult = resolutionCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies ResolutionCommandError);
+    return;
+  }
+
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      resolutionCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    if (
+      tableCommandTransaction?.supports({ category: 'resolution', command })
+    ) {
+      const success = await tableCommandTransaction.run({
+        category: 'resolution',
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          switch (command.type) {
+            case 'request_resolution':
+              return {
+                ok: true,
+                data: await transactionRuntime.requestResolution(command),
+              } satisfies ResolutionCommandSuccess;
+            case 'submit_resolution':
+              return {
+                ok: true,
+                data: await transactionRuntime.submitResolution(command),
+              } satisfies ResolutionCommandSuccess;
+            case 'cancel_resolution_request':
+              return {
+                ok: true,
+                data: await transactionRuntime.cancelResolutionRequest(command),
+              } satisfies ResolutionCommandSuccess;
+            default:
+              throw new Error(
+                'Unsupported transactional resolution command type.',
+              );
+          }
+        },
+      });
+
+      sendJson(response, 200, success, resolutionCommandSuccessSchema);
+      return;
+    }
+
+    const cachedSuccess =
+      await idempotency.getCachedSuccess<ResolutionCommandSuccess>({
+        category: 'resolution',
+        command,
+      });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, resolutionCommandSuccessSchema);
+      return;
+    }
+
+    let data: ResolutionCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'request_resolution':
+        data = await runtime.requestResolution(command);
+        break;
+      case 'submit_resolution':
+        data = await runtime.submitResolution(command);
+        break;
+      case 'cancel_resolution_request':
+        data = await runtime.cancelResolutionRequest(command);
+        break;
+      default:
+        throw new Error('Unsupported resolution command type.');
+    }
+
+    const success: ResolutionCommandSuccess = { ok: true, data };
+
+    await idempotency.cacheSuccess({
+      category: 'resolution',
+      command,
+      response: success,
+    });
+    sendJson(response, 200, success, resolutionCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, resolutionCommandErrorSchema);
+  }
+}
+
+async function handlePlayerIntentCommandRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  runtime: GameRuntime,
+  idempotency: CommandIdempotencyStore,
+  participantCredentials: ParticipantCredentialStore,
+  tableCommandTransaction?: DbBackedTableCommandTransactionBoundary,
+): Promise<void> {
+  let body: unknown;
+
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    sendBodyReadError(response, error, playerIntentCommandErrorSchema);
+    return;
+  }
+
+  const commandResult = playerIntentCommandSchema.safeParse(body);
+
+  if (!commandResult.success) {
+    sendJson(response, 400, {
+      ok: false,
+      error: {
+        code: 'invalid_command',
+        message:
+          commandResult.error.issues[0]?.message ?? 'Invalid command payload.',
+      },
+    } satisfies PlayerIntentCommandError);
+    return;
+  }
+
+  const command = commandResult.data;
+
+  if (
+    !requireParticipantCredential(
+      request,
+      response,
+      participantCredentials,
+      command,
+      playerIntentCommandErrorSchema,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    if (tableCommandTransaction?.supports({ category: 'intent', command })) {
+      const success = await tableCommandTransaction.run({
+        category: 'intent',
+        command,
+        runtime,
+        execute: async (transactionRuntime) => {
+          switch (command.type) {
+            case 'submit_player_intent':
+              return {
+                ok: true,
+                data: await transactionRuntime.submitPlayerIntent(command),
+              } satisfies PlayerIntentCommandSuccess;
+            case 'update_player_intent_status':
+              return {
+                ok: true,
+                data: await transactionRuntime.updatePlayerIntentStatus(
+                  command,
+                ),
+              } satisfies PlayerIntentCommandSuccess;
+            default:
+              throw new Error(
+                'Unsupported transactional player intent command type.',
+              );
+          }
+        },
+      });
+
+      sendJson(response, 200, success, playerIntentCommandSuccessSchema);
+      return;
+    }
+
+    const cachedSuccess =
+      await idempotency.getCachedSuccess<PlayerIntentCommandSuccess>({
+        category: 'intent',
+        command,
+      });
+
+    if (cachedSuccess) {
+      sendJson(response, 200, cachedSuccess, playerIntentCommandSuccessSchema);
+      return;
+    }
+
+    let data: PlayerIntentCommandSuccess['data'];
+
+    switch (command.type) {
+      case 'submit_player_intent':
+        data = await runtime.submitPlayerIntent(command);
+        break;
+      case 'update_player_intent_status':
+        data = await runtime.updatePlayerIntentStatus(command);
+        break;
+      default:
+        throw new Error('Unsupported player intent command type.');
+    }
+
+    const success: PlayerIntentCommandSuccess = { ok: true, data };
+
+    await idempotency.cacheSuccess({
+      category: 'intent',
+      command,
+      response: success,
+    });
+    sendJson(response, 200, success, playerIntentCommandSuccessSchema);
+  } catch (error) {
+    handleRuntimeError(response, error, playerIntentCommandErrorSchema);
   }
 }
 
@@ -2723,6 +3131,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'character_not_found':
     case 'character_library_entry_not_found':
     case 'participant_not_found':
+    case 'player_intent_not_found':
+    case 'resolution_request_not_found':
     case 'rules_profile_not_found':
     case 'scene_not_found':
     case 'session_not_found':
@@ -2739,6 +3149,8 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'attack_target_out_of_reach':
     case 'bonus_action_already_used':
     case 'invalid_encounter_participant':
+    case 'invalid_intent_status_transition':
+    case 'resolution_request_already_resolved':
     case 'invalid_attack_target':
     case 'invalid_encounter_session_association':
     case 'invalid_turn_actor':
@@ -2778,7 +3190,12 @@ function errorCodeToStatus(code: RuntimeErrorCode): number {
     case 'scene_entity_out_of_bounds':
     case 'scene_terrain_out_of_bounds':
       return 400;
+    // Answering a request addressed to another seat is a permission failure,
+    // not a malformed one: the payload is valid and the caller simply does not
+    // own what they are trying to act on.
+    case 'invalid_resolution_target':
     case 'invalid_role_assumption':
+    case 'seat_owned_by_another_account':
       return 403;
     case 'unauthenticated':
       return 401;
@@ -2798,7 +3215,8 @@ function isRuntimeStoreError(error: unknown): error is RuntimeStoreError {
     error instanceof MovementRuntimeError ||
     error instanceof RulesProfileStoreError ||
     error instanceof SceneStoreError ||
-    error instanceof SessionStoreError
+    error instanceof SessionStoreError ||
+    error instanceof SessionTableStateError
   );
 }
 

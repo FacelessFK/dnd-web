@@ -3775,6 +3775,38 @@ export function describeSessionStreamEvent(
         titleKey: 'runtime.events.title.session',
         tone: 'info',
       };
+    // The feed reports that a roll was asked for or answered. The numbers
+    // themselves belong to the resolution panel, which renders the server's
+    // audit record rather than restating it here.
+    case 'resolution_state':
+      return {
+        detailKey: 'runtime.events.detail.resolution',
+        detailValues: {
+          pending: String(
+            event.state.requests.filter(
+              (request) => request.status === 'pending',
+            ).length,
+          ),
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+        },
+        titleKey: 'runtime.events.title.resolution',
+        tone: 'info',
+      };
+    // Intent text is player-authored, so it is never interpolated into the
+    // feed: only the count travels here.
+    case 'player_intent_state':
+      return {
+        detailKey: 'runtime.events.detail.playerIntent',
+        detailValues: {
+          pending: String(
+            event.state.intents.filter((intent) => intent.status === 'pending')
+              .length,
+          ),
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+        },
+        titleKey: 'runtime.events.title.playerIntent',
+        tone: 'info',
+      };
   }
 }
 

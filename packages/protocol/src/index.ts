@@ -9,6 +9,8 @@ export * from './scene.js';
 export * from './movement.js';
 export * from './encounter.js';
 export * from './combat.js';
+export * from './resolution.js';
+export * from './intent.js';
 export * from './dm.js';
 export * from './stream.js';
 export * from './outbox.js';

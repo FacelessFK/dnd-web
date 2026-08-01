@@ -8,7 +8,9 @@ import {
   DrizzleCommandEventOutboxDatabase,
   DrizzleDndDatabaseUnitOfWork,
   DrizzleSceneRecordDatabase,
+  DrizzleSessionSeatOwnershipDatabase,
   DrizzleSessionSnapshotDatabase,
+  DrizzleSessionTableStateDatabase,
   type AuthUserDatabase,
   type ActiveEncounterRecordDatabase,
   type CharacterLibraryEntryDatabase,
@@ -18,7 +20,9 @@ import {
   type DndDatabase,
   type DndDatabaseUnitOfWork,
   type SceneRecordDatabase,
+  type SessionSeatOwnershipDatabase,
   type SessionSnapshotDatabase,
+  type SessionTableStateDatabase,
 } from '@dnd/db';
 
 import { AuthService } from './auth-store.js';
@@ -40,7 +44,11 @@ import { DbBackedSceneCommandTransactionBoundary } from './db-scene-command-tran
 import { DbBackedSessionCommandTransactionBoundary } from './db-session-command-transaction.js';
 import { DbBackedEncounterStore } from './db-encounter-store.js';
 import { DbBackedSceneStore } from './db-scene-store.js';
+import { DbBackedSeatOwnershipStorage } from './db-session-seat-ownership.js';
 import { DbBackedSessionStore } from './db-session-store.js';
+import { DbBackedSessionTableStateStore } from './db-session-table-state-store.js';
+import { DbBackedTableCommandTransactionBoundary } from './db-table-command-transaction.js';
+import { SessionSeatOwnership } from './session-seat-ownership.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 import { createSessionServer } from './session-server.js';
 import type { SceneEntityId, SessionId } from '@dnd/shared';
@@ -84,7 +92,13 @@ export type ServerBootstrapDependencies = {
   createPersistenceConnection: (databaseUrl: string) => PersistenceConnection;
   createSceneRecordDatabase: (db: DndDatabase) => SceneRecordDatabase;
   createServer: typeof createSessionServer;
+  createSessionSeatOwnershipDatabase: (
+    db: DndDatabase,
+  ) => SessionSeatOwnershipDatabase;
   createSessionSnapshotDatabase: (db: DndDatabase) => SessionSnapshotDatabase;
+  createSessionTableStateDatabase: (
+    db: DndDatabase,
+  ) => SessionTableStateDatabase;
   createUnitOfWork: (db: DndDatabase) => DndDatabaseUnitOfWork;
 };
 
@@ -113,7 +127,11 @@ const defaultDependencies: ServerBootstrapDependencies = {
     createNodePostgresDndDatabaseConnection(databaseUrl),
   createSceneRecordDatabase: (db) => new DrizzleSceneRecordDatabase(db),
   createServer: createSessionServer,
+  createSessionSeatOwnershipDatabase: (db) =>
+    new DrizzleSessionSeatOwnershipDatabase(db),
   createSessionSnapshotDatabase: (db) => new DrizzleSessionSnapshotDatabase(db),
+  createSessionTableStateDatabase: (db) =>
+    new DrizzleSessionTableStateDatabase(db),
   createUnitOfWork: (db) => new DrizzleDndDatabaseUnitOfWork(db),
 };
 
@@ -183,13 +201,33 @@ export async function createBootstrappedSessionServer(
       dependencies.createCommandIdempotencyRecordDatabase(connection.db);
     const commandEventOutboxRecords =
       dependencies.createCommandEventOutboxDatabase(connection.db);
+    const seatOwnershipRecords =
+      dependencies.createSessionSeatOwnershipDatabase(connection.db);
+    const tableStateRecords = dependencies.createSessionTableStateDatabase(
+      connection.db,
+    );
     const unitOfWork = dependencies.createUnitOfWork(connection.db);
+    // Positional, matching the runtime's constructor: the M1 table state is the
+    // thirteenth argument, after the three rollers that precede it.
     const runtime = new InMemoryGameRuntime(
       await DbBackedSessionStore.fromDatabase(sessionSnapshots),
       undefined,
       new DbBackedCharacterRepository(characterRecords),
       await DbBackedSceneStore.fromDatabase(sceneRecords),
       await DbBackedEncounterStore.fromDatabase(encounterRecords),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      await DbBackedSessionTableStateStore.fromDatabase(tableStateRecords),
+    );
+    // Seat bindings are hydrated from the database, which is what lets an
+    // account recover its chair in a process that has never seen it before.
+    const seatOwnership = new SessionSeatOwnership(
+      await DbBackedSeatOwnershipStorage.fromDatabase(seatOwnershipRecords),
     );
     const idempotency = new DbBackedCommandIdempotencyStore(
       commandIdempotencyRecords,
@@ -218,6 +256,11 @@ export async function createBootstrappedSessionServer(
       );
     const sceneCommandTransaction = new DbBackedSceneCommandTransactionBoundary(
       unitOfWork,
+      commandEventOutboxDispatcher,
+    );
+    const tableCommandTransaction = new DbBackedTableCommandTransactionBoundary(
+      unitOfWork,
+      commandEventOutboxDispatcher,
     );
     const encounterCommandTransaction =
       new DbBackedEncounterCommandTransactionBoundary(
@@ -242,6 +285,8 @@ export async function createBootstrappedSessionServer(
         sceneCommandTransaction,
         characterLibrary,
         auth,
+        tableCommandTransaction,
+        seatOwnership,
       ),
       closePersistence,
       persistenceMode,

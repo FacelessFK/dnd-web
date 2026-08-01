@@ -12,8 +12,10 @@ import {
   rulesProfileIdSchema,
   sceneIdSchema,
   sessionIdSchema,
+  skillIdSchema,
 } from './common.js';
 import { commandErrorSchema } from './errors.js';
+import { abilityKeySchema } from './resolution.js';
 import { rulesConfigValueSchema, rulesProfileSchema } from './rules-profile.js';
 import { sceneEntityFootprintSchema } from './scene.js';
 import { sessionSnapshotSchema } from './session.js';
@@ -59,6 +61,23 @@ export const hitPointsSchema = z
 // Temporary cross-ruleset placeholder until ancestry terminology is split by ruleset.
 export const speciesOrRaceSchema = z.string().trim().min(1).max(64);
 
+/**
+ * What a character is trained in.
+ *
+ * Canonical IDs, never display labels: a proficiency selected in the Persian UI
+ * has to mean the same thing as one selected in English, and the audit record
+ * that names it has to stay readable after either translation changes.
+ *
+ * Deliberately just the two lists the resolution path consults. Tools,
+ * languages, expertise and class features belong to the full 2014 character
+ * work; recording them here now would be a schema guessing at a design that
+ * does not exist yet.
+ */
+export const characterProficienciesSchema = z.object({
+  savingThrows: z.array(abilityKeySchema).max(6),
+  skills: z.array(skillIdSchema).max(18),
+});
+
 export const characterInputSchema = z.object({
   name: characterNameSchema,
   level: levelSchema,
@@ -71,6 +90,7 @@ export const characterInputSchema = z.object({
   speed: z.number().int().min(0).max(200),
   notes: z.string().trim().max(4000).nullable().optional(),
   meta: z.record(rulesConfigValueSchema).optional(),
+  proficiencies: characterProficienciesSchema.optional(),
 });
 
 export const characterUpdateInputSchema = z.object({
@@ -102,6 +122,9 @@ export const characterSchema = z.object({
   speed: z.number().int().min(0).max(200),
   notes: z.string().trim().max(4000).nullable(),
   meta: z.record(rulesConfigValueSchema),
+  // Always present on a stored character, so nothing downstream has to guess
+  // whether "no proficiencies" means none or means unrecorded.
+  proficiencies: characterProficienciesSchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -278,6 +301,9 @@ export const characterCommandResponseSchema = z.union([
   characterCommandErrorSchema,
 ]);
 
+export type CharacterProficiencies = z.infer<
+  typeof characterProficienciesSchema
+>;
 export type Character = z.infer<typeof characterSchema>;
 export type CharacterInput = z.infer<typeof characterInputSchema>;
 export type CharacterUpdateInput = z.infer<typeof characterUpdateInputSchema>;

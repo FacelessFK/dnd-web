@@ -9,6 +9,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "check:readiness": "node scripts/check-db-readiness.mjs",
+    "db:migrate": "node scripts/apply-db-migrations.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
