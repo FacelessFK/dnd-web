@@ -1192,6 +1192,115 @@ export async function runDbReadinessCheck(env = process.env) {
   }
 }
 
+/**
+ * Proves a headed run is actually on a desktop, not `--headless=new` in
+ * disguise.
+ *
+ * Three independent signals, because no one of them is sufficient:
+ *
+ * - the user agent, which is Chrome reporting its OWN mode. `--headless=new`
+ *   puts `HeadlessChrome` there whatever the harness intended;
+ * - the launched process's real `/proc/<pid>/cmdline`, so a stray `--headless`
+ *   from anywhere - env, wrapper, a future edit to the display args - is caught
+ *   rather than assumed absent;
+ * - screen metrics that only a window manager produces. Headless reports a
+ *   screen the exact size of the viewport with `availHeight === height`; a
+ *   GNOME desktop reserves space for its top bar, so the two differ.
+ *
+ * What this deliberately does NOT claim is a verified socket to the compositor.
+ * Chrome reaches both X11 and Wayland over abstract unix sockets, whose peer
+ * names do not appear in `/proc/net/unix`, `/proc/<pid>/fd` or `ss -xp` on this
+ * platform. Asserting one from process metadata would be exactly the
+ * "headed success based only on process metadata" that is worth avoiding.
+ */
+export async function assertHeadedBrowser(page, chromeProcess) {
+  const view = await page.evaluate(`(() => ({
+    availHeight: window.screen.availHeight,
+    availWidth: window.screen.availWidth,
+    devicePixelRatio: window.devicePixelRatio,
+    outerHeight: window.outerHeight,
+    outerWidth: window.outerWidth,
+    screenHeight: window.screen.height,
+    screenWidth: window.screen.width,
+    screenX: window.screenX,
+    screenY: window.screenY,
+    userAgent: navigator.userAgent,
+    visibilityState: document.visibilityState,
+  }))()`);
+
+  if (/headless/i.test(view.userAgent)) {
+    throw new Error(
+      `${page.label} is running headless: Chrome reports user agent "${view.userAgent}".`,
+    );
+  }
+
+  const cmdline = readProcessCommandLine(chromeProcess?.pid);
+
+  if (cmdline.some((argument) => argument.startsWith('--headless'))) {
+    throw new Error(
+      `${page.label}: Chrome (pid ${chromeProcess?.pid}) was launched with ${cmdline.find((argument) => argument.startsWith('--headless'))}.`,
+    );
+  }
+
+  if (!(view.outerWidth > 0) || !(view.outerHeight > 0)) {
+    throw new Error(
+      `${page.label} reports a ${view.outerWidth}x${view.outerHeight} outer window, which is not a visible one.`,
+    );
+  }
+
+  const desktopChrome =
+    view.availHeight !== view.screenHeight ||
+    view.availWidth !== view.screenWidth ||
+    view.screenWidth > view.outerWidth;
+
+  if (!desktopChrome) {
+    throw new Error(
+      `${page.label} reports a ${view.screenWidth}x${view.screenHeight} screen with no reserved desktop area and a window filling it, which is what headless looks like.`,
+    );
+  }
+
+  return view;
+}
+
+export function readProcessCommandLine(pid) {
+  if (!pid) {
+    return [];
+  }
+
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+      .split('\0')
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** Writes a named screenshot for a journey step, outside the working tree. */
+export async function captureStage(runDir, name, pages) {
+  mkdirSync(runDir, { recursive: true });
+
+  const written = [];
+
+  for (const [pageName, page] of Object.entries(pages)) {
+    if (!page) {
+      continue;
+    }
+
+    try {
+      const shot = await page.send('Page.captureScreenshot', { format: 'png' });
+      const file = resolve(runDir, `${name}-${pageName}.png`);
+
+      writeFileSync(file, Buffer.from(shot.data, 'base64'));
+      written.push(file);
+    } catch {
+      // A screenshot is evidence, not a gate: never fail a run over one.
+    }
+  }
+
+  return written;
+}
+
 export function redactSecrets(value) {
   return String(value ?? '')
     .replace(/postgres(?:ql)?:\/\/[^\s'"]+/gi, 'postgres://[redacted]')

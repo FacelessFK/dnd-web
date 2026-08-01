@@ -25,7 +25,9 @@ import { resolve } from 'node:path';
 
 import {
   artifactRoot,
+  assertHeadedBrowser,
   captureArtifacts,
+  captureStage,
   cleanup,
   clickButton,
   clickButtonIfEnabled,
@@ -99,6 +101,29 @@ import {
 
 const runId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const runDir = resolve(artifactRoot, `full-loop-${runId}`);
+
+/**
+ * Headed runs are the local acceptance; CI stays headless.
+ *
+ * When headed, the run additionally proves it is really on screen and writes a
+ * screenshot at each named point of the journey, which is the evidence a
+ * reviewer can actually look at.
+ */
+const headed = ['1', 'true', 'yes'].includes(
+  (process.env.RUNTIME_SMOKE_HEADED ?? '').trim().toLowerCase(),
+);
+
+async function stage(name) {
+  if (!headed && process.env.M1_SMOKE_CAPTURE !== '1') {
+    return;
+  }
+
+  const written = await captureStage(runDir, name, pages);
+
+  if (written.length > 0) {
+    console.log(`[m1-full-loop]   captured ${name}`);
+  }
+}
 
 setRunTag(runId);
 loadRepoEnvironment();
@@ -235,14 +260,19 @@ async function main() {
   });
 
   step('launch isolated GM and Player browser profiles');
-  launchBrowserProfile('gm', browserPath, gmDebugPort, {
+  const gmChrome = launchBrowserProfile('gm', browserPath, gmDebugPort, {
     windowPosition: { x: 0, y: 0 },
     windowSize: { height: 1080, width: 950 },
   });
-  launchBrowserProfile('player', browserPath, playerDebugPort, {
-    windowPosition: { x: 960, y: 0 },
-    windowSize: { height: 1080, width: 950 },
-  });
+  const playerChrome = launchBrowserProfile(
+    'player',
+    browserPath,
+    playerDebugPort,
+    {
+      windowPosition: { x: 960, y: 0 },
+      windowSize: { height: 1080, width: 950 },
+    },
+  );
   await Promise.all([
     waitForHttp(`http://127.0.0.1:${gmDebugPort}/json/version`, {
       label: 'GM Chrome DevTools',
@@ -264,6 +294,19 @@ async function main() {
   // so the recorder is the transport for the app's own stream across reloads.
   await installSseRecorder(gmPage);
   await installSseRecorder(playerPage);
+
+  if (headed) {
+    for (const [page, chrome] of [
+      [gmPage, gmChrome],
+      [playerPage, playerChrome],
+    ]) {
+      const proof = await assertHeadedBrowser(page, chrome);
+
+      console.log(
+        `[m1-full-loop]   ${page.label} on screen: window ${proof.outerWidth}x${proof.outerHeight} at ${proof.screenX},${proof.screenY} on a ${proof.screenWidth}x${proof.screenHeight} display (avail ${proof.availWidth}x${proof.availHeight}), dpr ${proof.devicePixelRatio}, ua "${proof.userAgent}"`,
+      );
+    }
+  }
 
   try {
     step('authenticate the GM in its own browser profile');
@@ -485,6 +528,8 @@ async function main() {
     // above, which does not depend on any client refresh.
     await clickButton(playerPage, ['Recover']);
 
+    await stage('gm-and-player-maps');
+
     step('GM moves a monster through the UI');
     // Straight below the Player's cell at 3,2. The melee baseline is five feet
     // and a diagonal does not qualify, so an off-by-one here reads as a product
@@ -534,6 +579,8 @@ async function main() {
       total: proficientCheck.total,
     });
 
+    await stage('proficient-check');
+
     step('GM requests the non-proficient comparison check');
     await requestResolution(gmPage, {
       ability: SHARED_ABILITY,
@@ -578,6 +625,8 @@ async function main() {
       );
     }
 
+    await stage('non-proficient-check');
+
     step('GM requests the proficient saving throw');
     await requestResolution(gmPage, {
       ability: PROFICIENT_SAVE,
@@ -610,6 +659,8 @@ async function main() {
       label: 'proficient saving throw',
     });
 
+    await stage('saving-throw');
+
     step('GM applies poisoned and the Player sees it');
     await clickButton(gmPage, ['Apply poisoned'], {
       scope: '[data-testid="m1-gm-conditions"]',
@@ -618,6 +669,8 @@ async function main() {
       label: 'Player poisoned condition',
       predicate: `Boolean(document.querySelector('[data-testid="m1-player-conditions"] [data-condition="poisoned"]'))`,
     });
+
+    await stage('poisoned');
 
     step('poisoned makes an ability check keep the lower die');
     await requestResolution(gmPage, {
@@ -667,6 +720,8 @@ async function main() {
       fail('Poisoned was not named as the source of the disadvantage.');
     }
 
+    await stage('poisoned-roll-explanation');
+
     step('poisoned leaves saving throws alone');
     await requestResolution(gmPage, {
       ability: PROFICIENT_SAVE,
@@ -697,6 +752,8 @@ async function main() {
     step('Player submits an intent and the GM transitions it');
     await runIntentLifecycle({ gmPage, playerPage });
 
+    await stage('intent-transitions');
+
     step('GM starts the encounter');
     await clickButton(gmPage, ['Start Encounter']);
     // The panel heading is CSS-uppercased in `innerText`; match either casing.
@@ -715,6 +772,8 @@ async function main() {
       targetCombatantId: visibleEntityId,
       targetName: visibleMonsterName,
     });
+
+    await stage('encounter-attack-damage-hp');
 
     step('GM reveals the concealed monster and the Player receives it');
     // Everything before this index is a stretch in which the creature was
@@ -735,6 +794,8 @@ async function main() {
       visibleEntityId,
       visibleMonsterName,
     });
+
+    await stage('reveal');
 
     step('GM conceals it again and the Player loses it');
     const preReconcealFrameIndex = await countSseFrames(playerPage);
@@ -758,6 +819,8 @@ async function main() {
       visibleMonsterName,
     });
 
+    await stage('re-conceal');
+
     step('compare the GM and Player named SSE frames');
     await compareRoleProjections({
       concealedEntityId,
@@ -779,6 +842,7 @@ async function main() {
       'player-001',
     );
     await reload(playerPage);
+    await stage('disconnected-state');
     await waitForText(playerPage, ['Runtime War Table'], 'Player after reload');
     await clickButton(playerPage, ['Recover']);
     await assertPlayerTableRestored(playerPage, {
@@ -884,6 +948,8 @@ async function main() {
       serverUrl,
       skill: NON_PROFICIENT_SKILL,
     });
+
+    await stage('recovered-state');
 
     step('assert the run left no console or network damage');
     await assertCleanBrowsers({ gmPage, playerPage });
