@@ -307,15 +307,25 @@ function applyScene(
   state: RuntimeSessionState,
   scene: Scene,
 ): RuntimeSessionState {
-  if (
-    state.scene &&
-    state.scene.id === scene.id &&
-    Date.parse(scene.updatedAt) <= Date.parse(state.scene.updatedAt)
-  ) {
-    return state;
+  return shouldReplaceScene(state.scene, scene) ? { ...state, scene } : state;
+}
+
+/**
+ * Whether an arriving scene should replace the one already held.
+ *
+ * Exported because the cockpit still holds its map in `useState` while it is
+ * being decomposed, and one staleness rule applied in two places is a bug
+ * waiting for the day the two copies disagree.
+ */
+export function shouldReplaceScene(
+  current: Scene | null,
+  next: Scene,
+): boolean {
+  if (!current || current.id !== next.id) {
+    return true;
   }
 
-  return { ...state, scene };
+  return Date.parse(next.updatedAt) > Date.parse(current.updatedAt);
 }
 
 function applyEncounter(

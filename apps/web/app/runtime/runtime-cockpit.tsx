@@ -143,6 +143,7 @@ import {
   type SessionSnapshot,
   type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
+import { shouldReplaceScene } from '../../lib/runtime-session-state';
 import { useSessionStream } from '../../lib/use-session-stream';
 import { describeStreamStatus } from '../../lib/m1-feedback';
 import { useM1Table } from '../../lib/use-m1-table';
@@ -1486,6 +1487,18 @@ export function RuntimeCockpit() {
         break;
       case 'movement_state':
         applyMovementState(event);
+        break;
+      // The map the server just sent is the map, already projected for this
+      // seat. Nothing is filtered here: a client that received the whole scene
+      // and hid part of it would be one devtools tab away from omniscience.
+      // This is what closes M1's gap where a placement or a reveal sat unseen
+      // until somebody pressed Recover.
+      case 'scene_state':
+        setScene((currentScene) =>
+          shouldReplaceScene(currentScene, event.scene)
+            ? event.scene
+            : currentScene,
+        );
         break;
       case 'encounter_state':
         setEncounter(event.encounter);
