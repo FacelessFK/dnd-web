@@ -80,7 +80,10 @@ export async function seedLibraryEntry({ account, characterName, serverUrl }) {
             con: 12,
             dex: DEX_SCORE,
             int: 10,
-            str: 8,
+            // Positive Strength so a landed melee hit deals at least some
+            // damage; a negative modifier can legally floor a hit at zero,
+            // which makes "damage was applied" impossible to prove reliably.
+            str: 16,
             wis: 11,
           },
           abilityScoreMethod: 'standard-array',
@@ -956,17 +959,23 @@ export async function runPlayerAttack({
     });
 
     if (attackFrame.hit) {
-      if (attackFrame.damage <= 0) {
-        fail('The server reported a hit that dealt no damage.');
-      }
-
-      if (targetBefore - targetAfter !== attackFrame.damage) {
+      // A hit for zero damage is legal: a low damage die plus a negative
+      // Strength modifier floors at nothing. It is simply not the swing that
+      // proves damage, so the loop keeps going - after checking that HP moved
+      // by exactly what was reported, which for zero means not at all.
+      if (attackFrame.damage === 0) {
+        if (targetBefore !== targetAfter) {
+          fail('A hit for no damage still changed the target HP.');
+        }
+      } else if (targetBefore - targetAfter !== attackFrame.damage) {
         fail(
           `HP fell by ${targetBefore - targetAfter} but the server reported ${attackFrame.damage} damage.`,
         );
       }
 
-      landed = { damage: attackFrame.damage, hp: targetAfter, swings };
+      if (attackFrame.damage > 0) {
+        landed = { damage: attackFrame.damage, hp: targetAfter, swings };
+      }
     } else if (targetBefore !== targetAfter) {
       fail('A miss changed the target HP.');
     }
@@ -996,7 +1005,7 @@ export async function runPlayerAttack({
 
   if (!landed) {
     fail(
-      `No attack landed in ${swings} swings against a deliberately low armour class; the attack path is not producing damage.`,
+      `No attack dealt damage in ${swings} swings against a deliberately low armour class; the attack path is not producing damage.`,
     );
   }
 
