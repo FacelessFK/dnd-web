@@ -125,6 +125,39 @@ test('an explicit headed opt-in drops headless and places the window', () => {
   );
 });
 
+test('a display backend is passed only when the run explicitly names one', () => {
+  // Chrome chooses its own backend by default. Naming the wrong one does not
+  // degrade to a working window - it fails to open one - so this must never be
+  // inferred from the machine.
+  assert.deepEqual(
+    getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: '1' } }),
+    [],
+  );
+  assert.deepEqual(
+    getChromeDisplayArgs({
+      env: { RUNTIME_SMOKE_HEADED: '1', RUNTIME_SMOKE_OZONE_PLATFORM: '  ' },
+    }),
+    [],
+  );
+  assert.deepEqual(
+    getChromeDisplayArgs({
+      env: {
+        RUNTIME_SMOKE_HEADED: '1',
+        RUNTIME_SMOKE_OZONE_PLATFORM: 'wayland',
+      },
+      windowSize: { height: 1040, width: 950 },
+    }),
+    ['--ozone-platform=wayland', '--window-size=950,1040'],
+  );
+  // A headless run ignores it: there is no window to place on any backend.
+  assert.deepEqual(
+    getChromeDisplayArgs({
+      env: { RUNTIME_SMOKE_OZONE_PLATFORM: 'wayland' },
+    }),
+    ['--headless=new'],
+  );
+});
+
 // Next inlines NEXT_PUBLIC_SERVER_URL into the client chunks, and every harness
 // compiles into the same apps/web/.next. A second `next dev` on this working
 // tree - a leftover from a killed run, a developer's `pnpm dev`, or a second

@@ -83,6 +83,16 @@ export function getChromeDisplayArgs({
 
   const args = [];
 
+  // Only ever set when asked for. Chrome picks its own backend otherwise, and
+  // hardcoding one here would break every machine whose session is not the one
+  // guessed - a headed run on X11 given `wayland` does not fall back, it fails
+  // to open a window at all.
+  const ozonePlatform = (env.RUNTIME_SMOKE_OZONE_PLATFORM ?? '').trim();
+
+  if (ozonePlatform) {
+    args.push(`--ozone-platform=${ozonePlatform}`);
+  }
+
   if (windowSize) {
     args.push(`--window-size=${windowSize.width},${windowSize.height}`);
   }

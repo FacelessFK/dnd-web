@@ -609,6 +609,14 @@ async function assertSingleStreamOpen(page, label) {
   }
 }
 
+/**
+ * The Player's board actually redrew, not just its accessible state.
+ *
+ * Runs in both modes. The headed launch disables occluded-window backgrounding
+ * for exactly this reason: without it Chrome freezes the rear window's
+ * animation frames and the board keeps its last painted content while the DOM
+ * updates correctly underneath.
+ */
 async function assertMapSignatureChanged(page, before, label) {
   const deadline = Date.now() + 15000;
 
@@ -663,6 +671,11 @@ function readCellLabels(page) {
  *
  * `toDataURL()` on a retina-sized board is megabytes, so it is folded to a
  * 32-bit value in the page rather than shipped over the DevTools socket.
+ *
+ * The board is scrolled into view first. Headless renders the whole page
+ * regardless, but a headed window only paints what it is showing, and the map
+ * sits well below the fold on this layout - so the hash would stay frozen at
+ * whatever was last drawn and a live repaint would read as no repaint at all.
  */
 function readMapSignature(page) {
   return page.evaluate(`(() => {
@@ -671,6 +684,8 @@ function readMapSignature(page) {
     if (!canvas) {
       return { canvasHash: 'no-canvas', cells: 0 };
     }
+
+    canvas.scrollIntoView({ block: 'center', inline: 'center' });
 
     const data = canvas.toDataURL('image/png');
     let hash = 5381;

@@ -185,6 +185,14 @@ export function launchBrowserProfile(
     '--disable-dev-shm-usage',
     '--disable-gpu',
     '--no-sandbox',
+    // A two-profile run always leaves one window behind the other, and Chrome
+    // throttles timers and animation frames in a window it considers occluded.
+    // The Player's board then stops repainting and its React work crawls, so a
+    // live update reads as no update - a property of the compositor rather than
+    // of anything the product did.
+    '--disable-backgrounding-occluded-windows',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
     'about:blank',
   ]);
 }
