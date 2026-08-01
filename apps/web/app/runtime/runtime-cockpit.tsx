@@ -6710,12 +6710,21 @@ function ActionButton({
   disabledReason,
   label,
   onClick,
+  testId,
   variant = 'primary',
 }: {
   disabled?: boolean;
   disabledReason?: string;
   label: string;
   onClick: () => void | Promise<void>;
+  /**
+   * Stable hook for browser harnesses.
+   *
+   * Several controls share a label - two "Delete" buttons, four "Name / label"
+   * fields - so matching on visible text picks whichever renders first. That is
+   * how an acceptance harness ends up silently driving the wrong panel.
+   */
+  testId?: string;
   variant?: 'danger' | 'primary' | 'secondary';
 }) {
   const styles = {
@@ -6730,6 +6739,7 @@ function ActionButton({
   return (
     <button
       className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-bold shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 ${styles}`}
+      data-testid={testId}
       disabled={disabled}
       onClick={() => {
         void onClick();
@@ -6780,11 +6790,14 @@ function LabeledInput({
   label,
   onChange,
   placeholder,
+  testId,
   value,
 }: {
   label: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /** See `ActionButton`: labels are not unique across panels. */
+  testId?: string;
   value: string;
 }) {
   return (
@@ -6792,6 +6805,7 @@ function LabeledInput({
       <span className="font-semibold text-amber-100/75">{label}</span>
       <input
         className="min-h-10 rounded-xl border border-amber-300/20 bg-black/25 px-3 py-2 text-amber-50 outline-none transition placeholder:text-amber-100/30 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25"
+        data-testid={testId}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         value={value}
@@ -6828,6 +6842,7 @@ function SelectField({
   label,
   onChange,
   options,
+  testId,
   value,
 }: {
   label: string;
@@ -6836,6 +6851,8 @@ function SelectField({
     label: string;
     value: string;
   }>;
+  /** See `ActionButton`: labels are not unique across panels. */
+  testId?: string;
   value: string;
 }) {
   return (
@@ -6843,6 +6860,7 @@ function SelectField({
       <span className="font-semibold text-amber-100/75">{label}</span>
       <select
         className="min-h-10 rounded-xl border border-amber-300/20 bg-[#1d140f] px-3 py-2 text-amber-50 outline-none transition focus:border-amber-300 focus:ring-2 focus:ring-amber-300/25"
+        data-testid={testId}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
@@ -7721,6 +7739,7 @@ function SceneBuilderPanel({
           <LabeledInput
             label={t('runtime.sceneBuilder.field.name')}
             onChange={(value) => onEntityFieldChange('name', value)}
+            testId="scene-entity-name"
             value={entityDraft.name}
           />
           <div className="grid grid-cols-2 gap-2">
@@ -7763,6 +7782,7 @@ function SceneBuilderPanel({
             disabledReason={placeEntityDisabledReason ?? undefined}
             label={t('runtime.sceneBuilder.action.placeEntity')}
             onClick={onPlaceEntity}
+            testId="scene-entity-place"
             variant="secondary"
           />
         </div>
@@ -7784,6 +7804,7 @@ function SceneBuilderPanel({
                 label: getLocalizedSceneEntityPositionLabel(entity, t),
                 value: entity.id,
               }))}
+              testId="scene-entity-select"
               value={selectedEntityId}
             />
           ) : (
@@ -7878,6 +7899,7 @@ function SceneBuilderPanel({
                   disabledReason={deleteEntityDisabledReason ?? undefined}
                   label={t('runtime.sceneBuilder.action.delete')}
                   onClick={onDeleteEntity}
+                  testId="scene-entity-delete"
                   variant="danger"
                 />
               </div>
@@ -8370,6 +8392,7 @@ function CombatantPanel({
             <LabeledInput
               label={t('runtime.combatants.name')}
               onChange={(value) => onFieldChange('name', value)}
+              testId="combatant-name"
               value={combatantDraft.name}
             />
           </div>
@@ -8437,6 +8460,7 @@ function CombatantPanel({
             disabledReason={createDisabledReason ?? undefined}
             label={t('runtime.combatants.create')}
             onClick={onCreate}
+            testId="combatant-create"
           />
         </div>
 
@@ -8506,6 +8530,7 @@ function CombatantPanel({
               disabledReason={repositionDisabledReason ?? undefined}
               label={t('runtime.combatants.reposition')}
               onClick={onReposition}
+              testId="combatant-reposition"
               variant="secondary"
             />
             <ActionButton
