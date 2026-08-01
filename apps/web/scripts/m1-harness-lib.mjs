@@ -940,6 +940,29 @@ export function readCredentialShape(page) {
 }
 
 /**
+ * Wait until a join or recover has actually issued this seat a credential.
+ *
+ * The stored session ID is not that proof: typing a session code into the form
+ * persists it immediately, so a wait on the code returns while the join command
+ * is still in flight. A harness that then clicks Subscribe is subscribing as a
+ * seat the browser cannot yet authenticate. Only the credential's arrival marks
+ * the join as done.
+ *
+ * Presence only - the token itself is never read back out here.
+ */
+export function waitForParticipantCredential(page, sessionId, label) {
+  return waitFor(page, {
+    label: `${label} participant credential`,
+    predicate: `(() => {
+      const stored = JSON.parse(localStorage.getItem('dnd-participant-credential') ?? '[]');
+      return stored.some(
+        (entry) => entry.sessionId === ${JSON.stringify(sessionId)} && Boolean(entry.token),
+      );
+    })()`,
+  });
+}
+
+/**
  * A stable fingerprint of a credential, for proving it changed.
  *
  * Never the token itself: this is printed, written to artifacts and pasted into

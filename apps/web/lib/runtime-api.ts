@@ -256,6 +256,25 @@ export function getParticipantCredential(
   return loadCredentials().get(credentialKey(sessionId, participantId)) ?? null;
 }
 
+/**
+ * Whether this browser holds a credential for that exact seat.
+ *
+ * Separate from `getParticipantCredential` so a caller that only needs to know
+ * *whether* it may subscribe never has the token in hand. The subscription hook
+ * uses it as a render-visible signal, and a boolean is the most it should be
+ * able to put into a dependency array.
+ */
+export function hasParticipantCredential(
+  sessionId: string | null,
+  participantId: string | null,
+): boolean {
+  if (!sessionId || !participantId) {
+    return false;
+  }
+
+  return loadCredentials().has(credentialKey(sessionId, participantId));
+}
+
 export function clearParticipantCredentials(): void {
   participantCredentials = new Map();
 

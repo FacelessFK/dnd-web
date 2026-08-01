@@ -32,6 +32,14 @@ export type SessionStreamStatus = 'connected' | 'idle' | 'reconnecting';
 
 type UseSessionStreamParams = {
   enabled: boolean;
+  /**
+   * Whether this browser already holds a credential for the seat.
+   *
+   * Passed in rather than read here so it is a render-visible value: the
+   * credential is issued by a command response, and the effect below has to
+   * re-run when one arrives.
+   */
+  hasCredential: boolean;
   onEvent: (event: SessionStreamEvent) => void;
   participantId: string | null;
   /**
@@ -49,6 +57,7 @@ type UseSessionStreamParams = {
 
 export function useSessionStream({
   enabled,
+  hasCredential,
   onEvent,
   participantId,
   resubscribeToken = 0,
@@ -69,6 +78,25 @@ export function useSessionStream({
     if (!enabled || !sessionId || !participantId) {
       setStatus('idle');
       setError(null);
+      return undefined;
+    }
+
+    /**
+     * Never open a subscription this seat cannot authenticate.
+     *
+     * Every stream is token-gated server-side, so a tokenless URL is a
+     * guaranteed 401 - and `EventSource` retries the URL it was constructed
+     * with, so that subscription stays dead forever even once the credential
+     * arrives. Subscribing while a join was still in flight produced exactly
+     * that: a stream stuck reconnecting against a session the browser was by
+     * then a legitimate member of.
+     *
+     * Waiting is not a client-side authorization decision. The server remains
+     * the gate; this only declines to send a request that cannot succeed.
+     */
+    if (!hasCredential) {
+      setStatus('reconnecting');
+      setError('Join or recover this session before subscribing.');
       return undefined;
     }
 
@@ -114,7 +142,7 @@ export function useSessionStream({
       source.close();
       setStatus('idle');
     };
-  }, [enabled, participantId, resubscribeToken, sessionId]);
+  }, [enabled, hasCredential, participantId, resubscribeToken, sessionId]);
 
   return {
     error,

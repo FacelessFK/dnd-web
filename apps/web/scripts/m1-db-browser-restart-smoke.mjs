@@ -63,6 +63,7 @@ import {
   waitForHttp,
   waitForNoText,
   waitForPortRelease,
+  waitForParticipantCredential,
   waitForSseOpen,
   waitForText,
   webDir,
@@ -311,12 +312,17 @@ async function main() {
 
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
+    await waitForParticipantCredential(gmPage, sessionId, 'GM');
     await clickButton(gmPage, ['Subscribe SSE']);
     await waitForSseOpen(gmPage, 'GM');
 
     await setSessionCode(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session']);
     await waitForStoredSessionId(playerPage, sessionId);
+    // The stored session code is set by typing it, not by joining, so it does
+    // not mean the join finished. Subscribing before the credential lands is a
+    // subscription the seat cannot authenticate.
+    await waitForParticipantCredential(playerPage, sessionId, 'Player');
     await clickButton(playerPage, ['Subscribe SSE']);
     await waitForSseOpen(playerPage, 'Player');
 

@@ -410,6 +410,11 @@ export function M1GmPanel({
               <li
                 key={intent.id}
                 className="rounded-2xl border border-amber-500/20 bg-black/20 p-2"
+                // Mirrors the Player row's attribute so a harness can compare
+                // the two subscribers' convergence without reading translated
+                // text, which differs per locale and would make the assertion a
+                // statement about the phrase book rather than about state.
+                data-intent-status={intent.statusKey}
                 data-intent-terminal={intent.isTerminal ? 'true' : 'false'}
               >
                 <p className="text-amber-50">{intent.text}</p>

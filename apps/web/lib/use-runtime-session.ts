@@ -41,6 +41,7 @@ import {
   type RuntimeSessionState,
 } from './runtime-session-state';
 import { recoverSeat } from './runtime-recovery';
+import { hasParticipantCredential } from './runtime-api';
 import {
   useSessionStream,
   type SessionStreamStatus,
@@ -219,8 +220,23 @@ export function useRuntimeSession(params: UseRuntimeSessionParams = {}) {
     onStreamEventRef.current?.(event);
   }, []);
 
+  /**
+   * Read every render so the subscription effect sees the credential appear.
+   *
+   * The credential is issued by a command response and kept outside React, so
+   * nothing re-renders when it is stored. What does re-render is the reducer
+   * state the same response dispatches - and this line is evaluated on that
+   * render, which is what turns "the join finished" into a dependency change
+   * the stream effect can act on.
+   */
+  const hasCredential = hasParticipantCredential(
+    seats.sessionId || null,
+    activeParticipantId,
+  );
+
   const stream = useSessionStream({
     enabled: streamEnabled,
+    hasCredential,
     onEvent: handleStreamEvent,
     participantId: activeParticipantId,
     resubscribeToken: streamEpoch,

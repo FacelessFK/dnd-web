@@ -14,6 +14,7 @@ import {
   createCommandId,
   describeRequestFailure,
   getParticipantCredential,
+  hasParticipantCredential,
   parseOutboxStatusResponse,
   parseRuntimeCommandResponse,
   setParticipantCredential,
@@ -94,6 +95,37 @@ describe('runtime-api helpers', () => {
       buildSessionStreamUrl('ABC123', 'dm-001'),
       /participantToken/,
     );
+  });
+
+  it('reports credential presence per seat without handing out the token', () => {
+    // The subscription hook gates on this rather than on the credential itself:
+    // a tokenless stream URL is a guaranteed 401, and `EventSource` retries the
+    // URL it was constructed with, so subscribing before a join has landed
+    // leaves the stream permanently dead against a session the browser is by
+    // then a legitimate member of.
+    assert.equal(hasParticipantCredential('ABC123', 'player-001'), false);
+
+    setParticipantCredential({
+      participantId: 'player-001',
+      sessionId: 'ABC123',
+      token: 'p9Lm2Zx5Vt8Wq1Br6Ny3Hk8Jd0Sf5Cg2Ae4Ui7Ok3Ts',
+    });
+
+    try {
+      assert.equal(hasParticipantCredential('ABC123', 'player-001'), true);
+      // Not for a different seat at the same table, nor a different table.
+      assert.equal(hasParticipantCredential('ABC123', 'dm-001'), false);
+      assert.equal(hasParticipantCredential('XYZ789', 'player-001'), false);
+      // A missing session or participant is "no credential", not a throw: the
+      // hook calls this on every render, including before either is known.
+      assert.equal(hasParticipantCredential(null, 'player-001'), false);
+      assert.equal(hasParticipantCredential('ABC123', null), false);
+      assert.equal(hasParticipantCredential('', ''), false);
+    } finally {
+      clearParticipantCredentials();
+    }
+
+    assert.equal(hasParticipantCredential('ABC123', 'player-001'), false);
   });
 
   it('names a request timeout instead of surfacing a bare abort', () => {
