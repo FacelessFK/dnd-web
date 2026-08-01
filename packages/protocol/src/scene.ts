@@ -129,6 +129,48 @@ export const sceneSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
+export const sceneStateUpdateReasonSchema = z.enum([
+  // The subscriber just connected and is being told what the map looks like
+  // now. Not a replay of anything they missed - it is the current state only.
+  'initial_sync',
+  'scene_activated',
+  'entity_placed',
+  'entity_updated',
+  'entity_moved',
+  'entity_removed',
+  'terrain_painted',
+  'transition_created',
+  'transition_updated',
+  'transition_removed',
+  'combatant_placed',
+  'combatant_moved',
+  'combatant_hp_changed',
+  // A combatant was concealed or revealed. For the DM the scene is unchanged;
+  // for a player the entity appears or disappears entirely, which is the whole
+  // reason this cannot be a client-side filter.
+  'combatant_visibility_changed',
+]);
+
+/**
+ * The active scene as one subscriber is allowed to see it.
+ *
+ * The payload is already projected when it reaches this schema: a player's
+ * `scene.entities` never contains a hidden entity, so there is no hidden ID,
+ * position, or HP in the bytes at all. The DM receives the authoritative scene.
+ * Projecting before serialization is the point - a client that received the
+ * full scene and filtered it would be one devtools tab away from omniscience.
+ *
+ * This is live delivery, not a log. There is no cursor, no replay, and no
+ * ordering guarantee beyond the transport's own; a subscriber that misses a
+ * frame recovers by reconnecting and receiving `initial_sync`.
+ */
+export const sceneStateUpdateSchema = z.object({
+  type: z.literal('scene_state'),
+  reason: sceneStateUpdateReasonSchema,
+  sessionId: sessionIdSchema,
+  scene: sceneSchema,
+});
+
 export const sceneInputSchema = z.object({
   name: sceneNameSchema,
   grid: gridDefinitionSchema,
@@ -397,6 +439,10 @@ export type SceneCombatant = z.infer<typeof sceneCombatantSchema>;
 export type SceneTransition = z.infer<typeof sceneTransitionSchema>;
 export type SceneEntity = z.infer<typeof sceneEntitySchema>;
 export type Scene = z.infer<typeof sceneSchema>;
+export type SceneStateUpdateReason = z.infer<
+  typeof sceneStateUpdateReasonSchema
+>;
+export type SceneStateUpdate = z.infer<typeof sceneStateUpdateSchema>;
 export type SceneInput = z.infer<typeof sceneInputSchema>;
 export type SceneEntityInput = z.infer<typeof sceneEntityInputSchema>;
 export type SceneEntityUpdateInput = z.infer<

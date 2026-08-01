@@ -903,6 +903,7 @@ export const messages = {
     'runtime.events.title.combat': 'Attack resolved',
     'runtime.events.title.encounter': 'Encounter state',
     'runtime.events.title.movement': 'Token movement',
+    'runtime.events.title.scene': 'Map state',
     'runtime.events.title.character': 'Character state',
     'runtime.events.title.resolution': 'Dice request',
     'runtime.events.title.playerIntent': 'Player intent',
@@ -913,6 +914,7 @@ export const messages = {
       '{attacker} rolled {roll} against AC {armorClass} and {result} ({target} HP {previousHp} to {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. Round {round}, turn {turn}.',
     'runtime.events.detail.movement': '{participant} {reason} to {x},{y}.',
+    'runtime.events.detail.scene': '{reason}. {entities} on the map.',
     'runtime.events.detail.character':
       '{character} HP is now {currentHp}/{maxHp}.',
     'runtime.events.detail.characterWithConditions':
@@ -970,6 +972,29 @@ export const messages = {
       'The DM changed turn usage',
     'runtime.events.reason.encounter_state.dm_current_turn_changed':
       'The DM changed the current turn',
+    'runtime.events.reason.scene_state.initial_sync': 'The map was synced',
+    'runtime.events.reason.scene_state.scene_activated': 'A map was activated',
+    'runtime.events.reason.scene_state.entity_placed':
+      'Something was placed on the map',
+    'runtime.events.reason.scene_state.entity_updated':
+      'Something on the map changed',
+    'runtime.events.reason.scene_state.entity_moved':
+      'Something on the map moved',
+    'runtime.events.reason.scene_state.entity_removed':
+      'Something left the map',
+    'runtime.events.reason.scene_state.terrain_painted':
+      'The terrain was painted',
+    'runtime.events.reason.scene_state.transition_created': 'An exit was added',
+    'runtime.events.reason.scene_state.transition_updated': 'An exit changed',
+    'runtime.events.reason.scene_state.transition_removed':
+      'An exit was removed',
+    'runtime.events.reason.scene_state.combatant_placed':
+      'A creature was placed',
+    'runtime.events.reason.scene_state.combatant_moved': 'A creature moved',
+    'runtime.events.reason.scene_state.combatant_hp_changed':
+      'A creature took damage',
+    'runtime.events.reason.scene_state.combatant_visibility_changed':
+      'The GM changed what is visible',
     'runtime.turn.concealedCombatant': 'Unknown combatant',
     'runtime.turnTarget.advanceTurn': 'Advance Turn',
     'runtime.turnTarget.attackTarget': 'Attack Target',
@@ -2097,6 +2122,7 @@ export const messages = {
     'runtime.events.title.combat': 'حمله انجام شد',
     'runtime.events.title.encounter': 'وضعیت رویارویی',
     'runtime.events.title.movement': 'جابه‌جایی مهره',
+    'runtime.events.title.scene': 'وضعیت نقشه',
     'runtime.events.title.character': 'وضعیت کاراکتر',
     'runtime.events.title.resolution': 'درخواست تاس',
     'runtime.events.title.playerIntent': 'قصد بازیکن',
@@ -2107,6 +2133,7 @@ export const messages = {
       '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} (HP {target} از {previousHp} به {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. دور {round}، نوبت {turn}.',
     'runtime.events.detail.movement': '{participant} {reason} به {x}،{y}.',
+    'runtime.events.detail.scene': '{reason}. {entities} مورد روی نقشه.',
     'runtime.events.detail.character':
       'HP {character} اکنون {currentHp}/{maxHp} است.',
     'runtime.events.detail.characterWithConditions':
@@ -2163,6 +2190,27 @@ export const messages = {
       'DM مصرف نوبت را تغییر داد',
     'runtime.events.reason.encounter_state.dm_current_turn_changed':
       'DM نوبت جاری را تغییر داد',
+    'runtime.events.reason.scene_state.initial_sync': 'نقشه همگام شد',
+    'runtime.events.reason.scene_state.scene_activated': 'یک نقشه فعال شد',
+    'runtime.events.reason.scene_state.entity_placed':
+      'چیزی روی نقشه قرار گرفت',
+    'runtime.events.reason.scene_state.entity_updated':
+      'چیزی روی نقشه تغییر کرد',
+    'runtime.events.reason.scene_state.entity_moved':
+      'چیزی روی نقشه جابه‌جا شد',
+    'runtime.events.reason.scene_state.entity_removed': 'چیزی از نقشه حذف شد',
+    'runtime.events.reason.scene_state.terrain_painted': 'زمین نقاشی شد',
+    'runtime.events.reason.scene_state.transition_created':
+      'یک خروجی افزوده شد',
+    'runtime.events.reason.scene_state.transition_updated':
+      'یک خروجی تغییر کرد',
+    'runtime.events.reason.scene_state.transition_removed': 'یک خروجی حذف شد',
+    'runtime.events.reason.scene_state.combatant_placed': 'یک موجود قرار گرفت',
+    'runtime.events.reason.scene_state.combatant_moved': 'یک موجود جابه‌جا شد',
+    'runtime.events.reason.scene_state.combatant_hp_changed':
+      'یک موجود آسیب دید',
+    'runtime.events.reason.scene_state.combatant_visibility_changed':
+      'GM آنچه دیده می‌شود را تغییر داد',
     'runtime.turn.concealedCombatant': 'موجود ناشناس',
     'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
     'runtime.turnTarget.attackTarget': 'حمله به هدف',

@@ -230,6 +230,7 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       movement_state: 0,
       player_intent_state: 0,
       resolution_state: 0,
+      scene_state: 0,
       session_state: 0,
     };
   }
