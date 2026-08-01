@@ -14,23 +14,23 @@ Ordering principles:
 
 ## Status summary
 
-| Milestone                      | State       |
-| ------------------------------ | ----------- |
-| M0 — Foundation repair         | Complete    |
-| M1 — First playable table      | In progress |
-| M2 — Game HUD                  | Planned     |
-| M3 — Fog of war and lighting   | Planned     |
-| M4 — Renderer quality          | Planned     |
-| M5 — Map builder completion    | Planned     |
-| M6 — Character foundations     | Planned     |
-| M7 — Combat breadth            | Planned     |
-| M8 — Spellcasting architecture | Planned     |
-| M9 — Equipment and resources   | Planned     |
-| M10 — Progression              | Planned     |
-| M11 — Campaigns                | Planned     |
-| M12 — Content packs            | Planned     |
-| M13 — Polish                   | Planned     |
-| M14 — Production               | Planned     |
+| Milestone                      | State    |
+| ------------------------------ | -------- |
+| M0 — Foundation repair         | Complete |
+| M1 — First playable table      | Complete |
+| M2 — Game HUD                  | Next     |
+| M3 — Fog of war and lighting   | Planned  |
+| M4 — Renderer quality          | Planned  |
+| M5 — Map builder completion    | Planned  |
+| M6 — Character foundations     | Planned  |
+| M7 — Combat breadth            | Planned  |
+| M8 — Spellcasting architecture | Planned  |
+| M9 — Equipment and resources   | Planned  |
+| M10 — Progression              | Planned  |
+| M11 — Campaigns                | Planned  |
+| M12 — Content packs            | Planned  |
+| M13 — Polish                   | Planned  |
+| M14 — Production               | Planned  |
 
 ---
 
@@ -123,23 +123,41 @@ a DB-mode smoke proving the same loop persists.
 **Excludes.** Fog of war. Spellcasting. Inventory. Multiple simultaneous
 players. The HUD redesign — this milestone may ship inside the existing cockpit.
 
-**Landed so far.** The contracts and the pure rules, plus the seat fix M0
-deferred:
+**Landed.** The whole loop, in that order:
 
 - One `diceResolution` record shared by checks, saves and attacks, with stance
   and named modifier sources, in `packages/protocol`.
 - Request/submit/cancel commands for checks and saves, free-form player intent,
-  and `dm_set_combatant_hidden` — the conceal/reveal command whose absence a
-  pre-merge verification confirmed.
+  and `dm_set_combatant_hidden`.
 - `packages/rules` resolves checks and saves, folds advantage/disadvantage
   without stacking, and applies `poisoned` to attack rolls and ability checks
   but not saving throws.
-- Session seats bind to authenticated accounts.
+- Session seats bind to authenticated accounts, and a restart no longer forces
+  a rejoin: the durable seat binding is what the account proves its claim with.
+- A character records what it is trained in as canonical skill and ability IDs,
+  copied from its library entry by the existing bridge, so a proficient roll
+  reports a proficiency contribution and a non-proficient one does not.
+- Server handlers persist and project all of it per role, and a new subscriber
+  receives an `initial_sync` projection of the table it is joining.
+- The GM and player surfaces, the dice-result presentation, and the feedback
+  layer, in both locales.
+- `Recover` restores the M1 table. Requests, resolutions and notes have no read
+  command - the server only projects them onto a live subscription - so
+  recovering reopens the stream rather than leaving the panels empty.
 
-**Still open.** The server command handlers that persist and project these
-contracts, the player-facing UI, the full-loop and DB-restart smokes, and the
-Postgres CI job. Until those land the loop is not playable end to end, so this
-milestone stays In progress regardless of how much of the foundation is in.
+**Verified by.** `m1-full-loop-smoke.mjs` plays a table from an empty session to
+a recovered one through the real controls in two authenticated browser profiles,
+including the three probes that must fail. `m1-db-browser-restart-smoke.mjs`
+does it across a real PostgreSQL-backed server restart with both windows left
+open. Both ran three times cleanly, and the full loop was also played visibly on
+a desktop. Both run in the `m1-browser-acceptance` CI job.
+
+**Known limitation carried forward.** No stream event carries a scene
+projection, so a creature the GM places, reveals or conceals reaches a player
+only when that player presses `Recover`. The projection itself is correct
+either way - concealment is applied server-side before the bytes leave - so this
+is a liveness gap, not a disclosure one. It belongs with the HUD work in M2,
+which is rebuilding the surfaces that would consume such an event.
 
 ---
 
@@ -165,7 +183,7 @@ player-mode screenshot contains no raw identifier or protocol field name.
 **Tests.** Existing helper tests preserved and extended per extracted module;
 browser smokes updated to the new surfaces; both locales verified for RTL.
 
-**Dependencies.** M1.
+**Dependencies.** M1, which is complete.
 
 **Excludes.** Renderer replacement. New gameplay.
 

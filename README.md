@@ -47,7 +47,11 @@ Everything below is implemented and covered by tests.
 - Server-issued participant credentials: a session response returns an opaque
   participant token, and every command and stream subscription must present it.
 - Server-Sent Events for live delivery of `session_state`, `movement_state`,
-  `encounter_state`, `combat_event`, and `character_state`.
+  `encounter_state`, `combat_event`, `character_state`, `resolution_state`, and
+  `player_intent_state`.
+- A subscriber receives an `initial_sync` projection of the table's resolution
+  requests, dice audit and player notes on connect. That is a projection, not a
+  replay: it carries current state, never the events that produced it.
 - Recovery by re-reading authoritative read models after a refresh or
   reconnect — never from browser storage.
 - Per-command idempotency: replaying a successful command returns the cached
@@ -78,6 +82,18 @@ Everything below is implemented and covered by tests.
   handling, then `1d8 + Strength modifier` damage, dice doubled on a critical.
 - GM controls for HP, condition tags, repositioning, combatants, current turn,
   turn usage, and ending an encounter.
+- Ability checks and saving throws as a resolved flow: the GM requests one
+  naming the ability, an optional canonical skill, a DC and a stance; the player
+  answers it; the server rolls and publishes an audit record carrying every die
+  face, which one counted, each named modifier source and the outcome.
+- Real proficiency: a character carries the saving throws and skills it is
+  trained in as canonical IDs, copied from its library entry, and a proficient
+  roll shows the contribution separately from the ability modifier.
+- `poisoned` with mechanical effect - disadvantage on attack rolls and ability
+  checks, and deliberately not on saving throws - with the condition named in
+  the audit as the reason the roll had two dice.
+- Free-form player notes to the GM, which the GM marks seen, resolves or sets
+  aside. Nothing interprets them and no game state changes because one was sent.
 - A localized event feed.
 
 **Hidden information**
@@ -110,9 +126,14 @@ Read this before assuming a feature exists.
 - **Combat is a narrow melee foundation.** No weapon model, damage types,
   resistances, ranged attacks, opportunity attacks, advantage/disadvantage,
   death saves, or spellcasting.
-- **Condition tags are metadata.** They change no mechanics.
+- **Most condition tags are still metadata.** `poisoned` is the exception and
+  changes rolls; the rest are labels.
 - **Combatants are GM-controlled actors, not stat blocks.** No monster AI.
-- **No ability checks or saving throws** as a resolved action flow.
+- **A creature the GM places, reveals or conceals reaches a player only when
+  that player reloads their read models.** No stream event carries a scene
+  projection, so the visible `Recover` control is what refreshes a player's map.
+  The projection itself is correct either way: a concealed creature is stripped
+  server-side before the bytes leave, so refreshing never reveals one.
 - **`/maps` publishes new scenes only.** It cannot re-open or overwrite a server
   scene, and it does not activate what it publishes.
 - **`/runtime` is a developer cockpit, not a game HUD.** It is a single
@@ -297,7 +318,43 @@ DB mode (run `db:migrate` and `check:readiness` first):
 ```bash
 corepack pnpm --filter @dnd/web test:smoke:builder-export-db
 corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
+corepack pnpm --filter @dnd/web test:smoke:m1-full-loop            # the M1 acceptance
+corepack pnpm --filter @dnd/web test:smoke:m1-db-browser-restart   # browsers across a restart
 ```
+
+`test:smoke:m1-full-loop` is the M1 acceptance harness: two authenticated
+browser profiles with their own cookie jars play a table from an empty session
+to a recovered one — map, Character Library import, assignment, monsters,
+movement, a proficient check against a non-proficient one on the same ability, a
+proficient saving throw, poisoned, table notes, an encounter, an attack, conceal
+and reveal, and a refresh on both sides — then probe three things that must
+fail: a third account reclaiming a bound seat, a player issuing a GM-only
+command, and a player token pointed at the GM stream.
+
+`test:smoke:m1-db-browser-restart` provisions its own database, kills a real
+server process and starts a second one against the same data while both Chrome
+windows stay open, then recovers each seat through the visible Recover control.
+
+Both need DB mode. Authentication only exists when `SERVER_PERSISTENCE_MODE=db`,
+so an in-memory server has no login and no Character Library — half the journey.
+The restart harness also needs a `DATABASE_URL` whose role may create and drop
+databases.
+
+### Watching it happen
+
+The harnesses run headless by default. `RUNTIME_SMOKE_HEADED=1` opens real
+windows instead, which is how local acceptance is done:
+
+```bash
+RUNTIME_SMOKE_HEADED=1 RUNTIME_SMOKE_BROWSER=/usr/bin/google-chrome \
+  corepack pnpm --filter @dnd/web test:smoke:m1-full-loop
+```
+
+A headed run refuses to pass unless it really is on a desktop, and writes a
+screenshot at each point of the journey into `M1_SMOKE_ARTIFACT_DIR` (default
+`$TMPDIR/dnd-m1-smoke-artifacts`) — never into the working tree. Failures write
+the same directory plus console errors, failed requests, captured SSE frames and
+sanitized state dumps, in every mode.
 
 ## Database persistence and recovery
 
@@ -328,7 +385,10 @@ corepack pnpm --filter @dnd/server test:smoke:m1-db-restart   # real process res
 drives the HTTP command routes through a full M1 table, kills the server, starts
 a second process against the same data, and verifies recovery. It needs a
 `DATABASE_URL` whose role may create and drop databases. Both run in the
-`m1-db-recovery` CI job.
+`m1-db-recovery` CI job. The browser-driven equivalent —
+`test:smoke:m1-db-browser-restart`, which keeps two Chrome windows open across
+the same restart — runs in `m1-browser-acceptance` alongside the full-loop
+acceptance smoke.
 
 Set `RUNTIME_SMOKE_BROWSER=/path/to/chrome` if auto-discovery fails, and
 `RUNTIME_SMOKE_TIMEOUT_MS` (default `120000`) on a slow machine.

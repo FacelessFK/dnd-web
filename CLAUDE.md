@@ -141,6 +141,23 @@ path masked both. Always pass a repository result through
 `resolveRepositoryResult` before touching its fields - never through a bare
 `const`.
 
+**A session has one SSE subscriber per participant.** `connectParticipant`
+replaces the room's subscriber and closes the previous one. A second connection
+for the same seat does not observe that seat - it takes the stream away from
+whoever had it. Anything that wants to watch the traffic has to be the transport
+the client is already using, not a connection beside it.
+
+**The M1 table has no read command.** Resolution requests, the dice audit and
+player notes are only ever projected onto a live subscription, as `initial_sync`
+on connect. Anything that needs them back - `Recover`, a new panel, a harness -
+has to (re)open the stream. There is nothing to `get_`.
+
+**`reconnect_session` rotates the credential when the caller owns the seat.**
+`recoversOwnSeat` is true whenever the authenticated account holds the seat
+binding, restart or not, and that path mints a fresh token. Using reconnect as a
+convenient read therefore invalidates the token the browser is holding. Reads go
+through the real read commands.
+
 **Participant credentials never become durable.** They are per-process bearer
 tokens and a restart must invalidate them. The durable fact is the _seat
 binding_ in `session_seat_ownership`, and `reconnect_session` accepts it in
@@ -183,6 +200,9 @@ stay stable and untranslated. Never auto-translate user-entered character data.
 - `apps/web/lib/*.test.ts` — helpers, renderers, mappers.
 - `scripts/smoke.test.mjs` — repository shape and smoke diagnostics.
 - `apps/web/scripts/*.mjs` — browser harnesses driving headless Chrome.
+  `m1-full-loop-smoke.mjs` and `m1-db-browser-restart-smoke.mjs` are the M1
+  acceptance pair; both need DB mode, because authentication and the Character
+  Library only exist there.
 
 A visibility or authorization property gets its own test that tries to break it.
 "The UI does not show it" is not a test.
