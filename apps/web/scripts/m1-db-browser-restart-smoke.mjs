@@ -75,6 +75,7 @@ import {
   concealCombatant,
   countSseFrames,
   createCombatant,
+  settleSseFrames,
   fail,
   findCombatantId,
   NON_PROFICIENT_SKILL,
@@ -369,6 +370,14 @@ async function main() {
       x: 6,
       y: 5,
     });
+
+    // Both monsters are placed visible first, so the Player's scene frames up
+    // to here legitimately name the second one. The recorder's transcript
+    // survives the restart below, so without this boundary the post-restart
+    // concealment check would scan frames from before the creature was ever
+    // concealed and report correct behaviour as a leak.
+    const preConcealFrameIndex = await settleSseFrames(playerPage);
+
     await concealCombatant(gmPage, concealedMonsterName);
 
     const visibleEntityId = await findCombatantId({
@@ -700,6 +709,7 @@ async function main() {
 
     step('verify concealment survived the restart');
     await assertPlayerCannotSee(playerPage, {
+      fromIndex: preConcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealment across a restart',
     });

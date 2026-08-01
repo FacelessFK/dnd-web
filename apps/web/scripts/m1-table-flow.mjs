@@ -859,15 +859,32 @@ export async function runIntentLifecycle({ gmPage, playerPage }) {
     });
 
     // A terminal intent offers no way back to pending, in the UI or otherwise.
-    const terminal = await gmPage.evaluate(`(() => {
-      const row = ${gmIntentRowExpression(text)};
-      return row ? row.dataset.intentTerminal : null;
-    })()`);
+    //
+    // Waited for on the GM's own page rather than sampled once. The GM and the
+    // Player hold two independent subscriptions with no ordering between them,
+    // so the Player having rendered the new status says nothing about whether
+    // the GM's frame has landed yet. Sampling here read a row the GM had not
+    // been told about and reported it as the flag never being set.
+    if (transition.button !== 'Mark seen') {
+      await waitFor(gmPage, {
+        label: `Intent ${index + 1} is terminal for the GM after ${transition.button}`,
+        predicate: `(() => {
+          const row = ${gmIntentRowExpression(text)};
+          return Boolean(row && row.dataset.intentTerminal === 'true');
+        })()`,
+      });
 
-    if (transition.button !== 'Mark seen' && terminal !== 'true') {
-      fail(
-        `Intent ${index + 1} was not marked terminal after ${transition.button}.`,
-      );
+      // A terminal intent must also offer the GM no way to transition it again.
+      const reopenable = await gmPage.evaluate(`(() => {
+        const row = ${gmIntentRowExpression(text)};
+        return row ? row.querySelectorAll('button').length : -1;
+      })()`);
+
+      if (reopenable !== 0) {
+        fail(
+          `Intent ${index + 1} still offered ${reopenable} transition control(s) after ${transition.button}.`,
+        );
+      }
     }
   }
 }
@@ -1203,8 +1220,54 @@ export function countSseFrames(page) {
   return page.evaluate(`(window.__m1Sse?.frames ?? []).length`);
 }
 
+/**
+ * Where the next mutation's frames will start, once the previous step's have
+ * all landed.
+ *
+ * Sampling `countSseFrames` immediately before acting is not enough to separate
+ * "before" from "after". Frames from the preceding step - especially the
+ * `initial_sync` burst a `Recover` produces - can still be in flight, so they
+ * land at indices past the sample and fall inside a window that is supposed to
+ * contain only post-mutation traffic. A creature that was legitimately visible
+ * a moment ago then reads as a concealment leak, which is the product's correct
+ * behaviour reported as a defect.
+ *
+ * Waiting for the transcript to go quiet first makes the boundary real. This is
+ * quiescence, not a fixed sleep: it returns as soon as the count holds still,
+ * and throws rather than guessing if frames never stop arriving.
+ */
+export async function settleSseFrames(
+  page,
+  { quietMs = 600, timeoutMs = 15000 } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  let previous = await countSseFrames(page);
+  let stableSince = Date.now();
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const current = await countSseFrames(page);
+
+    if (current !== previous) {
+      previous = current;
+      stableSince = Date.now();
+      continue;
+    }
+
+    if (Date.now() - stableSince >= quietMs) {
+      return current;
+    }
+  }
+
+  throw new Error(
+    `SSE frames never settled: still arriving after ${timeoutMs}ms (last count ${previous}).`,
+  );
+}
+
 export async function compareRoleProjections({
   concealedEntityId,
+  concealedFromIndex = 0,
   concealedMonsterName,
   concealedUntilIndex,
   gmPage,
@@ -1260,8 +1323,15 @@ export async function compareRoleProjections({
     fail('The GM stream never named the concealed combatant it controls.');
   }
 
-  // Bounded by the reveal: after it, the Player is entitled to the creature.
-  const concealedWindow = playerFrames.slice(0, concealedUntilIndex);
+  // Bounded at both ends. The creature is placed visible and only concealed
+  // afterwards, so frames before `concealedFromIndex` are entitled to name it;
+  // after the reveal at `concealedUntilIndex` the Player is entitled to it
+  // again. Only the stretch between is a concealment claim, and scanning
+  // outside it reports correct behaviour as a leak.
+  const concealedWindow = playerFrames.slice(
+    concealedFromIndex,
+    concealedUntilIndex,
+  );
 
   for (const identifier of [concealedEntityId, concealedMonsterName]) {
     if (concealedWindow.some((frame) => frame.raw.includes(identifier))) {

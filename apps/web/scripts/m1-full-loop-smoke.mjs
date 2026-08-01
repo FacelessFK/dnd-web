@@ -71,7 +71,6 @@ import {
   assertSceneProjections,
   compareRoleProjections,
   concealCombatant,
-  countSseFrames,
   createCombatant,
   EXPECTED_PROFICIENCY_BONUS,
   fail,
@@ -90,6 +89,7 @@ import {
   runIntentLifecycle,
   runPlayerAttack,
   seedLibraryEntry,
+  settleSseFrames,
   setRunTag,
   setCell,
   setSessionCode,
@@ -488,6 +488,14 @@ async function main() {
     });
     await waitForText(gmPage, [visibleMonsterName], 'GM visible monster');
     await waitForText(gmPage, [concealedMonsterName], 'GM concealed monster');
+
+    // Both monsters are placed visible, so the Player's scene frames up to this
+    // point legitimately name the second one - it was not concealed yet. The
+    // window has to open here, exactly as it does for the reveal and re-conceal
+    // below. Under M1 no stream event carried a scene at all, so scanning from
+    // frame zero was safe; M2's live scene frames made that stale.
+    const preConcealFrameIndex = await settleSseFrames(playerPage);
+
     await concealCombatant(gmPage, concealedMonsterName);
 
     step('verify the role-specific scene projection');
@@ -505,6 +513,7 @@ async function main() {
     });
 
     await assertPlayerCannotSee(playerPage, {
+      fromIndex: preConcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealed monster after the first conceal',
     });
@@ -777,8 +786,10 @@ async function main() {
 
     step('GM reveals the concealed monster and the Player receives it');
     // Everything before this index is a stretch in which the creature was
-    // concealed, and is what the leak checks are allowed to look at.
-    const preRevealFrameIndex = await countSseFrames(playerPage);
+    // concealed, and is what the leak checks are allowed to look at. Settling
+    // first makes that stretch cover every frame the conceal actually produced
+    // rather than however many had arrived when the count was sampled.
+    const preRevealFrameIndex = await settleSseFrames(playerPage);
 
     await revealCombatant(gmPage, concealedMonsterName);
     await clickButton(playerPage, ['Recover']);
@@ -798,12 +809,14 @@ async function main() {
     await stage('reveal');
 
     step('GM conceals it again and the Player loses it');
-    const preReconcealFrameIndex = await countSseFrames(playerPage);
+    // The reveal's own `Recover` burst is still landing here; settling is what
+    // keeps those legitimately-revealed frames out of the re-conceal window.
+    const preReconcealFrameIndex = await settleSseFrames(playerPage);
 
     await concealCombatant(gmPage, concealedMonsterName);
     await clickButton(playerPage, ['Recover']);
     await assertPlayerCannotSee(playerPage, {
-      fromIndex: preReconcealFrameIndex + 1,
+      fromIndex: preReconcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealed monster after re-conceal',
     });
@@ -824,6 +837,7 @@ async function main() {
     step('compare the GM and Player named SSE frames');
     await compareRoleProjections({
       concealedEntityId,
+      concealedFromIndex: preConcealFrameIndex,
       concealedMonsterName,
       concealedUntilIndex: preRevealFrameIndex,
       gmPage,
