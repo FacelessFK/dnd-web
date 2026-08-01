@@ -20,6 +20,7 @@ import { buildSessionStreamUrl } from './runtime-api';
 const streamEventTypes: SessionStreamEvent['type'][] = [
   'session_state',
   'movement_state',
+  'scene_state',
   'encounter_state',
   'combat_event',
   'character_state',
