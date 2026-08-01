@@ -6,6 +6,7 @@ import type {
 import type {
   CharacterAssignmentSuccess,
   SceneActivationSuccess,
+  SceneStateUpdate,
   SessionCommandSuccess,
   SessionStateUpdate,
   SessionStateUpdateReason,
@@ -185,11 +186,21 @@ export class DbBackedSessionCommandTransactionBoundary {
     const transactionSessions = runtimeSessions.forkForTransaction(
       context.sessions,
     );
+    // Activating a scene writes nothing to the scene store, but it does change
+    // which map the room is looking at, so the scene event belongs in this
+    // command's transaction rather than being left for the client to go and ask
+    // for after the session snapshot changed under it.
+    const sceneStateUpdates: SceneStateUpdate[] = [];
     const transactionRuntime = params.runtime
       .withSessionStore(transactionSessions)
       .withCharacterRepository(
         new DbBackedCharacterRepository(context.characters),
-      );
+      )
+      .withSceneRepository(params.runtime.scenes, {
+        sceneStateUpdateSink: (update) => {
+          sceneStateUpdates.push(update);
+        },
+      });
     const commandSessionId = getCommandSessionId(params.command);
     const initialSnapshot =
       params.command.type === 'create_session' || !commandSessionId
@@ -219,17 +230,21 @@ export class DbBackedSessionCommandTransactionBoundary {
         initialSnapshot === null ||
         nextSnapshot.session.revision > initialSnapshot.session.revision;
 
-      if (didMutate && this.supportsOutboxDispatch(commandType)) {
-        const update = this.buildSessionStateUpdate(commandType, nextSnapshot);
+      // The session event goes first so a subscriber learns which scene is
+      // active before being handed that scene's contents.
+      const events: (SessionStateUpdate | SceneStateUpdate)[] =
+        didMutate && this.supportsOutboxDispatch(commandType)
+          ? [this.buildSessionStateUpdate(commandType, nextSnapshot)]
+          : [];
 
-        await this.persistOutboxRow(context, idempotencyKey, update);
+      if (didMutate) {
+        events.push(...sceneStateUpdates);
       }
 
+      await this.persistOutboxRows(context, idempotencyKey, events);
+
       return {
-        dispatchIdempotencyKey:
-          didMutate && this.supportsOutboxDispatch(commandType)
-            ? idempotencyKey
-            : null,
+        dispatchIdempotencyKey: events.length ? idempotencyKey : null,
         response,
         sessionSnapshot: didMutate ? nextSnapshot : null,
       };
@@ -259,27 +274,29 @@ export class DbBackedSessionCommandTransactionBoundary {
     };
   }
 
-  private async persistOutboxRow(
+  private async persistOutboxRows(
     context: DndDatabaseUnitOfWorkContext,
     idempotencyKey: string,
-    update: SessionStateUpdate,
+    updates: (SessionStateUpdate | SceneStateUpdate)[],
   ): Promise<void> {
-    const inserted = await context.outbox.insertCommandEventOutboxRecord({
-      eventOrder: 0,
-      eventType: this.getEventType(update),
-      idempotencyKey,
-      outboxId: `${idempotencyKey}:0`,
-      payload: this.clone(update),
-      sessionId: update.sessionId,
-    });
+    for (const [eventOrder, update] of updates.entries()) {
+      const inserted = await context.outbox.insertCommandEventOutboxRecord({
+        eventOrder,
+        eventType: this.getEventType(update),
+        idempotencyKey,
+        outboxId: `${idempotencyKey}:${eventOrder}`,
+        payload: this.clone(update),
+        sessionId: update.sessionId,
+      });
 
-    if (inserted) {
-      return;
+      if (inserted) {
+        continue;
+      }
+
+      throw new Error(
+        `Outbox row "${idempotencyKey}:${eventOrder}" was not inserted for session command "${idempotencyKey}".`,
+      );
     }
-
-    throw new Error(
-      `Outbox row "${idempotencyKey}:0" was not inserted for session command "${idempotencyKey}".`,
-    );
   }
 
   private buildSessionStateUpdate(
@@ -323,7 +340,7 @@ export class DbBackedSessionCommandTransactionBoundary {
   }
 
   private getEventType(
-    update: SessionStateUpdate,
+    update: SessionStateUpdate | SceneStateUpdate,
   ): CommandEventOutboxEventType {
     return update.type;
   }

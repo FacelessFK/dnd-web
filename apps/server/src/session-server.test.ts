@@ -5691,11 +5691,13 @@ test('db-backed missed realtime delivery is recovered through read models withou
   );
   assert.equal(targetCharacterRead.body.data.character.hp.current, 29);
   // Connecting replays what the subscriber is entitled to know *now*: the
-  // session snapshot plus the M1 table as it stands. What it must never replay
-  // is the combat event it missed, which is the point of this test.
+  // session snapshot, the active map, and the M1 table as they stand. What it
+  // must never replay is the combat event it missed, which is the point of
+  // this test.
   assert.deepEqual(lateStreamUpdates.map((update) => update.type).sort(), [
     'player_intent_state',
     'resolution_state',
+    'scene_state',
     'session_state',
   ]);
   assert.equal(
@@ -6004,6 +6006,7 @@ test('outbox status endpoint reports unpublished backlog without draining rows',
         movement_state: 1,
         player_intent_state: 0,
         resolution_state: 0,
+        scene_state: 0,
         session_state: 1,
       },
       oldestCreatedAt: null,
@@ -6228,7 +6231,7 @@ test('db-backed session transaction boundary writes one runtime copy and one out
   assert.equal(reusableEntry.hp.current, 9);
 });
 
-test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
+test('db-backed session transaction boundary writes session and scene outbox rows, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const sceneDatabase = new InMemorySceneRecordDatabase();
@@ -6310,11 +6313,19 @@ test('db-backed session transaction boundary writes one outbox row, dispatches a
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
-  assert.equal(sessionUpdates.length, 1);
-  assert.equal(sessionUpdates[0]?.type, 'session_state');
-  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
-  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  // Two rows for one activation: the session change and the map it now points
+  // at, committed together so a crash between them is impossible.
+  assert.equal(outboxDatabase.recordCount, 2);
+  assert.deepEqual(
+    sessionUpdates.map((update) => `${update.type}:${update.reason}`),
+    ['session_state:active_scene_changed', 'scene_state:scene_activated'],
+  );
+  // One marker per delivered event, both reading the post-commit count:
+  // neither the session change nor the scene reached a subscriber early.
+  assert.deepEqual(newCommitMarkers, [
+    commitCountBefore + 1,
+    commitCountBefore + 1,
+  ]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -7631,10 +7642,17 @@ test('db-backed session transaction boundary commits activate_scene_transition a
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
-  assert.equal(sessionUpdates.length, 1);
-  assert.equal(sessionUpdates[0]?.type, 'session_state');
-  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
+  assert.equal(outboxDatabase.recordCount, 2);
+  // Walking through a door announces the door's destination, not the room the
+  // party just left.
+  assert.deepEqual(
+    sessionUpdates.map((update) => `${update.type}:${update.reason}`),
+    ['session_state:active_scene_changed', 'scene_state:scene_activated'],
+  );
+  assert.equal(
+    sessionUpdates.find((update) => update.type === 'scene_state')?.scene.id,
+    targetScene.id,
+  );
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -11169,11 +11187,12 @@ test('reconnected SSE subscribers receive current session state without combat e
     },
   });
 
-  // Session snapshot first, then the M1 table, all as `initial_sync`. A
-  // reconnecting client rebuilds from state rather than from replayed events.
+  // Session snapshot first, then the map, then the M1 table, all as
+  // `initial_sync`. A reconnecting client rebuilds from state rather than from
+  // replayed events - the combat event above is not re-sent.
   assert.deepEqual(
     reconnectUpdates.map((update) => update.type),
-    ['session_state', 'resolution_state', 'player_intent_state'],
+    ['session_state', 'scene_state', 'resolution_state', 'player_intent_state'],
   );
   assert.ok(
     reconnectUpdates.every((update) => update.reason === 'initial_sync'),

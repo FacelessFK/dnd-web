@@ -20,8 +20,9 @@ import type {
   PlayerIntentStateUpdateReason,
   ResolutionRequest,
   ResolutionStateUpdateReason,
+  SceneStateUpdate,
 } from '@dnd/protocol';
-import { projectEncounterForRole } from '@dnd/rules';
+import { projectEncounterForRole, projectSceneForRole } from '@dnd/rules';
 import type {
   ParticipantId,
   ParticipantRole,
@@ -87,6 +88,27 @@ export function publishEncounterStateUpdateToRoom(
       role,
       concealedCombatantIds,
     ),
+  }));
+}
+
+/**
+ * Fan out the active scene, projected per role before serialization.
+ *
+ * Always projected, with no "nothing is hidden" fast path. The equivalent
+ * shortcut on the encounter is safe because concealment there is a set the
+ * caller has already computed; here the answer lives on each entity, so a fast
+ * path would mean deciding whether anything is hidden in a second place and
+ * getting to broadcast the authoritative scene when that decision was wrong.
+ * `projectSceneForRole` returns the same object for the DM anyway, so the cost
+ * of always asking is one array filter per player payload.
+ */
+export function publishSceneStateUpdateToRoom(
+  room: SessionEventFanoutRoom,
+  update: SceneStateUpdate,
+): void {
+  broadcastByRole(room, (role) => ({
+    ...update,
+    scene: projectSceneForRole(update.scene, role),
   }));
 }
 

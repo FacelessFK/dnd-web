@@ -11,6 +11,7 @@ import type {
   OutboxStatusSuccess,
   PlayerIntentStateUpdate,
   ResolutionStateUpdate,
+  SceneStateUpdate,
   SessionStateUpdate,
 } from '@dnd/protocol';
 
@@ -171,6 +172,16 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       this.sessions.publishEncounterStateUpdate(
         update,
         this.resolveConcealedCombatantIds(update.sessionId),
+      );
+      return;
+    }
+
+    // The stored payload is the authoritative scene, which is correct for a
+    // durable record. Concealment is applied by the store on the way to each
+    // subscriber, exactly as it is on the live path.
+    if (row.eventType === 'scene_state') {
+      this.sessions.publishSceneStateUpdate(
+        this.clone(row.payload as SceneStateUpdate),
       );
       return;
     }

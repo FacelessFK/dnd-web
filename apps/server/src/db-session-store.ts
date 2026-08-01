@@ -9,6 +9,7 @@ import type {
   MovementStateUpdate,
   MovementStateUpdateReason,
   ReconnectSessionCommand,
+  SceneStateUpdate,
   SessionStateUpdate,
   SessionStateUpdateReason,
   SessionStreamEvent,
@@ -36,6 +37,7 @@ import {
   publishEncounterStateUpdateToRoom,
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
+  publishSceneStateUpdateToRoom,
   type PlayerIntentStateFanout,
   type ResolutionStateFanout,
 } from './session-event-fanout.js';
@@ -422,6 +424,10 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
       update,
       concealedCombatantIds,
     );
+  }
+
+  publishSceneStateUpdate(update: SceneStateUpdate): void {
+    publishSceneStateUpdateToRoom(this.requireRoom(update.sessionId), update);
   }
 
   publishResolutionStateUpdate(params: ResolutionStateFanout): void {
