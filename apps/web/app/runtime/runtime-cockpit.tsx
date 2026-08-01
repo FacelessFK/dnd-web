@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 
 import type {
-  ActiveSceneState,
   CharacterLibraryEntry,
   CharacterResource,
   CombatEvent,
-  DmCommand,
   Encounter,
   Scene,
   SceneEntityInput,
@@ -17,29 +15,16 @@ import type {
 } from '@dnd/protocol';
 
 import { useAuth } from '../../lib/auth-context';
-import {
-  listCharacterLibraryEntries,
-  submitCharacterLibraryEntryForAssignment,
-} from '../../lib/character-library-api';
+import { listCharacterLibraryEntries } from '../../lib/character-library-api';
 import {
   createCommandId,
   fetchOutboxStatus,
   runtimeServerUrl,
-  sendCharacterCommand,
-  sendDmCommand,
-  sendEncounterCommand,
-  sendMovementCommand,
-  sendSceneCommand,
-  sendSessionCommand,
   type OutboxStatusSuccessResponse,
-  type RuntimeApiResult,
 } from '../../lib/runtime-api';
 import { LanguageSwitcher, useI18n, type MessageKey } from '../../lib/i18n';
 import {
   abilityKeys,
-  characterInputFromDraft,
-  characterUpdateInputFromDraft,
-  cockpitStorageKey,
   CONCEALED_COMBATANT_LABEL,
   createCharacterDraftFormFromResource,
   createDefaultCharacterDraftForm,
@@ -57,12 +42,10 @@ import {
   defaultPlayer,
   demoScenarios,
   describeSessionStreamEvent,
-  formatRuntimeFailure,
   getActingParticipantId,
   getActionEconomyFeedbackSummary,
   getActionTargetFeedbackSummary,
   getAssignmentRequestCharacterPreview,
-  getAssignedCharacterRefs,
   getAttackableCombatantEntities,
   getCharacterLibrarySourceProvenance,
   getCombatantEntities,
@@ -82,7 +65,6 @@ import {
   getMovementFeedbackSummary,
   getOutboxStatusView,
   getPendingAssignmentRequests,
-  getPendingCharacterRefs,
   getPassiveSceneEntities,
   getPlayerNextStep,
   getPlayerParticipantIds,
@@ -94,20 +76,11 @@ import {
   getTransitionSceneEntities,
   isSessionStreamEvent,
   isCombatantEntityDefeated,
-  isExpectedRecoveryMiss,
-  sampleCharacters,
   samplePlayers,
-  sanitizeSessionIdInput,
   sceneEntityPresets,
-  sceneEntityInputFromDraft,
-  sceneEntityUpdateInputFromDraft,
   sceneEntityTypeOptions,
-  sceneTransitionInputFromDraft,
   sceneTransitionKindOptions,
   sceneTransitionPresets,
-  sceneTransitionUpdateInputFromDraft,
-  combatantInputFromDraft,
-  sceneInputFromDraft,
   validateCharacterDraftForm,
   validateCombatantDraftForm,
   validateSceneDraftForm,
@@ -140,23 +113,17 @@ import {
   type SceneTransitionDraftForm,
   type SceneTransitionPreset,
   type SceneTransitionPresetId,
-  type SessionSnapshot,
-  type StoredCockpitState,
 } from '../../lib/runtime-cockpit-helpers';
-import { shouldReplaceScene } from '../../lib/runtime-session-state';
-import { useSessionStream } from '../../lib/use-session-stream';
+import { useRuntimeSession } from '../../lib/use-runtime-session';
+import { useRuntimeCommands } from '../../lib/use-runtime-commands';
+import type { SceneTarget } from '../../lib/runtime-scene-commands';
+import type { SimpleEncounterCommandType } from '../../lib/runtime-encounter-commands';
 import { describeStreamStatus } from '../../lib/m1-feedback';
-import { useM1Table } from '../../lib/use-m1-table';
+import { useM1Table, type UseM1TableResult } from '../../lib/use-m1-table';
 import { M1FeedbackLayer, usePrefersReducedMotion } from './m1-feedback-layer';
 import { M1GmPanel, type M1ResolutionTarget } from './m1-gm-panel';
 import { M1PlayerPanel } from './m1-player-panel';
 import { TacticalMap } from './tactical-map';
-
-type SimpleEncounterCommandType =
-  | 'advance_turn'
-  | 'use_action'
-  | 'use_bonus_action'
-  | 'use_reaction';
 
 type EventLogEntry = {
   at: string;
@@ -688,35 +655,10 @@ function formatOutboxStatusLabel(
 export function RuntimeCockpit() {
   const { t } = useI18n();
   const { loading: authLoading, user } = useAuth();
-  const [dmParticipantId, setDmParticipantId] = useState<string>(
-    defaultDm.participantId,
-  );
-  const [dmDisplayName, setDmDisplayName] = useState<string>(
-    defaultDm.displayName,
-  );
-  const [mode, setMode] = useState<RuntimeMode>('dm');
-  const [playerParticipantId, setPlayerParticipantId] = useState<string>(
-    defaultPlayer.participantId,
-  );
-  const [playerDisplayName, setPlayerDisplayName] = useState<string>(
-    defaultPlayer.displayName,
-  );
-  const [sessionId, setSessionId] = useState('');
-  const [sceneId, setSceneId] = useState('');
-  const [sessionState, setSessionState] = useState<SessionSnapshot | null>(
-    null,
-  );
-  const [scene, setScene] = useState<Scene | null>(null);
-  const [knownScenesById, setKnownScenesById] = useState<Record<string, Scene>>(
-    {},
-  );
-  const [activeScene, setActiveScene] = useState<ActiveSceneState | null>(null);
-  const [encounter, setEncounter] = useState<Encounter | null>(null);
-  const [charactersByParticipant, setCharactersByParticipant] = useState<
-    Record<string, CharacterResource | undefined>
-  >({});
-  const [knownCharacterIdsByParticipant, setKnownCharacterIdsByParticipant] =
-    useState<Record<string, string>>({});
+
+  // Local form and selection state. These are the browser's own - a half-typed
+  // scene name is not a fact about the table - so they stay here while every
+  // server-projected value comes from `session.state`.
   const [characterDraft, setCharacterDraft] = useState<CharacterDraftForm>(() =>
     createDefaultCharacterDraftForm(defaultPlayer.displayName),
   );
@@ -754,9 +696,6 @@ export function RuntimeCockpit() {
   );
   const [eventLog, setEventLog] = useState<EventLogEntry[]>([]);
   const [lastResponse, setLastResponse] = useState<LastResponse | null>(null);
-  const [commandError, setCommandError] = useState<string | null>(null);
-  const [recoveryNotes, setRecoveryNotes] = useState<string[]>([]);
-  const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [outboxStatus, setOutboxStatus] = useState<
     OutboxStatusSuccessResponse['data'] | null
   >(null);
@@ -764,11 +703,6 @@ export function RuntimeCockpit() {
     null,
   );
   const [outboxStatusLoading, setOutboxStatusLoading] = useState(false);
-  const [streamEnabled, setStreamEnabled] = useState(false);
-  // Bumped to force a fresh subscription. The M1 table has no read command, so
-  // reopening the stream is the only way to ask the server for its projection of
-  // the requests, resolutions and intents this seat is allowed to see.
-  const [streamEpoch, setStreamEpoch] = useState(0);
   const [selectedActor, setSelectedActor] = useState<string>(
     samplePlayers[0].participantId,
   );
@@ -788,6 +722,68 @@ export function RuntimeCockpit() {
     movementUsed: 0,
     reactionUsed: false,
   });
+
+  // The M1 table's seat comes from the session hook, and the session hook needs
+  // to hand frames to the table - so the reference is filled in immediately
+  // after both exist. Both callbacks below run from event handlers, never during
+  // this render, so the ref is always populated by the time they fire.
+  const m1Ref = useRef<UseM1TableResult | null>(null);
+
+  /**
+   * Every server-projected value, in one place.
+   *
+   * The hook owns the reducer, the subscription and the recovery sequence. This
+   * component reads what it holds and never writes to it except through a
+   * command - which is why there is no `setScene` here to disagree with the
+   * server's next frame.
+   */
+  const session = useRuntimeSession({
+    onIdentityReset: () => {
+      m1Ref.current?.resetTable();
+      setEventLog([]);
+      setLastResponse(null);
+    },
+    onStreamEvent: (event) => {
+      m1Ref.current?.ingestStreamEvent(event);
+      pushLog(event.type, event);
+    },
+  });
+
+  // M1 table state and commands live in their own hook so this component keeps
+  // only the wiring: which participant, which session, and where the panels go.
+  const m1 = useM1Table({
+    participantId: session.activeParticipantId,
+    sessionId: session.seats.sessionId,
+  });
+  m1Ref.current = m1;
+
+  const { seats, state: runtime } = session;
+  const mode = seats.mode;
+  const sessionId = seats.sessionId;
+  const dmParticipantId = seats.dmParticipantId;
+  const dmDisplayName = seats.dmDisplayName;
+  const playerParticipantId = seats.playerParticipantId;
+  const playerDisplayName = seats.playerDisplayName;
+
+  // Read-only bindings onto the reducer's state. Named for what the panels below
+  // already call them so this stays a rename, not a second copy: nothing here
+  // can be assigned.
+  const sessionState = runtime.session;
+  const scene = runtime.scene;
+  const sceneId = runtime.sceneId;
+  const knownScenesById = runtime.knownScenesById;
+  const activeScene = runtime.activeScene;
+  const encounter = runtime.encounter;
+  const charactersByParticipant = runtime.charactersByParticipant;
+  const commandError = runtime.commandError;
+  const recoveryNotes = runtime.recoveryNotes;
+  const busyLabel = runtime.pendingCommand;
+  const streamParticipantId = session.activeParticipantId;
+  const streamDisplayName = session.activeDisplayName;
+  const streamRole: 'dm' | 'player' = mode === 'dm' ? 'dm' : 'player';
+
+  const stream = session.stream;
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   const outboxStatusView = getOutboxStatusView({
     data: outboxStatus,
@@ -811,7 +807,7 @@ export function RuntimeCockpit() {
   const knownCharacterIds = getKnownCharacterIds(
     sessionState,
     charactersByParticipant,
-    knownCharacterIdsByParticipant,
+    runtime.knownCharacterIdsByParticipant,
   );
   const playerParticipantIds = useMemo(
     () => getPlayerParticipantIds(sessionState),
@@ -826,10 +822,6 @@ export function RuntimeCockpit() {
     playerParticipantId,
     selectedActor,
   });
-  const streamParticipantId =
-    mode === 'dm' ? dmParticipantId : playerParticipantId;
-  const streamDisplayName = mode === 'dm' ? dmDisplayName : playerDisplayName;
-  const streamRole = mode === 'dm' ? 'dm' : 'player';
   const participants = sessionState?.participants ?? [
     {
       characterId: null,
@@ -869,53 +861,78 @@ export function RuntimeCockpit() {
         ]),
   ];
 
-  // M1 table state and commands live in their own hook so this component keeps
-  // only the wiring: which participant, which session, and where the panels go.
-  const m1 = useM1Table({
-    participantId: streamParticipantId,
+  // The command context is created once, so it reads actors through a ref rather
+  // than closing over this render's values. Capturing them would make a command
+  // act as whichever seat was selected when the component first mounted.
+  const sessionRef = useRef({
+    acting: actingParticipantId,
+    dmParticipantId,
+    playerParticipantId,
     sessionId,
+    streamDisplayName,
+    streamParticipantId,
+    streamRole,
   });
-  const prefersReducedMotion = usePrefersReducedMotion();
+  sessionRef.current = {
+    acting: actingParticipantId,
+    dmParticipantId,
+    playerParticipantId,
+    sessionId,
+    streamDisplayName,
+    streamParticipantId,
+    streamRole,
+  };
 
-  const stream = useSessionStream({
-    enabled: streamEnabled,
-    onEvent: (event) => {
-      applyStreamEvent(event);
-      m1.ingestStreamEvent(event);
-      pushLog(event.type, event);
+  /**
+   * Every command this surface can issue.
+   *
+   * Payload construction, command IDs, credential handling and error mapping all
+   * live behind these families. Nothing below builds a request or calls `fetch`.
+   */
+  const commands = useRuntimeCommands({
+    dispatch: session.dispatch,
+    getActors: () => {
+      const current = sessionRef.current;
+
+      return {
+        acting: current.acting,
+        dm: current.dmParticipantId,
+        player: current.playerParticipantId,
+        stream: current.streamParticipantId,
+        streamDisplayName: current.streamDisplayName,
+        streamRole: current.streamRole,
+      };
     },
-    participantId: streamParticipantId,
-    resubscribeToken: streamEpoch,
-    sessionId: sessionId || null,
+    getSessionId: () => sessionRef.current.sessionId,
+    onSettled: (label, payload) => {
+      setLastResponse({ label, payload });
+      pushLog(label, payload);
+    },
   });
 
+  const sceneTarget: SceneTarget = {
+    activeSceneId: sceneId,
+    loadedSceneId: scene?.id ?? null,
+  };
+
+  /**
+   * Mirror the authoritative turn usage into the editable draft.
+   *
+   * The GM's usage form is a draft over a server value, so it follows the
+   * encounter rather than being written by each command that happens to change
+   * it. Deriving it here is what kept the four separate assignments the old
+   * command handlers each had to remember from drifting apart.
+   */
   useEffect(() => {
-    const rawState = localStorage.getItem(cockpitStorageKey);
-
-    if (!rawState) {
-      return;
-    }
-
-    try {
-      const stored = JSON.parse(rawState) as StoredCockpitState;
-
-      setDmParticipantId(stored.dmParticipantId ?? defaultDm.participantId);
-      setDmDisplayName(stored.dmDisplayName ?? defaultDm.displayName);
-      setMode(stored.mode ?? 'dm');
-      setPlayerParticipantId(
-        stored.playerParticipantId ?? defaultPlayer.participantId,
-      );
-      setPlayerDisplayName(
-        stored.playerDisplayName ?? defaultPlayer.displayName,
-      );
-      setSessionId(stored.sessionId ?? '');
-      setSceneId(stored.sceneId ?? '');
-      setSceneActivationId(stored.sceneId ?? '');
-      setKnownCharacterIdsByParticipant(stored.charactersByParticipant ?? {});
-    } catch {
-      localStorage.removeItem(cockpitStorageKey);
-    }
-  }, []);
+    setTurnUsageDraft(
+      encounter?.currentTurnUsage ?? {
+        actionUsed: false,
+        bonusActionUsed: false,
+        movementUsed: 0,
+        reactionUsed: false,
+      },
+    );
+  }, [encounter]);
 
   useEffect(() => {
     if (mode !== 'dm' || !playerParticipantIds.length) {
@@ -1070,38 +1087,31 @@ export function RuntimeCockpit() {
     }
   }, [scene, selectedTransitionId]);
 
+  /**
+   * Keep the scene ID field pointed at whatever the table is actually on.
+   *
+   * The GM may then type over it to activate a different map; this only supplies
+   * the default so activating the current scene never requires retyping its ID.
+   */
   useEffect(() => {
-    const stored: StoredCockpitState = {
-      charactersByParticipant: {
-        ...knownCharacterIdsByParticipant,
-        ...Object.fromEntries(
-          Object.entries(charactersByParticipant).flatMap(
-            ([participantId, resource]) =>
-              resource ? [[participantId, resource.character.id] as const] : [],
-          ),
-        ),
-      },
-      dmDisplayName,
-      dmParticipantId,
-      mode,
-      playerDisplayName,
-      playerParticipantId,
-      sceneId,
-      sessionId,
-    };
+    setSceneActivationId(sceneId);
+  }, [sceneId]);
 
-    localStorage.setItem(cockpitStorageKey, JSON.stringify(stored));
-  }, [
-    charactersByParticipant,
-    dmDisplayName,
-    dmParticipantId,
-    knownCharacterIdsByParticipant,
-    mode,
-    playerDisplayName,
-    playerParticipantId,
-    sceneId,
-    sessionId,
-  ]);
+  useEffect(() => {
+    const own = charactersByParticipant[playerParticipantId];
+
+    if (own) {
+      setCharacterDraft(createCharacterDraftFormFromResource(own));
+    }
+  }, [charactersByParticipant, playerParticipantId]);
+
+  useEffect(() => {
+    const nextScene = scene;
+
+    if (nextScene) {
+      setSceneDraft(createSceneDraftFormFromScene(nextScene));
+    }
+  }, [scene]);
 
   // Seats the GM may address: a participant with an assigned runtime character.
   // A request aimed anywhere else would create a pending row nobody can answer.
@@ -1133,108 +1143,18 @@ export function RuntimeCockpit() {
     charactersByParticipant[streamParticipantId]?.overlay.activeConditions ??
     [];
 
-  /**
-   * Concealment goes through the authoritative command, then the panel re-reads
-   * the scene the server returned. Nothing is hidden locally, so a player's
-   * projection changes because their next read is different - not because this
-   * browser drew it differently.
-   */
-  async function handleSetCombatantHidden(
-    combatantId: string,
-    hidden: boolean,
-  ): Promise<void> {
-    await runTask('dm_set_combatant_hidden', async () => {
-      const response = await unwrap(
-        'dm_set_combatant_hidden',
-        sendDmCommand({
-          actor: { participantId: streamParticipantId },
-          commandId: createCommandId('m1-combatant-hidden'),
-          payload: { combatantId, hidden, sessionId },
-          type: 'dm_set_combatant_hidden',
-        }),
-      );
-
-      if ('scene' in response.data) {
-        setScene(response.data.scene);
-      }
-
-      return response;
-    });
-  }
-
-  /**
-   * Poisoned is applied by replacing the whole condition list, which is the
-   * command the server offers. Building the next list from the authoritative
-   * one - rather than from a local toggle - is what makes applying it twice a
-   * no-op instead of two stacked entries.
-   */
-  async function handleSetPoisoned(
-    target: M1ResolutionTarget,
-    poisoned: boolean,
-  ): Promise<void> {
-    const withoutPoisoned = target.activeConditions.filter(
-      (condition) => condition !== 'poisoned',
+  function pushLog(label: string, payload: unknown): void {
+    setEventLog((current) =>
+      [
+        {
+          at: new Date().toLocaleTimeString(),
+          id: createCommandId('event'),
+          label,
+          payload,
+        },
+        ...current,
+      ].slice(0, 40),
     );
-
-    await runTask('dm_set_character_active_conditions', async () => {
-      const response = await unwrap(
-        'dm_set_character_active_conditions',
-        sendDmCommand({
-          actor: { participantId: streamParticipantId },
-          commandId: createCommandId('m1-condition'),
-          payload: {
-            activeConditions: poisoned
-              ? [...withoutPoisoned, 'poisoned']
-              : withoutPoisoned,
-            characterId: target.characterId,
-            participantId: target.participantId,
-            sessionId,
-          },
-          type: 'dm_set_character_active_conditions',
-        }),
-      );
-
-      if ('character' in response.data) {
-        setCharactersByParticipant((current) => ({
-          ...current,
-          [target.participantId]: response.data as CharacterResource,
-        }));
-      }
-
-      return response;
-    });
-  }
-
-  async function runTask<T>(label: string, task: () => Promise<T>) {
-    setBusyLabel(label);
-    setCommandError(null);
-
-    try {
-      const payload = await task();
-
-      setLastResponse({
-        label,
-        payload,
-      });
-      pushLog(label, payload);
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyLabel(null);
-    }
-  }
-
-  async function unwrap<T>(
-    label: string,
-    result: Promise<RuntimeApiResult<T>>,
-  ): Promise<T> {
-    const response = await result;
-
-    if (!response.ok) {
-      throw new Error(formatRuntimeFailure(label, response.error));
-    }
-
-    return response.response;
   }
 
   async function refreshPlayerLibraryEntries(): Promise<void> {
@@ -1262,20 +1182,6 @@ export function RuntimeCockpit() {
     setLibraryEntriesLoading(false);
   }
 
-  function pushLog(label: string, payload: unknown): void {
-    setEventLog((current) =>
-      [
-        {
-          at: new Date().toLocaleTimeString(),
-          id: createCommandId('event'),
-          label,
-          payload,
-        },
-        ...current,
-      ].slice(0, 40),
-    );
-  }
-
   async function refreshOutboxStatus(): Promise<void> {
     setOutboxStatusLoading(true);
     setOutboxStatusError(null);
@@ -1292,2202 +1198,42 @@ export function RuntimeCockpit() {
     setOutboxStatusLoading(false);
   }
 
-  function clearRuntimeReadModels(
-    options: { clearKnownCharacterIds?: boolean } = {},
-  ): void {
-    setSceneId('');
-    setSessionState(null);
-    setScene(null);
-    setActiveScene(null);
-    setEncounter(null);
-    setCharactersByParticipant({});
-    if (options.clearKnownCharacterIds) {
-      setKnownCharacterIdsByParticipant({});
-    }
-    setLastResponse(null);
-    setCommandError(null);
-    setRecoveryNotes([]);
-    setSceneDraft(createDefaultSceneDraftForm());
-    setSceneActivationId('');
-    setSceneEntityDraft(createDefaultSceneEntityDraftForm());
-    setSceneEntityEditDraft(createDefaultSceneEntityDraftForm());
-    setSelectedSceneEntityId('');
-    setSceneTransitionDraft(createDefaultSceneTransitionDraftForm());
-    setSceneTransitionEditDraft(createDefaultSceneTransitionDraftForm());
-    setSelectedTransitionId('');
-    setKnownScenesById({});
-    setCombatantDraft(createDefaultCombatantDraftForm());
-    setSelectedCombatantId('');
-    setSelectedTargetCombatantId('');
-    setCombatantHpDraft('8');
-    setTurnUsageDraft({
-      actionUsed: false,
-      bonusActionUsed: false,
-      movementUsed: 0,
-      reactionUsed: false,
-    });
-    setSelectedCell({ x: 0, y: 0 });
-  }
+  // --- seat switching ------------------------------------------------------
+  // Each of these changes which seat this browser looks through, so the hook
+  // clears the previous seat's projections. The table on screen was projected
+  // for the old seat: leaving it would show a player the GM's copy.
 
-  // Every one of these changes which seat this browser is looking through. The
-  // table already on screen was projected for the previous seat or the previous
-  // session, so it has to go: leaving it would show a player the GM's copy of a
-  // request, or show this table the last one's notes.
   function switchSessionId(nextSessionId: string): void {
-    setStreamEnabled(false);
-    setSessionId(sanitizeSessionIdInput(nextSessionId));
-    clearRuntimeReadModels({ clearKnownCharacterIds: true });
-    m1.resetTable();
-    setEventLog([]);
+    session.actions.switchIdentity({ sessionId: nextSessionId });
   }
 
   function switchMode(nextMode: RuntimeMode): void {
-    setMode(nextMode);
-    setStreamEnabled(false);
-    m1.resetTable();
-    setCommandError(null);
-    setRecoveryNotes([]);
+    session.actions.switchIdentity({ mode: nextMode });
   }
 
   function switchPlayerParticipantId(nextParticipantId: string): void {
-    setStreamEnabled(false);
-    setPlayerParticipantId(nextParticipantId.trim());
+    session.actions.switchIdentity({
+      playerParticipantId: nextParticipantId.trim(),
+    });
     setCharacterDraft(createDefaultCharacterDraftForm(playerDisplayName));
-    m1.resetTable();
-    setCommandError(null);
-    setRecoveryNotes([]);
   }
 
   function switchDmParticipantId(nextParticipantId: string): void {
-    setStreamEnabled(false);
-    setDmParticipantId(nextParticipantId.trim());
-    m1.resetTable();
-    setCommandError(null);
-    setRecoveryNotes([]);
+    session.actions.switchIdentity({
+      dmParticipantId: nextParticipantId.trim(),
+    });
   }
 
   function resetLocalCockpit(): void {
-    localStorage.removeItem(cockpitStorageKey);
-    // Deliberately keeps the participant credential. Local Reset means "clear
-    // this browser's view of the table", not "give up my seat": the documented
-    // behaviour, and what the smoke harnesses assert, is that re-entering the
-    // session ID and recovering brings back the same participant. Dropping the
-    // credential here would make that recovery impossible and turn a UI reset
-    // into leaving the session.
-    //
-    // Giving up a seat is `clearParticipantCredentials()`. Nothing calls it
-    // yet - there is no explicit "leave table" action - which ROADMAP M0 records
-    // as a known gap.
-    setDmParticipantId(defaultDm.participantId);
-    setDmDisplayName(defaultDm.displayName);
-    setMode('dm');
-    setPlayerParticipantId(defaultPlayer.participantId);
-    setPlayerDisplayName(defaultPlayer.displayName);
-    setSessionId('');
-    setStreamEnabled(false);
+    session.actions.resetLocal();
     setCharacterDraft(
       createDefaultCharacterDraftForm(defaultPlayer.displayName),
     );
-    clearRuntimeReadModels({ clearKnownCharacterIds: true });
-    m1.resetTable();
-    setEventLog([]);
   }
 
-  function applySessionSnapshot(state: SessionSnapshot): void {
-    setSessionState(state);
-    setSessionId(state.session.id);
-
-    if (state.session.activeSceneId) {
-      setSceneId(state.session.activeSceneId);
-      setSceneActivationId(state.session.activeSceneId);
-    } else {
-      setSceneId('');
-      setSceneActivationId('');
-      setScene(null);
-      setActiveScene(null);
-    }
-  }
-
-  function rememberScene(nextScene: Scene): void {
-    setScene(nextScene);
-    setKnownScenesById((current) => ({
-      ...current,
-      [nextScene.id]: nextScene,
-    }));
-    setSceneId(nextScene.id);
-    setSceneActivationId(nextScene.id);
-    setSceneDraft(createSceneDraftFormFromScene(nextScene));
-  }
-
-  function rememberCharacter(resource: CharacterResource): void {
-    setCharactersByParticipant((current) => ({
-      ...current,
-      [resource.character.ownerParticipantId]: resource,
-    }));
-    setKnownCharacterIdsByParticipant((current) => ({
-      ...current,
-      [resource.character.ownerParticipantId]: resource.character.id,
-    }));
-
-    if (resource.character.ownerParticipantId === playerParticipantId) {
-      setCharacterDraft(createCharacterDraftFormFromResource(resource));
-    }
-  }
-
-  function patchCharacter(
-    characterId: string,
-    patch: (resource: CharacterResource) => CharacterResource,
-  ): void {
-    setCharactersByParticipant((current) => {
-      const next = { ...current };
-
-      for (const [participantId, resource] of Object.entries(current)) {
-        if (resource?.character.id === characterId) {
-          next[participantId] = patch(resource);
-        }
-      }
-
-      return next;
-    });
-  }
-
-  function applyMovementState(
-    event: Extract<SessionStreamEvent, { type: 'movement_state' }>,
-  ): void {
-    setActiveScene((current) => {
-      const previous = current ?? {
-        activeSceneId: event.activeSceneId,
-        placedCharacters: [],
-        sessionId: event.sessionId,
-      };
-      const otherPlacements = previous.placedCharacters.filter(
-        (placement) => placement.participantId !== event.participantId,
-      );
-
-      return {
-        ...previous,
-        activeSceneId: event.activeSceneId,
-        placedCharacters: [
-          ...otherPlacements,
-          {
-            characterId: event.characterId,
-            footprint: event.footprint,
-            participantId: event.participantId,
-            position: event.position,
-          },
-        ],
-      };
-    });
-  }
-
-  function applyStreamEvent(event: SessionStreamEvent): void {
-    switch (event.type) {
-      case 'session_state':
-        applySessionSnapshot(event.state);
-        break;
-      case 'movement_state':
-        applyMovementState(event);
-        break;
-      // The map the server just sent is the map, already projected for this
-      // seat. Nothing is filtered here: a client that received the whole scene
-      // and hid part of it would be one devtools tab away from omniscience.
-      // This is what closes M1's gap where a placement or a reveal sat unseen
-      // until somebody pressed Recover.
-      case 'scene_state':
-        setScene((currentScene) =>
-          shouldReplaceScene(currentScene, event.scene)
-            ? event.scene
-            : currentScene,
-        );
-        break;
-      case 'encounter_state':
-        setEncounter(event.encounter);
-        setTurnUsageDraft(event.encounter.currentTurnUsage);
-        break;
-      case 'character_state':
-        patchCharacter(event.characterId, (resource) => ({
-          ...resource,
-          character: {
-            ...resource.character,
-            hp: event.hp,
-          },
-          overlay: {
-            ...resource.overlay,
-            activeConditions:
-              event.activeConditions ?? resource.overlay.activeConditions,
-          },
-        }));
-        break;
-      case 'combat_event':
-        // `targetHp` is withheld when the viewer may not identify the target,
-        // so there is nothing to reconcile locally in that case. The server
-        // stays the authority either way.
-        if (event.targetHp && event.targetCharacterId) {
-          const targetCharacterHp = event.targetHp;
-
-          patchCharacter(event.targetCharacterId, (resource) => ({
-            ...resource,
-            character: {
-              ...resource.character,
-              hp: {
-                ...resource.character.hp,
-                current: targetCharacterHp.current,
-              },
-            },
-          }));
-        }
-        if (event.targetHp && event.targetCombatantId) {
-          const targetHp = event.targetHp;
-
-          setScene((currentScene) => {
-            if (!currentScene) {
-              return currentScene;
-            }
-
-            return {
-              ...currentScene,
-              entities: currentScene.entities.map((entity) =>
-                entity.id === event.targetCombatantId && entity.combatant
-                  ? {
-                      ...entity,
-                      combatant: {
-                        ...entity.combatant,
-                        hp: {
-                          ...entity.combatant.hp,
-                          current: targetHp.current,
-                        },
-                      },
-                    }
-                  : entity,
-              ),
-            };
-          });
-        }
-        break;
-    }
-  }
-
-  async function createSession(): Promise<void> {
-    await runTask('create_session', async () => {
-      const response = await unwrap(
-        'create_session',
-        sendSessionCommand({
-          actor: {
-            displayName: streamDisplayName,
-            participantId: streamParticipantId,
-            role: streamRole,
-          },
-          commandId: createCommandId('create-session'),
-          payload: {
-            rulesProfileId: 'dnd5e-2024-core',
-          },
-          type: 'create_session',
-        }),
-      );
-
-      setStreamEnabled(false);
-      clearRuntimeReadModels({ clearKnownCharacterIds: true });
-      applySessionSnapshot(response.data.state);
-
-      return response;
-    });
-  }
-
-  async function joinCurrentPlayer(): Promise<void> {
-    await runTask('join current player', async () => {
-      assertSession();
-
-      const response = await unwrap(
-        `join_session ${playerParticipantId}`,
-        sendSessionCommand({
-          actor: {
-            displayName: playerDisplayName,
-            participantId: playerParticipantId,
-            role: 'player',
-          },
-          commandId: createCommandId(`join-${playerParticipantId}`),
-          payload: {
-            sessionId,
-          },
-          type: 'join_session',
-        }),
-      );
-
-      applySessionSnapshot(response.data.state);
-
-      return response;
-    });
-  }
-
-  async function runFreshDemoSetup(): Promise<void> {
-    await runTask(`run ${selectedDemoScenario.name}`, async () => {
-      setStreamEnabled(false);
-      const scenarioPlayers = selectedDemoScenario.playerParticipantIds.map(
-        (participantId) => {
-          const player = samplePlayers.find(
-            (candidate) => candidate.participantId === participantId,
-          );
-
-          if (!player) {
-            throw new Error(
-              `No sample player is defined for ${participantId}.`,
-            );
-          }
-
-          return player;
-        },
-      );
-
-      const createdSession = await unwrap(
-        'create_session',
-        sendSessionCommand({
-          actor: {
-            displayName: dmDisplayName,
-            participantId: dmParticipantId,
-            role: 'dm',
-          },
-          commandId: createCommandId(
-            `${selectedDemoScenario.id}-create-session`,
-          ),
-          payload: {
-            rulesProfileId: 'dnd5e-2024-core',
-          },
-          type: 'create_session',
-        }),
-      );
-      const activeSessionId = createdSession.data.sessionId;
-      let latestState = createdSession.data.state;
-
-      clearRuntimeReadModels({ clearKnownCharacterIds: true });
-      setEventLog([]);
-      applySessionSnapshot(latestState);
-
-      for (const player of scenarioPlayers) {
-        const joined = await unwrap(
-          `join_session ${player.participantId}`,
-          sendSessionCommand({
-            actor: {
-              displayName: player.displayName,
-              participantId: player.participantId,
-              role: 'player',
-            },
-            commandId: createCommandId(`demo-join-${player.participantId}`),
-            payload: {
-              sessionId: activeSessionId,
-            },
-            type: 'join_session',
-          }),
-        );
-
-        latestState = joined.data.state;
-        applySessionSnapshot(latestState);
-      }
-
-      const createdCharacters: Record<string, CharacterResource> = {};
-
-      for (const player of scenarioPlayers) {
-        const characterInput = sampleCharacters[player.participantId];
-
-        if (!characterInput) {
-          throw new Error(
-            `No sample character is defined for ${player.participantId}.`,
-          );
-        }
-
-        const created = await unwrap(
-          `create_character ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(
-              `demo-create-character-${player.participantId}`,
-            ),
-            payload: {
-              character: characterInput,
-              ownerParticipantId: player.participantId,
-              sessionId: activeSessionId,
-            },
-            type: 'create_character',
-          }),
-        );
-
-        if (!('character' in created.data)) {
-          throw new Error(
-            'create_character returned a non-character response.',
-          );
-        }
-
-        createdCharacters[player.participantId] = created.data;
-        rememberCharacter(created.data);
-      }
-
-      for (const player of scenarioPlayers) {
-        const characterId =
-          createdCharacters[player.participantId]?.character.id;
-
-        if (!characterId) {
-          throw new Error(
-            `No sample character was created for ${player.participantId}.`,
-          );
-        }
-
-        const finalized = await unwrap(
-          `finalize_character ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(`demo-finalize-${player.participantId}`),
-            payload: {
-              characterId,
-              sessionId: activeSessionId,
-            },
-            type: 'finalize_character',
-          }),
-        );
-
-        if ('character' in finalized.data) {
-          rememberCharacter(finalized.data);
-        }
-
-        const assigned = await unwrap(
-          `assign_character_to_participant ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: dmParticipantId,
-            },
-            commandId: createCommandId(`demo-assign-${player.participantId}`),
-            payload: {
-              characterId,
-              participantId: player.participantId,
-              sessionId: activeSessionId,
-            },
-            type: 'assign_character_to_participant',
-          }),
-        );
-
-        if ('state' in assigned.data) {
-          latestState = assigned.data.state;
-          applySessionSnapshot(latestState);
-        }
-      }
-
-      const createdScene = await unwrap(
-        'create_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId(`${selectedDemoScenario.id}-create-scene`),
-          payload: {
-            scene: selectedDemoScenario.scene,
-            sessionId: activeSessionId,
-          },
-          type: 'create_scene',
-        }),
-      );
-
-      if (!('scene' in createdScene.data)) {
-        throw new Error('create_scene returned a non-scene response.');
-      }
-
-      rememberScene(createdScene.data.scene);
-
-      const activated = await unwrap(
-        'activate_scene_for_session',
-        sendSceneCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId('demo-activate-scene'),
-          payload: {
-            sceneId: createdScene.data.scene.id,
-            sessionId: activeSessionId,
-          },
-          type: 'activate_scene_for_session',
-        }),
-      );
-
-      if ('state' in activated.data) {
-        latestState = activated.data.state;
-        applySessionSnapshot(latestState);
-      }
-
-      for (const player of scenarioPlayers) {
-        const position = selectedDemoScenario.positions[player.participantId];
-
-        if (!position) {
-          throw new Error(
-            `No sample position is defined for ${player.participantId}.`,
-          );
-        }
-
-        const placed = await unwrap(
-          `place_character_in_active_scene ${player.participantId}`,
-          sendMovementCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(`demo-place-${player.participantId}`),
-            payload: {
-              participantId: player.participantId,
-              position,
-              sessionId: activeSessionId,
-            },
-            type: 'place_character_in_active_scene',
-          }),
-        );
-
-        if ('character' in placed.data) {
-          rememberCharacter(placed.data);
-        }
-      }
-
-      const activeSceneState = await unwrap(
-        'get_active_scene_state',
-        sendMovementCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('demo-get-active-scene'),
-          payload: {
-            sessionId: activeSessionId,
-          },
-          type: 'get_active_scene_state',
-        }),
-      );
-
-      if ('placedCharacters' in activeSceneState.data) {
-        setActiveScene(activeSceneState.data);
-      }
-
-      return {
-        activeScene: activeSceneState.data,
-        characters: Object.values(createdCharacters).map(
-          (resource) => resource.character.id,
-        ),
-        scene: createdScene.data.scene,
-        session: latestState,
-      };
-    });
-  }
-
-  async function joinSamplePlayers(): Promise<void> {
-    await runTask('join sample players', async () => {
-      assertSession();
-
-      let lastState: SessionSnapshot | null = null;
-
-      for (const player of samplePlayers) {
-        const response = await unwrap(
-          `join_session ${player.participantId}`,
-          sendSessionCommand({
-            actor: {
-              displayName: player.displayName,
-              participantId: player.participantId,
-              role: 'player',
-            },
-            commandId: createCommandId(`join-${player.participantId}`),
-            payload: {
-              sessionId,
-            },
-            type: 'join_session',
-          }),
-        );
-
-        lastState = response.data.state;
-        applySessionSnapshot(response.data.state);
-      }
-
-      return lastState;
-    });
-  }
-
-  async function createSampleCharacters(): Promise<void> {
-    await runTask('create sample characters', async () => {
-      assertSession();
-
-      const created: CharacterResource[] = [];
-
-      for (const player of samplePlayers) {
-        const characterInput = sampleCharacters[player.participantId];
-
-        if (!characterInput) {
-          throw new Error(
-            `No sample character is defined for ${player.participantId}.`,
-          );
-        }
-
-        const response = await unwrap(
-          `create_character ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(
-              `create-character-${player.participantId}`,
-            ),
-            payload: {
-              character: characterInput,
-              ownerParticipantId: player.participantId,
-              sessionId,
-            },
-            type: 'create_character',
-          }),
-        );
-
-        if ('character' in response.data) {
-          rememberCharacter(response.data);
-          created.push(response.data);
-        }
-      }
-
-      return created;
-    });
-  }
-
-  async function finalizeAndAssignCharacters(): Promise<void> {
-    await runTask('finalize and assign sample characters', async () => {
-      assertSession();
-
-      let latestState: SessionSnapshot | null = null;
-
-      for (const player of samplePlayers) {
-        const characterId =
-          knownCharacterIds[player.participantId] ??
-          charactersByParticipant[player.participantId]?.character.id;
-
-        if (!characterId) {
-          throw new Error(
-            `No character ID is known for ${player.participantId}.`,
-          );
-        }
-
-        const finalized = await unwrap(
-          `finalize_character ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(`finalize-${player.participantId}`),
-            payload: {
-              characterId,
-              sessionId,
-            },
-            type: 'finalize_character',
-          }),
-        );
-
-        if ('character' in finalized.data) {
-          rememberCharacter(finalized.data);
-        }
-
-        const assigned = await unwrap(
-          `assign_character_to_participant ${player.participantId}`,
-          sendCharacterCommand({
-            actor: {
-              participantId: dmParticipantId,
-            },
-            commandId: createCommandId(`assign-${player.participantId}`),
-            payload: {
-              characterId,
-              participantId: player.participantId,
-              sessionId,
-            },
-            type: 'assign_character_to_participant',
-          }),
-        );
-
-        if ('state' in assigned.data) {
-          latestState = assigned.data.state;
-          applySessionSnapshot(assigned.data.state);
-        }
-      }
-
-      return latestState;
-    });
-  }
-
-  async function createAndActivateScene(): Promise<void> {
-    await runTask('create and activate scene', async () => {
-      assertSession();
-
-      const created = await unwrap(
-        'create_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('create-scene'),
-          payload: {
-            scene: defaultDemoScenario.scene,
-            sessionId,
-          },
-          type: 'create_scene',
-        }),
-      );
-
-      if (!('scene' in created.data)) {
-        throw new Error('create_scene returned a non-scene response.');
-      }
-
-      rememberScene(created.data.scene);
-
-      const activated = await unwrap(
-        'activate_scene_for_session',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('activate-scene'),
-          payload: {
-            sceneId: created.data.scene.id,
-            sessionId,
-          },
-          type: 'activate_scene_for_session',
-        }),
-      );
-
-      if ('state' in activated.data) {
-        applySessionSnapshot(activated.data.state);
-      }
-
-      return {
-        activated,
-        created,
-      };
-    });
-  }
-
-  async function createCustomScene(): Promise<void> {
-    await runTask('create custom scene', async () => {
-      assertSession();
-      assertSceneDraftValid();
-
-      const response = await unwrap(
-        'create_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-create-custom-scene'),
-          payload: {
-            scene: sceneInputFromDraft(sceneDraft),
-            sessionId,
-          },
-          type: 'create_scene',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error('create_scene returned a non-scene response.');
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function activateSelectedScene(): Promise<void> {
-    await runTask('activate selected scene', async () => {
-      assertSession();
-      const nextSceneId = (sceneActivationId || scene?.id || sceneId).trim();
-
-      if (!nextSceneId) {
-        throw new Error('Enter or create a scene ID to activate.');
-      }
-
-      const activated = await unwrap(
-        'activate_scene_for_session',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-activate-scene'),
-          payload: {
-            sceneId: nextSceneId,
-            sessionId,
-          },
-          type: 'activate_scene_for_session',
-        }),
-      );
-
-      if (!('state' in activated.data) || !('sceneId' in activated.data)) {
-        throw new Error(
-          'activate_scene_transition returned a non-activation response.',
-        );
-      }
-
-      applySessionSnapshot(activated.data.state);
-
-      const recovered = await unwrap(
-        'get_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-get-activated-scene'),
-          payload: {
-            sceneId: nextSceneId,
-            sessionId,
-          },
-          type: 'get_scene',
-        }),
-      );
-
-      if ('scene' in recovered.data) {
-        rememberScene(recovered.data.scene);
-      }
-
-      return {
-        activated,
-        scene: recovered,
-      };
-    });
-  }
-
-  async function placeSceneEntity(): Promise<void> {
-    await runTask('place scene entity', async () => {
-      assertSession();
-      assertSceneEntityDraftValid();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId) {
-        throw new Error('Create, activate, or recover a scene first.');
-      }
-
-      const response = await unwrap(
-        'place_entity_in_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-place-scene-entity'),
-          payload: {
-            entity: sceneEntityInputFromDraft(sceneEntityDraft, selectedCell),
-            sceneId: targetSceneId,
-            sessionId,
-          },
-          type: 'place_entity_in_scene',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error('place_entity_in_scene returned a non-scene response.');
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function updateSceneEntity(): Promise<void> {
-    await runTask('update scene entity', async () => {
-      assertSession();
-      assertSceneEntityEditDraftValid();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedSceneEntityId) {
-        throw new Error('Select a passive scene entity to update.');
-      }
-
-      const response = await unwrap(
-        'update_scene_entity',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-update-scene-entity'),
-          payload: {
-            entity: sceneEntityUpdateInputFromDraft(sceneEntityEditDraft),
-            entityId: selectedSceneEntityId,
-            sceneId: targetSceneId,
-            sessionId,
-          },
-          type: 'update_scene_entity',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error('update_scene_entity returned a non-scene response.');
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function repositionSceneEntity(): Promise<void> {
-    await runTask('reposition scene entity', async () => {
-      assertSession();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedSceneEntityId) {
-        throw new Error('Select a passive scene entity to reposition.');
-      }
-
-      const response = await unwrap(
-        'reposition_scene_entity',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-reposition-scene-entity'),
-          payload: {
-            entityId: selectedSceneEntityId,
-            position: selectedCell,
-            sceneId: targetSceneId,
-            sessionId,
-          },
-          type: 'reposition_scene_entity',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'reposition_scene_entity returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function deleteSceneEntity(): Promise<void> {
-    await runTask('delete scene entity', async () => {
-      assertSession();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedSceneEntityId) {
-        throw new Error('Select a passive scene entity to delete.');
-      }
-
-      const response = await unwrap(
-        'delete_scene_entity',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-delete-scene-entity'),
-          payload: {
-            entityId: selectedSceneEntityId,
-            sceneId: targetSceneId,
-            sessionId,
-          },
-          type: 'delete_scene_entity',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error('delete_scene_entity returned a non-scene response.');
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function createSceneTransition(): Promise<void> {
-    await runTask('create scene transition', async () => {
-      assertSession();
-      assertSceneTransitionDraftValid();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId) {
-        throw new Error('Create, activate, or recover a source scene first.');
-      }
-
-      const response = await unwrap(
-        'create_scene_transition',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-create-scene-transition'),
-          payload: {
-            sceneId: targetSceneId,
-            sessionId,
-            transition: sceneTransitionInputFromDraft(
-              sceneTransitionDraft,
-              selectedCell,
-            ),
-          },
-          type: 'create_scene_transition',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'create_scene_transition returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function updateSceneTransition(): Promise<void> {
-    await runTask('update scene transition', async () => {
-      assertSession();
-      assertSceneTransitionEditDraftValid();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedTransitionId) {
-        throw new Error('Select a scene transition to update.');
-      }
-
-      const response = await unwrap(
-        'update_scene_transition',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-update-scene-transition'),
-          payload: {
-            sceneId: targetSceneId,
-            sessionId,
-            transition: sceneTransitionUpdateInputFromDraft(
-              sceneTransitionEditDraft,
-            ),
-            transitionId: selectedTransitionId,
-          },
-          type: 'update_scene_transition',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'update_scene_transition returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function deleteSceneTransition(): Promise<void> {
-    await runTask('delete scene transition', async () => {
-      assertSession();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedTransitionId) {
-        throw new Error('Select a scene transition to delete.');
-      }
-
-      const response = await unwrap(
-        'delete_scene_transition',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-delete-scene-transition'),
-          payload: {
-            sceneId: targetSceneId,
-            sessionId,
-            transitionId: selectedTransitionId,
-          },
-          type: 'delete_scene_transition',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'delete_scene_transition returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function activateSceneTransition(): Promise<void> {
-    await runTask('activate scene transition', async () => {
-      assertSession();
-      const targetSceneId = scene?.id ?? sceneId;
-
-      if (!targetSceneId || !selectedTransitionId) {
-        throw new Error('Select a scene transition to activate.');
-      }
-
-      const activated = await unwrap(
-        'activate_scene_transition',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-activate-scene-transition'),
-          payload: {
-            sceneId: targetSceneId,
-            sessionId,
-            transitionId: selectedTransitionId,
-          },
-          type: 'activate_scene_transition',
-        }),
-      );
-
-      if (!('state' in activated.data) || !('sceneId' in activated.data)) {
-        throw new Error(
-          'activate_scene_transition returned a non-activation response.',
-        );
-      }
-
-      applySessionSnapshot(activated.data.state);
-
-      const recovered = await unwrap(
-        'get_scene',
-        sendSceneCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-get-transition-target-scene'),
-          payload: {
-            sceneId: activated.data.sceneId,
-            sessionId,
-          },
-          type: 'get_scene',
-        }),
-      );
-
-      if ('scene' in recovered.data) {
-        rememberScene(recovered.data.scene);
-      }
-
-      return {
-        activated,
-        scene: recovered,
-      };
-    });
-  }
-
-  async function createCombatant(): Promise<void> {
-    await runTask('dm_create_combatant_in_active_scene', async () => {
-      assertSession();
-      assertCombatantDraftValid();
-
-      const response = await unwrap(
-        'dm_create_combatant_in_active_scene',
-        sendDmCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-create-combatant'),
-          payload: {
-            combatant: combatantInputFromDraft(combatantDraft, selectedCell),
-            sessionId,
-          },
-          type: 'dm_create_combatant_in_active_scene',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'dm_create_combatant_in_active_scene returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function repositionCombatant(): Promise<void> {
-    await runTask('dm_reposition_combatant_in_active_scene', async () => {
-      assertSession();
-
-      if (!selectedCombatantId) {
-        throw new Error('Select a monster/NPC combatant first.');
-      }
-
-      const response = await unwrap(
-        'dm_reposition_combatant_in_active_scene',
-        sendDmCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-reposition-combatant'),
-          payload: {
-            combatantId: selectedCombatantId,
-            position: selectedCell,
-            sessionId,
-          },
-          type: 'dm_reposition_combatant_in_active_scene',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'dm_reposition_combatant_in_active_scene returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function setCombatantHp(): Promise<void> {
-    await runTask('dm_set_combatant_current_hp', async () => {
-      assertSession();
-
-      if (!selectedCombatantId) {
-        throw new Error('Select a monster/NPC combatant first.');
-      }
-
-      const response = await unwrap(
-        'dm_set_combatant_current_hp',
-        sendDmCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-combatant-hp'),
-          payload: {
-            combatantId: selectedCombatantId,
-            currentHp: Number.parseInt(combatantHpDraft, 10),
-            sessionId,
-          },
-          type: 'dm_set_combatant_current_hp',
-        }),
-      );
-
-      if (!('scene' in response.data)) {
-        throw new Error(
-          'dm_set_combatant_current_hp returned a non-scene response.',
-        );
-      }
-
-      rememberScene(response.data.scene);
-
-      return response;
-    });
-  }
-
-  async function placeSampleCharacters(): Promise<void> {
-    await runTask('place sample characters', async () => {
-      assertSession();
-
-      const positions: Record<string, Cell> = {
-        'player-001': { x: 0, y: 0 },
-        'player-002': { x: 1, y: 0 },
-      };
-      const placed: CharacterResource[] = [];
-
-      for (const player of samplePlayers) {
-        const position = positions[player.participantId];
-
-        if (!position) {
-          throw new Error(
-            `No sample position is defined for ${player.participantId}.`,
-          );
-        }
-
-        const response = await unwrap(
-          `place_character_in_active_scene ${player.participantId}`,
-          sendMovementCommand({
-            actor: {
-              participantId: player.participantId,
-            },
-            commandId: createCommandId(`place-${player.participantId}`),
-            payload: {
-              participantId: player.participantId,
-              position,
-              sessionId,
-            },
-            type: 'place_character_in_active_scene',
-          }),
-        );
-
-        if ('character' in response.data) {
-          rememberCharacter(response.data);
-          placed.push(response.data);
-        }
-      }
-
-      await readActiveSceneState({ quiet: true });
-
-      return placed;
-    });
-  }
-
-  async function startEncounter(): Promise<void> {
-    await runTask('start_encounter', async () => {
-      assertSession();
-
-      const response = await unwrap(
-        'start_encounter',
-        sendEncounterCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('start-encounter'),
-          payload: {
-            sessionId,
-          },
-          type: 'start_encounter',
-        }),
-      );
-
-      setEncounter(response.data.encounter);
-      setTurnUsageDraft(response.data.encounter.currentTurnUsage);
-
-      return response;
-    });
-  }
-
-  async function recoverReadModels(): Promise<void> {
-    await runTask('recover read models', async () => {
-      assertSession();
-
-      const activeSessionId = sessionId;
-      const notes: string[] = [];
-      const recovered = await unwrap(
-        'reconnect_session',
-        sendSessionCommand({
-          actor: {
-            displayName: streamDisplayName,
-            participantId: streamParticipantId,
-            role: streamRole,
-          },
-          commandId: createCommandId('reconnect'),
-          payload: {
-            sessionId: activeSessionId,
-          },
-          type: 'reconnect_session',
-        }),
-      );
-
-      clearRuntimeReadModels();
-      applySessionSnapshot(recovered.data.state);
-      // Requests, resolutions and intents have no read command: the server only
-      // ever projects them onto a live subscription. Dropping the stale copy and
-      // reopening the stream is therefore part of recovering, not a side effect
-      // of it - without this, Recover restores the map and the encounter and
-      // silently leaves the M1 panels empty after a refresh.
-      m1.resetTable();
-      setStreamEnabled(true);
-      setStreamEpoch((current) => current + 1);
-
-      const recoveredActiveSceneId = recovered.data.state.session.activeSceneId;
-      let recoveredScene: Scene | null = null;
-      let recoveredActiveScene: ActiveSceneState | null = null;
-      let recoveredEncounter: Encounter | null = null;
-
-      if (recoveredActiveSceneId) {
-        const sceneResult = await sendSceneCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId('get-scene'),
-          payload: {
-            sceneId: recoveredActiveSceneId,
-            sessionId: activeSessionId,
-          },
-          type: 'get_scene',
-        });
-
-        if (sceneResult.ok && 'scene' in sceneResult.response.data) {
-          recoveredScene = sceneResult.response.data.scene;
-          rememberScene(recoveredScene);
-        } else if (!sceneResult.ok) {
-          if (!isExpectedRecoveryMiss(sceneResult.error.code)) {
-            throw new Error(
-              formatRuntimeFailure('get_scene', sceneResult.error),
-            );
-          }
-
-          notes.push(formatRuntimeFailure('get_scene', sceneResult.error));
-          pushLog('recover skipped get_scene', sceneResult.error);
-          setScene(null);
-        }
-
-        const activeSceneResult = await sendMovementCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId('get-active-scene'),
-          payload: {
-            sessionId: activeSessionId,
-          },
-          type: 'get_active_scene_state',
-        });
-
-        if (
-          activeSceneResult.ok &&
-          'placedCharacters' in activeSceneResult.response.data
-        ) {
-          recoveredActiveScene = activeSceneResult.response.data;
-          setActiveScene(recoveredActiveScene);
-        } else if (!activeSceneResult.ok) {
-          if (!isExpectedRecoveryMiss(activeSceneResult.error.code)) {
-            throw new Error(
-              formatRuntimeFailure(
-                'get_active_scene_state',
-                activeSceneResult.error,
-              ),
-            );
-          }
-
-          notes.push(
-            formatRuntimeFailure(
-              'get_active_scene_state',
-              activeSceneResult.error,
-            ),
-          );
-          pushLog(
-            'recover skipped get_active_scene_state',
-            activeSceneResult.error,
-          );
-          setActiveScene(null);
-        }
-      } else {
-        setSceneId('');
-        setScene(null);
-        setActiveScene(null);
-      }
-
-      const encounterResult = await sendEncounterCommand({
-        actor: {
-          participantId: streamParticipantId,
-        },
-        commandId: createCommandId('get-encounter'),
-        payload: {
-          sessionId: activeSessionId,
-        },
-        type: 'get_encounter_state',
-      });
-
-      if (encounterResult.ok) {
-        recoveredEncounter = encounterResult.response.data.encounter;
-        setEncounter(recoveredEncounter);
-        setTurnUsageDraft(recoveredEncounter.currentTurnUsage);
-      } else if (isExpectedRecoveryMiss(encounterResult.error.code)) {
-        notes.push(
-          formatRuntimeFailure('get_encounter_state', encounterResult.error),
-        );
-        pushLog('recover skipped get_encounter_state', encounterResult.error);
-        setEncounter(null);
-        setTurnUsageDraft({
-          actionUsed: false,
-          bonusActionUsed: false,
-          movementUsed: 0,
-          reactionUsed: false,
-        });
-      } else {
-        throw new Error(
-          formatRuntimeFailure('get_encounter_state', encounterResult.error),
-        );
-      }
-
-      const characterRefs = new Map<
-        string,
-        {
-          characterId: string;
-          participantId: string;
-        }
-      >();
-
-      for (const participant of getAssignedCharacterRefs(
-        recovered.data.state,
-      )) {
-        characterRefs.set(participant.characterId, participant);
-      }
-
-      for (const participant of getPendingCharacterRefs(recovered.data.state)) {
-        if (!characterRefs.has(participant.characterId)) {
-          characterRefs.set(participant.characterId, participant);
-        }
-      }
-
-      for (const [participantId, characterId] of Object.entries(
-        knownCharacterIdsByParticipant,
-      )) {
-        if (characterId && !characterRefs.has(characterId)) {
-          characterRefs.set(characterId, {
-            characterId,
-            participantId,
-          });
-        }
-      }
-
-      for (const participant of characterRefs.values()) {
-        const characterResult = await sendCharacterCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId(
-            `get-character-${participant.participantId}`,
-          ),
-          payload: {
-            characterId: participant.characterId,
-            sessionId: activeSessionId,
-          },
-          type: 'get_character',
-        });
-
-        if (
-          characterResult.ok &&
-          'character' in characterResult.response.data
-        ) {
-          rememberCharacter(characterResult.response.data);
-        } else if (!characterResult.ok) {
-          if (!isExpectedRecoveryMiss(characterResult.error.code)) {
-            throw new Error(
-              formatRuntimeFailure('get_character', characterResult.error),
-            );
-          }
-
-          notes.push(
-            formatRuntimeFailure('get_character', characterResult.error),
-          );
-          pushLog('recover skipped get_character', {
-            error: characterResult.error,
-            participant,
-          });
-        }
-      }
-
-      setRecoveryNotes(notes);
-
-      return {
-        activeScene: recoveredActiveScene,
-        encounter: recoveredEncounter,
-        notes,
-        scene: recoveredScene,
-        session: recovered.data.state,
-      };
-    });
-  }
-
-  async function readActiveSceneState(params: { quiet?: boolean } = {}) {
-    const label = 'get_active_scene_state';
-    const read = async () => {
-      assertSession();
-
-      const response = await unwrap(
-        label,
-        sendMovementCommand({
-          actor: {
-            participantId: streamParticipantId,
-          },
-          commandId: createCommandId('get-active-scene'),
-          payload: {
-            sessionId,
-          },
-          type: 'get_active_scene_state',
-        }),
-      );
-
-      if (!('placedCharacters' in response.data)) {
-        throw new Error(
-          'get_active_scene_state returned a movement mutation response.',
-        );
-      }
-
-      setActiveScene(response.data);
-
-      return response;
-    };
-
-    if (params.quiet) {
-      await read();
-      return;
-    }
-
-    await runTask(label, read);
-  }
-
-  async function runEncounterCommand(type: SimpleEncounterCommandType) {
-    await runTask(type, async () => {
-      assertSession();
-
-      const actorParticipantId =
-        type === 'advance_turn' ? dmParticipantId : actingParticipantId;
-      const response = await unwrap(
-        type,
-        sendEncounterCommand({
-          actor: {
-            participantId: actorParticipantId,
-          },
-          commandId: createCommandId(type),
-          payload: {
-            sessionId,
-          },
-          type,
-        }),
-      );
-
-      setEncounter(response.data.encounter);
-      setTurnUsageDraft(response.data.encounter.currentTurnUsage);
-
-      return response;
-    });
-  }
-
-  async function attackTarget(): Promise<void> {
-    await runTask('attack', async () => {
-      assertSession();
-      const targetCombatantId =
-        mode === 'player' ? selectedTargetCombatantId : '';
-
-      const response = await unwrap(
-        'attack',
-        sendEncounterCommand({
-          actor: {
-            participantId: actingParticipantId,
-          },
-          commandId: createCommandId('attack'),
-          payload: {
-            sessionId,
-            ...(targetCombatantId
-              ? {
-                  targetCombatantId,
-                }
-              : {
-                  targetParticipantId: selectedTarget,
-                }),
-          },
-          type: 'attack',
-        }),
-      );
-
-      setEncounter(response.data.encounter);
-      setTurnUsageDraft(response.data.encounter.currentTurnUsage);
-
-      if (targetCombatantId && sceneId) {
-        const recoveredScene = await unwrap(
-          'get_scene',
-          sendSceneCommand({
-            actor: {
-              participantId: actingParticipantId,
-            },
-            commandId: createCommandId('attack-get-scene'),
-            payload: {
-              sceneId,
-              sessionId,
-            },
-            type: 'get_scene',
-          }),
-        );
-
-        if ('scene' in recoveredScene.data) {
-          rememberScene(recoveredScene.data.scene);
-        }
-      }
-
-      return response;
-    });
-  }
-
-  async function dmCombatantAttackTarget(): Promise<void> {
-    await runTask('dm_combatant_attack', async () => {
-      assertSession();
-
-      if (!selectedCombatantId) {
-        throw new Error('Select a monster/NPC combatant first.');
-      }
-
-      const response = await unwrap(
-        'dm_combatant_attack',
-        sendDmCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-combatant-attack'),
-          payload: {
-            combatantId: selectedCombatantId,
-            sessionId,
-            targetParticipantId: selectedTarget,
-          },
-          type: 'dm_combatant_attack',
-        }),
-      );
-
-      if ('encounter' in response.data) {
-        setEncounter(response.data.encounter);
-        setTurnUsageDraft(response.data.encounter.currentTurnUsage);
-      }
-
-      return response;
-    });
-  }
-
-  async function moveSelectedActor(): Promise<void> {
-    await runTask('move_character_in_active_scene', async () => {
-      assertSession();
-
-      const response = await unwrap(
-        'move_character_in_active_scene',
-        sendMovementCommand({
-          actor: {
-            participantId: actingParticipantId,
-          },
-          commandId: createCommandId('move-character'),
-          payload: {
-            participantId: actingParticipantId,
-            position: selectedCell,
-            sessionId,
-          },
-          type: 'move_character_in_active_scene',
-        }),
-      );
-
-      if ('character' in response.data) {
-        rememberCharacter(response.data);
-      }
-
-      await readActiveSceneState({ quiet: true });
-
-      return response;
-    });
-  }
-
-  async function createPlayerCharacter(): Promise<void> {
-    await runTask('create_character player draft', async () => {
-      assertSession();
-      assertCharacterDraftValid();
-
-      const response = await unwrap(
-        'create_character',
-        sendCharacterCommand({
-          actor: {
-            participantId: playerParticipantId,
-          },
-          commandId: createCommandId('player-create-character'),
-          payload: {
-            character: characterInputFromDraft(characterDraft),
-            ownerParticipantId: playerParticipantId,
-            sessionId,
-          },
-          type: 'create_character',
-        }),
-      );
-
-      if (!('character' in response.data)) {
-        throw new Error('create_character returned a non-character response.');
-      }
-
-      rememberCharacter(response.data);
-
-      return response;
-    });
-  }
-
-  async function updatePlayerCharacter(): Promise<void> {
-    await runTask('update_character player draft', async () => {
-      assertSession();
-      assertCharacterDraftValid();
-      const characterId = requirePlayerCharacterId();
-
-      const response = await unwrap(
-        'update_character',
-        sendCharacterCommand({
-          actor: {
-            participantId: playerParticipantId,
-          },
-          commandId: createCommandId('player-update-character'),
-          payload: {
-            character: characterUpdateInputFromDraft(characterDraft),
-            characterId,
-            sessionId,
-          },
-          type: 'update_character',
-        }),
-      );
-
-      if (!('character' in response.data)) {
-        throw new Error('update_character returned a non-character response.');
-      }
-
-      rememberCharacter(response.data);
-
-      return response;
-    });
-  }
-
-  async function finalizePlayerCharacter(): Promise<void> {
-    await runTask('finalize_character player draft', async () => {
-      assertSession();
-      const characterId = requirePlayerCharacterId();
-
-      const response = await unwrap(
-        'finalize_character',
-        sendCharacterCommand({
-          actor: {
-            participantId: playerParticipantId,
-          },
-          commandId: createCommandId('player-finalize-character'),
-          payload: {
-            characterId,
-            sessionId,
-          },
-          type: 'finalize_character',
-        }),
-      );
-
-      if (!('character' in response.data)) {
-        throw new Error(
-          'finalize_character returned a non-character response.',
-        );
-      }
-
-      rememberCharacter(response.data);
-
-      return response;
-    });
-  }
-
-  async function submitPlayerCharacterForAssignment(): Promise<void> {
-    await runTask('submit_character_for_assignment player', async () => {
-      assertSession();
-      const characterId = requirePlayerCharacterId();
-
-      const response = await unwrap(
-        'submit_character_for_assignment',
-        sendCharacterCommand({
-          actor: {
-            participantId: playerParticipantId,
-          },
-          commandId: createCommandId('player-submit-character'),
-          payload: {
-            characterId,
-            sessionId,
-          },
-          type: 'submit_character_for_assignment',
-        }),
-      );
-
-      if ('state' in response.data) {
-        applySessionSnapshot(response.data.state);
-      }
-
-      return response;
-    });
-  }
-
-  async function submitSelectedLibraryEntryForAssignment(): Promise<void> {
-    await runTask(
-      'submit_character_library_entry_for_assignment player',
-      async () => {
-        assertSession();
-
-        const ownerUserId = user?.id;
-
-        if (!ownerUserId) {
-          throw new Error(t('runtime.characterLibrary.signInRequired'));
-        }
-
-        const entry = finalizedLibraryEntries.find(
-          (candidate) => candidate.id === selectedLibraryEntryId,
-        );
-
-        if (!entry) {
-          throw new Error(t('runtime.characterLibrary.selectRequired'));
-        }
-
-        const result = await submitCharacterLibraryEntryForAssignment({
-          actorParticipantId: playerParticipantId,
-          entryId: entry.id,
-          ownerParticipantId: ownerUserId,
-          sessionId,
-        });
-
-        if (!result.ok) {
-          throw new Error(
-            formatRuntimeFailure(
-              'submit_character_library_entry_for_assignment',
-              result.error,
-            ),
-          );
-        }
-
-        applySessionSnapshot(result.data.state);
-        setKnownCharacterIdsByParticipant((current) => ({
-          ...current,
-          [playerParticipantId]: result.data.characterId,
-        }));
-
-        const characterResult = await unwrap(
-          'get_character',
-          sendCharacterCommand({
-            actor: {
-              participantId: playerParticipantId,
-            },
-            commandId: createCommandId('player-read-library-runtime-character'),
-            payload: {
-              characterId: result.data.characterId,
-              sessionId,
-            },
-            type: 'get_character',
-          }),
-        );
-
-        if ('character' in characterResult.data) {
-          rememberCharacter(characterResult.data);
-        }
-
-        return {
-          data: result.data,
-          ok: true,
-        };
-      },
-    );
-  }
-
-  async function dmAssignSelectedLoadedCharacter(): Promise<void> {
-    await runTask('assign selected loaded character', async () => {
-      assertSession();
-      const characterId =
-        charactersByParticipant[selectedActor]?.character.id ??
-        knownCharacterIds[selectedActor];
-
-      if (!characterId) {
-        throw new Error(`No loaded character is known for ${selectedActor}.`);
-      }
-
-      const response = await unwrap(
-        'assign_character_to_participant',
-        sendCharacterCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-assign-loaded-character'),
-          payload: {
-            characterId,
-            participantId: selectedActor,
-            sessionId,
-          },
-          type: 'assign_character_to_participant',
-        }),
-      );
-
-      if ('state' in response.data) {
-        applySessionSnapshot(response.data.state);
-      }
-
-      return response;
-    });
-  }
-
-  async function dmAssignPendingCharacter(
-    participantId: string,
-    characterId: string,
-  ): Promise<void> {
-    await runTask(`assign pending character ${participantId}`, async () => {
-      assertSession();
-
-      const response = await unwrap(
-        'assign_character_to_participant',
-        sendCharacterCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-assign-pending-character'),
-          payload: {
-            characterId,
-            participantId,
-            sessionId,
-          },
-          type: 'assign_character_to_participant',
-        }),
-      );
-
-      if ('state' in response.data) {
-        applySessionSnapshot(response.data.state);
-      }
-
-      return response;
-    });
-  }
-
-  async function dmSetCurrentHp(): Promise<void> {
-    await runDmCharacterCommand('dm_set_character_current_hp', {
-      currentHp: Number.parseInt(hpDraft, 10),
-    });
-  }
-
-  async function dmSetConditions(): Promise<void> {
-    await runDmCharacterCommand('dm_set_character_active_conditions', {
-      activeConditions: conditionsDraft
-        .split(',')
-        .map((condition) => condition.trim())
-        .filter(Boolean),
-    });
-  }
-
-  async function dmRepositionSelected(): Promise<void> {
-    await runTask('dm_reposition_character_in_active_scene', async () => {
-      assertSession();
-      const characterId = requireCharacterId(selectedActor);
-      const response = await unwrap(
-        'dm_reposition_character_in_active_scene',
-        sendDmCommand({
-          actor: {
-            participantId: dmParticipantId,
-          },
-          commandId: createCommandId('dm-reposition'),
-          payload: {
-            characterId,
-            participantId: selectedActor,
-            position: selectedCell,
-            sessionId,
-          },
-          type: 'dm_reposition_character_in_active_scene',
-        }),
-      );
-
-      if ('character' in response.data) {
-        rememberCharacter(response.data);
-      }
-
-      await readActiveSceneState({ quiet: true });
-
-      return response;
-    });
-  }
-
-  async function dmSetTurnParticipant(): Promise<void> {
-    await runDmEncounterCommand({
-      actor: {
-        participantId: dmParticipantId,
-      },
-      commandId: createCommandId('dm-current-turn'),
-      payload: {
-        participantId: selectedActor,
-        sessionId,
-      },
-      type: 'dm_set_current_turn_participant',
-    });
-  }
-
-  async function dmSetTurnCombatant(): Promise<void> {
-    if (!selectedCombatantId) {
-      setCommandError('Select a monster/NPC combatant first.');
-      return;
-    }
-
-    await runDmEncounterCommand({
-      actor: {
-        participantId: dmParticipantId,
-      },
-      commandId: createCommandId('dm-current-turn-combatant'),
-      payload: {
-        combatantId: selectedCombatantId,
-        sessionId,
-      },
-      type: 'dm_set_current_turn_participant',
-    });
-  }
-
-  async function dmSetTurnUsage(): Promise<void> {
-    await runDmEncounterCommand({
-      actor: {
-        participantId: dmParticipantId,
-      },
-      commandId: createCommandId('dm-turn-usage'),
-      payload: {
-        sessionId,
-        turnUsage: turnUsageDraft,
-      },
-      type: 'dm_set_current_turn_usage',
-    });
-  }
-
-  async function dmEndEncounter(): Promise<void> {
-    await runDmEncounterCommand({
-      actor: {
-        participantId: dmParticipantId,
-      },
-      commandId: createCommandId('dm-end-encounter'),
-      payload: {
-        sessionId,
-      },
-      type: 'dm_end_active_encounter',
-    });
-  }
-
-  async function runDmCharacterCommand(
-    type: 'dm_set_character_active_conditions' | 'dm_set_character_current_hp',
-    value:
-      | { activeConditions: string[] }
-      | {
-          currentHp: number;
-        },
-  ): Promise<void> {
-    await runTask(type, async () => {
-      assertSession();
-
-      const characterId = requireCharacterId(selectedActor);
-      const command: DmCommand =
-        type === 'dm_set_character_current_hp'
-          ? {
-              actor: {
-                participantId: dmParticipantId,
-              },
-              commandId: createCommandId('dm-hp'),
-              payload: {
-                characterId,
-                currentHp:
-                  'currentHp' in value && Number.isFinite(value.currentHp)
-                    ? value.currentHp
-                    : 0,
-                participantId: selectedActor,
-                sessionId,
-              },
-              type,
-            }
-          : {
-              actor: {
-                participantId: dmParticipantId,
-              },
-              commandId: createCommandId('dm-conditions'),
-              payload: {
-                activeConditions:
-                  'activeConditions' in value ? value.activeConditions : [],
-                characterId,
-                participantId: selectedActor,
-                sessionId,
-              },
-              type,
-            };
-
-      const response = await unwrap(type, sendDmCommand(command));
-
-      if ('character' in response.data) {
-        rememberCharacter(response.data);
-      }
-
-      return response;
-    });
-  }
-
-  async function runDmEncounterCommand(command: DmCommand): Promise<void> {
-    await runTask(command.type, async () => {
-      assertSession();
-
-      const response = await unwrap(command.type, sendDmCommand(command));
-
-      if ('encounter' in response.data) {
-        setEncounter(response.data.encounter);
-        setTurnUsageDraft(response.data.encounter.currentTurnUsage);
-      }
-
-      return response;
-    });
-  }
+  // --- command adapters ----------------------------------------------------
+  // Each of these is the call site's arguments and nothing else. The command
+  // itself - payload, ID, credential, error mapping - belongs to its family.
 
   function requireCharacterId(participantId: string): string {
     const characterId =
@@ -3513,88 +1259,315 @@ export function RuntimeCockpit() {
     return characterId;
   }
 
-  function assertCharacterDraftValid(): void {
-    const errors = validateCharacterDraftForm(characterDraft);
-
-    if (errors.length) {
-      throw new Error(`Fix the character sheet first: ${errors.join(' ')}`);
-    }
-  }
-
-  function assertSceneDraftValid(): void {
-    const errors = validateSceneDraftForm(sceneDraft);
-
-    if (errors.length) {
-      throw new Error(`Fix the scene draft first: ${errors.join(' ')}`);
-    }
-  }
-
-  function assertSceneEntityDraftValid(): void {
-    const errors = validateSceneEntityDraftForm({
-      form: sceneEntityDraft,
-      grid: scene?.grid,
-      position: selectedCell,
+  /**
+   * Report a precondition the caller cannot satisfy.
+   *
+   * A few adapters need a character ID before they can name a command at all.
+   * Routing the failure through the same state the command families use keeps
+   * one error surface rather than a second, quieter one.
+   */
+  function failCommand(error: unknown): void {
+    session.dispatch({
+      message: error instanceof Error ? error.message : String(error),
+      type: 'command_failed',
     });
+  }
 
-    if (errors.length) {
-      throw new Error(`Fix the entity draft first: ${errors.join(' ')}`);
+  function withCharacterTarget(
+    participantId: string,
+    run: (target: { characterId: string; participantId: string }) => void,
+  ): void {
+    try {
+      run({ characterId: requireCharacterId(participantId), participantId });
+    } catch (error) {
+      failCommand(error);
     }
   }
 
-  function assertSceneEntityEditDraftValid(): void {
-    const selectedEntity = getPassiveSceneEntities(scene).find(
-      (entity) => entity.id === selectedSceneEntityId,
+  function withPlayerCharacterId(run: (characterId: string) => void): void {
+    try {
+      run(requirePlayerCharacterId());
+    } catch (error) {
+      failCommand(error);
+    }
+  }
+
+  const createSession = () =>
+    commands.session.createSession({ rulesProfileId: 'dnd5e-2024-core' });
+  const joinCurrentPlayer = () =>
+    commands.session.joinSession({
+      displayName: playerDisplayName,
+      participantId: playerParticipantId,
+    });
+  const runFreshDemoSetup = () =>
+    commands.demo.runScenario(selectedDemoScenario);
+  const joinSamplePlayers = () => commands.demo.joinSamplePlayers();
+  const createSampleCharacters = () => commands.demo.createSampleCharacters();
+  const finalizeAndAssignCharacters = () =>
+    commands.demo.finalizeAndAssignCharacters({
+      characterIdByParticipant: Object.fromEntries(
+        samplePlayers.map((player) => [
+          player.participantId,
+          knownCharacterIds[player.participantId] ??
+            charactersByParticipant[player.participantId]?.character.id,
+        ]),
+      ),
+    });
+  const placeSampleCharacters = () =>
+    commands.demo.placeSampleCharacters({
+      positions: {
+        'player-001': { x: 0, y: 0 },
+        'player-002': { x: 1, y: 0 },
+      },
+    });
+  const createAndActivateScene = () =>
+    commands.scene.createAndActivateScene({
+      scene: defaultDemoScenario.scene,
+    });
+  const createCustomScene = () =>
+    commands.scene.createCustomScene({
+      draft: sceneDraft,
+      errors: sceneDraftErrors,
+    });
+  const activateSelectedScene = () =>
+    commands.scene.activateSelectedScene({
+      sceneId: sceneActivationId || scene?.id || sceneId,
+    });
+  const placeSceneEntity = () =>
+    commands.scene.placeSceneEntity({
+      cell: selectedCell,
+      draft: sceneEntityDraft,
+      errors: sceneEntityDraftErrors,
+      target: sceneTarget,
+    });
+  const updateSceneEntity = () =>
+    commands.scene.updateSceneEntity({
+      draft: sceneEntityEditDraft,
+      entityId: selectedSceneEntityId,
+      errors: sceneEntityEditDraftErrors,
+      target: sceneTarget,
+    });
+  const repositionSceneEntity = () =>
+    commands.scene.repositionSceneEntity({
+      cell: selectedCell,
+      entityId: selectedSceneEntityId,
+      target: sceneTarget,
+    });
+  const deleteSceneEntity = () =>
+    commands.scene.deleteSceneEntity({
+      entityId: selectedSceneEntityId,
+      target: sceneTarget,
+    });
+  const createSceneTransition = () =>
+    commands.scene.createSceneTransition({
+      cell: selectedCell,
+      draft: sceneTransitionDraft,
+      errors: transitionDraftErrors,
+      target: sceneTarget,
+    });
+  const updateSceneTransition = () =>
+    commands.scene.updateSceneTransition({
+      draft: sceneTransitionEditDraft,
+      errors: transitionEditDraftErrors,
+      target: sceneTarget,
+      transitionId: selectedTransitionId,
+    });
+  const deleteSceneTransition = () =>
+    commands.scene.deleteSceneTransition({
+      target: sceneTarget,
+      transitionId: selectedTransitionId,
+    });
+  const activateSceneTransition = () =>
+    commands.scene.activateSceneTransition({
+      target: sceneTarget,
+      transitionId: selectedTransitionId,
+    });
+  const createCombatant = () =>
+    commands.combatant.createCombatant({
+      cell: selectedCell,
+      draft: combatantDraft,
+      errors: combatantDraftErrors,
+    });
+  const repositionCombatant = () =>
+    commands.combatant.repositionCombatant({
+      cell: selectedCell,
+      combatantId: selectedCombatantId,
+    });
+  const setCombatantHp = () =>
+    commands.combatant.setCombatantHp({
+      combatantId: selectedCombatantId,
+      currentHp: combatantHpDraft,
+    });
+  const handleSetCombatantHidden = (combatantId: string, hidden: boolean) =>
+    commands.combatant.setCombatantHidden({ combatantId, hidden });
+  const dmCombatantAttackTarget = () =>
+    commands.combatant.combatantAttack({
+      combatantId: selectedCombatantId,
+      targetParticipantId: selectedTarget,
+    });
+  const startEncounter = () => commands.encounter.startEncounter();
+  const runEncounterCommand = (type: SimpleEncounterCommandType) =>
+    commands.encounter.runSimpleEncounterCommand(type);
+  const attackTarget = () =>
+    commands.encounter.attack({
+      sceneId,
+      targetCombatantId: mode === 'player' ? selectedTargetCombatantId : '',
+      targetParticipantId: selectedTarget,
+    });
+  const dmSetTurnParticipant = () =>
+    commands.encounter.setCurrentTurnParticipant({
+      participantId: selectedActor,
+    });
+  const dmSetTurnCombatant = () =>
+    commands.encounter.setCurrentTurnCombatant({
+      combatantId: selectedCombatantId,
+    });
+  const dmSetTurnUsage = () =>
+    commands.encounter.setCurrentTurnUsage({ turnUsage: turnUsageDraft });
+  const dmEndEncounter = () => commands.encounter.endEncounter();
+  const moveSelectedActor = () =>
+    commands.session.moveActingCharacter({ cell: selectedCell });
+  const recoverReadModels = async (): Promise<void> => {
+    await session.actions.recover();
+  };
+
+  function dmSetCurrentHp(): void {
+    withCharacterTarget(selectedActor, (target) => {
+      void commands.encounter.setCharacterCurrentHp({
+        currentHp: Number.parseInt(hpDraft, 10),
+        target,
+      });
+    });
+  }
+
+  function dmSetConditions(): void {
+    withCharacterTarget(selectedActor, (target) => {
+      void commands.encounter.setCharacterConditions({
+        activeConditions: conditionsDraft
+          .split(',')
+          .map((condition) => condition.trim())
+          .filter(Boolean),
+        target,
+      });
+    });
+  }
+
+  function dmRepositionSelected(): void {
+    withCharacterTarget(selectedActor, (target) => {
+      void commands.character.repositionCharacter({
+        cell: selectedCell,
+        characterId: target.characterId,
+        participantId: target.participantId,
+      });
+    });
+  }
+
+  /**
+   * Apply or clear `poisoned` without disturbing the rest of the list.
+   *
+   * The next list is built from the authoritative conditions rather than from a
+   * local toggle, which is what makes applying it twice a no-op instead of two
+   * stacked entries.
+   */
+  function handleSetPoisoned(
+    target: M1ResolutionTarget,
+    poisoned: boolean,
+  ): Promise<void> {
+    const withoutPoisoned = target.activeConditions.filter(
+      (condition) => condition !== 'poisoned',
     );
-    const errors = validateSceneEntityDraftForm({
-      form: sceneEntityEditDraft,
-      grid: scene?.grid,
-      position: selectedEntity?.position ?? selectedCell,
-    });
 
-    if (errors.length) {
-      throw new Error(`Fix the entity edit form first: ${errors.join(' ')}`);
-    }
+    return commands.encounter.setCharacterConditions({
+      activeConditions: poisoned
+        ? [...withoutPoisoned, 'poisoned']
+        : withoutPoisoned,
+      target: {
+        characterId: target.characterId,
+        participantId: target.participantId,
+      },
+    });
   }
 
-  function assertSceneTransitionDraftValid(): void {
-    const errors = validateSceneTransitionDraftForm({
-      form: sceneTransitionDraft,
-      grid: scene?.grid,
-      position: selectedCell,
+  function createPlayerCharacter(): void {
+    void commands.character.createPlayerCharacter({
+      draft: characterDraft,
+      errors: characterDraftErrors,
     });
-
-    if (errors.length) {
-      throw new Error(`Fix the transition draft first: ${errors.join(' ')}`);
-    }
   }
 
-  function assertSceneTransitionEditDraftValid(): void {
-    const selectedTransition = getTransitionSceneEntities(scene).find(
-      (entity) => entity.id === selectedTransitionId,
+  function updatePlayerCharacter(): void {
+    withPlayerCharacterId((characterId) => {
+      void commands.character.updatePlayerCharacter({
+        characterId,
+        draft: characterDraft,
+        errors: characterDraftErrors,
+      });
+    });
+  }
+
+  function finalizePlayerCharacter(): void {
+    withPlayerCharacterId((characterId) => {
+      void commands.character.finalizePlayerCharacter({ characterId });
+    });
+  }
+
+  function submitPlayerCharacterForAssignment(): void {
+    withPlayerCharacterId((characterId) => {
+      void commands.character.submitPlayerCharacterForAssignment({
+        characterId,
+      });
+    });
+  }
+
+  function submitSelectedLibraryEntryForAssignment(): void {
+    const ownerUserId = user?.id;
+
+    if (!ownerUserId) {
+      failCommand(new Error(t('runtime.characterLibrary.signInRequired')));
+      return;
+    }
+
+    const entry = finalizedLibraryEntries.find(
+      (candidate) => candidate.id === selectedLibraryEntryId,
     );
-    const errors = validateSceneTransitionDraftForm({
-      form: sceneTransitionEditDraft,
-      grid: scene?.grid,
-      position: selectedTransition?.position ?? selectedCell,
-    });
 
-    if (errors.length) {
-      throw new Error(
-        `Fix the transition edit form first: ${errors.join(' ')}`,
+    if (!entry) {
+      failCommand(new Error(t('runtime.characterLibrary.selectRequired')));
+      return;
+    }
+
+    void commands.character.submitLibraryEntryForAssignment({
+      entryId: entry.id,
+      ownerUserId,
+    });
+  }
+
+  function dmAssignSelectedLoadedCharacter(): void {
+    const characterId =
+      charactersByParticipant[selectedActor]?.character.id ??
+      knownCharacterIds[selectedActor];
+
+    if (!characterId) {
+      failCommand(
+        new Error(`No loaded character is known for ${selectedActor}.`),
       );
+      return;
     }
+
+    void commands.character.assignCharacterToParticipant({
+      characterId,
+      participantId: selectedActor,
+    });
   }
 
-  function assertCombatantDraftValid(): void {
-    const errors = validateCombatantDraftForm({
-      form: combatantDraft,
-      grid: scene?.grid,
-      position: selectedCell,
+  function dmAssignPendingCharacter(
+    participantId: string,
+    characterId: string,
+  ): Promise<void> {
+    return commands.character.assignPendingCharacter({
+      characterId,
+      participantId,
     });
-
-    if (errors.length) {
-      throw new Error(`Fix the combatant draft first: ${errors.join(' ')}`);
-    }
   }
 
   function updateSceneDraftField(
@@ -3835,12 +1808,6 @@ export function RuntimeCockpit() {
         [field]: value,
       },
     }));
-  }
-
-  function assertSession(): void {
-    if (!sessionId) {
-      throw new Error('Create or enter a session ID first.');
-    }
   }
 
   const canUseSession = Boolean(sessionId);
@@ -4594,11 +2561,11 @@ export function RuntimeCockpit() {
               />
               <StatusBadge
                 label={
-                  streamEnabled
+                  session.streamEnabled
                     ? t('runtime.status.stream', { status: stream.status })
                     : t('runtime.status.streamIdle')
                 }
-                tone={streamEnabled ? 'success' : 'info'}
+                tone={session.streamEnabled ? 'success' : 'info'}
               />
               <StatusBadge
                 label={
@@ -4696,7 +2663,12 @@ export function RuntimeCockpit() {
                 />
                 <LabeledInput
                   label={t('runtime.session.dmDisplayName')}
-                  onChange={setDmDisplayName}
+                  onChange={(value) =>
+                    session.setSeats((current) => ({
+                      ...current,
+                      dmDisplayName: value,
+                    }))
+                  }
                   value={dmDisplayName}
                 />
               </div>
@@ -4709,7 +2681,12 @@ export function RuntimeCockpit() {
                 />
                 <LabeledInput
                   label={t('runtime.session.playerDisplayName')}
-                  onChange={setPlayerDisplayName}
+                  onChange={(value) =>
+                    session.setSeats((current) => ({
+                      ...current,
+                      playerDisplayName: value,
+                    }))
+                  }
                   value={playerDisplayName}
                 />
               </div>
@@ -4746,12 +2723,16 @@ export function RuntimeCockpit() {
                 disabled={Boolean(missingSessionReason)}
                 disabledReason={missingSessionReason ?? undefined}
                 label={
-                  streamEnabled
+                  session.streamEnabled
                     ? t('runtime.session.disconnectSse')
                     : t('runtime.session.subscribeSse')
                 }
-                onClick={() => setStreamEnabled((current) => !current)}
-                variant={streamEnabled ? 'danger' : 'secondary'}
+                onClick={() =>
+                  session.streamEnabled
+                    ? session.actions.unsubscribe()
+                    : session.actions.resubscribe()
+                }
+                variant={session.streamEnabled ? 'danger' : 'secondary'}
               />
               <ActionButton
                 disabled={Boolean(busyLabel)}
