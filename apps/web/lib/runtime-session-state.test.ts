@@ -177,6 +177,66 @@ test('re-declaring the same identity changes nothing at all', () => {
   assert.equal(next, state);
 });
 
+test('adopting the ID of the session just created keeps that session', () => {
+  // A created or joined table is named by the server, so the seat learns its ID
+  // only from the snapshot. Treating that catch-up as a table switch used to
+  // wipe the snapshot that caused it, leaving the creator unable to name - or
+  // command - the session they had just made.
+  let state = createRuntimeSessionState({
+    mode: 'dm',
+    participantId: 'dm-001',
+    sessionId: '',
+  });
+
+  state = runtimeSessionReducer(state, {
+    type: 'credential_present',
+    hasCredential: true,
+  });
+  state = runtimeSessionReducer(state, {
+    type: 'session_snapshot_received',
+    snapshot: createSnapshot(1),
+  });
+  state = runtimeSessionReducer(state, {
+    type: 'scene_received',
+    scene: createScene(),
+  });
+
+  const next = runtimeSessionReducer(state, {
+    type: 'identity_changed',
+    identity: { sessionId: 'ABC123' },
+  });
+
+  assert.equal(next.identity.sessionId, 'ABC123');
+  assert.equal(next.session?.session.id, 'ABC123');
+  assert.equal(next.scene?.id, 'scene_1');
+  // The credential belongs to this seat at this table; adopting the name of
+  // the table it was issued for must not discard it.
+  assert.equal(next.hasCredential, true);
+});
+
+test('adopting a different session is still a switch that clears', () => {
+  const next = runtimeSessionReducer(seeded(), {
+    type: 'identity_changed',
+    identity: { sessionId: 'ZZZ999' },
+  });
+
+  assert.equal(next.session, null);
+  assert.equal(next.scene, null);
+  assert.equal(next.hasCredential, false);
+});
+
+test('changing seat within the held session still clears that seat', () => {
+  const next = runtimeSessionReducer(seeded(), {
+    type: 'identity_changed',
+    identity: { sessionId: 'ABC123', participantId: 'player-002' },
+  });
+
+  // Same table, different chair: the projections were for the old seat and a
+  // role-projected map is not transferable between them.
+  assert.equal(next.session, null);
+  assert.equal(next.hasCredential, false);
+});
+
 test('a stale session revision loses to the one already held', () => {
   const state = seeded();
   const next = runtimeSessionReducer(state, {

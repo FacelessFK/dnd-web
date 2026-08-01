@@ -174,8 +174,7 @@ function playerState(currentTurnIndex = 0): RuntimeSessionState {
     scene: projected,
   });
   state = runtimeSessionReducer(state, {
-    type: 'character_received',
-    participantId: 'player-001',
+    type: 'character_remembered',
     character: createCharacter(),
   });
   state = runtimeSessionReducer(state, {
