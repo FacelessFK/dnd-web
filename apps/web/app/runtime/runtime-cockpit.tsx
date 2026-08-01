@@ -764,6 +764,10 @@ export function RuntimeCockpit() {
   );
   const [outboxStatusLoading, setOutboxStatusLoading] = useState(false);
   const [streamEnabled, setStreamEnabled] = useState(false);
+  // Bumped to force a fresh subscription. The M1 table has no read command, so
+  // reopening the stream is the only way to ask the server for its projection of
+  // the requests, resolutions and intents this seat is allowed to see.
+  const [streamEpoch, setStreamEpoch] = useState(0);
   const [selectedActor, setSelectedActor] = useState<string>(
     samplePlayers[0].participantId,
   );
@@ -880,6 +884,7 @@ export function RuntimeCockpit() {
       pushLog(event.type, event);
     },
     participantId: streamParticipantId,
+    resubscribeToken: streamEpoch,
     sessionId: sessionId || null,
   });
 
@@ -1323,16 +1328,22 @@ export function RuntimeCockpit() {
     setSelectedCell({ x: 0, y: 0 });
   }
 
+  // Every one of these changes which seat this browser is looking through. The
+  // table already on screen was projected for the previous seat or the previous
+  // session, so it has to go: leaving it would show a player the GM's copy of a
+  // request, or show this table the last one's notes.
   function switchSessionId(nextSessionId: string): void {
     setStreamEnabled(false);
     setSessionId(sanitizeSessionIdInput(nextSessionId));
     clearRuntimeReadModels({ clearKnownCharacterIds: true });
+    m1.resetTable();
     setEventLog([]);
   }
 
   function switchMode(nextMode: RuntimeMode): void {
     setMode(nextMode);
     setStreamEnabled(false);
+    m1.resetTable();
     setCommandError(null);
     setRecoveryNotes([]);
   }
@@ -1341,6 +1352,7 @@ export function RuntimeCockpit() {
     setStreamEnabled(false);
     setPlayerParticipantId(nextParticipantId.trim());
     setCharacterDraft(createDefaultCharacterDraftForm(playerDisplayName));
+    m1.resetTable();
     setCommandError(null);
     setRecoveryNotes([]);
   }
@@ -1348,6 +1360,7 @@ export function RuntimeCockpit() {
   function switchDmParticipantId(nextParticipantId: string): void {
     setStreamEnabled(false);
     setDmParticipantId(nextParticipantId.trim());
+    m1.resetTable();
     setCommandError(null);
     setRecoveryNotes([]);
   }
@@ -1375,6 +1388,7 @@ export function RuntimeCockpit() {
       createDefaultCharacterDraftForm(defaultPlayer.displayName),
     );
     clearRuntimeReadModels({ clearKnownCharacterIds: true });
+    m1.resetTable();
     setEventLog([]);
   }
 
@@ -2645,6 +2659,14 @@ export function RuntimeCockpit() {
 
       clearRuntimeReadModels();
       applySessionSnapshot(recovered.data.state);
+      // Requests, resolutions and intents have no read command: the server only
+      // ever projects them onto a live subscription. Dropping the stale copy and
+      // reopening the stream is therefore part of recovering, not a side effect
+      // of it - without this, Recover restores the map and the encounter and
+      // silently leaves the M1 panels empty after a refresh.
+      m1.resetTable();
+      setStreamEnabled(true);
+      setStreamEpoch((current) => current + 1);
 
       const recoveredActiveSceneId = recovered.data.state.session.activeSceneId;
       let recoveredScene: Scene | null = null;

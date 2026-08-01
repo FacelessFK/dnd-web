@@ -42,6 +42,14 @@ export const M1_FEEDBACK_LIMIT = 5;
 export function describeM1Feedback(
   event: SessionStreamEvent,
 ): M1FeedbackItem | null {
+  // An `initial_sync` is a restore, not a moment. It carries whatever the table
+  // already holds, so announcing its newest record would tell a reader who just
+  // refreshed that a roll they already saw has only now landed - and would do it
+  // again on every reconnect, because the feedback list starts empty each load.
+  if ('reason' in event && event.reason === 'initial_sync') {
+    return null;
+  }
+
   switch (event.type) {
     case 'combat_event':
       return describeCombatFeedback(event);

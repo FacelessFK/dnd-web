@@ -30,7 +30,7 @@ function combatEvent(overrides: Partial<CombatEvent> = {}): CombatEvent {
 }
 
 function resolutionEvent(
-  reason: 'resolution_requested' | 'resolution_submitted',
+  reason: 'initial_sync' | 'resolution_requested' | 'resolution_submitted',
   success?: boolean,
 ): SessionStreamEvent {
   return {
@@ -52,7 +52,7 @@ function resolutionEvent(
         },
       ],
       resolutions:
-        reason === 'resolution_submitted'
+        reason !== 'resolution_requested'
           ? [
               {
                 ability: 'dex',
@@ -78,6 +78,29 @@ function resolutionEvent(
           : [],
     },
     type: 'resolution_state',
+  };
+}
+
+function intentEvent(
+  reason: 'initial_sync' | 'intent_submitted' | 'intent_status_changed',
+): SessionStreamEvent {
+  return {
+    reason,
+    sessionId: 'ABC123',
+    state: {
+      intents: [
+        {
+          authorParticipantId: 'player-001',
+          createdAt: '2026-07-31T12:00:00.000Z',
+          id: 'intent_11111111-1111-4111-8111-111111111111',
+          sessionId: 'ABC123',
+          status: reason === 'intent_submitted' ? 'pending' : 'acknowledged',
+          text: 'I sweep the rubble aside.',
+          updatedAt: '2026-07-31T12:00:05.000Z',
+        },
+      ],
+    },
+    type: 'player_intent_state',
   };
 }
 
@@ -125,6 +148,23 @@ test('a request announces itself', () => {
     describeM1Feedback(resolutionEvent('resolution_requested'))?.messageKey,
     'runtime.m1.feedback.resolutionRequested',
   );
+});
+
+test('an initial sync restores the table without announcing anything', () => {
+  // The frames a subscriber gets on connect carry records it has already seen.
+  // Announcing the newest one would tell someone who just refreshed that an old
+  // roll had only now landed, and would repeat that on every reconnect - the
+  // feedback list starts empty each page load, so dedupe cannot catch it.
+  // Both frames carry a record that WOULD be announced under any other reason,
+  // so this proves the reason is what suppresses it, not an empty payload.
+  assert.equal(
+    describeM1Feedback(resolutionEvent('resolution_submitted', true))
+      ?.messageKey,
+    'runtime.m1.feedback.resolutionSuccess',
+  );
+  assert.equal(describeM1Feedback(resolutionEvent('initial_sync', true)), null);
+  assert.ok(describeM1Feedback(intentEvent('intent_status_changed')));
+  assert.equal(describeM1Feedback(intentEvent('initial_sync')), null);
 });
 
 test('an event with no moment worth announcing produces nothing', () => {
