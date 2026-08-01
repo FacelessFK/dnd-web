@@ -7024,6 +7024,130 @@ test('db-backed scene transaction boundary commits place_entity_in_scene durably
   assert.equal(persistedScene?.record.entities[0]?.name, 'Stone Pillar');
 });
 
+test('db-backed scene transaction boundary writes a scene outbox row for the active map and dispatches it projected after commit', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  ).withRollers(TEST_ROLLERS);
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const sceneCommandTransaction = new DbBackedSceneCommandTransactionBoundary(
+    unitOfWork,
+    new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+  );
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+
+  // The sibling tests above leave the scene inactive, which is why they see no
+  // scene rows: an edit to a map the room is not looking at is saved silently.
+  // This one activates it first, so the write is something the table can see.
+  await runtime.activateSceneForSession({
+    commandId: 'durable-scene-activate-for-outbox',
+    type: 'activate_scene_for_session',
+    actor: { participantId: 'dm-001' },
+    payload: { sessionId, sceneId },
+  });
+
+  const dmUpdates: SessionStreamEvent[] = [];
+  const playerUpdates: SessionStreamEvent[] = [];
+
+  for (const [participantId, sink] of [
+    ['dm-001', dmUpdates],
+    ['player-001', playerUpdates],
+  ] as const) {
+    runtime.connectParticipant(sessionId, participantId, {
+      connectionId: `outbox-projection-${participantId}`,
+      close: () => undefined,
+      send: (update) => sink.push(update),
+    });
+  }
+
+  const dmFrameCountBefore = dmUpdates.length;
+  const playerFrameCountBefore = playerUpdates.length;
+
+  const placed = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    {
+      commandId: 'durable-place-hidden-entity-1',
+      type: 'place_entity_in_scene',
+      actor: { participantId: 'dm-001' },
+      payload: {
+        sessionId,
+        sceneId,
+        entity: {
+          type: 'object',
+          name: 'Concealed Trapdoor',
+          position: { x: 3, y: 3 },
+          footprint: { width: 1, height: 1 },
+          blocksMovement: true,
+          blocksVision: false,
+          hidden: true,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  const persistedScene = await sceneDatabase.getSceneRecord(sceneId);
+  const hiddenEntityId = persistedScene?.record.entities[0]?.id;
+  const dmScenes = dmUpdates
+    .slice(dmFrameCountBefore)
+    .filter((update) => update.type === 'scene_state');
+  const playerScenes = playerUpdates
+    .slice(playerFrameCountBefore)
+    .filter((update) => update.type === 'scene_state');
+
+  assert.equal(placed.status, 200);
+  assert.ok(hiddenEntityId);
+  assert.equal(outboxDatabase.recordCount, 1);
+  // Drained after commit, leaving nothing behind.
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+
+  // The durable row holds the authoritative scene; each subscriber is projected
+  // at delivery, exactly as on the live path.
+  assert.equal(dmScenes.length, 1);
+  assert.equal(playerScenes.length, 1);
+  assert.equal(
+    dmScenes[0]?.type === 'scene_state' &&
+      dmScenes[0].scene.entities.some((entity) => entity.id === hiddenEntityId),
+    true,
+  );
+  assert.equal(
+    playerScenes[0]?.type === 'scene_state' &&
+      playerScenes[0].scene.entities.length,
+    0,
+  );
+  assert.equal(
+    JSON.stringify(playerUpdates).includes(hiddenEntityId),
+    false,
+    'the hidden ID never reached the player through the outbox path',
+  );
+});
+
 test('concurrent duplicate db-backed place_entity_in_scene requests cannot append the entity twice', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const sceneDatabase = new InMemorySceneRecordDatabase();
