@@ -6,15 +6,24 @@ import { encounterStateUpdateSchema } from './encounter.js';
 import { playerIntentStateUpdateSchema } from './intent.js';
 import { resolutionStateUpdateSchema } from './resolution.js';
 import { movementStateUpdateSchema } from './movement.js';
-import { sceneStateUpdateSchema } from './scene.js';
+import {
+  authoritativeSceneStateUpdateSchema,
+  projectedSceneStateUpdateSchema,
+} from './scene.js';
 import { sessionStateUpdateSchema } from './session.js';
 
-export const sessionStreamEventSchema = z.discriminatedUnion('type', [
+// The two `scene_state` variants are listed individually rather than as
+// `sceneStateUpdateSchema`, because a discriminated union cannot be a member of
+// another discriminated union. They still discriminate cleanly here: both carry
+// `type: 'scene_state'`, so a consumer narrows to the pair on `type` and then
+// on `view`.
+export const sessionStreamEventSchema = z.union([
   combatEventSchema,
   characterStateUpdateSchema,
   sessionStateUpdateSchema,
   movementStateUpdateSchema,
-  sceneStateUpdateSchema,
+  authoritativeSceneStateUpdateSchema,
+  projectedSceneStateUpdateSchema,
   encounterStateUpdateSchema,
   resolutionStateUpdateSchema,
   playerIntentStateUpdateSchema,

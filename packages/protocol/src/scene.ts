@@ -1,10 +1,13 @@
 import { z } from 'zod';
 
 import {
+  sceneAmbientLightLevels,
+  sceneCellIlluminationLevels,
   sceneCombatantKinds,
   sceneEntityTypes,
   sceneTerrainTiles,
   sceneTransitionKinds,
+  sceneViewCellVisibilities,
 } from '@dnd/shared';
 
 import {
@@ -22,6 +25,38 @@ export const sceneEntityTypeSchema = z.enum(sceneEntityTypes);
 export const sceneCombatantKindSchema = z.enum(sceneCombatantKinds);
 export const sceneTransitionKindSchema = z.enum(sceneTransitionKinds);
 export const sceneTerrainTileSchema = z.enum(sceneTerrainTiles);
+export const sceneAmbientLightSchema = z.enum(sceneAmbientLightLevels);
+export const sceneCellIlluminationSchema = z.enum(sceneCellIlluminationLevels);
+export const sceneViewCellVisibilitySchema = z.enum(sceneViewCellVisibilities);
+
+/**
+ * Radii are bounded by the largest grid a scene may declare, so a light cannot
+ * be configured to sweep a region no map could contain.
+ */
+const sceneLightRadiusSchema = z.number().int().min(0).max(500);
+
+/**
+ * Uncoloured, unanimated light. See `SceneLightSource` in `@dnd/shared` for why
+ * the model is deliberately this small.
+ */
+export const sceneLightSourceSchema = z
+  .object({
+    enabled: z.boolean(),
+    brightRadius: sceneLightRadiusSchema,
+    dimRadius: sceneLightRadiusSchema,
+  })
+  .superRefine((value, ctx) => {
+    if (value.dimRadius >= value.brightRadius) {
+      return;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        'Outer dim radius cannot be smaller than bright radius; dim radius is the outer edge of the lit area, not a band width.',
+      path: ['dimRadius'],
+    });
+  });
 
 // Upper bound on encoded runs. A 500x500 grid is 250k cells, but a map that
 // needs a run per cell is pathological rather than authored, so the cap keeps
@@ -113,6 +148,9 @@ export const sceneEntitySchema = z.object({
   hidden: z.boolean(),
   combatant: sceneCombatantSchema.nullable().default(null),
   transition: sceneTransitionSchema.nullable().optional(),
+  // Optional rather than defaulted so an entity persisted before M3 parses
+  // byte-for-byte unchanged. Absent and null both mean "emits no light".
+  lightSource: sceneLightSourceSchema.nullable().optional(),
   meta: z.record(rulesConfigValueSchema),
 });
 
@@ -124,6 +162,12 @@ export const sceneSchema = z.object({
   // Nullable rather than required so scenes stored before the terrain layer
   // still parse; consumers treat null as an unpainted map.
   terrain: sceneTerrainSchema.nullable().default(null),
+  // Optional, not defaulted: scene records are JSONB documents that are cloned
+  // rather than re-parsed on the way out of the store, so a default here would
+  // fill the field for a caller that parsed and leave it absent for one that
+  // did not. `resolveSceneAmbientLight` is the single place absence becomes
+  // 'bright', and every read goes through it.
+  ambientLight: sceneAmbientLightSchema.optional(),
   entities: z.array(sceneEntitySchema),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -149,32 +193,119 @@ export const sceneStateUpdateReasonSchema = z.enum([
   // for a player the entity appears or disappears entirely, which is the whole
   // reason this cannot be a client-side filter.
   'combatant_visibility_changed',
+  // A character token moved. The map itself did not change - for the DM this
+  // frame is identical to the last one - but an observer moving is exactly what
+  // changes a player's projected view, and movement otherwise only announces
+  // itself as `movement_state`, which carries no visibility.
+  'observer_moved',
 ]);
+
+// ---------------------------------------------------------------------------
+// Projected scene view
+// ---------------------------------------------------------------------------
+
+/**
+ * Upper bound on projected runs. A 500-wide row alternating known and unknown
+ * cells is 250 runs, so 500 such rows is the pathological ceiling. Real fog is
+ * contiguous and compresses to a fraction of this.
+ */
+const maxSceneViewCellRuns = 125000;
+
+export const sceneViewCellRunSchema = z.object({
+  y: z.number().int().min(0).max(499),
+  x: z.number().int().min(0).max(499),
+  length: z.number().int().min(1).max(500),
+  tile: sceneTerrainTileSchema,
+  visibility: sceneViewCellVisibilitySchema,
+  illumination: sceneCellIlluminationSchema,
+});
+
+export const sceneViewEntitySchema = z.object({
+  id: sceneEntityIdSchema,
+  type: sceneEntityTypeSchema,
+  name: sceneEntityNameSchema,
+  position: scenePositionSchema,
+  footprint: sceneEntityFootprintSchema,
+  blocksMovement: z.boolean(),
+  blocksVision: z.boolean(),
+  combatant: sceneCombatantSchema.nullable().default(null),
+  transition: sceneTransitionSchema.nullable().optional(),
+  meta: z.record(rulesConfigValueSchema),
+});
+
+/**
+ * The map as one player's characters can currently perceive it.
+ *
+ * Not a `Scene`. The authoritative scene carries the whole terrain layer, every
+ * entity including the concealed ones, and the lighting configuration; sending
+ * that to a player and asking the browser to draw fog over it would put the
+ * entire map one devtools tab away. So this is a separate type, `view`
+ * discriminates it from `Scene`, and there is no cast between them.
+ *
+ * Unknown map state is *absent*. There is no fog tile, no null cell, and no
+ * "hidden: true" entry - a cell the viewer may not know about simply appears in
+ * no run, and an entity they may not see is in no array. Anything present here
+ * is something the server decided this viewer is entitled to.
+ *
+ * `cells` may carry `visibility: 'explored'` in a later wave. Nothing emits it
+ * yet and no surface claims remembered terrain exists.
+ */
+export const sceneViewSchema = z.object({
+  view: z.literal('player_projection'),
+  id: sceneIdSchema,
+  sessionId: sessionIdSchema,
+  name: sceneNameSchema,
+  grid: gridDefinitionSchema,
+  cells: z.array(sceneViewCellRunSchema).max(maxSceneViewCellRuns),
+  entities: z.array(sceneViewEntitySchema),
+  updatedAt: z.string().datetime(),
+  projectedAt: z.string().datetime(),
+});
 
 /**
  * The active scene as one subscriber is allowed to see it.
  *
- * The payload is already projected when it reaches this schema: a player's
- * `scene.entities` never contains a hidden entity, so there is no hidden ID,
- * position, or HP in the bytes at all. The DM receives the authoritative scene.
- * Projecting before serialization is the point - a client that received the
- * full scene and filtered it would be one devtools tab away from omniscience.
+ * The payload is already projected when it reaches this schema. The DM receives
+ * the authoritative scene; a player receives a `SceneView` containing only the
+ * cells and entities their characters can currently perceive. Projecting before
+ * serialization is the point - a client that received the full scene and
+ * filtered it would be one devtools tab away from omniscience.
+ *
+ * `view` is what keeps the two apart. A consumer has to branch on it, so code
+ * that handles a projected view cannot silently be handed an authoritative
+ * scene, and code expecting the whole map cannot silently be handed a sparse
+ * one.
  *
  * This is live delivery, not a log. There is no cursor, no replay, and no
  * ordering guarantee beyond the transport's own; a subscriber that misses a
  * frame recovers by reconnecting and receiving `initial_sync`.
  */
-export const sceneStateUpdateSchema = z.object({
+export const authoritativeSceneStateUpdateSchema = z.object({
   type: z.literal('scene_state'),
+  view: z.literal('authoritative'),
   reason: sceneStateUpdateReasonSchema,
   sessionId: sessionIdSchema,
   scene: sceneSchema,
 });
 
+export const projectedSceneStateUpdateSchema = z.object({
+  type: z.literal('scene_state'),
+  view: z.literal('player_projection'),
+  reason: sceneStateUpdateReasonSchema,
+  sessionId: sessionIdSchema,
+  scene: sceneViewSchema,
+});
+
+export const sceneStateUpdateSchema = z.discriminatedUnion('view', [
+  authoritativeSceneStateUpdateSchema,
+  projectedSceneStateUpdateSchema,
+]);
+
 export const sceneInputSchema = z.object({
   name: sceneNameSchema,
   grid: gridDefinitionSchema,
   terrain: sceneTerrainSchema.nullable().optional(),
+  ambientLight: sceneAmbientLightSchema.optional(),
 });
 
 export const sceneEntityInputSchema = z.object({
@@ -185,6 +316,7 @@ export const sceneEntityInputSchema = z.object({
   blocksMovement: z.boolean(),
   blocksVision: z.boolean(),
   hidden: z.boolean(),
+  lightSource: sceneLightSourceSchema.nullable().optional(),
   meta: z.record(rulesConfigValueSchema).optional(),
 });
 
@@ -196,6 +328,7 @@ export const sceneEntityUpdateInputSchema = z
     blocksMovement: z.boolean().optional(),
     blocksVision: z.boolean().optional(),
     hidden: z.boolean().optional(),
+    lightSource: sceneLightSourceSchema.nullable().optional(),
     meta: z.record(rulesConfigValueSchema).optional(),
   })
   .superRefine((update, context) => {
@@ -217,6 +350,7 @@ export const sceneTransitionInputSchema = z.object({
   blocksMovement: z.boolean(),
   blocksVision: z.boolean(),
   hidden: z.boolean(),
+  lightSource: sceneLightSourceSchema.nullable().optional(),
   targetSceneId: sceneIdSchema,
   targetLabel: sceneTransitionLabelSchema.nullable().optional(),
   notes: sceneTransitionNotesSchema.nullable().optional(),
@@ -230,6 +364,7 @@ export const sceneTransitionUpdateInputSchema = z
     blocksMovement: z.boolean().optional(),
     blocksVision: z.boolean().optional(),
     hidden: z.boolean().optional(),
+    lightSource: sceneLightSourceSchema.nullable().optional(),
     targetSceneId: sceneIdSchema.optional(),
     targetLabel: sceneTransitionLabelSchema.nullable().optional(),
     notes: sceneTransitionNotesSchema.nullable().optional(),
@@ -400,10 +535,16 @@ export const sceneCommandSchema = z.discriminatedUnion('type', [
   activateSceneTransitionCommandSchema,
 ]);
 
+/**
+ * Every scene command except `get_scene` is DM-gated and therefore always
+ * answers with the authoritative scene. `get_scene` is the one a player may
+ * issue, so the success shape has to admit a projected view as well - and a
+ * union rather than an optional field, so a consumer must decide which it has.
+ */
 export const sceneCommandSuccessSchema = z.object({
   ok: z.literal(true),
   data: z.object({
-    scene: sceneSchema,
+    scene: z.union([sceneSchema, sceneViewSchema]),
   }),
 });
 
@@ -438,9 +579,24 @@ export type SceneEntityFootprint = z.infer<typeof sceneEntityFootprintSchema>;
 export type SceneCombatant = z.infer<typeof sceneCombatantSchema>;
 export type SceneTransition = z.infer<typeof sceneTransitionSchema>;
 export type SceneEntity = z.infer<typeof sceneEntitySchema>;
+export type SceneLightSource = z.infer<typeof sceneLightSourceSchema>;
+export type SceneAmbientLight = z.infer<typeof sceneAmbientLightSchema>;
+export type SceneCellIllumination = z.infer<typeof sceneCellIlluminationSchema>;
+export type SceneViewCellVisibility = z.infer<
+  typeof sceneViewCellVisibilitySchema
+>;
+export type SceneViewCellRun = z.infer<typeof sceneViewCellRunSchema>;
+export type SceneViewEntity = z.infer<typeof sceneViewEntitySchema>;
+export type SceneView = z.infer<typeof sceneViewSchema>;
 export type Scene = z.infer<typeof sceneSchema>;
 export type SceneStateUpdateReason = z.infer<
   typeof sceneStateUpdateReasonSchema
+>;
+export type AuthoritativeSceneStateUpdate = z.infer<
+  typeof authoritativeSceneStateUpdateSchema
+>;
+export type ProjectedSceneStateUpdate = z.infer<
+  typeof projectedSceneStateUpdateSchema
 >;
 export type SceneStateUpdate = z.infer<typeof sceneStateUpdateSchema>;
 export type SceneInput = z.infer<typeof sceneInputSchema>;
