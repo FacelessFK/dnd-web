@@ -240,7 +240,12 @@ export function LatestEventFeed({
       eyebrow={t('runtime.eventFeed.eyebrow')}
       title={t('runtime.eventFeed.title')}
     >
-      <div className="grid gap-2">
+      {/*
+        Named so the acceptance can read the feed on its own rather than the
+        whole page. A leak here used to be found by a whole-surface text audit,
+        which says a rule broke without saying which surface broke it.
+      */}
+      <div className="grid gap-2" data-hud-region="event-feed">
         {entries.length ? (
           entries.map((entry) => (
             <div

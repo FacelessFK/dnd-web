@@ -383,6 +383,17 @@ async function main() {
       serverUrl,
     });
 
+    // The reposition above is the frame that leaked. It arrives at both shells
+    // as `movement_state`, carrying the seat and the record IDs the browser
+    // needs to key the placement it paints - and the feed used to interpolate
+    // them into the sentence it rendered. Asserted here, immediately after the
+    // frame, rather than left to the whole-surface audit further down: this
+    // says which surface broke the rule, and it waits for the line to exist so
+    // it cannot pass against a feed that has not rendered yet.
+    step('the movement the GM just made reads as words in both feeds');
+    await assertEventFeedNamesNoIdentifier(playerPage, 'Player', characterName);
+    await assertEventFeedNamesNoIdentifier(gmPage, 'GM', characterName);
+
     step('both shells mount, and each is the right one');
     await assertShellMounted(gmPage, 'gm');
     await assertShellMounted(playerPage, 'player');
@@ -779,6 +790,99 @@ async function assertNoForbiddenText(page, label) {
 
   if (/runtime\.[a-z]+\./i.test(text)) {
     fail(`${label}: an untranslated message key reached the Player surface.`);
+  }
+}
+
+/**
+ * The event feed, read on its own, after a movement frame has landed in it.
+ *
+ * This is the assertion the leak needed and did not have. The whole-surface
+ * audit does catch a seat ID in the feed, but only if the feed happens to have
+ * rendered by the time it runs, and it reports a pattern rather than a
+ * surface - so a regression here reads as "something, somewhere". This waits
+ * for the movement line, then checks that one region.
+ *
+ * Run for the GM as well as the Player. The rule is not "players get sanitized
+ * text": it is that the normal gameplay feed speaks in names for everyone, and
+ * technical values live in diagnostics. Asserting only the Player would let the
+ * GM feed keep an ID fallback that the next role-projection change promotes
+ * into a player's view.
+ */
+async function assertEventFeedNamesNoIdentifier(page, label, characterName) {
+  await waitFor(page, {
+    label: `${label} event feed shows the movement that just happened`,
+    predicate: `(() => {
+      const feed = document.querySelector('[data-hud-region="event-feed"]');
+      if (!feed) { return false; }
+      const text = feed.innerText ?? '';
+      return /\\b2,2\\b/.test(text) || /\\b2،2\\b/.test(text);
+    })()`,
+  });
+
+  const text = await page.evaluate(
+    `(() => {
+      const feed = document.querySelector('[data-hud-region="event-feed"]');
+      return feed ? feed.innerText ?? '' : '';
+    })()`,
+  );
+
+  if (!text.trim()) {
+    fail(`${label}: the event feed rendered no text to audit.`);
+  }
+
+  // The identifiers this table actually uses, by value, alongside the shared
+  // patterns. A named value is what turns "a rule broke" into "the feed printed
+  // this seat", and it is what makes the assertion fail against the behaviour
+  // this session was opened to fix.
+  const forbiddenValues = [
+    { label: 'the Player seat ID', value: 'player-001' },
+    { label: 'the GM seat ID', value: 'dm-001' },
+  ];
+
+  for (const { label: what, value } of forbiddenValues) {
+    if (text.includes(value)) {
+      fail(
+        `${label}: the event feed rendered ${what} (${JSON.stringify(value)}).\n` +
+          `Feed text: ${JSON.stringify(text)}`,
+      );
+    }
+  }
+
+  for (const { label: what, pattern } of forbiddenPlayerPatterns) {
+    const match = pattern.exec(text);
+
+    if (match) {
+      fail(
+        `${label}: the event feed rendered ${what}: ${JSON.stringify(match[0])}\n` +
+          `Feed text: ${JSON.stringify(text)}`,
+      );
+    }
+  }
+
+  if (/runtime\.[a-z]+\./i.test(text)) {
+    fail(`${label}: an untranslated message key reached the event feed.`);
+  }
+
+  // A sentinel that escaped `localizeActorLabel` would render as
+  // `__event_actor_you__` - not an identifier, so no pattern above sees it, but
+  // just as wrong on screen.
+  if (/__[a-z_]+__/.test(text)) {
+    fail(
+      `${label}: an unlocalized actor sentinel reached the event feed.\n` +
+        `Feed text: ${JSON.stringify(text)}`,
+    );
+  }
+
+  // The positive half. Without it, deleting the feed would pass every check
+  // above: the movement line has to be present, and it has to name the mover in
+  // words - the reader in the second person, or the character by name.
+  const names = ['You', 'شما', characterName];
+
+  if (!names.some((name) => text.includes(name))) {
+    fail(
+      `${label}: the movement line named nobody. Expected one of ` +
+        `${JSON.stringify(names)}.\nFeed text: ${JSON.stringify(text)}`,
+    );
   }
 }
 

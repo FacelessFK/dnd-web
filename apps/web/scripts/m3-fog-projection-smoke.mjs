@@ -24,6 +24,7 @@ import {
   getCockpitModeSelectionExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
+  isHeadedSmokeRun,
 } from './runtime-smoke-diagnostics.mjs';
 import {
   cleanup,
@@ -196,6 +197,9 @@ async function main() {
   const dm = await openProfile(dmDebugPort, runtimeUrl);
   const player = await openProfile(playerDebugPort, runtimeUrl);
 
+  await assertRenderModeMatchesRequest(dm, 'GM');
+  await assertRenderModeMatchesRequest(player, 'Player');
+
   try {
     await run(dm, player, serverUrl);
     console.log('[m3-fog-projection-smoke] passed');
@@ -208,6 +212,36 @@ async function main() {
   }
 
   process.exit(0);
+}
+
+/**
+ * That the browser rendering this run is the one the run asked for.
+ *
+ * A headed visibility check is only worth doing because a person can watch it,
+ * and the whole value evaporates if the run quietly came up headless instead.
+ * The arguments Chrome was spawned with cannot settle that - they are what was
+ * requested, not what happened - so this asks the renderer itself: `--headless`
+ * puts "HeadlessChrome" in the user agent and a headed window does not.
+ */
+async function assertRenderModeMatchesRequest(page, label) {
+  const userAgent = await page.evaluate('navigator.userAgent');
+  const renderedHeadless = /headlesschrome/i.test(String(userAgent ?? ''));
+
+  if (isHeadedSmokeRun() && renderedHeadless) {
+    throw new Error(
+      `${label}: RUNTIME_SMOKE_HEADED was set but Chrome came up headless.`,
+    );
+  }
+
+  if (!isHeadedSmokeRun() && !renderedHeadless) {
+    throw new Error(
+      `${label}: this run did not ask for a headed browser but got one.`,
+    );
+  }
+
+  console.log(
+    `[m3-fog-smoke] ${label} renderer: ${renderedHeadless ? 'headless' : 'headed'}`,
+  );
 }
 
 async function openProfile(debugPort, runtimeUrl) {
@@ -332,6 +366,13 @@ async function run(dm, player, serverUrl) {
   assertKnownCellsDiffer(litView, movedView, 'observer movement');
   await assertMapSignatureChanged(player, beforeMove, 'observer movement');
   assertNoRecoverSince(recoverBaseline, 'observer movement');
+
+  // The move the Player just made is also a line in their event feed. The
+  // fog assertions above are all about the board; this is the one surface that
+  // narrates the same movement in words, and it is where a seat ID reached a
+  // player's screen. Asserted here so the headed visibility run proves it too,
+  // rather than leaving it entirely to the M2 acceptance.
+  await assertPlayerFeedNamesNoIdentifier(player);
 
   logStep('disabling the vision blocker');
   await clearFrames(player);
@@ -936,6 +977,55 @@ async function assertMapSignatureChanged(page, before, label) {
   }
 
   throw new Error(`${label}: the Player canvas did not repaint.`);
+}
+
+/**
+ * The Player's event feed, in words, with nothing from the wire in it.
+ *
+ * The board hides what a player may not see; the feed has to as well, and it
+ * used to not - it interpolated the seat and record IDs a `movement_state`
+ * frame carries into the sentence it rendered. Patterns rather than one known
+ * value, so this catches the class rather than the instance.
+ */
+async function assertPlayerFeedNamesNoIdentifier(page) {
+  const text = String(
+    (await page.evaluate(
+      `(() => {
+        const feed = document.querySelector('[data-hud-region="event-feed"]');
+        return feed ? (feed.innerText ?? '') : '';
+      })()`,
+    )) ?? '',
+  );
+
+  if (!text.trim()) {
+    throw new Error('The Player event feed rendered no text to audit.');
+  }
+
+  const forbidden = [
+    { label: 'a participant ID', pattern: /\b(?:player|dm)-\d{3}\b/ },
+    { label: 'a character record ID', pattern: /\bcharacter_[0-9a-f]/ },
+    { label: 'a scene entity ID', pattern: /scene_entity_/ },
+    { label: 'a scene ID', pattern: /\bscene_[0-9a-f]/ },
+    { label: 'an encounter ID', pattern: /\bencounter_[0-9a-f]/ },
+    {
+      label: 'a UUID',
+      pattern:
+        /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i,
+    },
+    { label: 'an untranslated message key', pattern: /runtime\.[a-z]+\./i },
+    { label: 'an unlocalized actor sentinel', pattern: /__[a-z_]+__/ },
+  ];
+
+  for (const { label, pattern } of forbidden) {
+    const match = pattern.exec(text);
+
+    if (match) {
+      throw new Error(
+        `The Player event feed rendered ${label}: ${JSON.stringify(match[0])}\n` +
+          `Feed text: ${JSON.stringify(text)}`,
+      );
+    }
+  }
 }
 
 async function readMapSignature(page) {
