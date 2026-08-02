@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +18,13 @@ import {
   getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
+
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../../..');
@@ -391,7 +397,13 @@ async function main() {
 function startProcess(name, command, args, env = {}) {
   const usesWindowsCommandShim =
     process.platform === 'win32' && command.endsWith('.cmd');
-  const child = spawn(
+  // This harness starts the server through `corepack pnpm --filter @dnd/server
+  // dev`, i.e. `corepack -> pnpm -> node --watch -> server`. Signalling the
+  // recorded handle stops corepack and orphans the rest, which is how M3 wave
+  // one finished a green sweep with four servers still holding ports. The tree
+  // logic is shared; see `harness-process-tree.mjs`.
+  const { child } = spawnOwnedProcess(
+    name,
     usesWindowsCommandShim ? (process.env.ComSpec ?? 'cmd.exe') : command,
     usesWindowsCommandShim ? ['/d', '/s', '/c', command, ...args] : args,
     {
@@ -459,7 +471,7 @@ function logSmokeStep(label) {
 function launchBrowser(browserPath, debugPort) {
   chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-runtime-smoke-'));
 
-  return startProcess('chrome', browserPath, [
+  const chrome = startProcess('chrome', browserPath, [
     ...getChromeDisplayArgs({ windowSize: { height: 1000, width: 1600 } }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${chromeUserDataDir}`,
@@ -471,6 +483,11 @@ function launchBrowser(browserPath, debugPort) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  // Deleted only once this Chrome has exited, never beside it.
+  ownDirectoryAfter(getOwnedRecord(chrome), chromeUserDataDir);
+
+  return chrome;
 }
 
 async function createCdpPage(debugPort, url) {
@@ -951,53 +968,8 @@ function getBrowserCandidates() {
 }
 
 async function cleanup() {
-  await Promise.allSettled(
-    [...startedProcesses].reverse().map((child) => stopProcess(child)),
-  );
-
-  if (chromeUserDataDir) {
-    await removeDirectoryWithRetry(chromeUserDataDir);
-  }
-}
-
-async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode) {
-    return;
-  }
-
-  child.kill('SIGTERM');
-
-  const exited = await Promise.race([
-    once(child, 'exit').then(() => true),
-    delay(5000).then(() => false),
-  ]);
-
-  if (!exited && child.exitCode === null) {
-    child.kill('SIGKILL');
-    await Promise.race([
-      once(child, 'exit').then(() => true),
-      delay(5000).then(() => false),
-    ]);
-  }
-}
-
-async function removeDirectoryWithRetry(directory) {
-  let lastError;
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    try {
-      rmSync(directory, {
-        force: true,
-        recursive: true,
-      });
-      return;
-    } catch (error) {
-      lastError = error;
-      await delay(250);
-    }
-  }
-
-  throw lastError;
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
 }
 
 function printProcessLogs() {

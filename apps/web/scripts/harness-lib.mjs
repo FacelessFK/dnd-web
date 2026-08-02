@@ -5,12 +5,18 @@
 //
 // The existing `runtime-smoke.mjs` family still carries its own copy; this module
 // is additive on purpose so those passing harnesses stay untouched.
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  stopOwnedChild,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
 import { getChromeDisplayArgs } from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -37,7 +43,10 @@ export function getFreePort() {
 }
 
 export function startProcess(name, command, args, env = {}) {
-  const child = spawn(command, args, {
+  // `map-builder-smoke` starts the server through `corepack pnpm ... dev`,
+  // which is the exact `corepack -> pnpm -> node --watch -> server` chain that
+  // survived teardown in M3 wave one. Owning the group is what reaches it.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -104,7 +113,7 @@ export function findBrowserExecutable() {
 export function launchBrowser(browserPath, debugPort, { width, height }) {
   chromeUserDataDir = mkdtempSync(resolve(tmpdir(), 'dnd-visual-'));
 
-  return startProcess('chrome', browserPath, [
+  const chrome = startProcess('chrome', browserPath, [
     ...getChromeDisplayArgs(),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${chromeUserDataDir}`,
@@ -119,6 +128,10 @@ export function launchBrowser(browserPath, debugPort, { width, height }) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  ownDirectoryAfter(getOwnedRecord(chrome), chromeUserDataDir);
+
+  return chrome;
 }
 
 export async function createCdpPage(debugPort, url) {
@@ -365,37 +378,11 @@ export function delay(ms) {
 }
 
 export async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return;
-  }
-
-  child.kill('SIGTERM');
-
-  await Promise.race([
-    new Promise((resolveExit) => child.once('exit', resolveExit)),
-    delay(4000),
-  ]);
-
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL');
-  }
+  await stopOwnedChild(child, { graceMs: 4000 });
 }
 
 export async function cleanup() {
-  for (const child of startedProcesses.splice(0).reverse()) {
-    await stopProcess(child);
-  }
-
-  if (chromeUserDataDir) {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      try {
-        rmSync(chromeUserDataDir, { force: true, recursive: true });
-        break;
-      } catch {
-        await delay(200);
-      }
-    }
-
-    chromeUserDataDir = undefined;
-  }
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
+  chromeUserDataDir = undefined;
 }

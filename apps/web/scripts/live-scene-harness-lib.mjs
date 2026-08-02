@@ -13,14 +13,19 @@
 //    `EventSource` before any application script runs, so every frame is kept as
 //    the raw text the server sent. Asserting on a parsed object cannot prove a
 //    concealed ID is absent from the wire - only searching the bytes can.
-import { spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
 import { getChromeDisplayArgs } from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -80,17 +85,19 @@ export function cleanup() {
 }
 
 async function runCleanup() {
-  await Promise.allSettled(
-    [...startedProcesses].reverse().map((child) => stopProcess(child)),
-  );
-
-  for (const profileDir of profileDirs.splice(0)) {
-    await removeDirectoryWithRetry(profileDir);
-  }
+  // Sequential and newest-first, through the shared owner. The previous form
+  // stopped every recorded handle in parallel and then deleted profile
+  // directories, which raced Chrome's own exit; the owner ties each directory
+  // to the process that must release it first.
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
+  profileDirs.splice(0);
 }
 
 export function startProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  // One owned process group per spawn. See `harness-process-tree.mjs`: the
+  // handle a harness records is not always the process holding the port.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: options.cwd ?? repoRoot,
     env: {
       ...process.env,
@@ -98,6 +105,7 @@ export function startProcess(name, command, args, options = {}) {
       FORCE_COLOR: '0',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    ownedPort: options.ownedPort ?? null,
   });
 
   startedProcesses.push(child);
@@ -172,7 +180,7 @@ export function launchBrowserProfile(
   const userDataDir = mkdtempSync(resolve(tmpdir(), `dnd-${name}-`));
   profileDirs.push(userDataDir);
 
-  return startProcess(name, browserPath, [
+  const chrome = startProcess(name, browserPath, [
     ...getChromeDisplayArgs({
       windowPosition: options.windowPosition,
       windowSize: options.windowSize ?? { height: 1040, width: 950 },
@@ -195,6 +203,13 @@ export function launchBrowserProfile(
     '--disable-renderer-backgrounding',
     'about:blank',
   ]);
+
+  // Removed only after this Chrome exits. A profile deleted from under a live
+  // browser comes back half-written, and the next run inherits a state no
+  // product code ever produces.
+  ownDirectoryAfter(getOwnedRecord(chrome), userDataDir);
+
+  return chrome;
 }
 
 export async function createCdpPage(debugPort, url) {
@@ -596,38 +611,6 @@ function getBrowserCandidates() {
     'chrome',
     'msedge',
   ];
-}
-
-async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode) {
-    return;
-  }
-
-  child.kill('SIGTERM');
-
-  const exited = await Promise.race([
-    once(child, 'exit').then(() => true),
-    delay(5000).then(() => false),
-  ]);
-
-  if (!exited && child.exitCode === null) {
-    child.kill('SIGKILL');
-    await Promise.race([
-      once(child, 'exit').then(() => true),
-      delay(5000).then(() => false),
-    ]);
-  }
-}
-
-async function removeDirectoryWithRetry(directory) {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    try {
-      rmSync(directory, { force: true, recursive: true });
-      return;
-    } catch {
-      await delay(250);
-    }
-  }
 }
 
 export function delay(ms) {

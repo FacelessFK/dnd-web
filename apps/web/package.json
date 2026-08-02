@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test": "node --import tsx --test \"lib/*.test.ts\"",
+    "test": "node --import tsx --test \"lib/*.test.ts\" \"scripts/*.test.mjs\"",
     "test:smoke:builder-export-db": "node scripts/character-builder-export-db-smoke.mjs",
     "test:smoke:map-builder": "node scripts/map-builder-smoke.mjs",
     "test:smoke:bridge-db": "node scripts/runtime-bridge-db-smoke.mjs",

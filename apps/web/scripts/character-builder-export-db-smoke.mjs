@@ -20,6 +20,13 @@ import {
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
 
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, '..');
 const repoRoot = resolve(webDir, '../..');
@@ -482,7 +489,9 @@ function assertOk(response, label) {
 }
 
 function startProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  // Owned as a process group. A server reached through a `corepack -> pnpm`
+  // wrapper outlives a `kill` aimed at the handle; see `harness-process-tree`.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: options.cwd ?? repoRoot,
     env: {
       ...process.env,
@@ -566,7 +575,7 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   const userDataDir = mkdtempSync(resolve(tmpdir(), `dnd-${name}-`));
   profileDirs.push(userDataDir);
 
-  return startProcess(name, browserPath, [
+  const chrome = startProcess(name, browserPath, [
     ...getChromeDisplayArgs({ windowSize: { height: 1000, width: 1400 } }),
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${userDataDir}`,
@@ -578,6 +587,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  // Removed only after this Chrome exits; a profile deleted beside a live
+  // browser comes back half-written.
+  ownDirectoryAfter(getOwnedRecord(chrome), userDataDir);
+
+  return chrome;
 }
 
 async function createCdpPage(debugPort, url) {
@@ -1314,44 +1329,16 @@ function redactSecrets(value) {
 }
 
 async function cleanup() {
-  const children = [...startedProcesses].reverse();
-
-  for (const child of children) {
-    if (!child.killed) {
-      child.kill();
-    }
-  }
-
-  await Promise.allSettled(
-    children.map((child) => waitForProcessExit(child, 2000)),
-  );
-
-  for (const dir of profileDirs) {
-    await removeDirectory(dir);
-  }
+  // Through the shared owner; see `harness-process-tree.mjs`. Profile
+  // directories are released by the owner once their Chrome has exited, and
+  // the export scratch directories follow, since nothing holds those open.
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
+  profileDirs.splice(0);
 
   for (const dir of tempDirs) {
     await removeDirectory(dir);
   }
-}
-
-function waitForProcessExit(child, timeoutMs) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolveExit) => {
-    const done = () => {
-      clearTimeout(timeout);
-      child.off('close', done);
-      child.off('exit', done);
-      resolveExit();
-    };
-    const timeout = setTimeout(done, timeoutMs);
-
-    child.once('close', done);
-    child.once('exit', done);
-  });
 }
 
 async function removeDirectory(dir) {

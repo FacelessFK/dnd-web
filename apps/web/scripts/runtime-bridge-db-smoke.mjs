@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -17,6 +17,13 @@ import {
   getSessionInputAssignmentExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
+
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, '..');
@@ -960,7 +967,9 @@ async function validateTrainingRoomReadModels({
 }
 
 function startProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  // Owned as a process group. A server reached through a `corepack -> pnpm`
+  // wrapper outlives a `kill` aimed at the handle; see `harness-process-tree`.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: options.cwd ?? repoRoot,
     env: {
       ...process.env,
@@ -1044,7 +1053,7 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   const userDataDir = mkdtempSync(resolve(tmpdir(), `dnd-${name}-`));
   profileDirs.push(userDataDir);
 
-  return startProcess(name, browserPath, [
+  const chrome = startProcess(name, browserPath, [
     // Headed runs put the DM on the left and the player on the right so both
     // seats stay visible side by side.
     ...getChromeDisplayArgs({
@@ -1061,6 +1070,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  // Removed only after this Chrome exits; a profile deleted beside a live
+  // browser comes back half-written.
+  ownDirectoryAfter(getOwnedRecord(chrome), userDataDir);
+
+  return chrome;
 }
 
 async function createCdpPage(debugPort, url) {
@@ -1600,65 +1615,12 @@ function redactSecrets(value) {
 }
 
 async function cleanup() {
-  const children = [...startedProcesses].reverse();
-
-  for (const child of children) {
-    if (!child.killed) {
-      child.kill();
-    }
-  }
-
-  await Promise.allSettled(
-    children.map((child) => waitForProcessExit(child, 2000)),
-  );
-
-  for (const dir of profileDirs) {
-    await removeProfileDir(dir);
-  }
-}
-
-function waitForProcessExit(child, timeoutMs) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolveExit) => {
-    const done = () => {
-      clearTimeout(timeout);
-      child.off('close', done);
-      child.off('exit', done);
-      resolveExit();
-    };
-    const timeout = setTimeout(done, timeoutMs);
-
-    child.once('close', done);
-    child.once('exit', done);
-  });
-}
-
-async function removeProfileDir(dir) {
-  for (let attempt = 1; attempt <= 6; attempt += 1) {
-    try {
-      rmSync(dir, {
-        force: true,
-        maxRetries: 3,
-        recursive: true,
-        retryDelay: 250,
-      });
-      return;
-    } catch (error) {
-      if (attempt === 6) {
-        console.warn(
-          `[runtime-bridge-db-smoke] unable to remove browser profile directory after cleanup: ${redactSecrets(
-            error instanceof Error ? error.message : error,
-          )}`,
-        );
-        return;
-      }
-
-      await delay(500);
-    }
-  }
+  // Through the shared owner: a bare `child.kill()` reaches one process, and
+  // the server behind a `corepack -> pnpm` wrapper is not that process. The
+  // owner also holds each profile directory until its Chrome has exited.
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
+  profileDirs.splice(0);
 }
 
 function delay(ms) {

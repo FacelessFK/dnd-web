@@ -24,7 +24,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -33,6 +32,13 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  stopOwnedChild,
+  teardownOwnedProcesses,
+} from './harness-process-tree.mjs';
 import {
   getChromeDisplayArgs,
   getCloseGameMasterToolExpression,
@@ -83,13 +89,19 @@ export function getFreePort() {
 }
 
 export function startProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  // Owned as a process *group*, not as a handle. A server started through
+  // `corepack -> pnpm -> node --watch` outlives its wrapper, and signalling the
+  // wrapper was how four of them survived a clean acceptance sweep. The tree
+  // logic lives in `harness-process-tree.mjs`; this stays the same function it
+  // always was to every caller.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: options.cwd ?? repoRoot,
     env: {
       ...process.env,
       ...options.env,
       FORCE_COLOR: '0',
     },
+    ownedPort: options.ownedPort ?? null,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -185,7 +197,7 @@ export function launchBrowserProfile(name, browserPath, debugPort, options) {
 
   profileDirs.push(userDataDir);
 
-  return startProcess('chrome:' + name, browserPath, [
+  const chrome = startProcess('chrome:' + name, browserPath, [
     ...getChromeDisplayArgs({
       windowPosition: options?.windowPosition,
       windowSize: options?.windowSize,
@@ -200,6 +212,10 @@ export function launchBrowserProfile(name, browserPath, debugPort, options) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  ownDirectoryAfter(getOwnedRecord(chrome), userDataDir);
+
+  return chrome;
 }
 
 export async function createCdpPage(debugPort, url) {
@@ -1083,24 +1099,7 @@ export async function captureArtifacts(runDir, name, pages, extra = {}) {
 }
 
 export async function stopProcess(child, { timeoutMs = 8000 } = {}) {
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return;
-  }
-
-  child.kill('SIGTERM');
-
-  await Promise.race([
-    new Promise((resolveExit) => child.once('exit', resolveExit)),
-    delay(timeoutMs),
-  ]);
-
-  if (child.exitCode === null && child.signalCode === null) {
-    child.kill('SIGKILL');
-    await Promise.race([
-      new Promise((resolveExit) => child.once('exit', resolveExit)),
-      delay(4000),
-    ]);
-  }
+  await stopOwnedChild(child, { graceMs: timeoutMs, killMs: 4000 });
 }
 
 export function isProcessAlive(pid) {
@@ -1113,22 +1112,13 @@ export function isProcessAlive(pid) {
 }
 
 export async function cleanup() {
-  for (const child of startedProcesses.splice(0).reverse()) {
-    await stopProcess(child);
-  }
-
+  // Every owned group, newest first, then the profile directories - which are
+  // registered against the Chrome that holds them and are therefore removed
+  // only once that Chrome has actually exited.
+  startedProcesses.splice(0);
+  await teardownOwnedProcesses();
   processLogs.clear();
-
-  for (const dir of profileDirs.splice(0)) {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      try {
-        rmSync(dir, { force: true, recursive: true });
-        break;
-      } catch {
-        await delay(250);
-      }
-    }
-  }
+  profileDirs.splice(0);
 }
 
 /**

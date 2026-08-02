@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'node:child_process';
-import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -18,6 +17,13 @@ import {
   getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
 } from './runtime-smoke-diagnostics.mjs';
+
+import {
+  getOwnedRecord,
+  ownDirectoryAfter,
+  spawnOwnedProcess,
+  stopOwnedChild,
+} from './harness-process-tree.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webDir = resolve(scriptDir, '..');
@@ -274,7 +280,9 @@ async function enablePage(page) {
 }
 
 function startProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  // Owned as a process group. A server reached through a `corepack -> pnpm`
+  // wrapper outlives a `kill` aimed at the handle; see `harness-process-tree`.
+  const { child } = spawnOwnedProcess(name, command, args, {
     cwd: options.cwd ?? repoRoot,
     env: {
       ...process.env,
@@ -339,7 +347,7 @@ function launchBrowserProfile(name, browserPath, debugPort) {
   const userDataDir = mkdtempSync(resolve(tmpdir(), `dnd-${name}-`));
   profileDirs.push(userDataDir);
 
-  return startProcess(name, browserPath, [
+  const chrome = startProcess(name, browserPath, [
     // Headed runs put the DM on the left and the player on the right so both
     // seats stay visible side by side.
     ...getChromeDisplayArgs({
@@ -356,6 +364,12 @@ function launchBrowserProfile(name, browserPath, debugPort) {
     '--no-sandbox',
     'about:blank',
   ]);
+
+  // Removed only after this Chrome exits; a profile deleted beside a live
+  // browser comes back half-written.
+  ownDirectoryAfter(getOwnedRecord(chrome), userDataDir);
+
+  return chrome;
 }
 
 async function createCdpPage(debugPort, url) {
@@ -922,24 +936,7 @@ async function cleanup() {
 }
 
 async function stopProcess(child) {
-  if (!child || child.exitCode !== null || child.signalCode) {
-    return;
-  }
-
-  child.kill('SIGTERM');
-
-  const exited = await Promise.race([
-    once(child, 'exit').then(() => true),
-    delay(5000).then(() => false),
-  ]);
-
-  if (!exited && child.exitCode === null) {
-    child.kill('SIGKILL');
-    await Promise.race([
-      once(child, 'exit').then(() => true),
-      delay(5000).then(() => false),
-    ]);
-  }
+  await stopOwnedChild(child);
 }
 
 async function removeDirectoryWithRetry(directory) {
