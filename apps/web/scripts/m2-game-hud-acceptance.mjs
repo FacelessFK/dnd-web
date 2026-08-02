@@ -424,6 +424,12 @@ async function main() {
       await assertMapDominant(playerPage, `Player ${name}`);
       await assertNoOverflow(gmPage, `GM ${name}`);
       await assertNoOverflow(playerPage, `Player ${name}`);
+      await assertActionsSitBesideMap(gmPage, `GM ${name}`, 'gm-inspector');
+      await assertActionsSitBesideMap(
+        playerPage,
+        `Player ${name}`,
+        'player-actions',
+      );
       evidence.viewportsChecked.push(
         `${name} ${viewport.width}x${viewport.height}`,
       );
@@ -586,6 +592,62 @@ async function assertMapDominant(page, label) {
   if (measurement.mapHeight < measurement.viewportHeight * 0.3) {
     fail(
       `${label}: the map is only ${Math.round(measurement.mapHeight)}px tall in a ${measurement.viewportHeight}px viewport.`,
+    );
+  }
+}
+
+/**
+ * The map and the role's primary actions share one screenful.
+ *
+ * "The map remains visible while common actions are performed" is a layout
+ * requirement, and the way it fails is not a missing control - it is a control
+ * that exists a page and a half below the board. So this asserts both regions
+ * begin inside the first viewport height, which is what "beside" means once the
+ * columns layout is doing its job.
+ *
+ * It deliberately says nothing about the event feed or the GM tool region.
+ * Those are optional reading, they are allowed below the fold, and that is
+ * recorded as a known layout limitation rather than hidden by a looser
+ * assertion here.
+ */
+async function assertActionsSitBesideMap(page, label, actionRegion) {
+  const geometry = await page.evaluate(`(() => {
+    const read = (selector) => {
+      const node = document.querySelector(selector);
+
+      if (!node) {
+        return null;
+      }
+
+      const box = node.getBoundingClientRect();
+
+      return { bottom: box.bottom + window.scrollY, top: box.top + window.scrollY };
+    };
+
+    return {
+      actions: read('[data-hud-region="${actionRegion}"]'),
+      map: read('[data-hud-region="map"]'),
+      viewportHeight: window.innerHeight,
+    };
+  })()`);
+
+  if (!geometry.map) {
+    fail(`${label}: no map region on screen.`);
+  }
+
+  if (!geometry.actions) {
+    fail(`${label}: no ${actionRegion} region on screen.`);
+  }
+
+  if (geometry.map.top >= geometry.viewportHeight) {
+    fail(
+      `${label}: the map starts ${Math.round(geometry.map.top)}px down a ${geometry.viewportHeight}px viewport.`,
+    );
+  }
+
+  if (geometry.actions.top >= geometry.viewportHeight) {
+    fail(
+      `${label}: ${actionRegion} starts ${Math.round(geometry.actions.top)}px down a ${geometry.viewportHeight}px viewport, so reaching it scrolls the map away.`,
     );
   }
 }
