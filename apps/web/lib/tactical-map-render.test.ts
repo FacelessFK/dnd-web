@@ -10,6 +10,7 @@ import {
   buildBlockedCellKeys,
   buildMapDecor,
   buildMapTokens,
+  UNNAMED_TOKEN_LABEL,
   clampCamera,
   clampMapScale,
   createFitCamera,
@@ -538,4 +539,36 @@ test('getHealthColor steps from green through amber to red', () => {
   assert.equal(getHealthColor(0.1), '#e05252');
   assert.equal(getHealthColor(-5), '#e05252');
   assert.equal(getHealthColor(5), '#54d98c');
+});
+
+test('a placed token never falls back to the raw participant ID', () => {
+  const activeScene = {
+    placedCharacters: [
+      { participantId: 'player-001', position: { x: 1, y: 1 } },
+    ],
+  } as unknown as ActiveSceneState;
+
+  // The window between a placement frame and the character frame that names it.
+  // The token still has to be drawn - the character is standing there - but the
+  // seat ID is not a display name and must never reach the board.
+  const [token] = buildMapTokens({
+    activeScene,
+    characterNamesByParticipant: {},
+    currentTurnCombatantId: null,
+    currentTurnParticipantId: null,
+    ownParticipantId: 'player-001',
+    scene: null,
+    selectedCombatantId: null,
+    selectedParticipantId: null,
+    targetCombatantId: null,
+    targetParticipantId: null,
+  });
+
+  assert.ok(token);
+  assert.equal(token.name, UNNAMED_TOKEN_LABEL);
+  assert.equal(token.name.includes('player-001'), false);
+  assert.equal(token.initials.includes('player'), false);
+  // The ID stays available as data for selection and turn matching; it is the
+  // rendered *name* that must not be it.
+  assert.equal(token.participantId, 'player-001');
 });

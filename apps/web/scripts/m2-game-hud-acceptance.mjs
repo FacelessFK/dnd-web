@@ -58,6 +58,7 @@ import {
   reload,
   runDbReadinessCheck,
   serverDir,
+  setLabeledField,
   setReducedMotion,
   setViewport,
   startProcess,
@@ -80,9 +81,11 @@ import {
   repositionCombatant,
   revealCombatant,
   seedLibraryEntry,
+  setCell,
   setRunTag,
   setSessionCode,
   settleSseFrames,
+  waitForActiveScenePlacement,
   waitForStoredSessionId,
 } from './m1-table-flow.mjs';
 
@@ -361,6 +364,24 @@ async function main() {
     await waitForText(gmPage, [characterName], 'GM pending character');
     await clickButton(gmPage, ['Assign Runtime Copy']);
     await waitForText(playerPage, [characterName], 'Player assigned character');
+
+    // M3 gave the Player a point of view. Until their character is standing
+    // somewhere, they have no observer and the server projects them an empty
+    // map - correctly, and by design. Every "reaches the Player live" assertion
+    // below therefore needs a placed token first, or it would be asserting
+    // against a seat that can see nothing at all. The only control that places
+    // a token for another seat is the GM's own reposition.
+    step('GM places the assigned character so the Player has a viewpoint');
+    await setLabeledField(gmPage, 'Acting token', 'player-001');
+    await setCell(gmPage, 2, 2);
+    await clickButton(gmPage, ['DM Reposition']);
+    await waitForActiveScenePlacement({
+      expected: { x: 2, y: 2 },
+      gmPage,
+      participantId: 'player-001',
+      sessionId,
+      serverUrl,
+    });
 
     step('both shells mount, and each is the right one');
     await assertShellMounted(gmPage, 'gm');
@@ -747,8 +768,11 @@ async function assertNoForbiddenText(page, label) {
     const match = pattern.exec(text);
 
     if (match) {
+      const at = match.index ?? 0;
+
       fail(
-        `${label}: the Player surface rendered ${what}: ${JSON.stringify(match[0])}`,
+        `${label}: the Player surface rendered ${what}: ${JSON.stringify(match[0])}\n` +
+          `Context: ${JSON.stringify(text.slice(Math.max(0, at - 220), at + 220))}`,
       );
     }
   }

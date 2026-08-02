@@ -440,6 +440,16 @@ export function getTokenInitials(name: string): string {
  * list. Selection/turn/target flags are resolved here so the canvas only has to
  * paint what it is handed.
  */
+/**
+ * Stand-in for a token whose character name the client does not have yet.
+ *
+ * Deliberately not localized here: this module is pure derivation with no
+ * access to the message catalogue, and the renderer draws initials from it. It
+ * reads as a neutral placeholder in both locales and, unlike a seat ID, says
+ * nothing.
+ */
+export const UNNAMED_TOKEN_LABEL = '—';
+
 export function buildMapTokens(params: {
   activeScene: ActiveSceneState | null;
   characterNamesByParticipant: Record<
@@ -460,7 +470,13 @@ export function buildMapTokens(params: {
   for (const placement of params.activeScene?.placedCharacters ?? []) {
     const character =
       params.characterNamesByParticipant[placement.participantId];
-    const name = character?.name ?? placement.participantId;
+    // Never the participant ID. A placed token whose character name has not
+    // arrived yet - the window between the placement frame and the character
+    // frame - used to fall back to the raw seat ID and paint it on the board,
+    // labels and all. That is the same class of leak as an encounter ID
+    // reaching a player's screen, and it is now unreachable rather than
+    // unlikely.
+    const name = character?.name ?? UNNAMED_TOKEN_LABEL;
 
     tokens.push({
       defeated: character ? character.hp.current <= 0 : false,
