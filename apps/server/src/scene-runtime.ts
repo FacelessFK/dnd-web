@@ -41,6 +41,12 @@ export function createSceneRecord(
     terrain: sceneInput.terrain
       ? applySceneTerrainCells(sceneInput.grid, sceneInput.terrain, [])
       : createSceneTerrain(sceneInput.grid),
+    // Only written when the author asked for one. Leaving it absent is what
+    // makes every pre-M3 scene, and every scene created without a lighting
+    // opinion, read back as ambient bright.
+    ...(sceneInput.ambientLight
+      ? { ambientLight: sceneInput.ambientLight }
+      : {}),
     entities: [],
     createdAt: now,
     updatedAt: now,
@@ -59,6 +65,9 @@ export function createSceneEntity(entityInput: SceneEntityInput): SceneEntity {
     hidden: entityInput.hidden,
     combatant: null,
     transition: null,
+    lightSource: entityInput.lightSource
+      ? structuredClone(entityInput.lightSource)
+      : null,
     meta: structuredClone(entityInput.meta ?? {}),
   };
 }
@@ -76,6 +85,9 @@ export function createSceneTransitionEntity(
     blocksVision: transitionInput.blocksVision,
     hidden: transitionInput.hidden,
     combatant: null,
+    lightSource: transitionInput.lightSource
+      ? structuredClone(transitionInput.lightSource)
+      : null,
     transition: {
       kind: transitionInput.kind,
       targetSceneId: transitionInput.targetSceneId,

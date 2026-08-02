@@ -503,3 +503,198 @@ test('the player projection leaves the stored scene untouched for the DM', () =>
   assert.equal(dmScene.entities.length, 1);
   assert.equal(dmScene.entities[0]!.hidden, true);
 });
+
+// ---------------------------------------------------------------------------
+// Lighting data round trips
+// ---------------------------------------------------------------------------
+// Every one of these was a real defect caught by the M3 browser smoke rather
+// than by review: the schemas accepted the new fields and the command handlers
+// dropped them on the floor, so a dark scene came back bright and a torch could
+// not be snuffed. A field that validates but is never persisted is worse than a
+// missing field, because everything about it looks like it works.
+
+test('a scene created as dark stays dark', () => {
+  const { runtime, sessionId } = createTable();
+
+  const scene = runtime.createScene({
+    commandId: 'create-scene-dark',
+    type: 'create_scene',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      scene: {
+        name: 'Unlit Vault',
+        grid: { width: 6, height: 6, cellSizeFeet: 5 },
+        ambientLight: 'dark',
+      },
+    },
+  });
+
+  assert.equal(scene.ambientLight, 'dark');
+  assert.equal(
+    getAuthoritativeSceneAs(runtime, sessionId, scene.id, 'dm-001')
+      .ambientLight,
+    'dark',
+  );
+});
+
+test('a scene created without an opinion carries no ambient light at all', () => {
+  const { scene } = createTable();
+
+  assert.equal(scene.ambientLight, undefined);
+});
+
+test('a placed entity keeps the light source it was placed with', () => {
+  const { runtime, scene, sessionId } = createTable();
+
+  const withTorch = runtime.placeEntityInScene({
+    commandId: 'place-torch',
+    type: 'place_entity_in_scene',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      sceneId: scene.id,
+      entity: {
+        type: 'object',
+        name: 'Torch',
+        position: { x: 2, y: 2 },
+        footprint: { width: 1, height: 1 },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+        lightSource: { enabled: true, brightRadius: 2, dimRadius: 5 },
+      },
+    },
+  });
+  const torch = withTorch.entities.find((entity) => entity.name === 'Torch');
+
+  assert.deepEqual(torch?.lightSource, {
+    enabled: true,
+    brightRadius: 2,
+    dimRadius: 5,
+  });
+});
+
+test('an entity placed without a light source emits nothing', () => {
+  const { runtime, scene, sessionId } = createTable();
+
+  const placed = placeEntity(runtime, sessionId, scene.id, {
+    name: 'Crate',
+    hidden: false,
+    position: { x: 1, y: 1 },
+  });
+
+  assert.equal(placed.entities[0]?.lightSource, null);
+});
+
+test('a light source can be snuffed and relit through update_scene_entity', () => {
+  const { runtime, scene, sessionId } = createTable();
+
+  const withTorch = runtime.placeEntityInScene({
+    commandId: 'place-torch-toggle',
+    type: 'place_entity_in_scene',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      sceneId: scene.id,
+      entity: {
+        type: 'object',
+        name: 'Torch',
+        position: { x: 2, y: 2 },
+        footprint: { width: 1, height: 1 },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+        lightSource: { enabled: true, brightRadius: 1, dimRadius: 4 },
+      },
+    },
+  });
+  const entityId = withTorch.entities.find(
+    (entity) => entity.name === 'Torch',
+  )!.id;
+
+  const setLight = (lightSource: unknown, commandId: string) =>
+    runtime.updateSceneEntity({
+      commandId,
+      type: 'update_scene_entity',
+      actor: { participantId: 'dm-001' },
+      payload: {
+        sessionId,
+        sceneId: scene.id,
+        entityId,
+        entity: { lightSource } as never,
+      },
+    });
+
+  const snuffed = setLight(
+    { enabled: false, brightRadius: 1, dimRadius: 4 },
+    'snuff-torch',
+  );
+
+  assert.equal(
+    snuffed.entities.find((entity) => entity.id === entityId)?.lightSource
+      ?.enabled,
+    false,
+  );
+
+  const relit = setLight(
+    { enabled: true, brightRadius: 3, dimRadius: 6 },
+    'relight-torch',
+  );
+
+  assert.deepEqual(
+    relit.entities.find((entity) => entity.id === entityId)?.lightSource,
+    { enabled: true, brightRadius: 3, dimRadius: 6 },
+  );
+
+  const removed = setLight(null, 'remove-torch-light');
+
+  assert.equal(
+    removed.entities.find((entity) => entity.id === entityId)?.lightSource,
+    null,
+  );
+});
+
+test('an update that says nothing about light leaves the light alone', () => {
+  const { runtime, scene, sessionId } = createTable();
+
+  const withTorch = runtime.placeEntityInScene({
+    commandId: 'place-torch-untouched',
+    type: 'place_entity_in_scene',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      sceneId: scene.id,
+      entity: {
+        type: 'object',
+        name: 'Torch',
+        position: { x: 2, y: 2 },
+        footprint: { width: 1, height: 1 },
+        blocksMovement: false,
+        blocksVision: false,
+        hidden: false,
+        lightSource: { enabled: true, brightRadius: 1, dimRadius: 4 },
+      },
+    },
+  });
+  const entityId = withTorch.entities.find(
+    (entity) => entity.name === 'Torch',
+  )!.id;
+
+  const renamed = runtime.updateSceneEntity({
+    commandId: 'rename-torch',
+    type: 'update_scene_entity',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      sceneId: scene.id,
+      entityId,
+      entity: { name: 'Brazier' },
+    },
+  });
+
+  assert.deepEqual(
+    renamed.entities.find((entity) => entity.id === entityId)?.lightSource,
+    { enabled: true, brightRadius: 1, dimRadius: 4 },
+  );
+});

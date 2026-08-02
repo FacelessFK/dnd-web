@@ -2089,6 +2089,13 @@ export class InMemoryGameRuntime<
             hidden: command.payload.entity.hidden ?? existingEntity.hidden,
           }
         : {}),
+      ...('lightSource' in command.payload.entity
+        ? {
+            lightSource: command.payload.entity.lightSource
+              ? structuredClone(command.payload.entity.lightSource)
+              : null,
+          }
+        : {}),
       ...('meta' in command.payload.entity
         ? {
             meta: structuredClone(
@@ -2401,6 +2408,13 @@ export class InMemoryGameRuntime<
       ...('hidden' in command.payload.transition
         ? {
             hidden: command.payload.transition.hidden ?? existingEntity.hidden,
+          }
+        : {}),
+      ...('lightSource' in command.payload.transition
+        ? {
+            lightSource: command.payload.transition.lightSource
+              ? structuredClone(command.payload.transition.lightSource)
+              : null,
           }
         : {}),
       combatant: null,
