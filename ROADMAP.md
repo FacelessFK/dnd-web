@@ -178,9 +178,29 @@ state, command orchestration, recovery, character management, map editing,
 diagnostics. A client state model with selectors and hooks rather than one
 component owning every variable. Diagnostics behind a GM or development surface.
 
-**Acceptance criteria.** No component over 500 lines. The player bundle contains
-no diagnostic panel. Every existing runtime behaviour still passes its tests. A
-player-mode screenshot contains no raw identifier or protocol field name.
+**Acceptance criteria.**
+
+- No M2-owned component exceeds 500 lines. M2 owns the runtime HUD: the role
+  shells, the runtime composition root, runtime panels, and diagnostics -
+  everything under `apps/web/app/runtime/`.
+- Legacy components already over the limit outside that surface are pinned by
+  the repository shape test and assigned to the milestone that will decompose
+  each one. They may not grow while exempt, every exemption names its owning
+  milestone and its reason, and an exemption must be removed once its milestone
+  brings the file under the limit - the test fails on a stale entry as loudly as
+  on a violated one.
+- The Player and the GM use distinct production shells.
+- `runtime-cockpit.tsx` remains a small composition root.
+- The player bundle contains no diagnostic panel.
+- Every existing runtime behaviour still passes its tests.
+- A player-mode screenshot contains no raw identifier or protocol field name.
+
+The original wording said "no component over 500 lines" without saying which
+components. Read literally that made M2 responsible for decomposing the map
+builder, the character builder and the renderer - three surfaces this milestone
+was explicitly told to leave alone, and three that later milestones already own.
+The criterion above is the same rule with its scope stated, not a weaker one:
+inside the surface M2 rebuilt it is unconditional.
 
 **Tests.** Existing helper tests preserved and extended per extracted module;
 browser smokes updated to the new surfaces; both locales verified for RTL.
@@ -189,7 +209,7 @@ browser smokes updated to the new surfaces; both locales verified for RTL.
 
 **Excludes.** Renderer replacement. New gameplay.
 
-**Delivered.** `runtime-cockpit.tsx` is a 110-line composition root: it chooses
+**Delivered.** `runtime-cockpit.tsx` is a 135-line composition root: it chooses
 a role shell and provides its dependencies. `PlayerGameShell` and
 `GameMasterGameShell` are the production surfaces, each a map-dominant layout
 with a compact status strip, one contextual side region and one collapsible tool
@@ -201,9 +221,31 @@ Diagnostics moved to `app/runtime/diagnostics/`, which makes the boundary
 provable: a repository-shape test walks the Player shell's import graph and
 fails if anything under that directory appears in it, with the inverse assertion
 on the GM shell so a walk that resolved nothing cannot pass for the wrong
-reason. The same test enforces the 500-line rule, listing the five components
-that were already over it - all outside the runtime surface - at their exact
-current size, so none can grow and each must leave the list once decomposed.
+reason. The same test enforces the 500-line rule.
+
+Every M2-owned component is under it; the largest is
+`hud/player-readiness-panels.tsx` at 468. Five components were already over the
+limit when the rule landed, and the import graph - not their filenames - decides
+who owns each:
+
+| component                                                | lines | owner | why it is outside M2                                                                                                                        |
+| -------------------------------------------------------- | ----- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/maps/map-builder.tsx`                               | 1211  | M5    | The `/maps` route. Reached only from `app/maps/page.tsx`; no runtime shell reaches it.                                                      |
+| `app/runtime/tactical-map.tsx`                           | 1097  | M4    | The renderer surface, reached only through `runtime-map-stage.tsx`. M4 may swap the drawing layer behind that seam.                         |
+| `.../simple-builder/components/sheet/CharacterSheet.tsx` | 818   | M6    | The Character Builder review sheet. Not the Player HUD character surface, which is `app/runtime/panels/character-summary.tsx` at 127 lines. |
+| `app/characters/character-builder-ui.tsx`                | 688   | M6    | The `/characters` builder routes.                                                                                                           |
+| `.../simple-builder/components/steps/ClassStep.tsx`      | 532   | M6    | A Character Builder wizard step.                                                                                                            |
+
+Only the renderer is inside a runtime shell's import graph, and the test asserts
+it is reached through the map-stage seam and nowhere else - which is what lets
+M4 replace the drawing layer without either shell noticing. The other four are
+asserted _unreachable_ from both shells, so a builder surface cannot drift into
+the runtime by accident.
+
+None of this is a general allowance. Each entry pins a maximum size, names the
+milestone that will remove it, and fails the build if it grows, if its declared
+reachability stops matching the graph, or if it is still listed after its
+milestone brings it under the limit.
 
 `test:smoke:m2-game-hud` is the acceptance harness. Map dominance is measured
 rather than judged: 70% of its row at 1366, 77% at 1920, 100% on mobile. It runs
@@ -211,12 +253,22 @@ in Persian and English at 1920, 1366 and 430px, checks the Player surface for
 UUIDs, record IDs, participant IDs and protocol command names, opens and closes
 a mobile drawer and confirms focus returned to its opener.
 
-Four defects were found by these harnesses and fixed rather than worked around:
-a subscription opened without a credential stayed dead forever because
-`EventSource` retries the URL it was built with; the credential cache went stale
-against any write it did not make itself; `EncounterStatusFeedback` rendered the
-encounter ID onto a player's screen; and headless Chrome had been running every
-harness at 800x600, so no layout assertion described the viewport it claimed.
+Nine defects were found by these harnesses and fixed rather than worked around.
+The ones worth naming: a subscription opened without a credential stayed dead
+forever, because `EventSource` retries the URL it was built with; the credential
+cache went stale against any write it did not make itself; recovery notes and
+`EncounterStatusFeedback` put a protocol failure and an encounter ID onto a
+player's screen; the Character Sheet panel showed a player their own participant
+and character IDs and was entirely untranslated; and headless Chrome had been
+running every harness at 800x600, so no layout assertion described the viewport
+it claimed.
+
+**Layout limitation carried forward.** At 1366x768 the shell is about one and a
+half page heights, so reading the event feed scrolls the map off screen. The map
+is the dominant region and every common Player and GM action is reachable beside
+it without scrolling; only the optional event feed is below the fold. A
+viewport-locked layout was attempted and reverted - it collapsed the map to
+34px, which the acceptance harness caught. Polish, not a blocker.
 
 ---
 

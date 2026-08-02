@@ -98,10 +98,18 @@ goes in a helper module with a test, never inline in a component.
 
 **No React component exceeds 500 lines.** `scripts/smoke.test.mjs` enforces it.
 `runtime-cockpit.tsx` reached ~8,800 lines and was the largest known defect in
-the repository before M2 split it; the limit is what stops that recurring. Five
-components were already over it when the rule landed and are listed by name at
-their exact size, so none can grow and each must leave the list once decomposed.
-If a change would push a component over, extract instead.
+the repository before M2 split it; the limit is what stops that recurring. If a
+change would push a component over, extract instead.
+
+Five components were already over it when the rule landed. Each has a structured
+exemption recording its path, a pinned maximum size, the milestone that owns
+decomposing it, why it is outside the current milestone, and whether each role
+shell may reach it - asserted in **both** directions against the real import
+graph, so a stale claim fails as loudly as a violated one. The build breaks if
+an exempt file grows, if an unlisted component crosses the limit, if an
+exemption has no owning milestone, or if an exemption survives its own fix.
+There is no directory-level or open-ended allowance, and adding one would be the
+thing the rule exists to prevent.
 
 **The runtime has three shells and one composition root.**
 `runtime-cockpit.tsx` chooses between `RuntimeEntrySurface`, `PlayerGameShell`
