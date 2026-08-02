@@ -467,7 +467,6 @@ test('runtime smoke diagnostics read and restore the recover session input', () 
   assert.equal(input.value, 'session-restore-123');
   assert.deepEqual(dispatchedEvents, ['input', 'change']);
 });
-
 // --- M2 Game HUD shape ------------------------------------------------------
 
 /**
@@ -485,29 +484,89 @@ test('runtime smoke diagnostics read and restore the recover session input', () 
 const componentLineLimit = 500;
 
 /**
- * Components that were already over the limit when the rule was introduced.
+ * The surface M2 owns, and therefore the surface the limit is unconditional on.
  *
- * Each is outside the M2 runtime surface and none of them grew during it. The
- * list is deliberately exact rather than a glob: adding a file to it is a
- * visible decision in a diff, and shrinking one below the limit fails this
- * test until the entry is removed, so the list can only get shorter.
+ * Everything under `app/runtime/` is a Game HUD shell, a runtime panel, the
+ * composition root, or diagnostics - except the renderer component, which is
+ * listed as an exemption below with its own milestone. Membership is decided by
+ * path because that is what "M2 owns this file" actually means here: the
+ * milestone rebuilt that directory.
  */
-const knownOversizedComponents = new Map([
-  ['apps/web/app/maps/map-builder.tsx', 1211],
-  ['apps/web/app/runtime/tactical-map.tsx', 1097],
-  [
-    'apps/web/app/characters/simple-builder/components/sheet/CharacterSheet.tsx',
-    818,
-  ],
-  ['apps/web/app/characters/character-builder-ui.tsx', 688],
-  [
-    'apps/web/app/characters/simple-builder/components/steps/ClassStep.tsx',
-    532,
-  ],
-]);
+const m2OwnedPrefixes = ['apps/web/app/runtime/'];
+
+/** Milestones that may own an exemption. An unknown owner is a failure. */
+const owningMilestones = new Set(['M4', 'M5', 'M6']);
 
 /**
- * Files the rule does not describe, with the reason for each.
+ * Components that were already over the limit when the rule landed.
+ *
+ * Not technical debt in general: each is a bounded, named, temporary obligation
+ * with an owning milestone that will decompose it. The record is deliberately
+ * verbose - a path alone would let the next oversized file in without anyone
+ * having to say who owns it or why it is not M2's problem.
+ *
+ * `maxLines` pins the file against growth. `allowedInPlayerGraph` and
+ * `allowedInGameMasterGraph` are asserted in *both* directions, so a stale
+ * entry fails as loudly as a violated one: claiming a file is unreachable when
+ * it is reachable is a boundary breach, and claiming it is reachable when it is
+ * not is configuration nobody re-checked.
+ */
+const legacyOversizedComponents = [
+  {
+    allowedInGameMasterGraph: false,
+    allowedInPlayerGraph: false,
+    maxLines: 1211,
+    owner: 'M5',
+    path: 'apps/web/app/maps/map-builder.tsx',
+    reason:
+      'The /maps builder route. Reachable only from app/maps/page.tsx and from no runtime shell; ROADMAP M5 completes the map builder.',
+  },
+  {
+    // The one exemption that *is* in the runtime graph, and the only one that
+    // may be. It is the renderer component behind the RuntimeMapStage seam -
+    // camera maths and canvas art already live in lib/tactical-map-render.ts
+    // and lib/tactical-map-draw.ts, and this owns pointers and React state.
+    // ROADMAP M4 may swap the drawing layer behind that seam, which is the
+    // whole reason M2 was told not to replace the renderer.
+    allowedInGameMasterGraph: true,
+    allowedInPlayerGraph: true,
+    maxLines: 1097,
+    owner: 'M4',
+    path: 'apps/web/app/runtime/tactical-map.tsx',
+    reason:
+      'The tactical renderer surface, reached only through runtime-map-stage.tsx. ROADMAP M4 owns renderer quality and may replace the drawing layer behind that seam.',
+  },
+  {
+    allowedInGameMasterGraph: false,
+    allowedInPlayerGraph: false,
+    maxLines: 818,
+    owner: 'M6',
+    path: 'apps/web/app/characters/simple-builder/components/sheet/CharacterSheet.tsx',
+    reason:
+      'The Character Builder review sheet, reachable only from simple-builder/App.tsx. It is not the Player HUD character surface - that is app/runtime/panels/character-summary.tsx - and ROADMAP M6 owns character foundations.',
+  },
+  {
+    allowedInGameMasterGraph: false,
+    allowedInPlayerGraph: false,
+    maxLines: 688,
+    owner: 'M6',
+    path: 'apps/web/app/characters/character-builder-ui.tsx',
+    reason:
+      'The /characters builder routes. Reachable only from those pages; ROADMAP M6 owns character foundations.',
+  },
+  {
+    allowedInGameMasterGraph: false,
+    allowedInPlayerGraph: false,
+    maxLines: 532,
+    owner: 'M6',
+    path: 'apps/web/app/characters/simple-builder/components/steps/ClassStep.tsx',
+    reason:
+      'A Character Builder wizard step, reachable only from simple-builder/App.tsx. ROADMAP M6 owns character foundations.',
+  },
+];
+
+/**
+ * Files the component rule does not describe at all, with the reason for each.
  *
  * `i18n.tsx` is the message catalogue. It is `.tsx` only because it also
  * exports the provider and the language switcher; the length is two locales of
@@ -519,10 +578,21 @@ const componentLimitExemptions = new Map([
   ['apps/web/lib/i18n.tsx', 'bilingual message catalogue, not a component'],
 ]);
 
+const shellEntryPoints = {
+  gameMaster: 'apps/web/app/runtime/shells/game-master-game-shell.tsx',
+  player: 'apps/web/app/runtime/shells/player-game-shell.tsx',
+};
+
+/** Directories whose components must never enter a runtime shell's graph. */
+const builderSurfacePrefixes = [
+  'apps/web/app/characters/',
+  'apps/web/app/maps/',
+];
+
 function listComponentFiles() {
   const found = [];
 
-  const walk = (relativeDirectory) => {
+  const walkTree = (relativeDirectory) => {
     const absolute = join(root, relativeDirectory);
 
     for (const item of readdirSync(absolute, { withFileTypes: true })) {
@@ -530,7 +600,7 @@ function listComponentFiles() {
 
       if (item.isDirectory()) {
         if (item.name !== 'node_modules' && item.name !== '.next') {
-          walk(relative);
+          walkTree(relative);
         }
 
         continue;
@@ -542,8 +612,8 @@ function listComponentFiles() {
     }
   };
 
-  walk('apps/web/app');
-  walk('apps/web/lib');
+  walkTree('apps/web/app');
+  walkTree('apps/web/lib');
 
   return found.sort();
 }
@@ -556,25 +626,123 @@ function countLines(relativePath) {
   return lines.at(-1) === '' ? lines.length - 1 : lines.length;
 }
 
-test('no React component exceeds the M2 line limit', () => {
+function isM2Owned(relativePath) {
+  return m2OwnedPrefixes.some((prefix) => relativePath.startsWith(prefix));
+}
+
+function findExemption(relativePath) {
+  return legacyOversizedComponents.find((entry) => entry.path === relativePath);
+}
+
+/**
+ * Every local module reachable from an entry point, with the path that reached
+ * it.
+ *
+ * Walked rather than grepped so a transitive import counts. The failures this
+ * guards against - a player reaching diagnostics, a builder component reaching
+ * a shell - are exactly the ones that arrive through a third file nobody
+ * thought about.
+ */
+function collectImportGraph(entryPath) {
+  const reached = new Map([[entryPath, [entryPath]]]);
+  const queue = [entryPath];
+
+  const resolveLocal = (fromPath, specifier) => {
+    const base = join(dirname(fromPath), specifier);
+
+    for (const candidate of [
+      `${base}.tsx`,
+      `${base}.ts`,
+      `${base}/index.tsx`,
+      `${base}/index.ts`,
+    ]) {
+      if (existsSync(join(root, candidate))) {
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const source = readFileSync(join(root, current), 'utf8');
+
+    for (const match of source.matchAll(/from\s+'(\.[^']+)'/g)) {
+      const next = resolveLocal(current, match[1]);
+
+      if (next && !reached.has(next)) {
+        reached.set(next, [...reached.get(current), next]);
+        queue.push(next);
+      }
+    }
+  }
+
+  return reached;
+}
+
+test('every exemption names an owning milestone and a reason', () => {
+  for (const entry of legacyOversizedComponents) {
+    assert.ok(
+      entry.owner && owningMilestones.has(entry.owner),
+      `${entry.path} is exempt but its owner ${JSON.stringify(entry.owner)} is not one of ${[...owningMilestones].join(', ')}. An exemption without a milestone that will remove it is permanent debt.`,
+    );
+    assert.ok(
+      typeof entry.reason === 'string' && entry.reason.length > 40,
+      `${entry.path} is exempt without saying why it is outside M2.`,
+    );
+    assert.equal(
+      typeof entry.maxLines,
+      'number',
+      `${entry.path} is exempt without a pinned size.`,
+    );
+    assert.equal(
+      typeof entry.allowedInPlayerGraph,
+      'boolean',
+      `${entry.path} must state whether the Player shell may reach it.`,
+    );
+    assert.equal(
+      typeof entry.allowedInGameMasterGraph,
+      'boolean',
+      `${entry.path} must state whether the GM shell may reach it.`,
+    );
+  }
+
+  const paths = legacyOversizedComponents.map((entry) => entry.path);
+
+  assert.equal(
+    paths.length,
+    new Set(paths).size,
+    'the exemption list holds a duplicate path',
+  );
+});
+
+test('no M2-owned component exceeds the line limit', () => {
   const offenders = [];
 
   for (const relativePath of listComponentFiles()) {
+    if (
+      !isM2Owned(relativePath) ||
+      componentLimitExemptions.has(relativePath)
+    ) {
+      continue;
+    }
+
     const lines = countLines(relativePath);
 
     if (lines <= componentLineLimit) {
       continue;
     }
 
-    if (componentLimitExemptions.has(relativePath)) {
-      continue;
-    }
+    const exemption = findExemption(relativePath);
 
-    if (knownOversizedComponents.has(relativePath)) {
-      // Grandfathered, but not licensed to grow.
+    // An M2-owned file may only be over the limit if it has been explicitly
+    // reassigned to a later milestone with a reason - which is what the
+    // renderer component is. Anything else is the milestone regressing.
+    if (exemption) {
       assert.ok(
-        lines <= knownOversizedComponents.get(relativePath),
-        `${relativePath} grew to ${lines} lines; it was already over the ${componentLineLimit}-line limit at ${knownOversizedComponents.get(relativePath)} and must not get worse.`,
+        lines <= exemption.maxLines,
+        `${relativePath} grew to ${lines} lines against a pinned ${exemption.maxLines}.`,
       );
       continue;
     }
@@ -585,28 +753,64 @@ test('no React component exceeds the M2 line limit', () => {
   assert.deepEqual(
     offenders,
     [],
-    `These components exceed ${componentLineLimit} lines. Extract instead of adding to them:\n${offenders.join('\n')}`,
+    `These Game HUD components exceed ${componentLineLimit} lines. Extract instead of adding to them:\n${offenders.join('\n')}`,
   );
 });
 
-test('the grandfathered list holds no file that is already compliant', () => {
-  // Keeps the list honest: once a file is decomposed, its entry has to go, or
-  // the next oversized component can be hidden by an entry nobody re-checked.
-  for (const [relativePath, recorded] of knownOversizedComponents) {
-    assert.ok(
-      existsSync(join(root, relativePath)),
-      `${relativePath} is listed as oversized but does not exist; remove the entry.`,
-    );
+test('no unknown component anywhere exceeds the line limit', () => {
+  const offenders = [];
+
+  for (const relativePath of listComponentFiles()) {
+    if (componentLimitExemptions.has(relativePath)) {
+      continue;
+    }
 
     const lines = countLines(relativePath);
 
+    if (lines <= componentLineLimit) {
+      continue;
+    }
+
+    if (findExemption(relativePath)) {
+      continue;
+    }
+
+    offenders.push(`${relativePath} (${lines} lines)`);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `These components exceed ${componentLineLimit} lines and are not on the exemption list. Either decompose them or add an entry naming the milestone that will:\n${offenders.join('\n')}`,
+  );
+});
+
+test('an exempt component may not grow', () => {
+  for (const entry of legacyOversizedComponents) {
+    assert.ok(
+      existsSync(join(root, entry.path)),
+      `${entry.path} is exempt but does not exist; remove the stale entry.`,
+    );
+
+    const lines = countLines(entry.path);
+
+    assert.ok(
+      lines <= entry.maxLines,
+      `${entry.path} is ${lines} lines but is pinned at ${entry.maxLines}. ${entry.owner} owns decomposing it; it may not get worse first.`,
+    );
+  }
+});
+
+test('an exemption disappears once its component is compliant', () => {
+  // Keeps the list from outliving the problem. Once a milestone decomposes a
+  // file, its entry has to go - otherwise the next oversized component can be
+  // hidden behind an entry nobody re-checked.
+  for (const entry of legacyOversizedComponents) {
+    const lines = countLines(entry.path);
+
     assert.ok(
       lines > componentLineLimit,
-      `${relativePath} is now ${lines} lines and no longer needs an exemption; remove the entry.`,
-    );
-    assert.ok(
-      lines <= recorded,
-      `${relativePath} is ${lines} lines but was recorded at ${recorded}.`,
+      `${entry.path} is now ${lines} lines and no longer needs an exemption; remove the entry and let the limit apply.`,
     );
   }
 });
@@ -634,59 +838,18 @@ test('the runtime composition root stays a composition root', () => {
   );
 });
 
-/**
- * The Player shell must not be able to reach the diagnostics UI.
- *
- * Walked as an import graph rather than checked at the call site, because the
- * property has to keep holding when someone adds a panel in a hurry. A player
- * seeing a raw protocol payload is not a cosmetic defect - it is the browser
- * showing data the role projection exists to withhold.
- */
-function collectLocalImports(relativePath, seen = new Set()) {
-  if (seen.has(relativePath)) {
-    return seen;
-  }
-
-  seen.add(relativePath);
-
-  const source = readFileSync(join(root, relativePath), 'utf8');
-  const pattern = /from\s+'(\.[^']+)'/g;
-  let match = pattern.exec(source);
-
-  while (match) {
-    const specifier = match[1];
-    const resolvedBase = join(dirname(relativePath), specifier);
-
-    for (const candidate of [
-      `${resolvedBase}.tsx`,
-      `${resolvedBase}.ts`,
-      `${resolvedBase}/index.tsx`,
-      `${resolvedBase}/index.ts`,
-    ]) {
-      if (existsSync(join(root, candidate))) {
-        collectLocalImports(candidate, seen);
-        break;
-      }
-    }
-
-    match = pattern.exec(source);
-  }
-
-  return seen;
-}
-
 test('the Player shell imports no diagnostics module, directly or otherwise', () => {
-  const reachable = collectLocalImports(
-    'apps/web/app/runtime/shells/player-game-shell.tsx',
-  );
-  const diagnostics = [...reachable].filter((file) =>
+  const reachable = collectImportGraph(shellEntryPoints.player);
+  const diagnostics = [...reachable.keys()].filter((file) =>
     file.includes('/runtime/diagnostics/'),
   );
 
   assert.deepEqual(
     diagnostics,
     [],
-    `The Player shell can reach diagnostics UI through:\n${diagnostics.join('\n')}`,
+    `The Player shell can reach diagnostics UI through:\n${diagnostics
+      .map((file) => reachable.get(file).join(' -> '))
+      .join('\n')}`,
   );
 
   // The check is only meaningful if the walk actually found the graph.
@@ -699,12 +862,76 @@ test('the Player shell imports no diagnostics module, directly or otherwise', ()
 test('the GM shell does reach diagnostics, so the boundary is real', () => {
   // The inverse assertion. Without it, a walk that silently resolved nothing
   // would pass the Player test for the wrong reason.
-  const reachable = collectLocalImports(
-    'apps/web/app/runtime/shells/game-master-game-shell.tsx',
-  );
+  const reachable = collectImportGraph(shellEntryPoints.gameMaster);
 
   assert.ok(
-    [...reachable].some((file) => file.includes('/runtime/diagnostics/')),
+    [...reachable.keys()].some((file) =>
+      file.includes('/runtime/diagnostics/'),
+    ),
     'the GM shell should reach the diagnostics panel',
   );
+});
+
+test('no builder surface enters a runtime shell import graph', () => {
+  for (const [role, entry] of Object.entries(shellEntryPoints)) {
+    const reachable = collectImportGraph(entry);
+    const builders = [...reachable.keys()].filter((file) =>
+      builderSurfacePrefixes.some((prefix) => file.startsWith(prefix)),
+    );
+
+    assert.deepEqual(
+      builders,
+      [],
+      `The ${role} shell reaches a builder surface:\n${builders
+        .map((file) => reachable.get(file).join(' -> '))
+        .join('\n')}`,
+    );
+  }
+});
+
+test('an exempt component is reachable from exactly the shells it declares', () => {
+  const graphs = {
+    allowedInGameMasterGraph: collectImportGraph(shellEntryPoints.gameMaster),
+    allowedInPlayerGraph: collectImportGraph(shellEntryPoints.player),
+  };
+
+  for (const entry of legacyOversizedComponents) {
+    for (const [flag, reachable] of Object.entries(graphs)) {
+      const isReachable = reachable.has(entry.path);
+
+      if (entry[flag]) {
+        assert.ok(
+          isReachable,
+          `${entry.path} declares ${flag}: true but no shell path reaches it; the entry is stale.`,
+        );
+        continue;
+      }
+
+      assert.equal(
+        isReachable,
+        false,
+        `${entry.path} declares ${flag}: false but is reachable through:\n${(reachable.get(entry.path) ?? []).join(' -> ')}`,
+      );
+    }
+  }
+});
+
+test('the renderer is reached only through the map stage seam', () => {
+  // The one exempt component inside the runtime graph. M2 was told not to
+  // replace the renderer, so what it had to prove instead is that the shells
+  // depend on it through one seam - which is what lets M4 swap the drawing
+  // layer without either shell noticing.
+  const rendererPath = 'apps/web/app/runtime/tactical-map.tsx';
+  const seamPath = 'apps/web/app/runtime/shells/runtime-map-stage.tsx';
+
+  for (const [role, entry] of Object.entries(shellEntryPoints)) {
+    const path = collectImportGraph(entry).get(rendererPath);
+
+    assert.ok(path, `the ${role} shell should render the map`);
+    assert.equal(
+      path.at(-2),
+      seamPath,
+      `the ${role} shell reaches the renderer through ${path.at(-2)} rather than the map stage seam.`,
+    );
+  }
 });
