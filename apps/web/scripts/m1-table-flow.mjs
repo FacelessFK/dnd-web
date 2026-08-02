@@ -990,10 +990,26 @@ export async function runPlayerAttack({
         if (targetBefore !== targetAfter) {
           fail('A hit for no damage still changed the target HP.');
         }
-      } else if (targetBefore - targetAfter !== attackFrame.damage) {
-        fail(
-          `HP fell by ${targetBefore - targetAfter} but the server reported ${attackFrame.damage} damage.`,
-        );
+      } else {
+        // Damage floors the pool at zero rather than driving it negative -
+        // `applyFixedDamage` in `packages/rules` is where that happens - so the
+        // HP a 12-point creature loses to a 14-point hit is 12, not 14. This
+        // asserted the raw damage instead, which made it a probabilistic
+        // failure: it only fired on a roll big enough to overkill the target,
+        // and reported the product as wrong when the harness was.
+        const expectedLoss = Math.min(attackFrame.damage, targetBefore);
+
+        if (targetBefore - targetAfter !== expectedLoss) {
+          fail(
+            `HP fell by ${targetBefore - targetAfter} but a ${attackFrame.damage} point hit on ${targetBefore} HP should cost ${expectedLoss}.`,
+          );
+        }
+
+        // The floor itself, asserted rather than assumed. Without this the line
+        // above would also accept a negative pool.
+        if (targetAfter < 0) {
+          fail(`HP fell below zero to ${targetAfter}.`);
+        }
       }
 
       if (attackFrame.damage > 0) {
