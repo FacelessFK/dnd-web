@@ -2,7 +2,7 @@ import type {
   DndDatabaseUnitOfWork,
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
-import type { EncounterStateUpdate } from '@dnd/protocol';
+import type { EncounterStateUpdate, SceneStateUpdate } from '@dnd/protocol';
 import type { Scene, SceneId } from '@dnd/shared';
 
 import {
@@ -160,13 +160,20 @@ export class DbBackedSceneCommandTransactionBoundary {
       );
     }
 
-    const encounterStateUpdates: EncounterStateUpdate[] = [];
+    // One ordered list, not one per type. The scene event and the encounter
+    // event a reveal produces have to reach subscribers in the order the
+    // command emitted them, and two lists concatenated later would put every
+    // scene event before every encounter event regardless of what happened.
+    const commandEvents: (EncounterStateUpdate | SceneStateUpdate)[] = [];
     const transactionScenes = runtimeScenes.forkForTransaction(context.scenes);
     const transactionRuntime = params.runtime.withSceneRepository(
       transactionScenes,
       {
         encounterStateUpdateSink: (update) => {
-          encounterStateUpdates.push(update);
+          commandEvents.push(update);
+        },
+        sceneStateUpdateSink: (update) => {
+          commandEvents.push(update);
         },
       },
     );
@@ -184,16 +191,10 @@ export class DbBackedSceneCommandTransactionBoundary {
       });
 
     if (inserted) {
-      await this.persistOutboxRows(
-        context,
-        idempotencyKey,
-        encounterStateUpdates,
-      );
+      await this.persistOutboxRows(context, idempotencyKey, commandEvents);
 
       return {
-        dispatchIdempotencyKey: encounterStateUpdates.length
-          ? idempotencyKey
-          : null,
+        dispatchIdempotencyKey: commandEvents.length ? idempotencyKey : null,
         response,
         sceneCache: transactionScenes.cloneScenes(),
       };
@@ -226,7 +227,7 @@ export class DbBackedSceneCommandTransactionBoundary {
   private async persistOutboxRows(
     context: DndDatabaseUnitOfWorkContext,
     idempotencyKey: string,
-    updates: EncounterStateUpdate[],
+    updates: (EncounterStateUpdate | SceneStateUpdate)[],
   ): Promise<void> {
     for (const [eventOrder, update] of updates.entries()) {
       const inserted = await context.outbox.insertCommandEventOutboxRecord({

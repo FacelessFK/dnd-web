@@ -88,6 +88,8 @@ import type {
   ActivateSceneTransitionCommand,
   UpdateSceneTransitionCommand,
   SceneActivationSuccess,
+  SceneStateUpdate,
+  SceneStateUpdateReason,
   StartEncounterCommand,
   SubmitCharacterForAssignmentCommand,
   SubmitCharacterLibraryEntryForAssignmentCommand,
@@ -368,6 +370,11 @@ export class InMemoryGameRuntime<
     private readonly tableStateUpdateSink?: (
       update: ResolutionStateUpdate | PlayerIntentStateUpdate,
     ) => void,
+    // Set by the scene and session transaction boundaries in DB mode, so a
+    // scene event becomes an outbox row inside the same transaction as the
+    // scene write it describes. Kept last so existing positional call sites
+    // stay valid.
+    private readonly sceneStateUpdateSink?: (update: SceneStateUpdate) => void,
   ) {}
 
   /**
@@ -400,6 +407,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       tableStates,
       options.tableStateUpdateSink ?? this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -452,7 +460,66 @@ export class InMemoryGameRuntime<
     subscriber: SessionSubscriber,
   ): void {
     this.sessions.connectParticipant(sessionId, participantId, subscriber);
+    this.sendSceneSnapshot(sessionId, participantId, subscriber);
     this.sendTableStateSnapshot(sessionId, participantId, subscriber);
+  }
+
+  /**
+   * Hand the new subscriber the active map as they are allowed to see it.
+   *
+   * Without this a reconnecting client had no map until it issued a read, which
+   * is the whole reason the old cockpit needed a Recover button to see what the
+   * GM had already done. Sent to this subscriber alone and projected for their
+   * role first: a player reconnecting mid-ambush must not be caught up on the
+   * creatures the GM is still hiding.
+   *
+   * A session with no active scene sends nothing. There is no empty-scene
+   * sentinel because "no map yet" and "a map with nothing on it" are different
+   * states, and the session snapshot already reports which one this is.
+   */
+  private sendSceneSnapshot(
+    sessionId: SessionId,
+    participantId: ParticipantId,
+    subscriber: SessionSubscriber,
+  ): void {
+    let role: ParticipantRole;
+    let activeSceneId: SceneId | null;
+
+    try {
+      const snapshot = this.sessions.getSessionSnapshotForParticipant(
+        sessionId,
+        participantId,
+      );
+
+      role = this.requireParticipant(snapshot, participantId).role;
+      activeSceneId = snapshot.session.activeSceneId;
+    } catch {
+      // The subscription already failed or the participant is unknown. Failing
+      // closed means sending nothing rather than guessing a role.
+      return;
+    }
+
+    if (!activeSceneId) {
+      return;
+    }
+
+    let scene: Scene;
+
+    try {
+      scene = this.scenes.getScene(activeSceneId);
+    } catch {
+      // The session points at a scene the store cannot produce. That is a
+      // repository inconsistency for a read command to surface, not a reason to
+      // fail a subscription that is otherwise valid.
+      return;
+    }
+
+    subscriber.send({
+      type: 'scene_state',
+      reason: 'initial_sync',
+      sessionId,
+      scene: projectSceneForRole(scene, role),
+    });
   }
 
   private sendTableStateSnapshot(
@@ -525,6 +592,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -552,6 +620,7 @@ export class InMemoryGameRuntime<
       rollers.initiativeRoller ?? this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -577,6 +646,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -584,6 +654,7 @@ export class InMemoryGameRuntime<
     scenes: SceneRepository,
     options: {
       encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
+      sceneStateUpdateSink?: (update: SceneStateUpdate) => void;
     } = {},
   ): InMemoryGameRuntime<TCharacters, TSessions> {
     return new InMemoryGameRuntime(
@@ -601,6 +672,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      options.sceneStateUpdateSink ?? this.sceneStateUpdateSink,
     );
   }
 
@@ -625,6 +697,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -654,6 +727,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
+      this.sceneStateUpdateSink,
     );
   }
 
@@ -1186,14 +1260,15 @@ export class InMemoryGameRuntime<
           characterRecords: allCharacterRecords,
         });
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: [...scene.entities, entity],
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'combatant_placed',
+        });
       },
     );
   }
@@ -1243,16 +1318,17 @@ export class InMemoryGameRuntime<
           characterRecords: allCharacterRecords,
         });
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: scene.entities.map((entity) =>
               entity.id === movedCombatant.id ? movedCombatant : entity,
             ),
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'combatant_moved',
+        });
       },
     );
   }
@@ -1292,8 +1368,9 @@ export class InMemoryGameRuntime<
       command.payload.currentHp,
     );
 
-    return this.resolveRepositoryResult(
-      this.scenes.saveScene({
+    return this.saveAndPublishScene({
+      sessionId: snapshot.session.id,
+      scene: {
         ...scene,
         entities: scene.entities.map((entity) =>
           entity.id === command.payload.combatantId
@@ -1310,9 +1387,9 @@ export class InMemoryGameRuntime<
             : entity,
         ),
         updatedAt: this.now(),
-      }),
-      (updatedScene) => updatedScene,
-    );
+      },
+      reason: 'combatant_hp_changed',
+    });
   }
 
   /**
@@ -1357,14 +1434,20 @@ export class InMemoryGameRuntime<
       return scene;
     }
 
-    return this.resolveRepositoryResult(
-      this.scenes.saveScene({ ...change.scene, updatedAt: this.now() }),
-      (updatedScene) => {
-        this.republishEncounterForVisibilityChange(snapshot.session.id);
+    // The scene event carries the reveal itself: a player who could not see
+    // this creature is now sent a scene containing it, or stops being sent one.
+    // The encounter is republished straight after because concealment also
+    // decides whether that creature's initiative slot is identifiable, and the
+    // encounter did not otherwise change.
+    const updatedScene = this.saveAndPublishScene({
+      sessionId: snapshot.session.id,
+      scene: { ...change.scene, updatedAt: this.now() },
+      reason: 'combatant_visibility_changed',
+    });
 
-        return updatedScene;
-      },
-    );
+    this.republishEncounterForVisibilityChange(snapshot.session.id);
+
+    return updatedScene;
   }
 
   /**
@@ -1820,11 +1903,23 @@ export class InMemoryGameRuntime<
 
     return this.resolveSessionResult(
       this.sessions.activateScene(snapshot.session.id, scene.id),
-      (state) => ({
-        sessionId: snapshot.session.id,
-        sceneId: scene.id,
-        state,
-      }),
+      (state) => {
+        // Published after the activation lands, so the scene event describes a
+        // map the session is already pointed at. Sending it first would put a
+        // map on the players' screens that the session snapshot still says is
+        // not the active one.
+        this.publishSceneStateUpdate({
+          sessionId: snapshot.session.id,
+          scene,
+          reason: 'scene_activated',
+        });
+
+        return {
+          sessionId: snapshot.session.id,
+          sceneId: scene.id,
+          state,
+        };
+      },
     );
   }
 
@@ -1847,14 +1942,15 @@ export class InMemoryGameRuntime<
 
     assertSceneEntityPlacement(scene, entity);
 
-    return this.resolveRepositoryResult(
-      this.scenes.saveScene({
+    return this.saveAndPublishScene({
+      sessionId: snapshot.session.id,
+      scene: {
         ...scene,
         entities: [...scene.entities, entity],
         updatedAt: this.now(),
-      }),
-      (updatedScene) => updatedScene,
-    );
+      },
+      reason: 'entity_placed',
+    });
   }
 
   updateSceneEntity(command: UpdateSceneEntityCommand): Scene {
@@ -1953,16 +2049,17 @@ export class InMemoryGameRuntime<
           });
         }
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: scene.entities.map((entity) =>
               entity.id === updatedEntity.id ? updatedEntity : entity,
             ),
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'entity_updated',
+        });
       },
     );
   }
@@ -2010,16 +2107,17 @@ export class InMemoryGameRuntime<
           });
         }
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: scene.entities.map((entity) =>
               entity.id === movedEntity.id ? movedEntity : entity,
             ),
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'entity_moved',
+        });
       },
     );
   }
@@ -2039,16 +2137,17 @@ export class InMemoryGameRuntime<
     assertSceneBelongsToSession(snapshot, scene);
     this.requirePassiveSceneEntity(scene, command.payload.entityId);
 
-    return this.resolveRepositoryResult(
-      this.scenes.saveScene({
+    return this.saveAndPublishScene({
+      sessionId: snapshot.session.id,
+      scene: {
         ...scene,
         entities: scene.entities.filter(
           (entity) => entity.id !== command.payload.entityId,
         ),
         updatedAt: this.now(),
-      }),
-      (updatedScene) => updatedScene,
-    );
+      },
+      reason: 'entity_removed',
+    });
   }
 
   paintSceneTerrain(command: PaintSceneTerrainCommand): Scene {
@@ -2103,14 +2202,15 @@ export class InMemoryGameRuntime<
           });
         }
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             terrain,
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'terrain_painted',
+        });
       },
     );
   }
@@ -2151,14 +2251,15 @@ export class InMemoryGameRuntime<
           });
         }
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: [...scene.entities, entity],
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'transition_created',
+        });
       },
     );
   }
@@ -2267,16 +2368,17 @@ export class InMemoryGameRuntime<
           });
         }
 
-        return this.resolveRepositoryResult(
-          this.scenes.saveScene({
+        return this.saveAndPublishScene({
+          sessionId: snapshot.session.id,
+          scene: {
             ...scene,
             entities: scene.entities.map((entity) =>
               entity.id === updatedEntity.id ? updatedEntity : entity,
             ),
             updatedAt: this.now(),
-          }),
-          (updatedScene) => updatedScene,
-        );
+          },
+          reason: 'transition_updated',
+        });
       },
     );
   }
@@ -2296,16 +2398,17 @@ export class InMemoryGameRuntime<
     assertSceneBelongsToSession(snapshot, scene);
     this.requireSceneTransitionEntity(scene, command.payload.transitionId);
 
-    return this.resolveRepositoryResult(
-      this.scenes.saveScene({
+    return this.saveAndPublishScene({
+      sessionId: snapshot.session.id,
+      scene: {
         ...scene,
         entities: scene.entities.filter(
           (entity) => entity.id !== command.payload.transitionId,
         ),
         updatedAt: this.now(),
-      }),
-      (updatedScene) => updatedScene,
-    );
+      },
+      reason: 'transition_removed',
+    });
   }
 
   activateSceneTransition(
@@ -2336,11 +2439,19 @@ export class InMemoryGameRuntime<
 
     return this.resolveSessionResult(
       this.sessions.activateScene(snapshot.session.id, targetScene.id),
-      (state) => ({
-        sessionId: snapshot.session.id,
-        sceneId: targetScene.id,
-        state,
-      }),
+      (state) => {
+        this.publishSceneStateUpdate({
+          sessionId: snapshot.session.id,
+          scene: targetScene,
+          reason: 'scene_activated',
+        });
+
+        return {
+          sessionId: snapshot.session.id,
+          sceneId: targetScene.id,
+          state,
+        };
+      },
     );
   }
 
@@ -3817,7 +3928,11 @@ export class InMemoryGameRuntime<
     // this with a real transaction without changing the public attack flow.
     if (resolution.nextTargetScene) {
       return this.resolveRepositoryResult(
-        this.scenes.saveScene(resolution.nextTargetScene),
+        this.saveAndPublishScene({
+          sessionId: context.sessionId,
+          scene: resolution.nextTargetScene,
+          reason: 'combatant_hp_changed',
+        }),
         () => this.publishResolvedAttack(context, resolution),
       );
     }
@@ -4561,6 +4676,91 @@ export class InMemoryGameRuntime<
       update,
       this.resolveConcealedCombatantIds(params.encounter),
     );
+  }
+
+  /**
+   * Announce the active scene to the room.
+   *
+   * The authoritative scene goes in; the store decides what each role gets out.
+   * Nothing is filtered here, deliberately - projection belongs at the one
+   * boundary that knows who is listening, and a second filter upstream would be
+   * a second thing to keep correct.
+   */
+  private publishSceneStateUpdate(params: {
+    sessionId: SessionId;
+    scene: Scene;
+    reason: SceneStateUpdateReason;
+  }): void {
+    const update: SceneStateUpdate = {
+      type: 'scene_state',
+      reason: params.reason,
+      sessionId: params.sessionId,
+      scene: params.scene,
+    };
+
+    if (this.sceneStateUpdateSink) {
+      this.sceneStateUpdateSink(structuredClone(update));
+      return;
+    }
+
+    this.sessions.publishSceneStateUpdate(update);
+  }
+
+  /**
+   * Persist a scene mutation and tell the room about it, in that order.
+   *
+   * Every authoritative scene write goes through here rather than calling
+   * `scenes.saveScene` directly, so "the map changed" and "the players were
+   * told" cannot drift apart one command at a time. The saved scene is what
+   * gets published - never the caller's candidate object - because in DB mode
+   * the repository result is a promise and reading a field off it is the exact
+   * bug this codebase has shipped twice.
+   *
+   * A scene write for a session that is not currently displaying that scene is
+   * saved but not announced: the room is looking at a different map, and
+   * telling it about an edit to one it cannot see would replace what it is
+   * rendering with something else entirely.
+   */
+  private saveAndPublishScene(params: {
+    sessionId: SessionId;
+    scene: Scene;
+    reason: SceneStateUpdateReason;
+  }): Scene {
+    return this.resolveRepositoryResult(
+      this.scenes.saveScene(params.scene),
+      (savedScene) => {
+        if (this.isActiveSceneForSession(params.sessionId, savedScene.id)) {
+          this.publishSceneStateUpdate({
+            sessionId: params.sessionId,
+            scene: savedScene,
+            reason: params.reason,
+          });
+        }
+
+        return savedScene;
+      },
+    );
+  }
+
+  /**
+   * Whether the room is currently looking at this scene.
+   *
+   * Fails closed on a missing session rather than throwing: this only ever
+   * gates an announcement, and a scene write must not fail because the room it
+   * would have notified has gone away.
+   */
+  private isActiveSceneForSession(
+    sessionId: SessionId,
+    sceneId: SceneId,
+  ): boolean {
+    try {
+      return (
+        this.sessions.getSessionSnapshot(sessionId).session.activeSceneId ===
+        sceneId
+      );
+    } catch {
+      return false;
+    }
   }
 
   /**

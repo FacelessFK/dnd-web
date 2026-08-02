@@ -783,6 +783,17 @@ test('concealment republishes the encounter so a player rail updates at once', a
   const playerStream = await openStream(table, 'player-001');
 
   try {
+    // The goblin is on the map in plain sight until the command below, so the
+    // player's initial sync is entitled to name it. What must not survive the
+    // concealment is every byte sent afterwards.
+    const playerBytesBeforeConcealment = playerStream.raw().length;
+
+    assert.equal(
+      playerStream.raw().includes(table.combatantId),
+      true,
+      'the player could see the creature before it was concealed',
+    );
+
     await post(
       table,
       DM_PATH,
@@ -792,6 +803,9 @@ test('concealment republishes the encounter so a player rail updates at once', a
 
     const dmFrame = framesNamed(dmStream, 'encounter_state').at(-1)!;
     const playerFrame = framesNamed(playerStream, 'encounter_state').at(-1)!;
+    const playerBytesAfterConcealment = playerStream
+      .raw()
+      .slice(playerBytesBeforeConcealment);
 
     assert.equal(dmFrame.reason, 'dm_combatant_visibility_changed');
     assert.equal(playerFrame.reason, 'dm_combatant_visibility_changed');
@@ -801,9 +815,30 @@ test('concealment republishes the encounter so a player rail updates at once', a
       'the DM stream keeps the identity',
     );
     assert.equal(
-      playerStream.raw().includes(table.combatantId),
+      playerBytesAfterConcealment.includes(table.combatantId),
       false,
-      'no player frame ever carried the concealed ID',
+      'no player frame carried the concealed ID after concealment',
+    );
+
+    // The scene the player is now holding has the creature removed outright,
+    // not blanked - a blanked entity would still outline itself on the map.
+    const playerScene = framesNamed(playerStream, 'scene_state').at(-1)!;
+    const dmScene = framesNamed(dmStream, 'scene_state').at(-1)!;
+
+    assert.equal(playerScene.reason, 'combatant_visibility_changed');
+    assert.equal(
+      (playerScene.scene as { entities: { id: string }[] }).entities.some(
+        (entity) => entity.id === table.combatantId,
+      ),
+      false,
+      'the concealed creature left the player scene entirely',
+    );
+    assert.equal(
+      (dmScene.scene as { entities: { id: string }[] }).entities.some(
+        (entity) => entity.id === table.combatantId,
+      ),
+      true,
+      'the GM still sees the creature they concealed',
     );
   } finally {
     dmStream.close();

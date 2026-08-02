@@ -254,11 +254,36 @@ export const messages = {
       'Runtime copy {characterId} is waiting in authoritative session state. The DM must assign it before it becomes your active table character.',
     'runtime.characterLibrary.waitingTitle':
       'Runtime copy pending DM assignment',
+    'runtime.characterSheet.abilities': 'Abilities',
+    'runtime.characterSheet.background': 'Background',
+    'runtime.characterSheet.className': 'Class',
+    'runtime.characterSheet.combatBasics': 'Combat basics',
+    'runtime.characterSheet.createDraft': 'Create Draft',
+    'runtime.characterSheet.description':
+      'Create and maintain your own character draft. The server validates and returns the authoritative sheet.',
+    'runtime.characterSheet.draftNotCreated': 'Draft not created yet',
+    'runtime.characterSheet.eyebrow': 'Character sheet',
+    'runtime.characterSheet.finalize': 'Finalize',
+    'runtime.characterSheet.level': 'Level (create only)',
+    'runtime.characterSheet.name': 'Name',
+    'runtime.characterSheet.needsAttention': 'Sheet needs attention',
+    'runtime.characterSheet.notes': 'Notes',
+    'runtime.characterSheet.species': 'Species/Race',
+    'runtime.characterSheet.submitToDm': 'Submit to DM',
+    'runtime.characterSheet.title': 'Player Character',
+    'runtime.characterSheet.unnamed': 'Unwritten adventurer',
+    'runtime.characterSheet.updateDraft': 'Update Draft',
+    'runtime.characterSummary.armorClass': 'AC',
     'runtime.characterSummary.conditions': 'Conditions',
+    'runtime.characterSummary.emptyDetail':
+      'No character is loaded for {name}.',
+    'runtime.characterSummary.emptyTitle': 'No character',
+    'runtime.characterSummary.hitPoints': 'HP',
     'runtime.characterSummary.initiative': 'Init',
     'runtime.characterSummary.passivePerception': 'Passive',
     'runtime.characterSummary.proficiency': 'Prof',
     'runtime.characterSummary.speed': 'Speed',
+    'runtime.characterSummary.speedValue': '{feet} ft',
     'runtime.characterSummary.status.draft': 'Draft',
     'runtime.activeScene.buildDetail':
       'Create or activate a scene before placing tokens, entities, or starting an encounter.',
@@ -455,6 +480,61 @@ export const messages = {
     'runtime.combatants.option':
       '{name} ({kind}, HP {current}/{max}{defeatSuffix})',
     'runtime.combatants.reposition': 'Reposition',
+    'runtime.combatants.conceal': 'Conceal',
+    'runtime.combatants.reveal': 'Reveal',
+    'runtime.combatants.setTurn': 'Give the turn',
+    'runtime.entry.description':
+      'Create a table as the GM, join one with its code as a player, or recover a seat you already hold.',
+    'runtime.entry.eyebrow': 'Table entry',
+    'runtime.entry.scenarioDetail':
+      'Builds a complete practice table in one step: a map, two characters, placements and an encounter.',
+    'runtime.entry.seatBlocked':
+      'This seat cannot be taken with the credentials this browser holds. Recover it from the account that owns it, or ask the GM for a new code.',
+    'runtime.entry.stepGm': 'GM: create the table, then share its code.',
+    'runtime.entry.stepPlayer': 'Player: enter the code, then join.',
+    'runtime.entry.stepRecover':
+      'Returning: enter the code and recover to take your seat back.',
+    'runtime.entry.summary':
+      'The server owns the table. This browser submits what you intend and draws what the server sends back.',
+    'runtime.entry.title': 'Join a table',
+    'runtime.gmInspector.cell': 'Selected cell',
+    'runtime.gmInspector.concealed': 'Concealed',
+    'runtime.gmInspector.description':
+      'Actions for whatever is selected on the map.',
+    'runtime.gmInspector.emptyDetail':
+      'Select a token or an entity on the map to act on it, or pick an empty cell to place something.',
+    'runtime.gmInspector.emptyTitle': 'Nothing selected',
+    'runtime.gmInspector.selectedHp': 'Selected creature HP',
+    'runtime.gmInspector.eyebrow': 'Selection',
+    'runtime.gmInspector.title': 'Inspector',
+    'runtime.gmInspector.visible': 'Visible',
+    'runtime.gmShell.feedback': 'Encounter feedback',
+    'runtime.gmShell.inspector': 'Inspector',
+    'runtime.gmShell.tools': 'GM tools',
+    'runtime.gmTools.seatDescription':
+      'The identity this browser acts as at the table.',
+    'runtime.gmTools.seatTitle': 'Your GM seat',
+    'runtime.gmTools.tab.combatants': 'Combatants',
+    'runtime.gmTools.tab.diagnostics': 'Diagnostics',
+    'runtime.gmTools.tab.roster': 'Roster',
+    'runtime.gmTools.tab.scene': 'Map',
+    'runtime.gmTools.tab.table': 'Table',
+    'runtime.gmTools.title': 'GM tool groups',
+    'runtime.nav.label': 'Runtime navigation',
+    'runtime.playerActions.title': 'Your actions',
+    'runtime.playerActions.waiting': 'Waiting for your turn',
+    'runtime.playerActions.yourTurn': 'Your turn',
+    'runtime.playerShell.character': 'Your character',
+    'runtime.playerShell.details': 'Your turn and rolls',
+    'runtime.playerStatus.atTable': 'At table {code}',
+    'runtime.playerStatus.noEncounter': 'No encounter',
+    'runtime.playerStatus.noTable': 'No table joined',
+    'runtime.playerStatus.round': 'Round {round}, turn {turn}',
+    'runtime.playerStatus.tempHp': 'temp',
+    'runtime.playerStatus.title': 'Your status',
+    'runtime.sceneBuilder.action.deleteEntity': 'Remove',
+    'runtime.sceneBuilder.action.repositionEntity': 'Move here',
+    'runtime.session.roleGroup': 'Table role',
     'runtime.combatants.selected': 'Selected monster/NPC',
     'runtime.combatants.setHp': 'Set HP',
     'runtime.combatants.sizeHeight': 'Size H',
@@ -481,6 +561,32 @@ export const messages = {
     'runtime.combatants.validation.wholeNumber':
       '{field} must be a whole number.',
     'runtime.disabled.busy': 'Waiting on {label}.',
+    'runtime.disabled.characterAlreadyAssigned':
+      'This character is already assigned.',
+    'runtime.disabled.characterAlreadyFinalized':
+      'This character is already finalized.',
+    'runtime.disabled.characterAlreadyLoaded':
+      'A character is already loaded for this participant.',
+    'runtime.disabled.characterAwaitingAssignment':
+      'This character is already waiting for DM assignment.',
+    'runtime.disabled.createOrRecoverCharacter':
+      'Create or recover your character first.',
+    'runtime.disabled.enterSceneId': 'Enter or create a scene ID to activate.',
+    'runtime.disabled.finalizeBeforeSubmitting':
+      'Finalize this character before submitting it.',
+    'runtime.disabled.fixCharacterSheet':
+      'Fix the character sheet first: {error}',
+    'runtime.disabled.fixEntityDraft': 'Fix the entity draft first: {error}',
+    'runtime.disabled.fixEntityEdit': 'Fix the entity edit form first: {error}',
+    'runtime.disabled.fixSceneDraft': 'Fix the scene draft first: {error}',
+    'runtime.disabled.joinAsPlayer':
+      'Join or recover this session as the player first.',
+    'runtime.disabled.needScene': 'Create, activate, or recover a scene first.',
+    'runtime.disabled.needSourceScene':
+      'Create, activate, or recover a source scene first.',
+    'runtime.disabled.selectPassiveEntity':
+      'Select a passive scene entity first.',
+    'runtime.disabled.selectTransition': 'Select a transition node first.',
     'runtime.disabled.createOrRecoverActiveScene':
       'Create or recover an active scene first.',
     'runtime.disabled.createActivateRecoverScene':
@@ -523,6 +629,13 @@ export const messages = {
       'Selected participant already has this character assigned.',
     'runtime.eyebrow': 'Authoritative table surface',
     'runtime.notice.commandFailed': 'Command failed',
+    'runtime.recoveryNote.activeScene': 'No map is active at this table yet.',
+    'runtime.recoveryNote.character':
+      'A character could not be restored; ask the GM to reassign it.',
+    'runtime.recoveryNote.encounter': 'This table has no encounter yet.',
+    'runtime.recoveryNote.generic':
+      'Part of the table could not be restored yet.',
+    'runtime.recoveryNote.scene': 'The map could not be restored yet.',
     'runtime.notice.recoveryWithNotes': 'Recovery completed with notes',
     'runtime.encounterStatus.active': 'Active',
     'runtime.encounterStatus.ended': 'Ended',
@@ -900,9 +1013,16 @@ export const messages = {
     'runtime.m1.error.noActiveEncounter': 'No encounter is running.',
     'runtime.m1.error.combatantNotFound': 'That creature is not on the map.',
     'runtime.m1.error.generic': 'The server refused that action.',
+    'runtime.connection.idle': 'Not connected',
+    'runtime.connection.connecting': 'Connecting',
+    'runtime.connection.connected': 'Live',
+    'runtime.connection.reconnecting': 'Reconnecting',
+    'runtime.connection.credentialInvalid': 'Sign in again to rejoin',
+    'runtime.connection.seatUnavailable': 'This seat is not available',
     'runtime.events.title.combat': 'Attack resolved',
     'runtime.events.title.encounter': 'Encounter state',
     'runtime.events.title.movement': 'Token movement',
+    'runtime.events.title.scene': 'Map state',
     'runtime.events.title.character': 'Character state',
     'runtime.events.title.resolution': 'Dice request',
     'runtime.events.title.playerIntent': 'Player intent',
@@ -913,6 +1033,7 @@ export const messages = {
       '{attacker} rolled {roll} against AC {armorClass} and {result} ({target} HP {previousHp} to {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. Round {round}, turn {turn}.',
     'runtime.events.detail.movement': '{participant} {reason} to {x},{y}.',
+    'runtime.events.detail.scene': '{reason}. {entities} on the map.',
     'runtime.events.detail.character':
       '{character} HP is now {currentHp}/{maxHp}.',
     'runtime.events.detail.characterWithConditions':
@@ -970,12 +1091,36 @@ export const messages = {
       'The DM changed turn usage',
     'runtime.events.reason.encounter_state.dm_current_turn_changed':
       'The DM changed the current turn',
+    'runtime.events.reason.scene_state.initial_sync': 'The map was synced',
+    'runtime.events.reason.scene_state.scene_activated': 'A map was activated',
+    'runtime.events.reason.scene_state.entity_placed':
+      'Something was placed on the map',
+    'runtime.events.reason.scene_state.entity_updated':
+      'Something on the map changed',
+    'runtime.events.reason.scene_state.entity_moved':
+      'Something on the map moved',
+    'runtime.events.reason.scene_state.entity_removed':
+      'Something left the map',
+    'runtime.events.reason.scene_state.terrain_painted':
+      'The terrain was painted',
+    'runtime.events.reason.scene_state.transition_created': 'An exit was added',
+    'runtime.events.reason.scene_state.transition_updated': 'An exit changed',
+    'runtime.events.reason.scene_state.transition_removed':
+      'An exit was removed',
+    'runtime.events.reason.scene_state.combatant_placed':
+      'A creature was placed',
+    'runtime.events.reason.scene_state.combatant_moved': 'A creature moved',
+    'runtime.events.reason.scene_state.combatant_hp_changed':
+      'A creature took damage',
+    'runtime.events.reason.scene_state.combatant_visibility_changed':
+      'The GM changed what is visible',
     'runtime.turn.concealedCombatant': 'Unknown combatant',
     'runtime.turnTarget.advanceTurn': 'Advance Turn',
     'runtime.turnTarget.attackTarget': 'Attack Target',
     'runtime.turnTarget.description':
       'Turn controls submit actor-scoped commands; disabled buttons explain missing prerequisites.',
     'runtime.turnTarget.eyebrow': 'Encounter',
+    'runtime.turnTarget.combatantOption': '{name} ({kind}, HP {current}/{max})',
     'runtime.turnTarget.initiative': '· init {initiative}',
     'runtime.turnTarget.target': 'Target',
     'runtime.turnTarget.title': 'Turn & Target',
@@ -1454,11 +1599,36 @@ export const messages = {
       'نسخه runtime {characterId} در وضعیت مرجع نشست منتظر است. DM باید آن را تخصیص دهد تا کاراکتر فعال میز شما شود.',
     'runtime.characterLibrary.waitingTitle':
       'نسخه runtime در انتظار تخصیص توسط DM',
+    'runtime.characterSheet.abilities': 'توانایی‌ها',
+    'runtime.characterSheet.background': 'پیشینه',
+    'runtime.characterSheet.className': 'کلاس',
+    'runtime.characterSheet.combatBasics': 'پایه‌های مبارزه',
+    'runtime.characterSheet.createDraft': 'ساخت پیش‌نویس',
+    'runtime.characterSheet.description':
+      'پیش‌نویس شخصیت خود را بسازید و نگه دارید. سرور آن را اعتبارسنجی می‌کند و برگه معتبر را بازمی‌گرداند.',
+    'runtime.characterSheet.draftNotCreated': 'هنوز پیش‌نویسی ساخته نشده',
+    'runtime.characterSheet.eyebrow': 'برگه شخصیت',
+    'runtime.characterSheet.finalize': 'نهایی‌سازی',
+    'runtime.characterSheet.level': 'سطح (فقط هنگام ساخت)',
+    'runtime.characterSheet.name': 'نام',
+    'runtime.characterSheet.needsAttention': 'برگه نیاز به اصلاح دارد',
+    'runtime.characterSheet.notes': 'یادداشت‌ها',
+    'runtime.characterSheet.species': 'گونه/نژاد',
+    'runtime.characterSheet.submitToDm': 'ارسال به DM',
+    'runtime.characterSheet.title': 'شخصیت بازیکن',
+    'runtime.characterSheet.unnamed': 'ماجراجوی بی‌نام',
+    'runtime.characterSheet.updateDraft': 'به‌روزرسانی پیش‌نویس',
+    'runtime.characterSummary.armorClass': 'کلاس زره',
     'runtime.characterSummary.conditions': 'وضعیت‌ها',
+    'runtime.characterSummary.emptyDetail':
+      'شخصیتی برای {name} بارگذاری نشده است.',
+    'runtime.characterSummary.emptyTitle': 'بدون شخصیت',
+    'runtime.characterSummary.hitPoints': 'امتیاز ضربه',
     'runtime.characterSummary.initiative': 'ابتکار',
     'runtime.characterSummary.passivePerception': 'ادراک غیرفعال',
     'runtime.characterSummary.proficiency': 'مهارت',
     'runtime.characterSummary.speed': 'سرعت',
+    'runtime.characterSummary.speedValue': '{feet} فوت',
     'runtime.characterSummary.status.draft': 'پیش‌نویس',
     'runtime.activeScene.buildDetail':
       'قبل از قرار دادن توکن‌ها، موجودیت‌های صحنه یا شروع برخورد، یک صحنه بسازید یا فعال کنید.',
@@ -1651,6 +1821,62 @@ export const messages = {
     'runtime.combatants.option':
       '{name} ({kind}، HP {current}/{max}{defeatSuffix})',
     'runtime.combatants.reposition': 'جابجایی',
+    'runtime.combatants.conceal': 'پنهان‌سازی',
+    'runtime.combatants.reveal': 'آشکارسازی',
+    'runtime.combatants.setTurn': 'واگذاری نوبت',
+    'runtime.entry.description':
+      'به عنوان GM یک میز بسازید، با کد میز به عنوان بازیکن بپیوندید، یا صندلی‌ای را که از پیش دارید بازیابی کنید.',
+    'runtime.entry.eyebrow': 'ورود به میز',
+    'runtime.entry.scenarioDetail':
+      'یک میز تمرینی کامل را در یک گام می‌سازد: نقشه، دو شخصیت، جای‌گذاری‌ها و یک برخورد.',
+    'runtime.entry.seatBlocked':
+      'این صندلی با گواهی‌نامه‌ای که این مرورگر دارد قابل گرفتن نیست. آن را از حسابی که مالکش است بازیابی کنید یا از GM کد تازه بخواهید.',
+    'runtime.entry.stepGm':
+      'GM: میز را بسازید، سپس کد آن را به اشتراک بگذارید.',
+    'runtime.entry.stepPlayer': 'بازیکن: کد را وارد کنید، سپس بپیوندید.',
+    'runtime.entry.stepRecover':
+      'بازگشت: کد را وارد کنید و بازیابی کنید تا صندلی خود را پس بگیرید.',
+    'runtime.entry.summary':
+      'سرور مالک میز است. این مرورگر خواسته شما را ارسال می‌کند و آنچه سرور بازمی‌گرداند را ترسیم می‌کند.',
+    'runtime.entry.title': 'پیوستن به میز',
+    'runtime.gmInspector.cell': 'خانه انتخاب‌شده',
+    'runtime.gmInspector.concealed': 'پنهان',
+    'runtime.gmInspector.description':
+      'کنش‌های مربوط به آنچه روی نقشه انتخاب شده است.',
+    'runtime.gmInspector.emptyDetail':
+      'یک توکن یا موجودیت را روی نقشه انتخاب کنید تا روی آن کنش انجام دهید، یا یک خانه خالی را برای قرار دادن چیزی برگزینید.',
+    'runtime.gmInspector.emptyTitle': 'چیزی انتخاب نشده',
+    'runtime.gmInspector.selectedHp': 'امتیاز ضربه موجود انتخاب‌شده',
+    'runtime.gmInspector.eyebrow': 'انتخاب',
+    'runtime.gmInspector.title': 'بازرس',
+    'runtime.gmInspector.visible': 'آشکار',
+    'runtime.gmShell.feedback': 'بازخورد برخورد',
+    'runtime.gmShell.inspector': 'بازرس',
+    'runtime.gmShell.tools': 'ابزارهای GM',
+    'runtime.gmTools.seatDescription':
+      'هویتی که این مرورگر با آن سر میز کنش می‌کند.',
+    'runtime.gmTools.seatTitle': 'صندلی GM شما',
+    'runtime.gmTools.tab.combatants': 'رزم‌آوران',
+    'runtime.gmTools.tab.diagnostics': 'عیب‌یابی',
+    'runtime.gmTools.tab.roster': 'فهرست بازیکنان',
+    'runtime.gmTools.tab.scene': 'نقشه',
+    'runtime.gmTools.tab.table': 'میز',
+    'runtime.gmTools.title': 'گروه‌های ابزار GM',
+    'runtime.nav.label': 'ناوبری زمان اجرا',
+    'runtime.playerActions.title': 'کنش‌های شما',
+    'runtime.playerActions.waiting': 'در انتظار نوبت شما',
+    'runtime.playerActions.yourTurn': 'نوبت شما',
+    'runtime.playerShell.character': 'شخصیت شما',
+    'runtime.playerShell.details': 'نوبت و پرتاب‌های شما',
+    'runtime.playerStatus.atTable': 'سر میز {code}',
+    'runtime.playerStatus.noEncounter': 'بدون برخورد',
+    'runtime.playerStatus.noTable': 'به میزی نپیوسته‌اید',
+    'runtime.playerStatus.round': 'دور {round}، نوبت {turn}',
+    'runtime.playerStatus.tempHp': 'موقت',
+    'runtime.playerStatus.title': 'وضعیت شما',
+    'runtime.sceneBuilder.action.deleteEntity': 'حذف',
+    'runtime.sceneBuilder.action.repositionEntity': 'انتقال به اینجا',
+    'runtime.session.roleGroup': 'نقش سر میز',
     'runtime.combatants.selected': 'monster/NPC انتخاب‌شده',
     'runtime.combatants.setHp': 'ثبت HP',
     'runtime.combatants.sizeHeight': 'ارتفاع اندازه',
@@ -1676,6 +1902,37 @@ export const messages = {
       '{field} باید بین {min} و {max} باشد.',
     'runtime.combatants.validation.wholeNumber': '{field} باید عدد صحیح باشد.',
     'runtime.disabled.busy': 'در انتظار {label}.',
+    'runtime.disabled.characterAlreadyAssigned':
+      'این شخصیت از پیش تخصیص یافته است.',
+    'runtime.disabled.characterAlreadyFinalized':
+      'این شخصیت از پیش نهایی شده است.',
+    'runtime.disabled.characterAlreadyLoaded':
+      'برای این شرکت‌کننده از پیش یک شخصیت بارگذاری شده است.',
+    'runtime.disabled.characterAwaitingAssignment':
+      'این شخصیت از پیش در انتظار تخصیص توسط DM است.',
+    'runtime.disabled.createOrRecoverCharacter':
+      'ابتدا شخصیت خود را بسازید یا بازیابی کنید.',
+    'runtime.disabled.enterSceneId':
+      'برای فعال‌سازی، یک شناسه صحنه وارد کنید یا بسازید.',
+    'runtime.disabled.finalizeBeforeSubmitting':
+      'پیش از ارسال، این شخصیت را نهایی کنید.',
+    'runtime.disabled.fixCharacterSheet':
+      'ابتدا برگه شخصیت را اصلاح کنید: {error}',
+    'runtime.disabled.fixEntityDraft':
+      'ابتدا پیش‌نویس موجودیت را اصلاح کنید: {error}',
+    'runtime.disabled.fixEntityEdit':
+      'ابتدا فرم ویرایش موجودیت را اصلاح کنید: {error}',
+    'runtime.disabled.fixSceneDraft':
+      'ابتدا پیش‌نویس صحنه را اصلاح کنید: {error}',
+    'runtime.disabled.joinAsPlayer':
+      'ابتدا به عنوان بازیکن به این نشست بپیوندید یا آن را بازیابی کنید.',
+    'runtime.disabled.needScene':
+      'ابتدا یک صحنه بسازید، فعال کنید یا بازیابی کنید.',
+    'runtime.disabled.needSourceScene':
+      'ابتدا یک صحنه مبدأ بسازید، فعال کنید یا بازیابی کنید.',
+    'runtime.disabled.selectPassiveEntity':
+      'ابتدا یک موجودیت غیرفعال صحنه را انتخاب کنید.',
+    'runtime.disabled.selectTransition': 'ابتدا یک گره گذر را انتخاب کنید.',
     'runtime.disabled.createOrRecoverActiveScene':
       'ابتدا یک صحنه فعال بسازید یا بازیابی کنید.',
     'runtime.disabled.createActivateRecoverScene':
@@ -1719,6 +1976,12 @@ export const messages = {
       'این participant همین کاراکتر را قبلا تخصیص داده است.',
     'runtime.eyebrow': 'سطح کنترل مرجع برای میز بازی',
     'runtime.notice.commandFailed': 'Command ناموفق بود',
+    'runtime.recoveryNote.activeScene': 'هنوز نقشه‌ای در این میز فعال نیست.',
+    'runtime.recoveryNote.character':
+      'یک شخصیت بازیابی نشد؛ از GM بخواهید دوباره آن را تخصیص دهد.',
+    'runtime.recoveryNote.encounter': 'این میز هنوز برخوردی ندارد.',
+    'runtime.recoveryNote.generic': 'بخشی از میز هنوز بازیابی نشد.',
+    'runtime.recoveryNote.scene': 'نقشه هنوز بازیابی نشد.',
     'runtime.notice.recoveryWithNotes': 'بازیابی با یادداشت تکمیل شد',
     'runtime.encounterStatus.active': 'فعال',
     'runtime.encounterStatus.ended': 'تمام شده',
@@ -2094,9 +2357,16 @@ export const messages = {
     'runtime.m1.error.noActiveEncounter': 'نبردی در جریان نیست.',
     'runtime.m1.error.combatantNotFound': 'این موجود روی نقشه نیست.',
     'runtime.m1.error.generic': 'سرور این کنش را نپذیرفت.',
+    'runtime.connection.idle': 'متصل نیست',
+    'runtime.connection.connecting': 'در حال اتصال',
+    'runtime.connection.connected': 'زنده',
+    'runtime.connection.reconnecting': 'در حال اتصال دوباره',
+    'runtime.connection.credentialInvalid': 'برای بازگشت دوباره وارد شوید',
+    'runtime.connection.seatUnavailable': 'این جایگاه در دسترس نیست',
     'runtime.events.title.combat': 'حمله انجام شد',
     'runtime.events.title.encounter': 'وضعیت رویارویی',
     'runtime.events.title.movement': 'جابه‌جایی مهره',
+    'runtime.events.title.scene': 'وضعیت نقشه',
     'runtime.events.title.character': 'وضعیت کاراکتر',
     'runtime.events.title.resolution': 'درخواست تاس',
     'runtime.events.title.playerIntent': 'قصد بازیکن',
@@ -2107,6 +2377,7 @@ export const messages = {
       '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} (HP {target} از {previousHp} به {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. دور {round}، نوبت {turn}.',
     'runtime.events.detail.movement': '{participant} {reason} به {x}،{y}.',
+    'runtime.events.detail.scene': '{reason}. {entities} مورد روی نقشه.',
     'runtime.events.detail.character':
       'HP {character} اکنون {currentHp}/{maxHp} است.',
     'runtime.events.detail.characterWithConditions':
@@ -2163,12 +2434,35 @@ export const messages = {
       'DM مصرف نوبت را تغییر داد',
     'runtime.events.reason.encounter_state.dm_current_turn_changed':
       'DM نوبت جاری را تغییر داد',
+    'runtime.events.reason.scene_state.initial_sync': 'نقشه همگام شد',
+    'runtime.events.reason.scene_state.scene_activated': 'یک نقشه فعال شد',
+    'runtime.events.reason.scene_state.entity_placed':
+      'چیزی روی نقشه قرار گرفت',
+    'runtime.events.reason.scene_state.entity_updated':
+      'چیزی روی نقشه تغییر کرد',
+    'runtime.events.reason.scene_state.entity_moved':
+      'چیزی روی نقشه جابه‌جا شد',
+    'runtime.events.reason.scene_state.entity_removed': 'چیزی از نقشه حذف شد',
+    'runtime.events.reason.scene_state.terrain_painted': 'زمین نقاشی شد',
+    'runtime.events.reason.scene_state.transition_created':
+      'یک خروجی افزوده شد',
+    'runtime.events.reason.scene_state.transition_updated':
+      'یک خروجی تغییر کرد',
+    'runtime.events.reason.scene_state.transition_removed': 'یک خروجی حذف شد',
+    'runtime.events.reason.scene_state.combatant_placed': 'یک موجود قرار گرفت',
+    'runtime.events.reason.scene_state.combatant_moved': 'یک موجود جابه‌جا شد',
+    'runtime.events.reason.scene_state.combatant_hp_changed':
+      'یک موجود آسیب دید',
+    'runtime.events.reason.scene_state.combatant_visibility_changed':
+      'GM آنچه دیده می‌شود را تغییر داد',
     'runtime.turn.concealedCombatant': 'موجود ناشناس',
     'runtime.turnTarget.advanceTurn': 'بردن به نوبت بعد',
     'runtime.turnTarget.attackTarget': 'حمله به هدف',
     'runtime.turnTarget.description':
       'کنترل‌های نوبت فرمان‌های محدود به بازیگر می‌فرستند؛ دکمه‌های غیرفعال پیش‌نیازهای کم‌شده را توضیح می‌دهند.',
     'runtime.turnTarget.eyebrow': 'برخورد',
+    'runtime.turnTarget.combatantOption':
+      '{name} ({kind}، امتیاز ضربه {current}/{max})',
     'runtime.turnTarget.initiative': '· ابتکار {initiative}',
     'runtime.turnTarget.target': 'هدف',
     'runtime.turnTarget.title': 'نوبت و هدف',

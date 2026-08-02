@@ -6,6 +6,7 @@ import { encounterStateUpdateSchema } from './encounter.js';
 import { playerIntentStateUpdateSchema } from './intent.js';
 import { resolutionStateUpdateSchema } from './resolution.js';
 import { movementStateUpdateSchema } from './movement.js';
+import { sceneStateUpdateSchema } from './scene.js';
 import { sessionStateUpdateSchema } from './session.js';
 
 export const sessionStreamEventSchema = z.discriminatedUnion('type', [
@@ -13,6 +14,7 @@ export const sessionStreamEventSchema = z.discriminatedUnion('type', [
   characterStateUpdateSchema,
   sessionStateUpdateSchema,
   movementStateUpdateSchema,
+  sceneStateUpdateSchema,
   encounterStateUpdateSchema,
   resolutionStateUpdateSchema,
   playerIntentStateUpdateSchema,

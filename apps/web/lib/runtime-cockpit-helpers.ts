@@ -3739,6 +3739,20 @@ export function describeSessionStreamEvent(
         titleKey: 'runtime.events.title.encounter',
         tone: 'info',
       };
+    // Only the reason and the visible entity count travel here. The payload is
+    // already role-projected, so a player's count is the count of what they can
+    // see - and naming an entity in the feed would put a map secret in a log
+    // line the map itself is careful not to draw.
+    case 'scene_state':
+      return {
+        detailKey: 'runtime.events.detail.scene',
+        detailValues: {
+          entities: String(event.scene.entities.length),
+          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+        },
+        titleKey: 'runtime.events.title.scene',
+        tone: 'info',
+      };
     case 'movement_state':
       return {
         detailKey: 'runtime.events.detail.movement',

@@ -18,8 +18,8 @@ Ordering principles:
 | ------------------------------ | -------- |
 | M0 — Foundation repair         | Complete |
 | M1 — First playable table      | Complete |
-| M2 — Game HUD                  | Next     |
-| M3 — Fog of war and lighting   | Planned  |
+| M2 — Game HUD                  | Complete |
+| M3 — Fog of war and lighting   | Next     |
 | M4 — Renderer quality          | Planned  |
 | M5 — Map builder completion    | Planned  |
 | M6 — Character foundations     | Planned  |
@@ -152,12 +152,14 @@ does it across a real PostgreSQL-backed server restart with both windows left
 open. Both ran three times cleanly, and the full loop was also played visibly on
 a desktop. Both run in the `m1-browser-acceptance` CI job.
 
-**Known limitation carried forward.** No stream event carries a scene
-projection, so a creature the GM places, reveals or conceals reaches a player
-only when that player presses `Recover`. The projection itself is correct
-either way - concealment is applied server-side before the bytes leave - so this
-is a liveness gap, not a disclosure one. It belongs with the HUD work in M2,
-which is rebuilding the surfaces that would consume such an event.
+**Limitation carried forward, now closed.** No stream event carried a scene
+projection, so a creature the GM placed, revealed or concealed reached a player
+only when that player pressed `Recover`. The projection was correct either way -
+concealment is applied server-side before the bytes leave - so it was a liveness
+gap, not a disclosure one. M2 closed it: `scene_state` is a named stream event,
+and both the M2 acceptance harness and `test:smoke:live-scene` assert that
+placing, moving, concealing and revealing each reach the other browser with no
+`Recover` in between.
 
 ---
 
@@ -176,9 +178,29 @@ state, command orchestration, recovery, character management, map editing,
 diagnostics. A client state model with selectors and hooks rather than one
 component owning every variable. Diagnostics behind a GM or development surface.
 
-**Acceptance criteria.** No component over 500 lines. The player bundle contains
-no diagnostic panel. Every existing runtime behaviour still passes its tests. A
-player-mode screenshot contains no raw identifier or protocol field name.
+**Acceptance criteria.**
+
+- No M2-owned component exceeds 500 lines. M2 owns the runtime HUD: the role
+  shells, the runtime composition root, runtime panels, and diagnostics -
+  everything under `apps/web/app/runtime/`.
+- Legacy components already over the limit outside that surface are pinned by
+  the repository shape test and assigned to the milestone that will decompose
+  each one. They may not grow while exempt, every exemption names its owning
+  milestone and its reason, and an exemption must be removed once its milestone
+  brings the file under the limit - the test fails on a stale entry as loudly as
+  on a violated one.
+- The Player and the GM use distinct production shells.
+- `runtime-cockpit.tsx` remains a small composition root.
+- The player bundle contains no diagnostic panel.
+- Every existing runtime behaviour still passes its tests.
+- A player-mode screenshot contains no raw identifier or protocol field name.
+
+The original wording said "no component over 500 lines" without saying which
+components. Read literally that made M2 responsible for decomposing the map
+builder, the character builder and the renderer - three surfaces this milestone
+was explicitly told to leave alone, and three that later milestones already own.
+The criterion above is the same rule with its scope stated, not a weaker one:
+inside the surface M2 rebuilt it is unconditional.
 
 **Tests.** Existing helper tests preserved and extended per extracted module;
 browser smokes updated to the new surfaces; both locales verified for RTL.
@@ -186,6 +208,80 @@ browser smokes updated to the new surfaces; both locales verified for RTL.
 **Dependencies.** M1, which is complete.
 
 **Excludes.** Renderer replacement. New gameplay.
+
+**Delivered.** `runtime-cockpit.tsx` is a 154-line composition root: it chooses
+a role shell and provides its dependencies. `PlayerGameShell` and
+`GameMasterGameShell` are the production surfaces, each a map-dominant layout
+with a compact status strip, one contextual side region and one collapsible tool
+region. The model lives in `useRuntimeHud` over seven focused modules - drafts,
+selection, diagnostics, character library, and three pure derivations - none of
+which the shells may write to except through a command.
+
+Diagnostics moved to `app/runtime/diagnostics/`, which makes the boundary
+provable: a repository-shape test walks the Player shell's import graph and
+fails if anything under that directory appears in it, with the inverse assertion
+on the GM shell so a walk that resolved nothing cannot pass for the wrong
+reason. The same test enforces the 500-line rule.
+
+Every M2-owned component is under it; the largest are
+`shells/game-master-game-shell.tsx` at 469 and `hud/player-readiness-panels.tsx`
+at 468. Five components were already over the
+limit when the rule landed, and the import graph - not their filenames - decides
+who owns each:
+
+| component                                                | lines | owner | why it is outside M2                                                                                                                        |
+| -------------------------------------------------------- | ----- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/maps/map-builder.tsx`                               | 1211  | M5    | The `/maps` route. Reached only from `app/maps/page.tsx`; no runtime shell reaches it.                                                      |
+| `app/runtime/tactical-map.tsx`                           | 1097  | M4    | The renderer surface, reached only through `runtime-map-stage.tsx`. M4 may swap the drawing layer behind that seam.                         |
+| `.../simple-builder/components/sheet/CharacterSheet.tsx` | 818   | M6    | The Character Builder review sheet. Not the Player HUD character surface, which is `app/runtime/panels/character-summary.tsx` at 127 lines. |
+| `app/characters/character-builder-ui.tsx`                | 688   | M6    | The `/characters` builder routes.                                                                                                           |
+| `.../simple-builder/components/steps/ClassStep.tsx`      | 532   | M6    | A Character Builder wizard step.                                                                                                            |
+
+Only the renderer is inside a runtime shell's import graph, and the test asserts
+it is reached through the map-stage seam and nowhere else - which is what lets
+M4 replace the drawing layer without either shell noticing. The other four are
+asserted _unreachable_ from both shells, so a builder surface cannot drift into
+the runtime by accident.
+
+None of this is a general allowance. Each entry pins a maximum size, names the
+milestone that will remove it, and fails the build if it grows, if its declared
+reachability stops matching the graph, or if it is still listed after its
+milestone brings it under the limit.
+
+`test:smoke:m2-game-hud` is the acceptance harness. Map dominance is measured
+rather than judged: 70% of its row at 1366, 77% at 1920, 100% on mobile. It runs
+in Persian and English at 1920, 1366 and 430px, checks the Player surface for
+UUIDs, record IDs, participant IDs, protocol command names, read command names,
+raw HTTP statuses and protocol error codes, opens and closes a mobile drawer and
+confirms focus returned to its opener.
+
+The last defect it caught is worth recording, because it was invisible to every
+headless run: the column split came from React's observed viewport width, so the
+shell kept the desktop template whenever a `resize` never arrived and a 380px
+inspector squeezed the map to 26px. The split is a media query now - the map's
+share cannot depend on an event arriving - while the structural half, whether a
+side panel is an `<aside>` or a modal `role="dialog"`, stays measured because
+focus trapping and Escape cannot be expressed in CSS.
+
+Nine defects were found by these harnesses and fixed rather than worked around.
+The ones worth naming: a subscription opened without a credential stayed dead
+forever, because `EventSource` retries the URL it was built with; the credential
+cache went stale against any write it did not make itself; recovery notes and
+`EncounterStatusFeedback` put a protocol failure and an encounter ID onto a
+player's screen; the Character Sheet panel showed a player their own participant
+and character IDs and was entirely untranslated; and headless Chrome had been
+running every harness at 800x600, so no layout assertion described the viewport
+it claimed.
+
+**Layout limitation carried forward.** At 1366x768 the page is about one and a
+half viewport heights when the event feed or a GM tool group is open, so reading
+either scrolls the map off screen. What is asserted, at every desktop viewport
+and on every run, is that the map and the role's primary action region - the
+Player's action rail, the GM's inspector - each begin inside the first viewport
+height. Optional reading below the fold is the limitation; a required action
+below the fold would be a defect, and is tested for. A viewport-locked layout
+was attempted and reverted after it collapsed the map to 34px. Polish, not a
+blocker.
 
 ---
 
@@ -492,7 +588,6 @@ everything.
 
 | Defect                                               | Severity | Milestone |
 | ---------------------------------------------------- | -------- | --------- |
-| Runtime cockpit is one ~8,800-line component         | High     | M2        |
 | 2014/2024 rules content mixing                       | High     | M6        |
 | Rate limits, SSE fan-out, and outbox are per-process | Medium   | M14       |
 | Server runs via `tsx` in the container image         | Medium   | M14       |
@@ -500,7 +595,6 @@ everything.
 | `/maps` cannot re-edit a published scene             | Medium   | M5        |
 | Movement preview can offer a cell the server rejects | Low      | M3        |
 | Auth MVP lacks reset, verification, and MFA          | Low      | M14       |
-| Cockpit local state is replayed over live UI state   | Low      | M2        |
 | Demo scenario copy is hardcoded English              | Low      | M1        |
 
 `demoScenarios` in `apps/web/lib/runtime-cockpit-helpers.ts` carries its
@@ -521,8 +615,8 @@ it surfaced at two different steps on identical code. The failing run showed
 runs either side of it. The harnesses now confirm the mode against stored state
 and re-click if it reverts, and re-apply the session-ID write until it sticks.
 
-The product-side half is left as the defect above: because that hydration lives
-in a `useEffect(..., [])`, any remount replays stored local state over whatever
-the surface currently shows. In dev this is a compile; in production the window
-is small but the shape is wrong, and it belongs with the M2 cockpit split rather
-than a spot fix inside an 8,800-line component.
+The product-side half was the hydration effect replaying stored local state over
+whatever the surface currently showed on any remount. M2's split resolved it:
+identity and the projected read models now live in one hook whose only entry
+point is `switchIdentity`, and every switch clears the previous seat's
+projections, so there is no longer a second copy for a remount to replay.

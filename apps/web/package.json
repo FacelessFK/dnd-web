@@ -12,10 +12,13 @@
     "test:smoke:saved-character-training-room-db": "node scripts/runtime-bridge-db-smoke.mjs",
     "test:smoke": "node scripts/runtime-smoke.mjs",
     "test:smoke:two-profile": "node scripts/runtime-two-profile-smoke.mjs",
+    "test:smoke:live-scene": "node scripts/runtime-live-scene-smoke.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:smoke:m1-full-loop": "node scripts/m1-full-loop-smoke.mjs",
-    "test:smoke:m1-db-browser-restart": "node scripts/m1-db-browser-restart-smoke.mjs"
+    "test:smoke:m1-db-browser-restart": "node scripts/m1-db-browser-restart-smoke.mjs",
+    "test:preflight:intent-terminality": "node scripts/m2-intent-terminality-preflight.mjs",
+    "test:smoke:m2-game-hud": "node scripts/m2-game-hud-acceptance.mjs"
   },
   "dependencies": {
     "@dnd/protocol": "workspace:*",

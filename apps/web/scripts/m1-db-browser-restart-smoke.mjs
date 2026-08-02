@@ -48,6 +48,7 @@ import {
   loadRepoEnvironment,
   loginInBrowser,
   navigate,
+  openGameMasterTool,
   nextBin,
   postCommand,
   printProcessLogs,
@@ -63,6 +64,7 @@ import {
   waitForHttp,
   waitForNoText,
   waitForPortRelease,
+  waitForParticipantCredential,
   waitForSseOpen,
   waitForText,
   webDir,
@@ -75,6 +77,7 @@ import {
   concealCombatant,
   countSseFrames,
   createCombatant,
+  settleSseFrames,
   fail,
   findCombatantId,
   NON_PROFICIENT_SKILL,
@@ -308,14 +311,22 @@ async function main() {
     const sessionId = await waitForStoredSessionId(gmPage);
     console.log(`[m1-db-restart]   session ${sessionId}`);
 
+    // 'Create Scene' is the scenario shortcut on the Table tools, not the
+    // Scene Builder's 'Create Custom Scene'.
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
+    await waitForParticipantCredential(gmPage, sessionId, 'GM');
     await clickButton(gmPage, ['Subscribe SSE']);
     await waitForSseOpen(gmPage, 'GM');
 
     await setSessionCode(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session']);
     await waitForStoredSessionId(playerPage, sessionId);
+    // The stored session code is set by typing it, not by joining, so it does
+    // not mean the join finished. Subscribing before the credential lands is a
+    // subscription the seat cannot authenticate.
+    await waitForParticipantCredential(playerPage, sessionId, 'Player');
     await clickButton(playerPage, ['Subscribe SSE']);
     await waitForSseOpen(playerPage, 'Player');
 
@@ -329,6 +340,7 @@ async function main() {
 
     await clickButton(gmPage, ['Recover']);
     await waitForText(gmPage, [characterName], 'GM pending character preview');
+    await openGameMasterTool(gmPage, 'roster');
     await clickButton(gmPage, ['Assign Runtime Copy']);
     await waitForText(
       gmPage,
@@ -369,6 +381,14 @@ async function main() {
       x: 6,
       y: 5,
     });
+
+    // Both monsters are placed visible first, so the Player's scene frames up
+    // to here legitimately name the second one. The recorder's transcript
+    // survives the restart below, so without this boundary the post-restart
+    // concealment check would scan frames from before the creature was ever
+    // concealed and report correct behaviour as a leak.
+    const preConcealFrameIndex = await settleSseFrames(playerPage);
+
     await concealCombatant(gmPage, concealedMonsterName);
 
     const visibleEntityId = await findCombatantId({
@@ -442,6 +462,7 @@ async function main() {
 
     await runIntentLifecycle({ gmPage, playerPage });
 
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Start Encounter']);
     await waitForText(
       gmPage,
@@ -700,6 +721,7 @@ async function main() {
 
     step('verify concealment survived the restart');
     await assertPlayerCannotSee(playerPage, {
+      fromIndex: preConcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealment across a restart',
     });

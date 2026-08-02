@@ -9,6 +9,7 @@ import type {
   MovementStateUpdate,
   MovementStateUpdateReason,
   ReconnectSessionCommand,
+  SceneStateUpdate,
   SessionErrorCode,
   SessionStreamEvent,
   SessionStateUpdate,
@@ -33,6 +34,7 @@ import {
   publishEncounterStateUpdateToRoom,
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
+  publishSceneStateUpdateToRoom,
   type PlayerIntentStateFanout,
   type ResolutionStateFanout,
 } from './session-event-fanout.js';
@@ -119,6 +121,13 @@ export interface RuntimeSessionStore {
     update: CombatEvent,
     concealedCombatantIds?: ReadonlySet<SceneEntityId>,
   ): void;
+  /**
+   * Takes the authoritative scene and projects it per role on the way out.
+   * There is deliberately no pre-filtered variant of this call: a caller that
+   * could hand in a player view could also hand the DM one by mistake, and the
+   * failure would be silent in exactly the direction that matters.
+   */
+  publishSceneStateUpdate(update: SceneStateUpdate): void;
   publishCharacterStateUpdate(update: CharacterStateUpdate): void;
   /**
    * The whole table state goes in and a per-participant projection comes out.
@@ -427,6 +436,10 @@ export class InMemorySessionStore implements RuntimeSessionStore {
       update,
       concealedCombatantIds,
     );
+  }
+
+  publishSceneStateUpdate(update: SceneStateUpdate): void {
+    publishSceneStateUpdateToRoom(this.requireRoom(update.sessionId), update);
   }
 
   publishResolutionStateUpdate(params: ResolutionStateFanout): void {

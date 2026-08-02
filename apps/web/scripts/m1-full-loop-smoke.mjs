@@ -42,6 +42,7 @@ import {
   loadRepoEnvironment,
   loginInBrowser,
   navigate,
+  openGameMasterTool,
   nextBin,
   postCommand,
   printProcessLogs,
@@ -56,6 +57,7 @@ import {
   waitFor,
   waitForHttp,
   waitForNoText,
+  waitForParticipantCredential,
   waitForSseOpen,
   waitForText,
   webDir,
@@ -71,7 +73,6 @@ import {
   assertSceneProjections,
   compareRoleProjections,
   concealCombatant,
-  countSseFrames,
   createCombatant,
   EXPECTED_PROFICIENCY_BONUS,
   fail,
@@ -90,6 +91,7 @@ import {
   runIntentLifecycle,
   runPlayerAttack,
   seedLibraryEntry,
+  settleSseFrames,
   setRunTag,
   setCell,
   setSessionCode,
@@ -351,6 +353,9 @@ async function main() {
     console.log(`[m1-full-loop] session ${sessionId}`);
 
     step('GM activates a map through the UI');
+    // 'Create Scene' is the scenario shortcut on the Table tools, not the
+    // Scene Builder's 'Create Custom Scene'.
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
     await waitFor(gmPage, {
@@ -362,6 +367,7 @@ async function main() {
     });
 
     step('GM subscribes; the recorder captures raw named frames');
+    await waitForParticipantCredential(gmPage, sessionId, 'GM');
     await clickButton(gmPage, ['Subscribe SSE']);
     await waitForSseOpen(gmPage, 'GM');
 
@@ -369,6 +375,10 @@ async function main() {
     await setSessionCode(playerPage, sessionId);
     await clickButton(playerPage, ['Join Session']);
     await waitForStoredSessionId(playerPage, sessionId);
+    // The stored session code is set by typing it, not by joining, so it does
+    // not mean the join finished. Subscribing before the credential lands is a
+    // subscription the seat cannot authenticate.
+    await waitForParticipantCredential(playerPage, sessionId, 'Player');
     await clickButton(playerPage, ['Subscribe SSE']);
     await waitForSseOpen(playerPage, 'Player');
 
@@ -390,6 +400,7 @@ async function main() {
 
     step('GM assigns the runtime character');
     await clickButton(gmPage, ['Recover']);
+    await openGameMasterTool(gmPage, 'roster');
     await waitForText(gmPage, ['Assignment Requests'], 'GM assignment panel');
     await waitForText(gmPage, [characterName], 'GM pending character preview');
     await clickButton(gmPage, ['Assign Runtime Copy']);
@@ -488,6 +499,14 @@ async function main() {
     });
     await waitForText(gmPage, [visibleMonsterName], 'GM visible monster');
     await waitForText(gmPage, [concealedMonsterName], 'GM concealed monster');
+
+    // Both monsters are placed visible, so the Player's scene frames up to this
+    // point legitimately name the second one - it was not concealed yet. The
+    // window has to open here, exactly as it does for the reveal and re-conceal
+    // below. Under M1 no stream event carried a scene at all, so scanning from
+    // frame zero was safe; M2's live scene frames made that stale.
+    const preConcealFrameIndex = await settleSseFrames(playerPage);
+
     await concealCombatant(gmPage, concealedMonsterName);
 
     step('verify the role-specific scene projection');
@@ -505,6 +524,7 @@ async function main() {
     });
 
     await assertPlayerCannotSee(playerPage, {
+      fromIndex: preConcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealed monster after the first conceal',
     });
@@ -755,6 +775,7 @@ async function main() {
     await stage('intent-transitions');
 
     step('GM starts the encounter');
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Start Encounter']);
     // The panel heading is CSS-uppercased in `innerText`; match either casing.
     await waitForText(
@@ -777,8 +798,10 @@ async function main() {
 
     step('GM reveals the concealed monster and the Player receives it');
     // Everything before this index is a stretch in which the creature was
-    // concealed, and is what the leak checks are allowed to look at.
-    const preRevealFrameIndex = await countSseFrames(playerPage);
+    // concealed, and is what the leak checks are allowed to look at. Settling
+    // first makes that stretch cover every frame the conceal actually produced
+    // rather than however many had arrived when the count was sampled.
+    const preRevealFrameIndex = await settleSseFrames(playerPage);
 
     await revealCombatant(gmPage, concealedMonsterName);
     await clickButton(playerPage, ['Recover']);
@@ -798,12 +821,14 @@ async function main() {
     await stage('reveal');
 
     step('GM conceals it again and the Player loses it');
-    const preReconcealFrameIndex = await countSseFrames(playerPage);
+    // The reveal's own `Recover` burst is still landing here; settling is what
+    // keeps those legitimately-revealed frames out of the re-conceal window.
+    const preReconcealFrameIndex = await settleSseFrames(playerPage);
 
     await concealCombatant(gmPage, concealedMonsterName);
     await clickButton(playerPage, ['Recover']);
     await assertPlayerCannotSee(playerPage, {
-      fromIndex: preReconcealFrameIndex + 1,
+      fromIndex: preReconcealFrameIndex,
       identifiers: [concealedEntityId, concealedMonsterName],
       label: 'concealed monster after re-conceal',
     });
@@ -824,6 +849,7 @@ async function main() {
     step('compare the GM and Player named SSE frames');
     await compareRoleProjections({
       concealedEntityId,
+      concealedFromIndex: preConcealFrameIndex,
       concealedMonsterName,
       concealedUntilIndex: preRevealFrameIndex,
       gmPage,

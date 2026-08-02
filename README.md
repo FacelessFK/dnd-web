@@ -320,6 +320,8 @@ corepack pnpm --filter @dnd/web test:smoke:builder-export-db
 corepack pnpm --filter @dnd/web test:smoke:saved-character-training-room-db
 corepack pnpm --filter @dnd/web test:smoke:m1-full-loop            # the M1 acceptance
 corepack pnpm --filter @dnd/web test:smoke:m1-db-browser-restart   # browsers across a restart
+corepack pnpm --filter @dnd/web test:smoke:m2-game-hud             # the M2 acceptance
+corepack pnpm --filter @dnd/web test:preflight:intent-terminality  # repeated intent lifecycle
 ```
 
 `test:smoke:m1-full-loop` is the M1 acceptance harness: two authenticated
@@ -334,6 +336,24 @@ command, and a player token pointed at the GM stream.
 `test:smoke:m1-db-browser-restart` provisions its own database, kills a real
 server process and starts a second one against the same data while both Chrome
 windows stay open, then recovers each seat through the visible Recover control.
+
+`test:smoke:m2-game-hud` is the M2 acceptance harness: the same two profiles,
+asserting the visible Game HUD rather than the table underneath it. The map must
+hold at least half the row it shares — measured, not judged — at 1920, 1366 and
+430px; the Player surface must carry no diagnostics and no raw identifier, which
+is checked both structurally and by scanning rendered text for UUIDs, record
+IDs, participant IDs and protocol command names; the GM's diagnostics must exist
+and be closed; placing, moving, concealing and revealing must each reach the
+Player with no Recover in between; and the whole journey runs in Persian and in
+English, with the 430px pass opening a drawer, closing it and checking focus
+returned to the control that opened it.
+
+`test:preflight:intent-terminality` repeats the acknowledge / resolve / dismiss
+lifecycle across five clean sessions and twenty intents, waiting on the GM's
+subscription and the Player's independently after every transition. It exists
+because those are two subscriptions with no ordering between them, and a
+lifecycle that passes once proves the feature exists rather than that it is
+stable.
 
 Both need DB mode. Authentication only exists when `SERVER_PERSISTENCE_MODE=db`,
 so an in-memory server has no login and no Character Library — half the journey.

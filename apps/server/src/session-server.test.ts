@@ -5691,11 +5691,13 @@ test('db-backed missed realtime delivery is recovered through read models withou
   );
   assert.equal(targetCharacterRead.body.data.character.hp.current, 29);
   // Connecting replays what the subscriber is entitled to know *now*: the
-  // session snapshot plus the M1 table as it stands. What it must never replay
-  // is the combat event it missed, which is the point of this test.
+  // session snapshot, the active map, and the M1 table as they stand. What it
+  // must never replay is the combat event it missed, which is the point of
+  // this test.
   assert.deepEqual(lateStreamUpdates.map((update) => update.type).sort(), [
     'player_intent_state',
     'resolution_state',
+    'scene_state',
     'session_state',
   ]);
   assert.equal(
@@ -6004,6 +6006,7 @@ test('outbox status endpoint reports unpublished backlog without draining rows',
         movement_state: 1,
         player_intent_state: 0,
         resolution_state: 0,
+        scene_state: 0,
         session_state: 1,
       },
       oldestCreatedAt: null,
@@ -6228,7 +6231,7 @@ test('db-backed session transaction boundary writes one runtime copy and one out
   assert.equal(reusableEntry.hp.current, 9);
 });
 
-test('db-backed session transaction boundary writes one outbox row, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
+test('db-backed session transaction boundary writes session and scene outbox rows, dispatches after commit, and returns cached success on duplicate activate retry', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const characterDatabase = new InMemoryCharacterRecordDatabase();
   const sceneDatabase = new InMemorySceneRecordDatabase();
@@ -6310,11 +6313,19 @@ test('db-backed session transaction boundary writes one outbox row, dispatches a
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
-  assert.equal(sessionUpdates.length, 1);
-  assert.equal(sessionUpdates[0]?.type, 'session_state');
-  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
-  assert.deepEqual(newCommitMarkers, [commitCountBefore + 1]);
+  // Two rows for one activation: the session change and the map it now points
+  // at, committed together so a crash between them is impossible.
+  assert.equal(outboxDatabase.recordCount, 2);
+  assert.deepEqual(
+    sessionUpdates.map((update) => `${update.type}:${update.reason}`),
+    ['session_state:active_scene_changed', 'scene_state:scene_activated'],
+  );
+  // One marker per delivered event, both reading the post-commit count:
+  // neither the session change nor the scene reached a subscriber early.
+  assert.deepEqual(newCommitMarkers, [
+    commitCountBefore + 1,
+    commitCountBefore + 1,
+  ]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -7013,6 +7024,130 @@ test('db-backed scene transaction boundary commits place_entity_in_scene durably
   assert.equal(persistedScene?.record.entities[0]?.name, 'Stone Pillar');
 });
 
+test('db-backed scene transaction boundary writes a scene outbox row for the active map and dispatches it projected after commit', async () => {
+  const sessionDatabase = new InMemorySessionSnapshotDatabase();
+  const sceneDatabase = new InMemorySceneRecordDatabase();
+  const characterDatabase = new InMemoryCharacterRecordDatabase();
+  const idempotencyDatabase = new InMemoryCommandIdempotencyRecordDatabase();
+  const outboxDatabase = new InMemoryCommandEventOutboxDatabase();
+  const unitOfWork = new InMemoryDndDatabaseUnitOfWork(
+    characterDatabase,
+    idempotencyDatabase,
+    undefined,
+    outboxDatabase,
+    sessionDatabase,
+    sceneDatabase,
+  );
+  const runtime = new InMemoryGameRuntime(
+    await DbBackedSessionStore.fromDatabase(sessionDatabase),
+    undefined,
+    new DbBackedCharacterRepository(characterDatabase),
+    await DbBackedSceneStore.fromDatabase(sceneDatabase),
+  ).withRollers(TEST_ROLLERS);
+  const idempotency: CommandIdempotencyStore =
+    new InMemoryCommandIdempotencyStore();
+  const sceneCommandTransaction = new DbBackedSceneCommandTransactionBoundary(
+    unitOfWork,
+    new CommandEventOutboxDispatcher(outboxDatabase, runtime.sessions),
+  );
+  const { sceneId, sessionId } =
+    await setupDurableSessionForIdempotency(runtime);
+
+  // The sibling tests above leave the scene inactive, which is why they see no
+  // scene rows: an edit to a map the room is not looking at is saved silently.
+  // This one activates it first, so the write is something the table can see.
+  await runtime.activateSceneForSession({
+    commandId: 'durable-scene-activate-for-outbox',
+    type: 'activate_scene_for_session',
+    actor: { participantId: 'dm-001' },
+    payload: { sessionId, sceneId },
+  });
+
+  const dmUpdates: SessionStreamEvent[] = [];
+  const playerUpdates: SessionStreamEvent[] = [];
+
+  for (const [participantId, sink] of [
+    ['dm-001', dmUpdates],
+    ['player-001', playerUpdates],
+  ] as const) {
+    runtime.connectParticipant(sessionId, participantId, {
+      connectionId: `outbox-projection-${participantId}`,
+      close: () => undefined,
+      send: (update) => sink.push(update),
+    });
+  }
+
+  const dmFrameCountBefore = dmUpdates.length;
+  const playerFrameCountBefore = playerUpdates.length;
+
+  const placed = await postJson<SceneCommandResponse>(
+    runtime,
+    idempotency,
+    '/api/scenes/command',
+    {
+      commandId: 'durable-place-hidden-entity-1',
+      type: 'place_entity_in_scene',
+      actor: { participantId: 'dm-001' },
+      payload: {
+        sessionId,
+        sceneId,
+        entity: {
+          type: 'object',
+          name: 'Concealed Trapdoor',
+          position: { x: 3, y: 3 },
+          footprint: { width: 1, height: 1 },
+          blocksMovement: true,
+          blocksVision: false,
+          hidden: true,
+        },
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    sceneCommandTransaction,
+  );
+
+  const persistedScene = await sceneDatabase.getSceneRecord(sceneId);
+  const hiddenEntityId = persistedScene?.record.entities[0]?.id;
+  const dmScenes = dmUpdates
+    .slice(dmFrameCountBefore)
+    .filter((update) => update.type === 'scene_state');
+  const playerScenes = playerUpdates
+    .slice(playerFrameCountBefore)
+    .filter((update) => update.type === 'scene_state');
+
+  assert.equal(placed.status, 200);
+  assert.ok(hiddenEntityId);
+  assert.equal(outboxDatabase.recordCount, 1);
+  // Drained after commit, leaving nothing behind.
+  assert.equal(
+    (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
+    0,
+  );
+
+  // The durable row holds the authoritative scene; each subscriber is projected
+  // at delivery, exactly as on the live path.
+  assert.equal(dmScenes.length, 1);
+  assert.equal(playerScenes.length, 1);
+  assert.equal(
+    dmScenes[0]?.type === 'scene_state' &&
+      dmScenes[0].scene.entities.some((entity) => entity.id === hiddenEntityId),
+    true,
+  );
+  assert.equal(
+    playerScenes[0]?.type === 'scene_state' &&
+      playerScenes[0].scene.entities.length,
+    0,
+  );
+  assert.equal(
+    JSON.stringify(playerUpdates).includes(hiddenEntityId),
+    false,
+    'the hidden ID never reached the player through the outbox path',
+  );
+});
+
 test('concurrent duplicate db-backed place_entity_in_scene requests cannot append the entity twice', async () => {
   const sessionDatabase = new InMemorySessionSnapshotDatabase();
   const sceneDatabase = new InMemorySceneRecordDatabase();
@@ -7631,10 +7766,17 @@ test('db-backed session transaction boundary commits activate_scene_transition a
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
-  assert.equal(sessionUpdates.length, 1);
-  assert.equal(sessionUpdates[0]?.type, 'session_state');
-  assert.equal(sessionUpdates[0]?.reason, 'active_scene_changed');
+  assert.equal(outboxDatabase.recordCount, 2);
+  // Walking through a door announces the door's destination, not the room the
+  // party just left.
+  assert.deepEqual(
+    sessionUpdates.map((update) => `${update.type}:${update.reason}`),
+    ['session_state:active_scene_changed', 'scene_state:scene_activated'],
+  );
+  assert.equal(
+    sessionUpdates.find((update) => update.type === 'scene_state')?.scene.id,
+    targetScene.id,
+  );
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -11169,11 +11311,12 @@ test('reconnected SSE subscribers receive current session state without combat e
     },
   });
 
-  // Session snapshot first, then the M1 table, all as `initial_sync`. A
-  // reconnecting client rebuilds from state rather than from replayed events.
+  // Session snapshot first, then the map, then the M1 table, all as
+  // `initial_sync`. A reconnecting client rebuilds from state rather than from
+  // replayed events - the combat event above is not re-sent.
   assert.deepEqual(
     reconnectUpdates.map((update) => update.type),
-    ['session_state', 'resolution_state', 'player_intent_state'],
+    ['session_state', 'scene_state', 'resolution_state', 'player_intent_state'],
   );
   assert.ok(
     reconnectUpdates.every((update) => update.reason === 'initial_sync'),

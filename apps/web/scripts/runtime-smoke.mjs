@@ -13,6 +13,7 @@ import {
   getAbsentVisibleTextsOutsideSelectorExpression,
   getChromeDisplayArgs,
   getPageDiagnosticsExpression,
+  getOpenGameMasterToolExpression,
   getPresentVisibleTextsExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
@@ -156,14 +157,32 @@ async function main() {
       Boolean(state?.sessionId && state?.sceneId),
     );
     await waitForText(page, 'Training Room', 'active scene after demo setup');
+    await waitForText(page, 'Tactical Grid', 'tactical grid');
+    await waitForAnyText(
+      page,
+      ['No active turn', 'نوبت فعالی نیست'],
+      'localized no-active-turn status',
+    );
+
+    // The M2 HUD shows one GM tool group at a time, so each assertion below
+    // names the group it belongs to rather than assuming one long page.
+    await openGmTool(page, 'roster');
     await waitForText(page, 'Aria', 'sample character Aria');
     await waitForText(page, 'Borin', 'sample character Borin');
-    await waitForText(page, 'Tactical Grid', 'tactical grid');
+    await waitForAnyText(
+      page,
+      ['Conditions:', 'وضعیت‌ها:'],
+      'localized character summary labels',
+    );
+
+    await openGmTool(page, 'scene');
     await waitForAnyText(
       page,
       ['Target scene ID is required.', 'شناسه صحنه مقصد الزامی است.'],
       'localized transition validation',
     );
+
+    await openGmTool(page, 'combatants');
     await waitForAnyText(
       page,
       [
@@ -172,18 +191,9 @@ async function main() {
       ],
       'localized combatant selection blocker',
     );
-    await waitForAnyText(
-      page,
-      ['No active turn', 'نوبت فعالی نیست'],
-      'localized no-active-turn status',
-    );
-    await waitForAnyText(
-      page,
-      ['Conditions:', 'وضعیت‌ها:'],
-      'localized character summary labels',
-    );
 
     logSmokeStep('starting encounter from UI');
+    await openGmTool(page, 'table');
     await clickButton(page, 'Start Encounter');
     await waitFor(page, {
       label: 'encounter summary',
@@ -206,6 +216,7 @@ async function main() {
       ['Combat & Event Feed', 'برخورد و رخدادها'],
       'event feed panel',
     );
+    await openGmTool(page, 'combatants');
     await waitForAnyText(
       page,
       ['Monsters & NPCs', 'هیولاها و NPCها'],
@@ -227,6 +238,7 @@ async function main() {
     await waitForCockpitHydrated(page);
     await clickButton(page, 'Recover');
     await waitForText(page, 'Training Room', 'recovered scene');
+    await openGmTool(page, 'roster');
     await waitForText(page, 'Aria', 'recovered character Aria');
     await waitForText(page, 'Borin', 'recovered character Borin');
     await waitFor(page, {
@@ -260,22 +272,22 @@ async function main() {
 
     logSmokeStep('validating player mode guardrails');
     await clickButton(page, 'Player Mode');
-    await waitForText(page, 'PLAYER VIEW', 'player mode tactical shell');
+    // The Player surface is a distinct shell in M2, not the GM page with
+    // sections hidden - so this asserts which shell mounted rather than that a
+    // particular panel eyebrow is on screen.
+    await waitFor(page, {
+      label: 'player game shell mounted',
+      predicate: `Boolean(document.querySelector('[data-runtime-shell="player"]'))`,
+    });
     await clickButton(page, 'Recover');
     await waitForText(page, 'Aria', 'player assigned character');
     await waitForText(page, 'Tactical Grid', 'player tactical grid');
     await waitFor(page, {
-      label: 'player readiness summary',
+      label: 'player status and action regions',
       predicate: `(() => {
-        const text = document.body?.innerText ?? '';
-        const normalizedText = text.toLocaleLowerCase('en-US');
-        const hasReadinessSummary =
-          normalizedText.includes('readiness summary') ||
-          text.includes('خلاصه آمادگی');
-        const hasTokenStatus =
-          normalizedText.includes('token') ||
-          text.includes('توکن');
-        return hasReadinessSummary && hasTokenStatus;
+        const status = document.querySelector('[data-hud-region="player-status"]');
+        const actions = document.querySelector('[data-hud-region="player-actions"]');
+        return Boolean(status && actions && status.innerText.trim().length > 0);
       })()`,
     });
     await expectVisibleButton(page, 'Run Training Room Skirmish', false);
@@ -285,6 +297,20 @@ async function main() {
       ['Monsters & NPCs', 'هیولاها و NPCها'],
       false,
     );
+    // The Player shell must never mount the GM's tool region or the debug
+    // ledger. Both are structural, so both are checked structurally.
+    await waitFor(page, {
+      label: 'player shell carries no GM tools or diagnostics',
+      predicate: `(() => {
+        const forbidden = [
+          '[data-hud-region="gm-tools"]',
+          '[data-hud-region="gm-inspector"]',
+          '[data-testid="runtime-diagnostics-toggle"]',
+          '[data-testid="runtime-diagnostics-body"]',
+        ];
+        return forbidden.every((selector) => !document.querySelector(selector));
+      })()`,
+    });
     const sessionIdBeforeLocalReset = await getStoredCockpitSessionId(page);
 
     logSmokeStep('validating local reset stays local');
@@ -730,6 +756,14 @@ async function waitForCockpitState(page, predicate) {
 
       return (${predicate.toString()})(JSON.parse(raw));
     })()`,
+  });
+}
+
+/** Bring one GM tool group on screen before asserting on what it contains. */
+async function openGmTool(page, tab) {
+  await waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
   });
 }
 

@@ -3080,7 +3080,7 @@ test('activating a scene updates the authoritative session snapshot and broadcas
     connectionId: 'dm-scene-connection-1',
     close: () => undefined,
     send: (update) => {
-      updates.push(update.reason);
+      updates.push(`${update.type}:${update.reason}`);
     },
   });
 
@@ -3099,7 +3099,12 @@ test('activating a scene updates the authoritative session snapshot and broadcas
 
   assert.equal(activation.sceneId, scene.id);
   assert.equal(activation.state.session.activeSceneId, scene.id);
-  assert.equal(updates.at(-1), 'active_scene_changed');
+  // The session change is announced before the map it points at, so a client
+  // never receives a scene it does not yet believe is active.
+  assert.deepEqual(updates.slice(-2), [
+    'session_state:active_scene_changed',
+    'scene_state:scene_activated',
+  ]);
 });
 
 test('placing an entity stores it on the authoritative scene', () => {
@@ -5404,9 +5409,11 @@ test('current turn player character can attack an active scene combatant and emi
 
   assert.equal(updatedEncounter.currentTurnUsage.actionUsed, true);
   assert.equal(targetCombatant?.combatant?.hp.current, 3);
+  // Authoritative state lands before the narration that explains it: the map
+  // carries the combatant's new HP, then the encounter, then the log line.
   assert.deepEqual(
     newEvents.map((event) => event.type),
-    ['encounter_state', 'combat_event'],
+    ['scene_state', 'encounter_state', 'combat_event'],
   );
   assert.equal(combatEvent?.attackerKind, 'character');
   assert.equal(combatEvent?.targetKind, 'combatant');

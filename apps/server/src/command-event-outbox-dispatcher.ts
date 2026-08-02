@@ -11,6 +11,7 @@ import type {
   OutboxStatusSuccess,
   PlayerIntentStateUpdate,
   ResolutionStateUpdate,
+  SceneStateUpdate,
   SessionStateUpdate,
 } from '@dnd/protocol';
 
@@ -175,6 +176,16 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       return;
     }
 
+    // The stored payload is the authoritative scene, which is correct for a
+    // durable record. Concealment is applied by the store on the way to each
+    // subscriber, exactly as it is on the live path.
+    if (row.eventType === 'scene_state') {
+      this.sessions.publishSceneStateUpdate(
+        this.clone(row.payload as SceneStateUpdate),
+      );
+      return;
+    }
+
     if (row.eventType === 'movement_state') {
       this.sessions.publishMovementStateUpdate(
         this.clone(row.payload as MovementStateUpdate),
@@ -230,6 +241,7 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
       movement_state: 0,
       player_intent_state: 0,
       resolution_state: 0,
+      scene_state: 0,
       session_state: 0,
     };
   }

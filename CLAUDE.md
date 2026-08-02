@@ -92,13 +92,43 @@ change there as a security change and test it as one.
 
 ## Code patterns to follow
 
-**Pure logic in a tested helper; components stay presentational.**
-`apps/web/app/runtime/runtime-cockpit.tsx` is the counter-example — ~8,800 lines
-and the largest known defect in the repository (ROADMAP M2). Nearly all of its
-derivations live in `apps/web/lib/runtime-cockpit-helpers.ts` with matching
-`.test.ts` coverage. New runtime logic goes in a helper module with a test, never
-inline in the component. Do not add to the cockpit's size; if a change would,
-extract instead.
+**Pure logic in a tested helper; components stay presentational.** Derivations
+live in `apps/web/lib/*.ts` with matching `.test.ts` coverage. New runtime logic
+goes in a helper module with a test, never inline in a component.
+
+**No React component exceeds 500 lines.** `scripts/smoke.test.mjs` enforces it.
+`runtime-cockpit.tsx` reached ~8,800 lines and was the largest known defect in
+the repository before M2 split it; the limit is what stops that recurring. If a
+change would push a component over, extract instead.
+
+Five components were already over it when the rule landed. Each has a structured
+exemption recording its path, a pinned maximum size, the milestone that owns
+decomposing it, why it is outside the current milestone, and whether each role
+shell may reach it - asserted in **both** directions against the real import
+graph, so a stale claim fails as loudly as a violated one. The build breaks if
+an exempt file grows, if an unlisted component crosses the limit, if an
+exemption has no owning milestone, or if an exemption survives its own fix.
+There is no directory-level or open-ended allowance, and adding one would be the
+thing the rule exists to prevent.
+
+**The runtime has three shells and one composition root.**
+`runtime-cockpit.tsx` chooses between `RuntimeEntrySurface`, `PlayerGameShell`
+and `GameMasterGameShell` and provides their dependencies. It holds no command
+construction, no stream, no derivation and no server entity. `useRuntimeHud`
+assembles the model in dependency order — session, then the browser's own drafts
+and selection, then pure derivations, then actions — and nothing at a later step
+writes to an earlier one except through a command.
+
+**The Player shell must not reach `app/runtime/diagnostics/`.** A repository
+test walks its import graph, with the inverse assertion on the GM shell so a
+walk that resolved nothing cannot pass for the wrong reason. Anything a player
+must not see is kept out by the import boundary and by the server's projection,
+never by a render-time filter.
+
+**A player-facing component takes record IDs as opt-in.** `CharacterSummary`
+and `EncounterStatusFeedback` both render identifiers only when a GM surface
+asks. Defaulting them on is how an encounter ID and a runtime character ID
+reached a player's screen; both were caught by acceptance rather than review.
 
 **Map rendering splits three ways.** `lib/tactical-map-render.ts` holds camera
 maths, projections, palettes, and token/decor derivation (tested);
@@ -140,6 +170,20 @@ read `participants` off a `Promise`. Neither reproduces in memory, and the DM
 path masked both. Always pass a repository result through
 `resolveRepositoryResult` before touching its fields - never through a bare
 `const`.
+
+**Never open a subscription without a credential.** Every stream is token-gated
+server-side, and `EventSource` retries the URL it was constructed with — so a
+subscription opened before a join has issued a credential stays dead forever
+against a session the browser is by then a legitimate member of.
+`useSessionStream` takes credential _presence_ as an effect dependency and opens
+the moment one lands. This is not a client-side authorization decision; the
+server remains the gate.
+
+**The participant credential cache is keyed on the stored string.** Two writers
+change `localStorage` without going through the module's map: another tab — one
+browser legitimately holds several seats — and the page itself when a harness
+injects one. A cache filled once and trusted forever misses both, which surfaces
+as a 401 for a seat whose credential is sitting in storage.
 
 **A session has one SSE subscriber per participant.** `connectParticipant`
 replaces the room's subscriber and closes the previous one. A second connection
@@ -201,11 +245,41 @@ stay stable and untranslated. Never auto-translate user-entered character data.
 - `scripts/smoke.test.mjs` — repository shape and smoke diagnostics.
 - `apps/web/scripts/*.mjs` — browser harnesses driving headless Chrome.
   `m1-full-loop-smoke.mjs` and `m1-db-browser-restart-smoke.mjs` are the M1
-  acceptance pair; both need DB mode, because authentication and the Character
-  Library only exist there.
+  acceptance pair; `m2-game-hud-acceptance.mjs` is the M2 one. All three need DB
+  mode, because authentication and the Character Library only exist there.
 
 A visibility or authorization property gets its own test that tries to break it.
 "The UI does not show it" is not a test.
+
+### Traps these harnesses have already hit
+
+**A harness must state its viewport.** Headless Chrome defaults to 800x600,
+which is neither the desktop the layout assertions describe nor the phone the
+mobile ones do — and the M2 shells legitimately render a different layout at
+each. `getChromeDisplayArgs` passes an explicit `--window-size` in headless too,
+and `setViewport` drives `Emulation.setDeviceMetricsOverride` for the width CSS
+actually sees, which is not the same number as the window's.
+
+**Name the GM tool group before driving it.** The HUD shows one at a time behind
+a collapsible region, so `openGameMasterTool(page, 'scene' | 'combatants' |
+'roster' | 'table' | 'diagnostics')` is how a harness says which panel it means.
+
+**Chrome throttles occluded windows.** A two-profile headed run always leaves
+one window behind the other, and a throttled renderer stops repainting the
+board, so a live update reads as no update — a property of the compositor rather
+than of the product. The anti-throttling arguments in `launchBrowserProfile` are
+load-bearing.
+
+**Terminate by recorded PID, never by pattern.** Every harness records the
+children it spawns and stops them in reverse order, closing Chrome before
+deleting its profile directory. A broad `pkill -f node` on a developer's machine
+kills their editor's language server and any unrelated watch process.
+
+**Assert on the product, not on the harness.** Two M2 assertions were written
+against the recorder rather than the app: comparing SSE frame counts across a
+reload, which resets the recorder, and sampling the document direction during
+the pre-hydration default instead of waiting for it. Both "failed" on correct
+behaviour.
 
 ## Validation
 

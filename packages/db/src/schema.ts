@@ -71,6 +71,7 @@ export type CommandEventOutboxEventType =
   | 'combat_event'
   | 'encounter_state'
   | 'movement_state'
+  | 'scene_state'
   | 'resolution_state'
   | 'player_intent_state';
 export type StoredCommandEventOutboxPayloadDocument = {

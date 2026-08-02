@@ -33,7 +33,11 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getChromeDisplayArgs } from './runtime-smoke-diagnostics.mjs';
+import {
+  getChromeDisplayArgs,
+  getCloseGameMasterToolExpression,
+  getOpenGameMasterToolExpression,
+} from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 
@@ -940,6 +944,29 @@ export function readCredentialShape(page) {
 }
 
 /**
+ * Wait until a join or recover has actually issued this seat a credential.
+ *
+ * The stored session ID is not that proof: typing a session code into the form
+ * persists it immediately, so a wait on the code returns while the join command
+ * is still in flight. A harness that then clicks Subscribe is subscribing as a
+ * seat the browser cannot yet authenticate. Only the credential's arrival marks
+ * the join as done.
+ *
+ * Presence only - the token itself is never read back out here.
+ */
+export function waitForParticipantCredential(page, sessionId, label) {
+  return waitFor(page, {
+    label: `${label} participant credential`,
+    predicate: `(() => {
+      const stored = JSON.parse(localStorage.getItem('dnd-participant-credential') ?? '[]');
+      return stored.some(
+        (entry) => entry.sessionId === ${JSON.stringify(sessionId)} && Boolean(entry.token),
+      );
+    })()`,
+  });
+}
+
+/**
  * A stable fingerprint of a credential, for proving it changed.
  *
  * Never the token itself: this is printed, written to artifacts and pasted into
@@ -1306,4 +1333,160 @@ export function redactSecrets(value) {
     .replace(/postgres(?:ql)?:\/\/[^\s'"]+/gi, 'postgres://[redacted]')
     .replace(/("token"\s*:\s*)"[^"]+"/g, '$1"[redacted]"')
     .replace(/participantToken=[^&\s'"]+/g, 'participantToken=[redacted]');
+}
+
+/**
+ * Bring one GM tool group on screen before driving it.
+ *
+ * The M2 Game HUD keeps the GM's tools behind a collapsible region showing one
+ * group at a time, so the panels the M1 journey drives are no longer all
+ * rendered at once. This is the harness saying which one it needs.
+ */
+export function openGameMasterTool(page, tab) {
+  return waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
+  });
+}
+
+/** Put the map back in charge, so map assertions are not behind a drawer. */
+export function closeGameMasterTools(page) {
+  return waitFor(page, {
+    label: 'GM tools closed',
+    predicate: getCloseGameMasterToolExpression(),
+  });
+}
+
+// --- M2 Game HUD acceptance helpers -----------------------------------------
+
+/**
+ * Drive the page at an exact viewport.
+ *
+ * `--window-size` sets the browser window; this sets what CSS and
+ * `window.innerWidth` see, which is what the shells actually branch on. The two
+ * are not the same number once chrome and scrollbars are involved, and the
+ * layout assertions are about the second.
+ */
+export async function setViewport(page, { height, width }) {
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    deviceScaleFactor: 1,
+    height,
+    mobile: width < 700,
+    width,
+  });
+
+  // Tell the page its viewport changed.
+  //
+  // A device-metrics override changes what CSS and `window.innerWidth` see, but
+  // in a headed window it notifies the page of nothing - no `resize`, no
+  // `matchMedia` change, no `ResizeObserver` callback. A person resizing a real
+  // window always produces a `resize`, so a harness that skips it is testing a
+  // situation the product will never meet: CSS at one width and every JS
+  // listener still believing another.
+  //
+  // This is restoring fidelity, not compensating for a product defect. The
+  // structural half of the layout - whether a side panel is a column or a modal
+  // drawer, which decides `role="dialog"`, focus trapping and Escape - cannot
+  // be a media query, so it legitimately depends on the event.
+  await page.evaluate(
+    `(() => { window.dispatchEvent(new Event('resize')); return true; })()`,
+  );
+
+  await waitFor(page, {
+    label: `viewport ${width}x${height}`,
+    predicate: `window.innerWidth === ${width}`,
+  });
+}
+
+export async function clearViewport(page) {
+  await page.send('Emulation.clearDeviceMetricsOverride');
+}
+
+/**
+ * Emulate the reduced-motion preference.
+ *
+ * The product reads it through `matchMedia`, so emulating the media feature is
+ * the only way to exercise the real code path - setting a class or a prop would
+ * be testing the harness's opinion instead.
+ */
+export async function setReducedMotion(page, enabled) {
+  await page.send('Emulation.setEmulatedMedia', {
+    features: [
+      {
+        name: 'prefers-reduced-motion',
+        value: enabled ? 'reduce' : 'no-preference',
+      },
+    ],
+  });
+}
+
+/** `rtl` or `ltr`, from the element the i18n provider actually sets. */
+export function readDocumentDirection(page) {
+  return page.evaluate(`document.documentElement.dir`);
+}
+
+/**
+ * The map's share of the row it shares, measured rather than eyeballed.
+ *
+ * Returns `null` when the map is not on screen, so a caller can tell "the map
+ * is small" apart from "there is no map", which are very different failures.
+ */
+export function measureMapShare(page) {
+  return page.evaluate(`(() => {
+    const map = document.querySelector('[data-hud-region="map"]');
+
+    if (!map) {
+      return null;
+    }
+
+    const row = map.parentElement;
+    const mapWidth = map.getBoundingClientRect().width;
+    const rowWidth = row ? row.getBoundingClientRect().width : 0;
+
+    return {
+      mapHeight: map.getBoundingClientRect().height,
+      mapWidth,
+      rowWidth,
+      share: rowWidth > 0 ? mapWidth / rowWidth : 0,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+    };
+  })()`);
+}
+
+/**
+ * Whether the page scrolls sideways.
+ *
+ * Compared against `documentElement` rather than `body` because the shells set
+ * their background on a fixed layer, so `body` can measure narrower than the
+ * content that actually overflows.
+ */
+export function readHorizontalOverflow(page) {
+  return page.evaluate(`(() => {
+    const root = document.documentElement;
+
+    return {
+      clientWidth: root.clientWidth,
+      overflows: root.scrollWidth > root.clientWidth + 1,
+      scrollWidth: root.scrollWidth,
+    };
+  })()`);
+}
+
+/** The element that currently has focus, described without reading its value. */
+export function readFocusedElement(page) {
+  return page.evaluate(`(() => {
+    const active = document.activeElement;
+
+    if (!active) {
+      return null;
+    }
+
+    return {
+      ariaExpanded: active.getAttribute('aria-expanded'),
+      tag: active.tagName.toLowerCase(),
+      testId: active.getAttribute('data-testid'),
+      text: (active.textContent ?? '').trim().slice(0, 60),
+    };
+  })()`);
 }
