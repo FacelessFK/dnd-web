@@ -18,8 +18,8 @@ Ordering principles:
 | ------------------------------ | -------- |
 | M0 — Foundation repair         | Complete |
 | M1 — First playable table      | Complete |
-| M2 — Game HUD                  | Next     |
-| M3 — Fog of war and lighting   | Planned  |
+| M2 — Game HUD                  | Complete |
+| M3 — Fog of war and lighting   | Next     |
 | M4 — Renderer quality          | Planned  |
 | M5 — Map builder completion    | Planned  |
 | M6 — Character foundations     | Planned  |
@@ -152,12 +152,14 @@ does it across a real PostgreSQL-backed server restart with both windows left
 open. Both ran three times cleanly, and the full loop was also played visibly on
 a desktop. Both run in the `m1-browser-acceptance` CI job.
 
-**Known limitation carried forward.** No stream event carries a scene
-projection, so a creature the GM places, reveals or conceals reaches a player
-only when that player presses `Recover`. The projection itself is correct
-either way - concealment is applied server-side before the bytes leave - so this
-is a liveness gap, not a disclosure one. It belongs with the HUD work in M2,
-which is rebuilding the surfaces that would consume such an event.
+**Limitation carried forward, now closed.** No stream event carried a scene
+projection, so a creature the GM placed, revealed or concealed reached a player
+only when that player pressed `Recover`. The projection was correct either way -
+concealment is applied server-side before the bytes leave - so it was a liveness
+gap, not a disclosure one. M2 closed it: `scene_state` is a named stream event,
+and both the M2 acceptance harness and `test:smoke:live-scene` assert that
+placing, moving, concealing and revealing each reach the other browser with no
+`Recover` in between.
 
 ---
 
@@ -186,6 +188,35 @@ browser smokes updated to the new surfaces; both locales verified for RTL.
 **Dependencies.** M1, which is complete.
 
 **Excludes.** Renderer replacement. New gameplay.
+
+**Delivered.** `runtime-cockpit.tsx` is a 110-line composition root: it chooses
+a role shell and provides its dependencies. `PlayerGameShell` and
+`GameMasterGameShell` are the production surfaces, each a map-dominant layout
+with a compact status strip, one contextual side region and one collapsible tool
+region. The model lives in `useRuntimeHud` over seven focused modules - drafts,
+selection, diagnostics, character library, and three pure derivations - none of
+which the shells may write to except through a command.
+
+Diagnostics moved to `app/runtime/diagnostics/`, which makes the boundary
+provable: a repository-shape test walks the Player shell's import graph and
+fails if anything under that directory appears in it, with the inverse assertion
+on the GM shell so a walk that resolved nothing cannot pass for the wrong
+reason. The same test enforces the 500-line rule, listing the five components
+that were already over it - all outside the runtime surface - at their exact
+current size, so none can grow and each must leave the list once decomposed.
+
+`test:smoke:m2-game-hud` is the acceptance harness. Map dominance is measured
+rather than judged: 70% of its row at 1366, 77% at 1920, 100% on mobile. It runs
+in Persian and English at 1920, 1366 and 430px, checks the Player surface for
+UUIDs, record IDs, participant IDs and protocol command names, opens and closes
+a mobile drawer and confirms focus returned to its opener.
+
+Four defects were found by these harnesses and fixed rather than worked around:
+a subscription opened without a credential stayed dead forever because
+`EventSource` retries the URL it was built with; the credential cache went stale
+against any write it did not make itself; `EncounterStatusFeedback` rendered the
+encounter ID onto a player's screen; and headless Chrome had been running every
+harness at 800x600, so no layout assertion described the viewport it claimed.
 
 ---
 
@@ -492,7 +523,6 @@ everything.
 
 | Defect                                               | Severity | Milestone |
 | ---------------------------------------------------- | -------- | --------- |
-| Runtime cockpit is one ~8,800-line component         | High     | M2        |
 | 2014/2024 rules content mixing                       | High     | M6        |
 | Rate limits, SSE fan-out, and outbox are per-process | Medium   | M14       |
 | Server runs via `tsx` in the container image         | Medium   | M14       |
@@ -500,7 +530,6 @@ everything.
 | `/maps` cannot re-edit a published scene             | Medium   | M5        |
 | Movement preview can offer a cell the server rejects | Low      | M3        |
 | Auth MVP lacks reset, verification, and MFA          | Low      | M14       |
-| Cockpit local state is replayed over live UI state   | Low      | M2        |
 | Demo scenario copy is hardcoded English              | Low      | M1        |
 
 `demoScenarios` in `apps/web/lib/runtime-cockpit-helpers.ts` carries its
@@ -521,8 +550,8 @@ it surfaced at two different steps on identical code. The failing run showed
 runs either side of it. The harnesses now confirm the mode against stored state
 and re-click if it reverts, and re-apply the session-ID write until it sticks.
 
-The product-side half is left as the defect above: because that hydration lives
-in a `useEffect(..., [])`, any remount replays stored local state over whatever
-the surface currently shows. In dev this is a compile; in production the window
-is small but the shape is wrong, and it belongs with the M2 cockpit split rather
-than a spot fix inside an 8,800-line component.
+The product-side half was the hydration effect replaying stored local state over
+whatever the surface currently showed on any remount. M2's split resolved it:
+identity and the projected read models now live in one hook whose only entry
+point is `switchIdentity`, and every switch clears the previous seat's
+projections, so there is no longer a second copy for a remount to replay.

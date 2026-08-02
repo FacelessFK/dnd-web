@@ -288,3 +288,97 @@ jobs:
       - name: Capture PostgreSQL logs on failure
         if: ${{ failure() }}
         run: docker logs "$(docker ps -aqf ancestor=postgres:16-alpine)" 2>&1 | tail -200
+
+  # M2 acceptance: the visible Game HUD, in two authenticated browsers.
+  #
+  # Separate from `m1-browser-acceptance` for the same reason that job is
+  # separate from `m1-db-recovery`: it drives browsers, takes minutes, and a
+  # failure here is a different question from "does the table still work". M1
+  # failing and M2 failing should be two independent signals rather than one
+  # queued behind the other.
+  #
+  # DB mode for the same reason as M1 - the journey authenticates both roles and
+  # imports a Character Library entry, neither of which exists in memory.
+  #
+  # Headless here, headed locally. The harness sets an explicit viewport rather
+  # than accepting Chrome's headless default, so the layout assertions describe
+  # the desktop and the phone they claim to.
+  #
+  # The credentials below are ephemeral and belong to a container that exists
+  # for the length of this job. They are not secrets and must never be pointed
+  # at anything that outlives the runner.
+  m2-game-hud-acceptance:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dnd_web_ci
+          POSTGRES_PASSWORD: dnd_web_ci_password
+          POSTGRES_USER: dnd_web_ci
+          POSTGRES_INITDB_ARGS: '--encoding=UTF8'
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dnd_web_ci -d dnd_web_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://dnd_web_ci:dnd_web_ci_password@127.0.0.1:5432/dnd_web_ci
+      M1_SMOKE_ARTIFACT_DIR: ${{ github.workspace }}/../m2-hud-artifacts
+      SERVER_PERSISTENCE_MODE: db
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve Chrome
+        run: echo "RUNTIME_SMOKE_BROWSER=$(which google-chrome || which chromium-browser || which chromium)" >> "$GITHUB_ENV"
+
+      - name: Apply migrations
+        run: pnpm --filter @dnd/db db:migrate
+
+      - name: Verify database readiness
+        run: pnpm --filter @dnd/db check:readiness
+
+      # Proves intent terminality is a property of the state rather than of the
+      # timing, across clean sessions with two independent subscriptions.
+      - name: Intent terminality preflight
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web test:preflight:intent-terminality
+
+      # Map dominance, diagnostics isolation, live scene changes, both locales,
+      # and 1920 / 1366 / 430px.
+      - name: M2 Game HUD acceptance
+        if: ${{ !cancelled() }}
+        run: pnpm --filter @dnd/web test:smoke:m2-game-hud
+
+      - name: Upload browser failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: ignore
+          name: m2-game-hud-acceptance-artifacts
+          path: ${{ github.workspace }}/../m2-hud-artifacts
+          retention-days: 7
+
+      - name: Capture PostgreSQL logs on failure
+        if: ${{ failure() }}
+        run: docker logs "$(docker ps -aqf ancestor=postgres:16-alpine)" 2>&1 | tail -200
