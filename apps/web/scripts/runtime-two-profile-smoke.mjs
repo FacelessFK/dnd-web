@@ -13,6 +13,7 @@ import {
   getChromeDisplayArgs,
   getCockpitModeSelectionExpression,
   getPageDiagnosticsExpression,
+  getOpenGameMasterToolExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
   normalizePageDiagnostics,
@@ -164,6 +165,9 @@ async function main() {
     );
 
     logSmokeStep('starting encounter in DM profile');
+    // The M2 HUD keeps the GM's tools behind a collapsible region showing one
+    // group at a time; the scenario controls live on the Table group.
+    await openGmTool(dmPage, 'table');
     await clickButton(dmPage, ['Start Encounter', 'شروع برخورد']);
     await waitForEncounterSummary(dmPage, 'DM encounter summary');
     await waitForAnyText(
@@ -171,20 +175,21 @@ async function main() {
       ['Combat & Event Feed', 'برخورد و رخدادها'],
       'DM event feed',
     );
+    await openGmTool(dmPage, 'combatants');
     await waitForAnyText(
       dmPage,
       ['Monsters & NPCs', 'هیولاها و NPCها'],
       'DM combatant controls',
     );
 
-    await waitForVisibleTextOrder(
+    // The M2 hierarchy is structural rather than a reading order down one long
+    // page: the map comes first, the tools are a region below it, and the
+    // encounter controls sit in the inspector beside the map so advancing a
+    // turn never costs a panel opening mid-fight.
+    await waitForRegionOrder(
       dmPage,
-      [
-        ['Turn & Target', 'نوبت و هدف'],
-        ['Scene Builder', 'صحنه‌ساز'],
-        ['Monsters & NPCs', 'هیولاها و NPCها'],
-      ],
-      'DM active encounter action hierarchy',
+      ['map', 'gm-encounter', 'gm-tools'],
+      'DM map-first hierarchy',
     );
 
     logSmokeStep('joining and recovering table in Player profile');
@@ -207,16 +212,12 @@ async function main() {
       ['Tactical Grid', 'گرید تاکتیکی'],
       'Player tactical grid',
     );
-    await waitForAnyText(
+    // Status first so a player knows who they are and whether the table can
+    // hear them, then the board, then what they can do with it.
+    await waitForRegionOrder(
       playerPage,
-      ['Readiness summary', 'خلاصه آمادگی'],
-      'Player readiness summary',
-    );
-
-    await waitForVisibleTextOrder(
-      playerPage,
-      [['Turn & Target', 'نوبت و هدف'], ['Player Character']],
-      'Player active turn action hierarchy',
+      ['player-status', 'map', 'player-actions'],
+      'Player map-first hierarchy',
     );
 
     logSmokeStep('validating Player profile guardrails');
@@ -243,6 +244,16 @@ async function main() {
     await expectVisibleText(dmPage, ['Training Room'], true);
     await expectVisibleText(dmPage, ['Aria'], true);
     await waitForStoredCockpitSessionId(dmPage, sessionId);
+    // Local Reset returns this browser to the default seat, which is the DM
+    // chair - so a player taking their seat back picks Player Mode again before
+    // recovering. Recovering as the DM from a browser that never held that seat
+    // is correctly refused, and asserting on it would be asserting the harness
+    // took a wrong turn.
+    await selectCockpitMode(
+      playerPage,
+      ['Player Mode', 'حالت بازیکن'],
+      'player',
+    );
     await setSessionInputValue(playerPage, sessionId);
     await clickButton(playerPage, ['Recover', 'بازیابی']);
     await waitForAnyText(playerPage, ['Aria'], 'Player recovery after reset');
@@ -617,29 +628,6 @@ function hasVisibleTextExpression(texts) {
   })()`;
 }
 
-async function waitForVisibleTextOrder(page, texts, label) {
-  const textGroups = texts.map((text) => (Array.isArray(text) ? text : [text]));
-
-  await waitFor(page, {
-    label,
-    predicate: `(() => {
-      const bodyText = document.body?.innerText ?? '';
-      const indexes = ${JSON.stringify(textGroups)}.map((alternatives) => {
-        const presentIndexes = alternatives
-          .map((text) => bodyText.indexOf(text))
-          .filter((index) => index >= 0);
-
-        return presentIndexes.length ? Math.min(...presentIndexes) : -1;
-      });
-
-      return indexes.every((index) => index >= 0) &&
-        indexes.every((index, textIndex) =>
-          textIndex === 0 ? true : index > indexes[textIndex - 1],
-        );
-    })()`,
-  });
-}
-
 async function waitForEncounterSummary(page, label) {
   await waitFor(page, {
     label,
@@ -744,6 +732,47 @@ async function selectCockpitMode(page, modeLabels, expectedMode) {
       modeLabels,
       expectedMode,
     ),
+  });
+}
+
+/**
+ * Assert the shell's regions appear in this order in the document.
+ *
+ * Structural rather than textual: the regions carry `data-hud-region`, so the
+ * assertion survives a copy change and says what it means - which part of the
+ * surface comes first - instead of which sentence does.
+ */
+async function waitForRegionOrder(page, regions, label) {
+  await waitFor(page, {
+    label,
+    predicate: `(() => {
+      const wanted = ${JSON.stringify(regions)};
+      const found = wanted.map((region) =>
+        document.querySelector('[data-hud-region="' + region + '"]'),
+      );
+
+      if (found.some((node) => !node)) {
+        return false;
+      }
+
+      for (let index = 1; index < found.length; index += 1) {
+        const position = found[index - 1].compareDocumentPosition(found[index]);
+
+        if (!(position & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          return false;
+        }
+      }
+
+      return true;
+    })()`,
+  });
+}
+
+/** Bring one GM tool group on screen before driving or asserting on it. */
+async function openGmTool(page, tab) {
+  await waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
   });
 }
 

@@ -28,7 +28,7 @@ function movementEvent(): SessionStreamEvent {
     sceneId: 'scene_5f0d0c1a-0000-4000-8000-000000000001',
     sessionId: 'ABC123',
     type: 'movement_state',
-  } as SessionStreamEvent;
+  } as unknown as SessionStreamEvent;
 }
 
 function entry(id: string, payload: unknown): RuntimeLogEntry {

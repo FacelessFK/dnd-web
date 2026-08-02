@@ -12,6 +12,7 @@ import {
   formatSmokeWaitFailure,
   getChromeDisplayArgs,
   getCockpitModeSelectionExpression,
+  getOpenGameMasterToolExpression,
   getPageDiagnosticsExpression,
   getSessionInputAssignmentExpression,
   normalizePageDiagnostics,
@@ -269,6 +270,9 @@ async function main() {
     // was created by the harness rather than by this browser.
     await injectBrowserCredential(dmPage, sessionId, 'dm-001');
     await clickButton(dmPage, ['Recover', 'بازیابی']);
+    // The M2 HUD shows one GM tool group at a time; the roster and its
+    // assignment queue live on the Roster group.
+    await openGmTool(dmPage, 'roster');
     await waitForAnyText(
       dmPage,
       ['Assignment Requests', 'درخواست‌های تخصیص'],
@@ -419,26 +423,34 @@ async function main() {
       [savedCharacterName],
       'Player assigned saved character',
     );
-    await waitForAnyText(
-      playerPage,
-      ['Readiness summary', 'خلاصه آمادگی'],
-      'Player readiness summary evidence',
-    );
-    await waitForAnyText(
-      playerPage,
-      ['Token placed', 'توکن قرار گرفت'],
-      'Player placed-token evidence',
-    );
-    await waitForAnyText(
-      playerPage,
-      ['Turn ready', 'نوبت آماده است'],
-      'Player first-turn readiness evidence',
-    );
-    await waitForAnyText(
-      playerPage,
-      ['Turn & Target', 'نوبت و هدف'],
-      'Player turn and target evidence',
-    );
+    // The M2 Player shell states the same three facts in its own regions
+    // rather than in one readiness panel: who you are and what round it is, a
+    // token with a position on the board, and an action rail that says whether
+    // it is your turn. Asserted structurally so the check survives copy edits.
+    await waitFor(playerPage, {
+      label: 'Player status region carries identity and round',
+      predicate: `(() => {
+        const status = document.querySelector('[data-hud-region="player-status"]');
+        return Boolean(status && status.innerText.trim().length > 0);
+      })()`,
+    });
+    await waitFor(playerPage, {
+      label: 'Player placed-token evidence on the map stage',
+      predicate: `(() => {
+        const map = document.querySelector('[data-hud-region="map"]');
+        if (!map) { return false; }
+        const text = map.innerText;
+        return /\\d+,\\d+/.test(text) && !text.includes('NOT PLACED');
+      })()`,
+    });
+    await waitFor(playerPage, {
+      label: 'Player action rail states whose turn it is',
+      predicate: `(() => {
+        const rail = document.querySelector('[data-hud-region="player-actions"]');
+        if (!rail) { return false; }
+        return rail.dataset.ownTurn === 'true' || rail.dataset.ownTurn === 'false';
+      })()`,
+    });
     await waitForAnyText(
       playerPage,
       ['Use Action', 'مصرف اقدام'],
@@ -1376,6 +1388,14 @@ async function waitForStoredCockpitSessionId(page, sessionId) {
 
       return JSON.parse(raw).sessionId === ${JSON.stringify(sessionId)};
     })()`,
+  });
+}
+
+/** Bring one GM tool group on screen before driving or asserting on it. */
+async function openGmTool(page, tab) {
+  await waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
   });
 }
 

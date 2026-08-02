@@ -134,6 +134,12 @@ export function formatSmokeWaitFailure({
     sections.push(`Cockpit state: ${diagnostics.cockpitState}`);
   }
 
+  if (diagnostics?.credentialSeats?.length) {
+    sections.push(
+      `Credential seats: ${diagnostics.credentialSeats.join(', ')}`,
+    );
+  }
+
   if (diagnostics?.enabledButtons?.length) {
     sections.push(`Enabled buttons: ${diagnostics.enabledButtons.join(', ')}`);
   }
@@ -154,7 +160,24 @@ export function getPageDiagnosticsExpression(
       .filter(Boolean)
       .slice(0, 24);
 
+    // Seat and session only, never a token: this string is printed, written to
+    // artifacts and pasted into pull requests. Which seats this browser can act
+    // as is usually the answer when a recovery fails with a 401.
+    const credentialSeats = (() => {
+      try {
+        const stored = JSON.parse(
+          localStorage.getItem('dnd-participant-credential') ?? '[]',
+        );
+        return Array.isArray(stored)
+          ? stored.map((entry) => entry.sessionId + '/' + entry.participantId)
+          : [];
+      } catch {
+        return ['<unreadable>'];
+      }
+    })();
+
     return {
+      credentialSeats,
       enabledButtons,
       rawCockpitState: localStorage.getItem(${JSON.stringify(storageKey)}),
       url: window.location.href,
@@ -323,6 +346,9 @@ export function getSessionInputAssignmentExpression(sessionId) {
 export function normalizePageDiagnostics(rawDiagnostics) {
   return {
     cockpitState: summarizeCockpitState(rawDiagnostics?.rawCockpitState),
+    credentialSeats: Array.isArray(rawDiagnostics?.credentialSeats)
+      ? rawDiagnostics.credentialSeats
+      : [],
     enabledButtons: Array.isArray(rawDiagnostics?.enabledButtons)
       ? rawDiagnostics.enabledButtons
       : [],

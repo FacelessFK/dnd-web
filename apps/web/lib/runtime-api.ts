@@ -171,23 +171,59 @@ export const participantCredentialStorageKey = 'dnd-participant-credential';
  */
 let participantCredentials: Map<string, ParticipantCredential> | null = null;
 
+/**
+ * The exact stored string the cache was parsed from.
+ *
+ * The cache is keyed on this rather than merely being populated once, because
+ * "the map is already built" is not the same question as "is it still what
+ * storage says". Two things write these credentials without going through this
+ * module's map:
+ *
+ * - **another tab.** One browser legitimately holds several seats at once - the
+ *   runtime creates a session as the DM and joins players into it, and a GM
+ *   painting in `/maps` publishes to a table they hold in `/runtime`.
+ * - **the page itself, out of band.** A harness injects a credential straight
+ *   into `localStorage` to stand in for a seat the browser did not create.
+ *
+ * Neither is visible to a cache that is filled once and trusted forever. That
+ * went unnoticed while the map was only ever built on the first command, since
+ * by then both writers had usually finished; reading it during render moved the
+ * snapshot to mount, which is early enough to miss one. Comparing the raw
+ * string costs a synchronous `getItem` and re-parses only when it really
+ * changed.
+ */
+let participantCredentialsRaw: string | null = null;
+
 function credentialKey(sessionId: string, participantId: string): string {
   return `${sessionId} ${participantId}`;
 }
 
 function loadCredentials(): Map<string, ParticipantCredential> {
-  if (participantCredentials) {
+  if (typeof localStorage === 'undefined') {
+    participantCredentials ??= new Map();
+
+    return participantCredentials;
+  }
+
+  let raw: string | null = null;
+
+  try {
+    raw = localStorage.getItem(participantCredentialStorageKey);
+  } catch {
+    // Blocked storage is the same as holding no credential.
+    participantCredentials ??= new Map();
+
+    return participantCredentials;
+  }
+
+  if (participantCredentials && raw === participantCredentialsRaw) {
     return participantCredentials;
   }
 
   participantCredentials = new Map();
-
-  if (typeof localStorage === 'undefined') {
-    return participantCredentials;
-  }
+  participantCredentialsRaw = raw;
 
   try {
-    const raw = localStorage.getItem(participantCredentialStorageKey);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
 
     if (Array.isArray(parsed)) {
@@ -205,8 +241,8 @@ function loadCredentials(): Map<string, ParticipantCredential> {
       }
     }
   } catch {
-    // Corrupt or blocked storage is the same as holding no credential: the
-    // caller is told to rejoin rather than crashing.
+    // Corrupt storage is the same as holding no credential: the caller is told
+    // to rejoin rather than crashing.
   }
 
   return participantCredentials;
@@ -218,10 +254,10 @@ function persistCredentials(): void {
   }
 
   try {
-    localStorage.setItem(
-      participantCredentialStorageKey,
-      JSON.stringify([...participantCredentials.values()]),
-    );
+    const raw = JSON.stringify([...participantCredentials.values()]);
+
+    localStorage.setItem(participantCredentialStorageKey, raw);
+    participantCredentialsRaw = raw;
   } catch {
     // Storage can be unavailable or full. The in-memory copy still works for
     // this page load; only surviving a refresh is lost.
@@ -277,6 +313,7 @@ export function hasParticipantCredential(
 
 export function clearParticipantCredentials(): void {
   participantCredentials = new Map();
+  participantCredentialsRaw = null;
 
   if (typeof localStorage !== 'undefined') {
     try {

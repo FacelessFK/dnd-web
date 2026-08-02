@@ -27,6 +27,7 @@ import {
   formatSmokeWaitFailure,
   getCockpitModeSelectionExpression,
   getPageDiagnosticsExpression,
+  getOpenGameMasterToolExpression,
   getSessionInputAssignmentExpression,
   getStoredCockpitSessionIdExpression,
   isHeadedSmokeRun,
@@ -262,6 +263,7 @@ async function run(dm, player) {
   await clearFrames(player);
   const beforePlace = await readMapSignature(player);
   await clickMapCell(dm, sentryCell);
+  await openGmTool(dm, 'combatants');
   await setFieldByTestId(dm, 'combatant-name', sentryName);
   await clickTestId(dm, 'combatant-create');
   await waitForCombatantRow(dm, sentryName, 'visible');
@@ -274,6 +276,7 @@ async function run(dm, player) {
   await assertPlayerFrameShows(player, sentryId, true, 'live placement');
 
   logStep('starting the encounter');
+  await openGmTool(dm, 'table');
   await clickButton(dm, 'Start Encounter');
   const encounterBaseline = await readPlayerEncounter(
     player,
@@ -286,6 +289,7 @@ async function run(dm, player) {
   const beforeMove = await readMapSignature(player);
   await clickMapCell(dm, sentryCell);
   await clickMapCell(dm, sentryMovedCell);
+  await openGmTool(dm, 'combatants');
   await clickTestId(dm, 'combatant-reposition');
 
   await waitForMapToken(player, sentryMovedCell, sentryName, 'live movement');
@@ -329,6 +333,7 @@ async function run(dm, player) {
   await clearFrames(player);
   const beforeEntity = await readMapSignature(player);
   await clickMapCell(dm, markerCell);
+  await openGmTool(dm, 'scene');
   await setFieldByTestId(dm, 'scene-entity-name', markerName);
   await clickTestId(dm, 'scene-entity-place');
 
@@ -341,6 +346,7 @@ async function run(dm, player) {
   await clearFrames(player);
   const beforeDelete = await readMapSignature(player);
   await selectPassiveEntity(dm, markerName);
+  await openGmTool(dm, 'scene');
   await clickTestId(dm, 'scene-entity-delete');
 
   await waitForMapTokenAbsent(player, markerName, 'live scene removal');
@@ -985,6 +991,14 @@ async function selectPassiveEntity(page, name) {
  * fields are labelled "Name / label" and the first one in the DOM is not the one
  * the Place Entity button reads.
  */
+/** Bring one GM tool group on screen before driving it. */
+async function openGmTool(page, tab) {
+  await waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
+  });
+}
+
 async function setFieldByTestId(page, testId, value) {
   await waitFor(page, {
     label: `field [data-testid="${testId}"]`,
