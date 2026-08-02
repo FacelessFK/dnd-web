@@ -1034,12 +1034,35 @@ export const messages = {
     'runtime.events.detail.combatWithHp':
       '{attacker} rolled {roll} against AC {armorClass} and {result} ({target} HP {previousHp} to {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. Round {round}, turn {turn}.',
-    'runtime.events.detail.movement': '{participant} {reason} to {x},{y}.',
     'runtime.events.detail.scene': '{reason}. {entities} on the map.',
     'runtime.events.detail.character':
       '{character} HP is now {currentHp}/{maxHp}.',
     'runtime.events.detail.characterWithConditions':
       '{character} HP is now {currentHp}/{maxHp}, with {conditions}.',
+    'runtime.events.detail.characterOwn': 'Your HP is now {currentHp}/{maxHp}.',
+    'runtime.events.detail.characterOwnWithConditions':
+      'Your HP is now {currentHp}/{maxHp}, with {conditions}.',
+    // Whole sentences, one per movement reason and grammatical person. The feed
+    // used to build these from a subject, a reason fragment and a destination,
+    // which is why the subject was interpolated raw - and why Persian read in
+    // the wrong word order and the wrong person.
+    'runtime.events.movement.character_moved':
+      '{participant} moved to {x},{y}.',
+    'runtime.events.movement.character_placed':
+      '{participant} was placed at {x},{y}.',
+    'runtime.events.movement.dm_character_repositioned':
+      '{participant} was repositioned by the DM to {x},{y}.',
+    'runtime.events.movement.own.character_moved': 'You moved to {x},{y}.',
+    'runtime.events.movement.own.character_placed':
+      'You were placed at {x},{y}.',
+    'runtime.events.movement.own.dm_character_repositioned':
+      'You were repositioned by the DM to {x},{y}.',
+    // Stand-ins for an actor this reader may not be told about. Never an ID:
+    // the feed says as little as the role permits, and says it in words.
+    'runtime.events.actor.you': 'You',
+    'runtime.events.actor.otherAdventurer': 'Another adventurer',
+    'runtime.events.actor.unseenCreature': 'An unseen creature',
+    'runtime.events.actor.unknown': 'An unknown actor',
     'runtime.events.detail.resolution': '{reason}. {pending} awaiting a roll.',
     'runtime.events.detail.playerIntent':
       '{reason}. {pending} awaiting the GM.',
@@ -1074,10 +1097,6 @@ export const messages = {
       'A participant disconnected',
     'runtime.events.reason.session_state.participant_joined':
       'A participant joined',
-    'runtime.events.reason.movement_state.character_moved': 'moved',
-    'runtime.events.reason.movement_state.character_placed': 'was placed',
-    'runtime.events.reason.movement_state.dm_character_repositioned':
-      'was repositioned by the DM',
     'runtime.events.reason.encounter_state.encounter_started':
       'The encounter started',
     'runtime.events.reason.encounter_state.encounter_ended':
@@ -2380,12 +2399,32 @@ export const messages = {
     'runtime.events.detail.combatWithHp':
       '{attacker} عدد {roll} را در برابر AC {armorClass} انداخت و {result} (HP {target} از {previousHp} به {currentHp}).',
     'runtime.events.detail.encounter': '{reason}. دور {round}، نوبت {turn}.',
-    'runtime.events.detail.movement': '{participant} {reason} به {x}،{y}.',
     'runtime.events.detail.scene': '{reason}. {entities} مورد روی نقشه.',
     'runtime.events.detail.character':
       'HP {character} اکنون {currentHp}/{maxHp} است.',
     'runtime.events.detail.characterWithConditions':
       'HP {character} اکنون {currentHp}/{maxHp} است، با {conditions}.',
+    'runtime.events.detail.characterOwn':
+      'HP شما اکنون {currentHp}/{maxHp} است.',
+    'runtime.events.detail.characterOwnWithConditions':
+      'HP شما اکنون {currentHp}/{maxHp} است، با {conditions}.',
+    // جمله‌های کامل: در فارسی مقصد پیش از فعل می‌آید و فعل با فاعل مطابقت
+    // می‌کند، بنابراین قالب تکه‌ای انگلیسی اینجا قابل استفاده نیست.
+    'runtime.events.movement.character_moved':
+      '{participant} به {x}،{y} حرکت کرد.',
+    'runtime.events.movement.character_placed':
+      '{participant} در {x}،{y} قرار داده شد.',
+    'runtime.events.movement.dm_character_repositioned':
+      '{participant} توسط DM به {x}،{y} جابه‌جا شد.',
+    'runtime.events.movement.own.character_moved': 'شما به {x}،{y} حرکت کردید.',
+    'runtime.events.movement.own.character_placed':
+      'شما در {x}،{y} قرار داده شدید.',
+    'runtime.events.movement.own.dm_character_repositioned':
+      'شما توسط DM به {x}،{y} جابه‌جا شدید.',
+    'runtime.events.actor.you': 'شما',
+    'runtime.events.actor.otherAdventurer': 'ماجراجویی دیگر',
+    'runtime.events.actor.unseenCreature': 'موجودی دیده‌نشده',
+    'runtime.events.actor.unknown': 'کنشگری ناشناس',
     'runtime.events.detail.resolution': '{reason}. {pending} منتظر پرتاب تاس.',
     'runtime.events.detail.playerIntent': '{reason}. {pending} منتظر GM.',
     'runtime.events.detail.session': '{reason}. بازنگری {revision}.',
@@ -2419,10 +2458,6 @@ export const messages = {
       'یک شرکت‌کننده قطع شد',
     'runtime.events.reason.session_state.participant_joined':
       'یک شرکت‌کننده پیوست',
-    'runtime.events.reason.movement_state.character_moved': 'حرکت کرد',
-    'runtime.events.reason.movement_state.character_placed': 'قرار داده شد',
-    'runtime.events.reason.movement_state.dm_character_repositioned':
-      'توسط DM جابه‌جا شد',
     'runtime.events.reason.encounter_state.encounter_started':
       'رویارویی آغاز شد',
     'runtime.events.reason.encounter_state.encounter_ended':

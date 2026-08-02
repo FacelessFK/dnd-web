@@ -258,6 +258,11 @@ export function containsInternalIdentifier(value: string): boolean {
     /\bscene_entity_/.test(value) ||
     /\bscene_[0-9a-f]/.test(value) ||
     /\bencounter_[0-9a-f]/.test(value) ||
-    /\bcharacter_[0-9a-f]/.test(value)
+    /\bcharacter_[0-9a-f]/.test(value) ||
+    // A seat ID. The M2 acceptance has forbidden this on a player surface since
+    // it landed, but this predicate did not, so the unit tests agreed a feed
+    // line reading "player-001 was repositioned by the DM to 2,2" was clean and
+    // only a full browser run disagreed. The two lists now say the same thing.
+    /\b(?:player|dm)-\d{3}\b/.test(value)
   );
 }

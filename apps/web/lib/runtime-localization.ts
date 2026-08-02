@@ -18,23 +18,43 @@ import {
   type RuntimeEventDescriptor,
   type RuntimeEventSummary,
 } from './runtime-cockpit-helpers';
+import {
+  EVENT_ACTOR_OTHER_ADVENTURER,
+  EVENT_ACTOR_UNKNOWN,
+  EVENT_ACTOR_UNSEEN_CREATURE,
+  EVENT_ACTOR_YOU,
+} from './runtime-event-labels';
 
 /** The `t` function every localizer takes, named once. */
 export type RuntimeTranslator = ReturnType<typeof useI18n>['t'];
 
 /**
- * Swaps the pure helpers' concealed-combatant sentinel for localized copy.
+ * Swaps the pure helpers' actor sentinels for localized copy.
  *
- * The helper module has no translator by design, so it marks an unidentifiable
- * actor and the label is resolved here, at render time.
+ * The helper modules have no translator by design, so they mark an actor the
+ * reader may not be told about and the label is resolved here, at render time.
+ *
+ * Anything that is not a sentinel is a display name and passes through
+ * untouched: names are authored by a player or a GM and are never translated.
  */
 export function localizeActorLabel(
   label: string | null,
   t: RuntimeTranslator,
 ): string | null {
-  return label === CONCEALED_COMBATANT_LABEL
-    ? t('runtime.turn.concealedCombatant')
-    : label;
+  switch (label) {
+    case CONCEALED_COMBATANT_LABEL:
+      return t('runtime.turn.concealedCombatant');
+    case EVENT_ACTOR_YOU:
+      return t('runtime.events.actor.you');
+    case EVENT_ACTOR_OTHER_ADVENTURER:
+      return t('runtime.events.actor.otherAdventurer');
+    case EVENT_ACTOR_UNSEEN_CREATURE:
+      return t('runtime.events.actor.unseenCreature');
+    case EVENT_ACTOR_UNKNOWN:
+      return t('runtime.events.actor.unknown');
+    default:
+      return label;
+  }
 }
 
 /**
@@ -50,11 +70,17 @@ export function localizeRuntimeEventDescriptor(
   t: RuntimeTranslator,
 ): RuntimeEventSummary {
   const { resultKey, reasonKey, ...values } = descriptor.detailValues;
-  const resolved: Record<string, string> = {
-    ...values,
-    attacker: localizeActorLabel(values.attacker ?? null, t) ?? '',
-    target: localizeActorLabel(values.target ?? null, t) ?? '',
-  };
+  const resolved: Record<string, string> = { ...values };
+
+  // Every slot that can hold an actor, resolved through one function. Listing
+  // them is what stops a new event type quietly rendering a sentinel: a slot
+  // that is missing from here shows `__event_actor_you__` on screen, which the
+  // tests catch, rather than an identifier, which they would not.
+  for (const slot of ['attacker', 'character', 'participant', 'target']) {
+    if (values[slot] !== undefined) {
+      resolved[slot] = localizeActorLabel(values[slot] ?? null, t) ?? '';
+    }
+  }
 
   if (resultKey) {
     resolved.result = t(resultKey as MessageKey, values);

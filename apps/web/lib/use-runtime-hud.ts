@@ -42,6 +42,7 @@ import {
   useRuntimeDiagnostics,
 } from './runtime-hud-diagnostics';
 import { useRuntimeDrafts } from './runtime-hud-drafts';
+import { buildRuntimeEventLabels } from './runtime-event-labels';
 import { useRuntimeCharacterLibrary } from './runtime-hud-library';
 import { deriveRuntimePlayerModel } from './runtime-hud-player-model';
 import { deriveRuntimeSceneModel } from './runtime-hud-scene-model';
@@ -160,6 +161,28 @@ export function useRuntimeHud(selectedDemoScenarioId: string) {
       playerParticipantId: seats.playerParticipantId,
     });
 
+  // Built after the roster, because that is what bounds it: a name reaches the
+  // event feed only for a seat this role's current snapshot still lists, or a
+  // creature its current scene projection still contains. Anything else is
+  // named generically. This is presentation only - the server has already
+  // decided what may be sent - but it is what keeps a cached name from
+  // outliving the projection that justified it.
+  const eventLabels = useMemo(
+    () =>
+      buildRuntimeEventLabels({
+        charactersByParticipant: runtime.charactersByParticipant,
+        ownParticipantId: session.activeParticipantId,
+        participants,
+        scene: runtime.scene,
+      }),
+    [
+      participants,
+      runtime.charactersByParticipant,
+      runtime.scene,
+      session.activeParticipantId,
+    ],
+  );
+
   const sceneModel = deriveRuntimeSceneModel({
     busyLabel: runtime.pendingCommand,
     currentTurnCombatantId: getCurrentTurnCombatantId(runtime.encounter),
@@ -255,7 +278,7 @@ export function useRuntimeHud(selectedDemoScenarioId: string) {
     diagnostics,
     drafts: drafts.drafts,
     draftActions: drafts.actions,
-    feedEntries: selectRuntimeFeedEntries(diagnostics.entries, t),
+    feedEntries: selectRuntimeFeedEntries(diagnostics.entries, t, eventLabels),
     knownCharacterIds,
     library,
     m1,

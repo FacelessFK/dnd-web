@@ -8,6 +8,7 @@ import type {
   DmCombatantInput,
   Encounter,
   GridDefinition,
+  MovementStateUpdate,
   OutboxStatusSuccess,
   RuntimeErrorCode,
   SceneEntity,
@@ -26,6 +27,14 @@ import {
 
 import type { MessageKey } from './i18n';
 import type { RuntimeApiFailure } from './runtime-api';
+import {
+  isOwnEventCharacter,
+  isOwnEventParticipant,
+  resolveEventCharacterLabel,
+  resolveEventCombatSideLabel,
+  resolveEventParticipantLabel,
+  type RuntimeEventLabels,
+} from './runtime-event-labels';
 import { isSceneEntityHidden } from './runtime-scene-view';
 import type { RuntimeScene, RuntimeSceneEntity } from './runtime-scene-view';
 import { buildTrainingRoomLayout } from './scene-terrain-presets';
@@ -3669,6 +3678,22 @@ export function runtimeEventReasonKey(
   return `runtime.events.reason.${eventType}.${reason}` as MessageKey;
 }
 
+/**
+ * The whole movement sentence, chosen by reason and by grammatical person.
+ *
+ * Movement is the only feed line whose subject can be the reader, and it is the
+ * one that leaked a seat ID. Both facts point the same way: one catalogue entry
+ * per reason per person, so "You were repositioned by the DM to 2,2" is a
+ * sentence a translator wrote rather than three fragments this module
+ * concatenated.
+ */
+export function runtimeMovementDetailKey(
+  reason: MovementStateUpdate['reason'],
+  own: boolean,
+): MessageKey {
+  return `runtime.events.movement.${own ? 'own.' : ''}${reason}` as MessageKey;
+}
+
 export function describeCombatAttackResult(
   event: Extract<SessionStreamEvent, { type: 'combat_event' }>,
 ): { key: MessageKey; values: Record<string, string> } {
@@ -3700,22 +3725,41 @@ export function describeCombatAttackResult(
     : { key: 'runtime.events.attack.hit', values: { damage } };
 }
 
+/**
+ * Describe one frame, naming its actors from what this reader may know.
+ *
+ * `labels` is not optional and has no default. Every actor in every branch
+ * below is resolved through it, so there is no expression left in this function
+ * that can put an identifier into rendered text - which is what the previous
+ * version did, by interpolating `participantId` and `characterId` straight into
+ * the sentence. Pass `EMPTY_RUNTIME_EVENT_LABELS` to describe a frame for a
+ * reader who has been told nothing; every actor then reads as generic, which is
+ * the honest answer rather than a degraded one.
+ */
 export function describeSessionStreamEvent(
   event: SessionStreamEvent,
+  labels: RuntimeEventLabels,
 ): RuntimeEventDescriptor {
   switch (event.type) {
     case 'combat_event': {
       // A concealed combatant arrives without its ID and, when it is the
-      // target, without its health. Fall back to an unnamed label and drop the
-      // HP clause rather than rendering "undefined".
-      const targetLabel = event.targetConcealed
-        ? CONCEALED_COMBATANT_LABEL
-        : event.targetKind === 'combatant' && event.targetCombatantId
-          ? event.targetCombatantId
-          : event.targetParticipantId;
-      const attackerLabel = event.attackerConcealed
-        ? CONCEALED_COMBATANT_LABEL
-        : (event.attackerCombatantId ?? event.attackerParticipantId);
+      // target, without its health. Drop the HP clause rather than rendering
+      // "undefined"; the label itself is the resolver's problem, not this
+      // switch's.
+      const targetLabel = resolveEventCombatSideLabel(labels, {
+        characterId: event.targetCharacterId,
+        combatantId: event.targetCombatantId,
+        concealed: event.targetConcealed,
+        kind: event.targetKind,
+        participantId: event.targetParticipantId,
+      });
+      const attackerLabel = resolveEventCombatSideLabel(labels, {
+        characterId: event.attackerCharacterId,
+        combatantId: event.attackerCombatantId,
+        concealed: event.attackerConcealed,
+        kind: event.attackerKind,
+        participantId: event.attackerParticipantId,
+      });
       const result = describeCombatAttackResult(event);
 
       return {
@@ -3761,25 +3805,44 @@ export function describeSessionStreamEvent(
         titleKey: 'runtime.events.title.scene',
         tone: 'info',
       };
+    // Movement is one whole sentence per reason, in each locale and in each
+    // grammatical person, rather than a subject glued to a reason fragment and
+    // a destination. Persian puts the destination before the verb and inflects
+    // the verb for the subject, so the fragment form produced "شما حرکت کرد به
+    // 2،2" - a sentence in neither language's word order and in the wrong
+    // person.
     case 'movement_state':
       return {
-        detailKey: 'runtime.events.detail.movement',
+        detailKey: runtimeMovementDetailKey(
+          event.reason,
+          isOwnEventParticipant(labels, event.participantId),
+        ),
         detailValues: {
-          participant: event.participantId,
-          reasonKey: runtimeEventReasonKey(event.type, event.reason),
+          participant: resolveEventParticipantLabel(
+            labels,
+            event.participantId,
+            'second_person',
+          ),
           x: String(event.position.x),
           y: String(event.position.y),
         },
         titleKey: 'runtime.events.title.movement',
         tone: 'success',
       };
-    case 'character_state':
+    case 'character_state': {
+      const own = isOwnEventCharacter(labels, event.characterId);
+      const withConditions = Boolean(event.activeConditions?.length);
+
       return {
-        detailKey: event.activeConditions?.length
-          ? 'runtime.events.detail.characterWithConditions'
-          : 'runtime.events.detail.character',
+        detailKey: own
+          ? withConditions
+            ? 'runtime.events.detail.characterOwnWithConditions'
+            : 'runtime.events.detail.characterOwn'
+          : withConditions
+            ? 'runtime.events.detail.characterWithConditions'
+            : 'runtime.events.detail.character',
         detailValues: {
-          character: event.characterId,
+          character: resolveEventCharacterLabel(labels, event.characterId),
           conditions: event.activeConditions?.join(', ') ?? '',
           currentHp: String(event.hp.current),
           maxHp: String(event.hp.max),
@@ -3787,6 +3850,7 @@ export function describeSessionStreamEvent(
         titleKey: 'runtime.events.title.character',
         tone: 'warning',
       };
+    }
     case 'session_state':
       return {
         detailKey: 'runtime.events.detail.session',

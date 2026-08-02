@@ -8,7 +8,27 @@ import type {
   Scene,
 } from '@dnd/protocol';
 
+import type { RuntimeEventLabels } from './runtime-event-labels';
 import type { SessionSnapshot } from './runtime-cockpit-helpers';
+
+/**
+ * What the reader of the feed below is currently allowed to name.
+ *
+ * `describeSessionStreamEvent` takes this rather than reading identifiers out
+ * of the frame, which is what put `player-001` on a player's screen.
+ */
+const describeLabels: RuntimeEventLabels = {
+  characterNames: { 'CHAR-001': 'Alder Finch', 'CHAR-002': 'Brannoc Vale' },
+  combatantNames: {
+    'scene_entity_11111111-1111-4111-8111-111111111111': 'Grimtooth',
+  },
+  ownCharacterId: null,
+  ownParticipantId: null,
+  participantNames: {
+    'player-001': 'Alder Finch',
+    'player-002': 'Brannoc Vale',
+  },
+};
 import {
   characterInputFromDraft,
   characterUpdateInputFromDraft,
@@ -852,28 +872,31 @@ describe('runtime cockpit helpers', () => {
   });
 
   it('summarizes stream events for the readable combat feed', () => {
-    const summary = describeSessionStreamEvent({
-      attackerCharacterId: 'CHAR-001',
-      attackerParticipantId: 'player-001',
-      damage: 1,
-      encounterId: 'ENC-001',
-      hit: true,
-      reason: 'attack_resolved',
-      roll: {
-        d20: 12,
-        modifier: 5,
-        total: 17,
+    const summary = describeSessionStreamEvent(
+      {
+        attackerCharacterId: 'CHAR-001',
+        attackerParticipantId: 'player-001',
+        damage: 1,
+        encounterId: 'ENC-001',
+        hit: true,
+        reason: 'attack_resolved',
+        roll: {
+          d20: 12,
+          modifier: 5,
+          total: 17,
+        },
+        sessionId: 'SESSION-001',
+        targetArmorClass: 13,
+        targetCharacterId: 'CHAR-002',
+        targetHp: {
+          current: 0,
+          previous: 1,
+        },
+        targetParticipantId: 'player-002',
+        type: 'combat_event',
       },
-      sessionId: 'SESSION-001',
-      targetArmorClass: 13,
-      targetCharacterId: 'CHAR-002',
-      targetHp: {
-        current: 0,
-        previous: 1,
-      },
-      targetParticipantId: 'player-002',
-      type: 'combat_event',
-    });
+      describeLabels,
+    );
 
     // The feed is described as message keys, not English sentences, so the
     // Persian default locale does not render English. The keys are resolved in
@@ -881,40 +904,43 @@ describe('runtime cockpit helpers', () => {
     assert.equal(summary.titleKey, 'runtime.events.title.combat');
     assert.equal(summary.tone, 'danger');
     assert.equal(summary.detailKey, 'runtime.events.detail.combatWithHp');
-    assert.equal(summary.detailValues.attacker, 'player-001');
+    assert.equal(summary.detailValues.attacker, 'Alder Finch');
     assert.equal(summary.detailValues.roll, '17');
     assert.equal(summary.detailValues.armorClass, '13');
     assert.equal(summary.detailValues.resultKey, 'runtime.events.attack.hit');
 
-    const againstCombatant = describeSessionStreamEvent({
-      attackerCharacterId: 'CHAR-001',
-      attackerKind: 'character',
-      attackerParticipantId: 'player-001',
-      damage: 1,
-      encounterId: 'ENC-001',
-      hit: true,
-      reason: 'attack_resolved',
-      roll: {
-        d20: 20,
-        modifier: 5,
-        total: 25,
+    const againstCombatant = describeSessionStreamEvent(
+      {
+        attackerCharacterId: 'CHAR-001',
+        attackerKind: 'character',
+        attackerParticipantId: 'player-001',
+        damage: 1,
+        encounterId: 'ENC-001',
+        hit: true,
+        reason: 'attack_resolved',
+        roll: {
+          d20: 20,
+          modifier: 5,
+          total: 25,
+        },
+        sessionId: 'SESSION-001',
+        targetArmorClass: 12,
+        targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
+        targetHp: {
+          current: 7,
+          previous: 8,
+        },
+        targetKind: 'combatant',
+        targetParticipantId: 'dm-001',
+        type: 'combat_event',
       },
-      sessionId: 'SESSION-001',
-      targetArmorClass: 12,
-      targetCombatantId: 'scene_entity_11111111-1111-4111-8111-111111111111',
-      targetHp: {
-        current: 7,
-        previous: 8,
-      },
-      targetKind: 'combatant',
-      targetParticipantId: 'dm-001',
-      type: 'combat_event',
-    });
-
-    assert.equal(
-      againstCombatant.detailValues.target,
-      'scene_entity_11111111-1111-4111-8111-111111111111',
+      describeLabels,
     );
+
+    // The visible creature is named from the scene this role was sent. Before
+    // the label resolver landed, this asserted the raw scene entity ID - the
+    // same defect as the seat ID in the movement line, one event type over.
+    assert.equal(againstCombatant.detailValues.target, 'Grimtooth');
     assert.equal(againstCombatant.detailValues.previousHp, '8');
     assert.equal(againstCombatant.detailValues.currentHp, '7');
     // A natural 20 with no `critical` flag on the roll is not a critical: the

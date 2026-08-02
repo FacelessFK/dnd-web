@@ -26,6 +26,7 @@ import {
   getOutboxStatusView,
   isSessionStreamEvent,
 } from './runtime-cockpit-helpers';
+import type { RuntimeEventLabels } from './runtime-event-labels';
 import {
   localizeRuntimeEventDescriptor,
   type RuntimeTranslator,
@@ -130,10 +131,16 @@ export type RuntimeDiagnosticsModel = ReturnType<typeof useRuntimeDiagnostics>;
  * Pure, so the "a player's feed carries no protocol payload" property is a test
  * rather than a promise: only entries that really are stream events survive,
  * and each becomes a title, a detail and a tone.
+ *
+ * `labels` is what names the actors. It is built from the role's *current*
+ * projections and passed in rather than read here, so this stays pure and the
+ * "no identifier reaches the feed" property is asserted against a directory a
+ * test can write by hand.
  */
 export function selectRuntimeFeedEntries(
   entries: RuntimeLogEntry[],
   t: RuntimeTranslator,
+  labels: RuntimeEventLabels,
 ) {
   return entries
     .flatMap((entry) =>
@@ -143,7 +150,7 @@ export function selectRuntimeFeedEntries(
               at: entry.at,
               id: entry.id,
               summary: localizeRuntimeEventDescriptor(
-                describeSessionStreamEvent(entry.payload),
+                describeSessionStreamEvent(entry.payload, labels),
                 t,
               ),
             },
