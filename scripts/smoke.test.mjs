@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import {
   formatSmokeStep,
@@ -466,4 +466,245 @@ test('runtime smoke diagnostics read and restore the recover session input', () 
   );
   assert.equal(input.value, 'session-restore-123');
   assert.deepEqual(dispatchedEvents, ['input', 'change']);
+});
+
+// --- M2 Game HUD shape ------------------------------------------------------
+
+/**
+ * Every React component file stays under this.
+ *
+ * The number is the M2 acceptance rule, and the rule exists because of what it
+ * is measured against: `runtime-cockpit.tsx` reached ~9,000 lines and became
+ * the largest known defect in the repository. A component that large cannot be
+ * reviewed, cannot be tested except through a browser, and hides duplicated
+ * server state inside itself.
+ *
+ * Enforced here rather than in a linter because it is a product decision about
+ * this repository's history, not a style preference.
+ */
+const componentLineLimit = 500;
+
+/**
+ * Components that were already over the limit when the rule was introduced.
+ *
+ * Each is outside the M2 runtime surface and none of them grew during it. The
+ * list is deliberately exact rather than a glob: adding a file to it is a
+ * visible decision in a diff, and shrinking one below the limit fails this
+ * test until the entry is removed, so the list can only get shorter.
+ */
+const knownOversizedComponents = new Map([
+  ['apps/web/app/maps/map-builder.tsx', 1211],
+  ['apps/web/app/runtime/tactical-map.tsx', 1097],
+  [
+    'apps/web/app/characters/simple-builder/components/sheet/CharacterSheet.tsx',
+    818,
+  ],
+  ['apps/web/app/characters/character-builder-ui.tsx', 688],
+  [
+    'apps/web/app/characters/simple-builder/components/steps/ClassStep.tsx',
+    532,
+  ],
+]);
+
+/**
+ * Files the rule does not describe, with the reason for each.
+ *
+ * `i18n.tsx` is the message catalogue. It is `.tsx` only because it also
+ * exports the provider and the language switcher; the length is two locales of
+ * translation strings, and splitting them would make the `Messages = typeof
+ * messages.en` parity check - the only thing enforcing that every English key
+ * has a Persian one - harder to state rather than easier.
+ */
+const componentLimitExemptions = new Map([
+  ['apps/web/lib/i18n.tsx', 'bilingual message catalogue, not a component'],
+]);
+
+function listComponentFiles() {
+  const found = [];
+
+  const walk = (relativeDirectory) => {
+    const absolute = join(root, relativeDirectory);
+
+    for (const item of readdirSync(absolute, { withFileTypes: true })) {
+      const relative = `${relativeDirectory}/${item.name}`;
+
+      if (item.isDirectory()) {
+        if (item.name !== 'node_modules' && item.name !== '.next') {
+          walk(relative);
+        }
+
+        continue;
+      }
+
+      if (item.name.endsWith('.tsx') && !item.name.endsWith('.test.tsx')) {
+        found.push(relative);
+      }
+    }
+  };
+
+  walk('apps/web/app');
+  walk('apps/web/lib');
+
+  return found.sort();
+}
+
+/** Newline-terminated lines, so the number matches what `wc -l` reports. */
+function countLines(relativePath) {
+  const source = readFileSync(join(root, relativePath), 'utf8');
+  const lines = source.split('\n');
+
+  return lines.at(-1) === '' ? lines.length - 1 : lines.length;
+}
+
+test('no React component exceeds the M2 line limit', () => {
+  const offenders = [];
+
+  for (const relativePath of listComponentFiles()) {
+    const lines = countLines(relativePath);
+
+    if (lines <= componentLineLimit) {
+      continue;
+    }
+
+    if (componentLimitExemptions.has(relativePath)) {
+      continue;
+    }
+
+    if (knownOversizedComponents.has(relativePath)) {
+      // Grandfathered, but not licensed to grow.
+      assert.ok(
+        lines <= knownOversizedComponents.get(relativePath),
+        `${relativePath} grew to ${lines} lines; it was already over the ${componentLineLimit}-line limit at ${knownOversizedComponents.get(relativePath)} and must not get worse.`,
+      );
+      continue;
+    }
+
+    offenders.push(`${relativePath} (${lines} lines)`);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `These components exceed ${componentLineLimit} lines. Extract instead of adding to them:\n${offenders.join('\n')}`,
+  );
+});
+
+test('the grandfathered list holds no file that is already compliant', () => {
+  // Keeps the list honest: once a file is decomposed, its entry has to go, or
+  // the next oversized component can be hidden by an entry nobody re-checked.
+  for (const [relativePath, recorded] of knownOversizedComponents) {
+    assert.ok(
+      existsSync(join(root, relativePath)),
+      `${relativePath} is listed as oversized but does not exist; remove the entry.`,
+    );
+
+    const lines = countLines(relativePath);
+
+    assert.ok(
+      lines > componentLineLimit,
+      `${relativePath} is now ${lines} lines and no longer needs an exemption; remove the entry.`,
+    );
+    assert.ok(
+      lines <= recorded,
+      `${relativePath} is ${lines} lines but was recorded at ${recorded}.`,
+    );
+  }
+});
+
+test('the runtime composition root stays a composition root', () => {
+  const source = readFileSync(
+    join(root, 'apps/web/app/runtime/runtime-cockpit.tsx'),
+    'utf8',
+  );
+  const lines = source.split('\n').length;
+
+  assert.ok(
+    lines < 200,
+    `runtime-cockpit.tsx is ${lines} lines; it exists to choose a shell and provide its dependencies.`,
+  );
+
+  // The three things that made the old cockpit unreviewable. None of them may
+  // come back, whatever the file's length.
+  assert.doesNotMatch(source, /\bfetch\s*\(/, 'no request building here');
+  assert.doesNotMatch(source, /EventSource/, 'no stream implementation here');
+  assert.doesNotMatch(
+    source,
+    /useReducer|createCommandId/,
+    'no state machine or command construction here',
+  );
+});
+
+/**
+ * The Player shell must not be able to reach the diagnostics UI.
+ *
+ * Walked as an import graph rather than checked at the call site, because the
+ * property has to keep holding when someone adds a panel in a hurry. A player
+ * seeing a raw protocol payload is not a cosmetic defect - it is the browser
+ * showing data the role projection exists to withhold.
+ */
+function collectLocalImports(relativePath, seen = new Set()) {
+  if (seen.has(relativePath)) {
+    return seen;
+  }
+
+  seen.add(relativePath);
+
+  const source = readFileSync(join(root, relativePath), 'utf8');
+  const pattern = /from\s+'(\.[^']+)'/g;
+  let match = pattern.exec(source);
+
+  while (match) {
+    const specifier = match[1];
+    const resolvedBase = join(dirname(relativePath), specifier);
+
+    for (const candidate of [
+      `${resolvedBase}.tsx`,
+      `${resolvedBase}.ts`,
+      `${resolvedBase}/index.tsx`,
+      `${resolvedBase}/index.ts`,
+    ]) {
+      if (existsSync(join(root, candidate))) {
+        collectLocalImports(candidate, seen);
+        break;
+      }
+    }
+
+    match = pattern.exec(source);
+  }
+
+  return seen;
+}
+
+test('the Player shell imports no diagnostics module, directly or otherwise', () => {
+  const reachable = collectLocalImports(
+    'apps/web/app/runtime/shells/player-game-shell.tsx',
+  );
+  const diagnostics = [...reachable].filter((file) =>
+    file.includes('/runtime/diagnostics/'),
+  );
+
+  assert.deepEqual(
+    diagnostics,
+    [],
+    `The Player shell can reach diagnostics UI through:\n${diagnostics.join('\n')}`,
+  );
+
+  // The check is only meaningful if the walk actually found the graph.
+  assert.ok(
+    reachable.size > 10,
+    `the import walk only reached ${reachable.size} files; it is not proving anything`,
+  );
+});
+
+test('the GM shell does reach diagnostics, so the boundary is real', () => {
+  // The inverse assertion. Without it, a walk that silently resolved nothing
+  // would pass the Player test for the wrong reason.
+  const reachable = collectLocalImports(
+    'apps/web/app/runtime/shells/game-master-game-shell.tsx',
+  );
+
+  assert.ok(
+    [...reachable].some((file) => file.includes('/runtime/diagnostics/')),
+    'the GM shell should reach the diagnostics panel',
+  );
 });
