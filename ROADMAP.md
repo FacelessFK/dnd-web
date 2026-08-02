@@ -209,7 +209,7 @@ browser smokes updated to the new surfaces; both locales verified for RTL.
 
 **Excludes.** Renderer replacement. New gameplay.
 
-**Delivered.** `runtime-cockpit.tsx` is a 135-line composition root: it chooses
+**Delivered.** `runtime-cockpit.tsx` is a 154-line composition root: it chooses
 a role shell and provides its dependencies. `PlayerGameShell` and
 `GameMasterGameShell` are the production surfaces, each a map-dominant layout
 with a compact status strip, one contextual side region and one collapsible tool
@@ -223,8 +223,9 @@ fails if anything under that directory appears in it, with the inverse assertion
 on the GM shell so a walk that resolved nothing cannot pass for the wrong
 reason. The same test enforces the 500-line rule.
 
-Every M2-owned component is under it; the largest is
-`hud/player-readiness-panels.tsx` at 468. Five components were already over the
+Every M2-owned component is under it; the largest are
+`shells/game-master-game-shell.tsx` at 469 and `hud/player-readiness-panels.tsx`
+at 468. Five components were already over the
 limit when the rule landed, and the import graph - not their filenames - decides
 who owns each:
 
