@@ -100,6 +100,22 @@ export function RuntimeCockpit() {
     viewportWidthPx,
   };
 
+  // Nothing is decided until the stored seat has loaded.
+  //
+  // The seat is read from `localStorage` in an effect, so the first client
+  // render always has an empty session ID - and choosing a shell from it there
+  // means every reload mid-game flashes the entry surface before the table
+  // reappears. Waiting one render costs nothing and removes it.
+  if (!hud.session.hydrated) {
+    return (
+      <main
+        aria-busy="true"
+        className="min-h-screen bg-slate-950"
+        data-runtime-shell="loading"
+      />
+    );
+  }
+
   if (!hud.seats.sessionId) {
     return <RuntimeEntrySurface hud={hud} />;
   }

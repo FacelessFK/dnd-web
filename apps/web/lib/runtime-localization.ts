@@ -340,3 +340,32 @@ export function formatOutboxStatusLabel(
       return t('runtime.outbox.status.unknown');
   }
 }
+
+/**
+ * A recovery miss, in the reader's language.
+ *
+ * Recovery notes are shown to whoever recovered - players included - so they
+ * carry a stable error code rather than a formatted protocol failure. Anything
+ * unrecognised falls back to a generic sentence instead of leaking the token:
+ * a code that reaches here unmapped is still a wire detail.
+ */
+export function localizeRecoveryNote(
+  code: string,
+  t: RuntimeTranslator,
+): string {
+  switch (code) {
+    case 'character_not_found':
+    case 'invalid_character_id':
+      return t('runtime.recoveryNote.character');
+    case 'invalid_scene_id':
+    case 'invalid_scene_session_association':
+    case 'scene_not_found':
+      return t('runtime.recoveryNote.scene');
+    case 'no_active_encounter':
+      return t('runtime.recoveryNote.encounter');
+    case 'no_active_scene':
+      return t('runtime.recoveryNote.activeScene');
+    default:
+      return t('runtime.recoveryNote.generic');
+  }
+}

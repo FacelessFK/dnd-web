@@ -124,6 +124,17 @@ const forbiddenPlayerPatterns = [
     pattern:
       /\b(?:set_combatant_hp|place_entity_in_scene|submit_player_intent|update_player_intent_status|advance_turn|start_encounter|assign_character_to_participant)\b/,
   },
+  // A recovery note used to render `formatRuntimeFailure` verbatim, which put
+  // "get_encounter_state failed. HTTP 409: no_active_encounter" on a player's
+  // screen. These three patterns are that whole class: a read command name, an
+  // HTTP status, and a protocol error code.
+  { label: 'a protocol read command', pattern: /\bget_[a-z_]+\b/ },
+  { label: 'a raw HTTP status', pattern: /\bHTTP\s+\d{3}\b/ },
+  {
+    label: 'a protocol error code',
+    pattern:
+      /\b(?:no_active_encounter|no_active_scene|scene_not_found|character_not_found|invalid_scene_id|invalid_character_id|command_id_conflict|unauthenticated)\b/,
+  },
 ];
 
 setRunTag(runId);
@@ -836,9 +847,14 @@ async function assertLocale(
 ) {
   await forceLocale(page, locale);
   await navigate(page, runtimeUrl);
+  // The *game* shell, not merely any shell. `[data-runtime-shell]` also matches
+  // the entry surface and the pre-hydration placeholder, so waiting on it would
+  // let the locale assertions - and the screenshots - land on the wrong screen.
   await waitFor(page, {
-    label: `${label} ${locale} shell`,
-    predicate: `Boolean(document.querySelector('[data-runtime-shell]'))`,
+    label: `${label} ${locale} game shell`,
+    predicate: `Boolean(
+      document.querySelector('[data-runtime-shell="gm"], [data-runtime-shell="player"]'),
+    )`,
   });
 
   // Waited for, not sampled. The stored locale is read in an effect, so the

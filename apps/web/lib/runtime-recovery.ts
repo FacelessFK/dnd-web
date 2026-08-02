@@ -275,7 +275,16 @@ function handleMiss(
     throw new Error(message);
   }
 
-  notes.push(message);
+  // The note is the *code*, not the formatted failure.
+  //
+  // A recovery note is rendered to whoever recovered, players included, and
+  // `formatRuntimeFailure` produces "get_encounter_state failed. HTTP 409:
+  // no_active_encounter: ..." - a command name, a status and an error code, on
+  // a player's screen. Recording the stable code instead lets the surface say
+  // "this table has no encounter yet" in the reader's language, and keeps the
+  // raw text where it belongs: the diagnostics ledger already holds every
+  // command response verbatim for the GM.
+  notes.push(error.code ?? 'recovery_miss');
 
   return null;
 }

@@ -79,6 +79,7 @@ export function PlayerGameShell({
       onToggleInspector={() => onTogglePanel('inspector')}
       onToggleTools={() => onTogglePanel('tools')}
       role="player"
+      seatControlsCollapsible={panels.layout === 'drawer'}
       toolsLabel={t('runtime.playerShell.character')}
       toolsOpen={panels.toolsOpen}
       toolsOpenerRef={onboardingOpenerRef}
@@ -276,7 +277,6 @@ export function PlayerGameShell({
             onUpdate={hud.actions.updatePlayerCharacter}
             pendingCharacterId={player.pendingCharacterId}
             playerCharacter={player.character}
-            playerParticipantId={seats.playerParticipantId}
             selectedLibraryEntry={hud.library.selectedEntry}
             selectedLibraryEntryId={hud.library.selectedEntryId}
             submitDisabledReason={player.reasons.submit}

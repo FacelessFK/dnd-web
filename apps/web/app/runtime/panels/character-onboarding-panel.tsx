@@ -3,6 +3,7 @@
 import type { CharacterLibraryEntry, CharacterResource } from '@dnd/protocol';
 
 import { useI18n } from '../../../lib/i18n';
+import { localizeRuntimeCharacterStatus } from '../../../lib/runtime-localization';
 import {
   abilityKeys,
   type AbilityKey,
@@ -41,7 +42,6 @@ export function CharacterOnboardingPanel({
   onUpdate,
   pendingCharacterId,
   playerCharacter,
-  playerParticipantId,
   selectedLibraryEntry,
   selectedLibraryEntryId,
   submitDisabledReason,
@@ -79,7 +79,6 @@ export function CharacterOnboardingPanel({
   onUpdate: () => void | Promise<void>;
   pendingCharacterId: string | null;
   playerCharacter?: CharacterResource;
-  playerParticipantId: string;
   selectedLibraryEntry: CharacterLibraryEntry | null;
   selectedLibraryEntryId: string;
   submitDisabledReason: string | null;
@@ -111,29 +110,41 @@ export function CharacterOnboardingPanel({
 
   return (
     <Panel
-      description="Create and maintain your own character draft. The server validates and returns the authoritative sheet."
-      eyebrow="Character sheet"
-      title="Player Character"
+      description={t('runtime.characterSheet.description')}
+      eyebrow={t('runtime.characterSheet.eyebrow')}
+      title={t('runtime.characterSheet.title')}
       tone="player"
     >
       <div className="grid gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-300/20 bg-sky-950/20 p-3">
           <div>
             <p className="text-sm font-bold text-amber-50">
-              {playerCharacter?.character.name ?? 'Unwritten adventurer'}
+              {playerCharacter?.character.name ??
+                t('runtime.characterSheet.unnamed')}
             </p>
+            {/*
+              The owner line used to read "Owner: player-001". A player does
+              not need their own participant ID to recognise their own sheet,
+              and rendering it puts an identifier the role projection withholds
+              onto the one panel every player lands on.
+            */}
             <p className="mt-1 text-xs text-amber-100/60">
-              Owner: {playerParticipantId}
               {playerCharacter
-                ? ` · ${playerCharacter.character.status}`
-                : ' · draft not created'}
+                ? localizeRuntimeCharacterStatus(
+                    playerCharacter.character.status,
+                    t,
+                  )
+                : t('runtime.characterSheet.draftNotCreated')}
             </p>
           </div>
           <StatusBadge label={statusLabel} tone={statusTone} />
         </div>
 
         {characterDraftErrors.length ? (
-          <Notice title="Sheet needs attention" tone="warning">
+          <Notice
+            title={t('runtime.characterSheet.needsAttention')}
+            tone="warning"
+          >
             <ul className="list-disc space-y-1 pl-5">
               {characterDraftErrors.slice(0, 4).map((error) => (
                 <li key={error}>{error}</li>
@@ -248,30 +259,30 @@ export function CharacterOnboardingPanel({
 
         <div className="grid gap-3">
           <LabeledInput
-            label="Name"
+            label={t('runtime.characterSheet.name')}
             onChange={(value) => onFieldChange('name', value)}
             value={characterDraft.name}
           />
           <div className="grid grid-cols-2 gap-3">
             <LabeledInput
-              label="Class"
+              label={t('runtime.characterSheet.className')}
               onChange={(value) => onFieldChange('className', value)}
               value={characterDraft.className}
             />
             <LabeledInput
-              label="Level (create only)"
+              label={t('runtime.characterSheet.level')}
               onChange={(value) => onFieldChange('level', value)}
               value={characterDraft.level}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <LabeledInput
-              label="Species/Race"
+              label={t('runtime.characterSheet.species')}
               onChange={(value) => onFieldChange('speciesOrRace', value)}
               value={characterDraft.speciesOrRace}
             />
             <LabeledInput
-              label="Background"
+              label={t('runtime.characterSheet.background')}
               onChange={(value) => onFieldChange('background', value)}
               value={characterDraft.background}
             />
@@ -280,7 +291,7 @@ export function CharacterOnboardingPanel({
 
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
-            Abilities
+            {t('runtime.characterSheet.abilities')}
           </p>
           <div className="grid grid-cols-3 gap-2">
             {abilityKeys.map((abilityKey) => (
@@ -296,31 +307,31 @@ export function CharacterOnboardingPanel({
 
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-300/70">
-            Combat Basics
+            {t('runtime.characterSheet.combatBasics')}
           </p>
           <div className="grid grid-cols-2 gap-2">
             <LabeledInput
-              label="HP Max"
+              label={t('runtime.combatants.hpMax')}
               onChange={(value) => onHpChange('max', value)}
               value={characterDraft.hp.max}
             />
             <LabeledInput
-              label="HP Current"
+              label={t('runtime.combatants.hpCurrent')}
               onChange={(value) => onHpChange('current', value)}
               value={characterDraft.hp.current}
             />
             <LabeledInput
-              label="Temp HP"
+              label={t('runtime.combatants.hpTemp')}
               onChange={(value) => onHpChange('temp', value)}
               value={characterDraft.hp.temp}
             />
             <LabeledInput
-              label="Armor Class"
+              label={t('runtime.characterSummary.armorClass')}
               onChange={(value) => onFieldChange('armorClass', value)}
               value={characterDraft.armorClass}
             />
             <LabeledInput
-              label="Speed"
+              label={t('runtime.characterSummary.speed')}
               onChange={(value) => onFieldChange('speed', value)}
               value={characterDraft.speed}
             />
@@ -328,27 +339,24 @@ export function CharacterOnboardingPanel({
         </div>
 
         <TextAreaField
-          label="Notes"
+          label={t('runtime.characterSheet.notes')}
           onChange={(value) => onFieldChange('notes', value)}
           value={characterDraft.notes}
         />
 
         {playerCharacter ? (
           <div className="grid gap-2 rounded-2xl border border-amber-500/15 bg-black/25 p-3 text-sm">
+            {/* The character ID row is gone for the same reason as the owner. */}
             <StatusRow
-              label="Character ID"
-              value={playerCharacter.character.id}
-            />
-            <StatusRow
-              label="Proficiency"
+              label={t('runtime.characterSummary.proficiency')}
               value={`+${playerCharacter.derived.proficiencyBonus}`}
             />
             <StatusRow
-              label="Initiative"
+              label={t('runtime.characterSummary.initiative')}
               value={`${playerCharacter.derived.initiativeModifier >= 0 ? '+' : ''}${playerCharacter.derived.initiativeModifier}`}
             />
             <StatusRow
-              label="Passive Perception"
+              label={t('runtime.characterSummary.passivePerception')}
               value={String(playerCharacter.derived.passivePerception)}
             />
           </div>
@@ -358,27 +366,27 @@ export function CharacterOnboardingPanel({
           <ActionButton
             disabled={Boolean(createDisabledReason)}
             disabledReason={createDisabledReason ?? undefined}
-            label="Create Draft"
+            label={t('runtime.characterSheet.createDraft')}
             onClick={onCreate}
           />
           <ActionButton
             disabled={Boolean(updateDisabledReason)}
             disabledReason={updateDisabledReason ?? undefined}
-            label="Update Draft"
+            label={t('runtime.characterSheet.updateDraft')}
             onClick={onUpdate}
             variant="secondary"
           />
           <ActionButton
             disabled={Boolean(finalizeDisabledReason)}
             disabledReason={finalizeDisabledReason ?? undefined}
-            label="Finalize"
+            label={t('runtime.characterSheet.finalize')}
             onClick={onFinalize}
             variant="secondary"
           />
           <ActionButton
             disabled={Boolean(submitDisabledReason)}
             disabledReason={submitDisabledReason ?? undefined}
-            label="Submit to DM"
+            label={t('runtime.characterSheet.submitToDm')}
             onClick={onSubmit}
             variant="secondary"
           />

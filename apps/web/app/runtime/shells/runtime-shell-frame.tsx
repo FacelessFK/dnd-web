@@ -14,10 +14,12 @@
  * no map, no character, no tools - so neither shell can leak into the other
  * through it.
  */
-import type { ReactNode, RefObject } from 'react';
+import { useId, type ReactNode, type RefObject } from 'react';
 import Link from 'next/link';
 
 import { LanguageSwitcher } from '../../../lib/i18n';
+import type { RuntimeMode } from '../../../lib/runtime-cockpit-helpers';
+import { localizeRecoveryNote } from '../../../lib/runtime-localization';
 import type { RuntimeHudModel } from '../../../lib/use-runtime-hud';
 import { Notice } from '../hud/hud-primitives';
 import { RuntimeSessionBar } from './runtime-session-bar';
@@ -31,6 +33,8 @@ export type RuntimeShellFrameProps = {
   onToggleInspector: () => void;
   onToggleTools: () => void;
   role: 'gm' | 'player';
+  /** Drawer layout: the seat controls collapse so the map keeps the screen. */
+  seatControlsCollapsible: boolean;
   toolsLabel: string;
   toolsOpen: boolean;
   toolsOpenerRef: RefObject<HTMLButtonElement | null>;
@@ -45,11 +49,38 @@ export function RuntimeShellFrame({
   onToggleInspector,
   onToggleTools,
   role,
+  seatControlsCollapsible,
   toolsLabel,
   toolsOpen,
   toolsOpenerRef,
 }: RuntimeShellFrameProps) {
   const { runtime, seats, session, t } = hud;
+  const seatControlsId = useId();
+
+  const sessionBarProps = {
+    busyReason: hud.scene.busyReason,
+    joinDisabledReason: hud.table.disabledReasons.joinPlayer,
+    mode: hud.mode,
+    onCreateSession: hud.actions.createSession,
+    onJoinSession: hud.actions.joinCurrentPlayer,
+    onLocalReset: () => {
+      session.actions.resetLocal();
+      hud.draftActions.resetCharacter(seats.playerDisplayName);
+    },
+    onRecover: () => void session.actions.recover(),
+    onSessionIdChange: (sessionId: string) =>
+      session.actions.switchIdentity({ sessionId }),
+    onSwitchMode: (mode: RuntimeMode) =>
+      session.actions.switchIdentity({ mode }),
+    onToggleSubscription: () =>
+      session.streamEnabled
+        ? session.actions.unsubscribe()
+        : session.actions.resubscribe(),
+    recoverDisabledReason: hud.table.disabledReasons.recover,
+    sessionId: seats.sessionId,
+    streamEnabled: session.streamEnabled,
+    t,
+  };
 
   return (
     <main
@@ -111,31 +142,27 @@ export function RuntimeShellFrame({
             </nav>
           </div>
 
-          <RuntimeSessionBar
-            busyReason={hud.scene.busyReason}
-            joinDisabledReason={hud.table.disabledReasons.joinPlayer}
-            mode={hud.mode}
-            onCreateSession={hud.actions.createSession}
-            onJoinSession={hud.actions.joinCurrentPlayer}
-            onLocalReset={() => {
-              session.actions.resetLocal();
-              hud.draftActions.resetCharacter(seats.playerDisplayName);
-            }}
-            onRecover={() => void session.actions.recover()}
-            onSessionIdChange={(sessionId) =>
-              session.actions.switchIdentity({ sessionId })
-            }
-            onSwitchMode={(mode) => session.actions.switchIdentity({ mode })}
-            onToggleSubscription={() =>
-              session.streamEnabled
-                ? session.actions.unsubscribe()
-                : session.actions.resubscribe()
-            }
-            recoverDisabledReason={hud.table.disabledReasons.recover}
-            sessionId={seats.sessionId}
-            streamEnabled={session.streamEnabled}
-            t={t}
-          />
+          {/*
+            On a phone these are seven controls nobody touches mid-game, and
+            leaving them expanded pushes the board below the fold - the exact
+            "scroll through an administration form to reach the map" the HUD
+            work exists to remove. They stay a column on a desktop, where there
+            is room for both.
+          */}
+          {seatControlsCollapsible ? (
+            <details className="grid gap-3">
+              <summary className="min-h-10 cursor-pointer list-none rounded-xl border border-slate-700 bg-slate-950/40 px-3 py-2 text-sm font-bold text-slate-300 outline-none focus-visible:ring-2 focus-visible:ring-amber-200">
+                {seats.sessionId
+                  ? t('runtime.playerStatus.atTable', { code: seats.sessionId })
+                  : t('runtime.entry.title')}
+              </summary>
+              <div className="mt-3" id={seatControlsId}>
+                <RuntimeSessionBar {...sessionBarProps} />
+              </div>
+            </details>
+          ) : (
+            <RuntimeSessionBar {...sessionBarProps} />
+          )}
         </header>
 
         {/*
@@ -155,7 +182,7 @@ export function RuntimeShellFrame({
             >
               <ul className="list-disc space-y-1 ps-5">
                 {runtime.recoveryNotes.map((note) => (
-                  <li key={note}>{note}</li>
+                  <li key={note}>{localizeRecoveryNote(note, t)}</li>
                 ))}
               </ul>
             </Notice>

@@ -213,7 +213,9 @@ test('an expected absence becomes a note and recovery continues', async () => {
 
   assert.equal(outcome.encounter, null);
   assert.equal(outcome.notes.length, 1);
-  assert.match(outcome.notes[0]!, /get_encounter_state failed\./);
+  // The note is the stable error code, so a surface can localize it
+  // instead of showing a player a command name and an HTTP status.
+  assert.equal(outcome.notes[0], 'no_active_encounter');
   // The scene still came back: one expected miss must not abort the sequence.
   assert.equal(outcome.scene?.id, 'scene_1');
 });
@@ -338,7 +340,7 @@ test('a missing character is noted without losing the ones that resolved', async
 
   assert.equal(outcome.characters.length, 1);
   assert.equal(outcome.notes.length, 1);
-  assert.match(outcome.notes[0]!, /get_character failed\./);
+  assert.equal(outcome.notes[0], 'character_not_found');
 });
 
 test('recovery never puts a participant token in a command payload', async () => {

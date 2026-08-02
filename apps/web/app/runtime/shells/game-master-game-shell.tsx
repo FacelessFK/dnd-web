@@ -86,6 +86,7 @@ export function GameMasterGameShell({
       onToggleInspector={() => onTogglePanel('inspector')}
       onToggleTools={() => onTogglePanel('tools')}
       role="gm"
+      seatControlsCollapsible={panels.layout === 'drawer'}
       toolsLabel={t('runtime.gmShell.tools')}
       toolsOpen={panels.toolsOpen}
       toolsOpenerRef={toolsOpenerRef}
