@@ -16,6 +16,7 @@ import {
   defaultTimeoutMs,
   delay,
   extractToken,
+  openGameMasterTool,
   postCommand,
   readLabeledOptions,
   readSseFrames,
@@ -227,6 +228,9 @@ export async function setCell(page, x, y) {
 }
 
 export async function createCombatant(page, { armorClass, hp, name, x, y }) {
+  // The M2 HUD keeps the GM's tools behind a collapsible region showing one
+  // group at a time, so the panel this drives has to be asked for by name.
+  await openGameMasterTool(page, 'combatants');
   await setCell(page, x, y);
   await setLabeledField(page, 'Name', name);
   await setLabeledField(page, 'HP max', hp);
@@ -290,6 +294,8 @@ export async function revealCombatant(page, name) {
 }
 
 export async function repositionCombatant(page, name, x, y) {
+  await openGameMasterTool(page, 'combatants');
+
   const options = await readLabeledOptions(page, 'Selected monster/NPC');
 
   if (!options) {

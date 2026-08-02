@@ -86,23 +86,32 @@ test('the pinned .nvmrc version satisfies the declared engine range', () => {
 // Only an explicit RUNTIME_SMOKE_HEADED opt-in may open a real window, so the
 // default has to stay pinned by a test rather than by reviewer memory.
 test('browser harnesses launch headless unless explicitly opted out', () => {
-  assert.deepEqual(getChromeDisplayArgs({ env: {} }), ['--headless=new']);
+  // Headless still gets an explicit viewport. Chrome's headless default is
+  // 800x600, which is neither the desktop the layout assertions describe nor
+  // the phone the mobile ones do - so a harness that said nothing would be
+  // asserting against whichever viewport Chrome happened to pick, and the M2
+  // shells legitimately render a different layout at each.
+  assert.deepEqual(getChromeDisplayArgs({ env: {} }), [
+    '--headless=new',
+    '--window-size=1600,1000',
+  ]);
   assert.deepEqual(
     getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: '' } }),
-    ['--headless=new'],
+    ['--headless=new', '--window-size=1600,1000'],
   );
   assert.deepEqual(
     getChromeDisplayArgs({ env: { RUNTIME_SMOKE_HEADED: '0' } }),
-    ['--headless=new'],
+    ['--headless=new', '--window-size=1600,1000'],
   );
-  // A window size must never leak into a headless launch as a stray extra flag.
+  // A requested size is honoured headless; the window *position* still is not,
+  // because there is no window to place.
   assert.deepEqual(
     getChromeDisplayArgs({
       env: {},
       windowPosition: { x: 960, y: 0 },
       windowSize: { height: 1040, width: 950 },
     }),
-    ['--headless=new'],
+    ['--headless=new', '--window-size=950,1040'],
   );
 });
 
@@ -149,12 +158,13 @@ test('a display backend is passed only when the run explicitly names one', () =>
     }),
     ['--ozone-platform=wayland', '--window-size=950,1040'],
   );
-  // A headless run ignores it: there is no window to place on any backend.
+  // A headless run ignores the backend: there is no window to place on one.
+  // It still carries the explicit viewport.
   assert.deepEqual(
     getChromeDisplayArgs({
       env: { RUNTIME_SMOKE_OZONE_PLATFORM: 'wayland' },
     }),
-    ['--headless=new'],
+    ['--headless=new', '--window-size=1600,1000'],
   );
 });
 

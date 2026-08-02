@@ -48,6 +48,7 @@ import {
   loadRepoEnvironment,
   loginInBrowser,
   navigate,
+  openGameMasterTool,
   nextBin,
   postCommand,
   printProcessLogs,
@@ -310,6 +311,7 @@ async function main() {
     const sessionId = await waitForStoredSessionId(gmPage);
     console.log(`[m1-db-restart]   session ${sessionId}`);
 
+    await openGameMasterTool(gmPage, 'scene');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
     await waitForParticipantCredential(gmPage, sessionId, 'GM');
@@ -336,6 +338,7 @@ async function main() {
 
     await clickButton(gmPage, ['Recover']);
     await waitForText(gmPage, [characterName], 'GM pending character preview');
+    await openGameMasterTool(gmPage, 'roster');
     await clickButton(gmPage, ['Assign Runtime Copy']);
     await waitForText(
       gmPage,
@@ -457,6 +460,7 @@ async function main() {
 
     await runIntentLifecycle({ gmPage, playerPage });
 
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Start Encounter']);
     await waitForText(
       gmPage,

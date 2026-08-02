@@ -77,11 +77,22 @@ export function getChromeDisplayArgs({
   windowPosition,
   windowSize,
 } = {}) {
-  if (!isHeadedSmokeRun(env)) {
-    return ['--headless=new'];
-  }
-
   const args = [];
+
+  if (!isHeadedSmokeRun(env)) {
+    args.push('--headless=new');
+
+    // Headless Chrome defaults to 800x600, which is neither the desktop the
+    // layout assertions describe nor the phone the mobile ones do. A harness
+    // that does not say which viewport it wants is asserting against whichever
+    // one Chrome happened to pick, so headless gets an explicit desktop size
+    // too - the same one the headed run uses.
+    args.push(
+      `--window-size=${windowSize?.width ?? 1600},${windowSize?.height ?? 1000}`,
+    );
+
+    return args;
+  }
 
   // Only ever set when asked for. Chrome picks its own backend otherwise, and
   // hardcoding one here would break every machine whose session is not the one
@@ -364,4 +375,66 @@ function truncateForSummary(value, limit = 160) {
   }
 
   return `${value.slice(0, limit - 1)}...`;
+}
+
+/**
+ * Open the GM tool region and select one tool group.
+ *
+ * The M2 Game HUD shows one GM tool group at a time behind a collapsible
+ * region, so a harness that used to find every panel on one page now has to say
+ * which one it wants. Expressed as an expression rather than a helper so the
+ * three harness libraries - each with its own click plumbing - can share it.
+ *
+ * Idempotent: opening an already-open region and re-selecting the current tab
+ * are both no-ops, so callers may state the tool they need before each group of
+ * assertions without tracking what is already open.
+ */
+export function getOpenGameMasterToolExpression(tab) {
+  return `(() => {
+    const toggle = document.querySelector('[data-testid="hud-toggle-tools"]');
+
+    if (!toggle) {
+      return false;
+    }
+
+    if (toggle.getAttribute('aria-expanded') !== 'true') {
+      toggle.click();
+      // The tab list only exists once the region is open, so this returns
+      // false and the caller's poll comes back for the second half.
+      return false;
+    }
+
+    const tabButton = document.querySelector(
+      '[data-testid="gm-tool-tab-' + ${JSON.stringify(tab)} + '"]',
+    );
+
+    if (!tabButton) {
+      return false;
+    }
+
+    if (tabButton.getAttribute('aria-selected') !== 'true') {
+      tabButton.click();
+      return false;
+    }
+
+    return true;
+  })()`;
+}
+
+/** Close the GM tool region, so the map owns the screen again. */
+export function getCloseGameMasterToolExpression() {
+  return `(() => {
+    const toggle = document.querySelector('[data-testid="hud-toggle-tools"]');
+
+    if (!toggle) {
+      return false;
+    }
+
+    if (toggle.getAttribute('aria-expanded') === 'true') {
+      toggle.click();
+      return false;
+    }
+
+    return true;
+  })()`;
 }

@@ -42,6 +42,7 @@ import {
   loadRepoEnvironment,
   loginInBrowser,
   navigate,
+  openGameMasterTool,
   nextBin,
   postCommand,
   printProcessLogs,
@@ -352,6 +353,7 @@ async function main() {
     console.log(`[m1-full-loop] session ${sessionId}`);
 
     step('GM activates a map through the UI');
+    await openGameMasterTool(gmPage, 'scene');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
     await waitFor(gmPage, {
@@ -396,6 +398,7 @@ async function main() {
 
     step('GM assigns the runtime character');
     await clickButton(gmPage, ['Recover']);
+    await openGameMasterTool(gmPage, 'roster');
     await waitForText(gmPage, ['Assignment Requests'], 'GM assignment panel');
     await waitForText(gmPage, [characterName], 'GM pending character preview');
     await clickButton(gmPage, ['Assign Runtime Copy']);
@@ -770,6 +773,7 @@ async function main() {
     await stage('intent-transitions');
 
     step('GM starts the encounter');
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Start Encounter']);
     // The panel heading is CSS-uppercased in `innerText`; match either casing.
     await waitForText(

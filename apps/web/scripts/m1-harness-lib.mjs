@@ -33,7 +33,11 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getChromeDisplayArgs } from './runtime-smoke-diagnostics.mjs';
+import {
+  getChromeDisplayArgs,
+  getCloseGameMasterToolExpression,
+  getOpenGameMasterToolExpression,
+} from './runtime-smoke-diagnostics.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 
@@ -1329,4 +1333,26 @@ export function redactSecrets(value) {
     .replace(/postgres(?:ql)?:\/\/[^\s'"]+/gi, 'postgres://[redacted]')
     .replace(/("token"\s*:\s*)"[^"]+"/g, '$1"[redacted]"')
     .replace(/participantToken=[^&\s'"]+/g, 'participantToken=[redacted]');
+}
+
+/**
+ * Bring one GM tool group on screen before driving it.
+ *
+ * The M2 Game HUD keeps the GM's tools behind a collapsible region showing one
+ * group at a time, so the panels the M1 journey drives are no longer all
+ * rendered at once. This is the harness saying which one it needs.
+ */
+export function openGameMasterTool(page, tab) {
+  return waitFor(page, {
+    label: `GM ${tab} tools open`,
+    predicate: getOpenGameMasterToolExpression(tab),
+  });
+}
+
+/** Put the map back in charge, so map assertions are not behind a drawer. */
+export function closeGameMasterTools(page) {
+  return waitFor(page, {
+    label: 'GM tools closed',
+    predicate: getCloseGameMasterToolExpression(),
+  });
 }
