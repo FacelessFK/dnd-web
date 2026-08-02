@@ -124,15 +124,25 @@ export function PlayerGameShell({
         {hud.activeSceneGuidance.detail}
       </Notice>
 
+      {/*
+        The column split is a media query, not a measured width.
+
+        `gridTemplateColumns` used to come from React's observed viewport, which
+        made the layout depend on a `resize` event actually arriving. When one
+        did not - a headed browser applying a device-metrics override - the
+        shell kept the desktop template, and a 380px inspector column inside a
+        406px row squeezed the map to 26px. The map being dominant is the
+        milestone's acceptance criterion, so it must not hinge on an event.
+
+        `inspectorOpen` still comes from React, because whether a panel was
+        asked for is genuinely state. Only the width branch is CSS.
+      */}
       <div
-        className="grid min-h-0 gap-4"
-        style={{
-          gridTemplateColumns: panels.inspectorAsDrawer
-            ? 'minmax(0, 1fr)'
-            : panels.inspectorOpen
-              ? 'minmax(0, 1fr) minmax(300px, 380px)'
-              : 'minmax(0, 1fr)',
-        }}
+        className={`grid min-h-0 grid-cols-[minmax(0,1fr)] gap-4 ${
+          panels.inspectorOpen
+            ? 'min-[900px]:grid-cols-[minmax(0,1fr)_minmax(300px,380px)]'
+            : ''
+        }`}
       >
         <RuntimeMapStage
           actingParticipantId={hud.actingParticipantId}
@@ -171,6 +181,7 @@ export function PlayerGameShell({
           asDrawer={panels.inspectorAsDrawer}
           onClose={() => onTogglePanel('inspector')}
           open={panels.inspectorOpen}
+          panel="inspector"
           openerRef={inspectorOpenerRef}
           title={t('runtime.playerShell.details')}
         >
@@ -252,6 +263,7 @@ export function PlayerGameShell({
           asDrawer={panels.toolsAsDrawer}
           onClose={() => onTogglePanel('tools')}
           open={panels.toolsOpen}
+          panel="tools"
           openerRef={onboardingOpenerRef}
           title={t('runtime.playerShell.character')}
         >

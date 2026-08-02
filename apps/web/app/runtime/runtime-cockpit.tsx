@@ -56,13 +56,32 @@ export function RuntimeCockpit() {
   const hud = useRuntimeHud(scenarioId);
   const prefersReducedMotion = usePrefersReducedMotion();
 
+  /**
+   * How wide the viewport is, for the one decision CSS cannot make.
+   *
+   * The column/drawer *grid* is a media query in the shells, so the map keeping
+   * its share never depends on a listener. What does depend on one is the
+   * structural half: whether a side panel is an `<aside>` or a modal
+   * `role="dialog"` with focus trapping and Escape. That cannot be expressed in
+   * CSS, so it is measured here.
+   *
+   * Both a `ResizeObserver` on the document element and `resize` are used,
+   * because they miss different things - the observer catches box changes that
+   * fire no window event, and `resize` catches window changes that leave the
+   * box alone, such as a zoom.
+   */
   useEffect(() => {
     const measure = (): void => setViewportWidthPx(window.innerWidth);
+    const observer = new ResizeObserver(measure);
 
     measure();
+    observer.observe(document.documentElement);
     window.addEventListener('resize', measure);
 
-    return () => window.removeEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, []);
 
   // On a narrow viewport the panels start closed so the map owns the screen; on

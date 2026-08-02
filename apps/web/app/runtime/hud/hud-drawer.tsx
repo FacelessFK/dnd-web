@@ -24,6 +24,14 @@ import { createFocusRestorer } from '../../../lib/runtime-hud-layout';
 
 type HudDrawerProps = {
   asDrawer: boolean;
+  /**
+   * Which panel this is.
+   *
+   * Both shells mount two of these, and in column form they used to carry the
+   * same `data-hud-region="inspector"` marker - so anything inspecting the page
+   * could not tell the inspector from the tool region.
+   */
+  panel: 'inspector' | 'tools';
   children: ReactNode;
   /** Where focus returns when the drawer closes. */
   openerRef: RefObject<HTMLElement | null>;
@@ -41,6 +49,7 @@ export function HudDrawer({
   onClose,
   open,
   openerRef,
+  panel,
   side = 'end',
   title,
 }: HudDrawerProps) {
@@ -84,7 +93,10 @@ export function HudDrawer({
       <aside
         aria-labelledby={headingId}
         className="grid content-start gap-4"
-        data-hud-region="inspector"
+        data-hud-panel={panel}
+        data-hud-region={
+          panel === 'inspector' ? 'inspector' : 'gm-tools-column'
+        }
       >
         <h2 className="sr-only" id={headingId}>
           {title}
@@ -95,7 +107,11 @@ export function HudDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex" data-hud-region="drawer">
+    <div
+      className="fixed inset-0 z-40 flex"
+      data-hud-panel={panel}
+      data-hud-region="drawer"
+    >
       <button
         aria-label={title}
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"

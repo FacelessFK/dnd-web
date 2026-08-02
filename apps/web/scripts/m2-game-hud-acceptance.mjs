@@ -36,6 +36,7 @@ import {
   clickButton,
   clickButtonIfEnabled,
   createCdpPage,
+  delay,
   findBrowserExecutable,
   forceLocale,
   getFreePort,
@@ -559,11 +560,19 @@ async function assertMapDominant(page, label) {
     predicate: `Boolean(document.querySelector('[data-hud-region="map"]'))`,
   });
 
-  const measurement = await measureMapShare(page);
-
-  if (!measurement) {
-    fail(`${label}: no map region on screen.`);
-  }
+  // Wait for the layout to settle, then measure.
+  //
+  // A viewport change is not instantaneous: `window.innerWidth` reports the new
+  // value before the grid has reflowed, so a single sample can catch the map
+  // mid-relayout. That surfaced only on the headed run - a real compositor
+  // schedules the reflow differently from a headless one - as a map measured at
+  // 26px of a 406px row, which is a fact about when the tape measure was held
+  // rather than about the layout.
+  //
+  // This does not soften the assertion: the threshold below is unchanged, the
+  // wait requires two consecutive identical non-degenerate measurements, and it
+  // throws rather than guessing if the layout never settles.
+  const measurement = await settleMapShare(page, label);
 
   evidence.mapShares[label] = measurement.share;
 
@@ -579,6 +588,45 @@ async function assertMapDominant(page, label) {
       `${label}: the map is only ${Math.round(measurement.mapHeight)}px tall in a ${measurement.viewportHeight}px viewport.`,
     );
   }
+}
+
+/**
+ * The map's measured share, once two consecutive samples agree.
+ *
+ * Quiescence rather than a sleep: it returns as soon as the layout holds still,
+ * and fails loudly if it never does.
+ */
+async function settleMapShare(page, label) {
+  const deadline = Date.now() + 15000;
+  let previous = null;
+
+  while (Date.now() < deadline) {
+    const measurement = await measureMapShare(page);
+
+    if (!measurement) {
+      fail(`${label}: no map region on screen.`);
+    }
+
+    const isSettled =
+      measurement.rowWidth > 0 &&
+      measurement.mapWidth > 0 &&
+      previous !== null &&
+      Math.abs(previous.mapWidth - measurement.mapWidth) < 1 &&
+      Math.abs(previous.rowWidth - measurement.rowWidth) < 1;
+
+    if (isSettled) {
+      return measurement;
+    }
+
+    previous = measurement;
+    await delay(150);
+  }
+
+  fail(
+    `${label}: the map layout never settled; last sample was ${previous?.mapWidth}px of ${previous?.rowWidth}px.`,
+  );
+
+  return previous;
 }
 
 async function assertNoDiagnostics(page) {
@@ -804,19 +852,43 @@ async function assertMobileLayout(page, label) {
 
   const opener = '[data-testid="hud-toggle-inspector"]';
 
+  // Click, then assert, as two steps. Folding both into one predicate made a
+  // failure say only "it never opened as a drawer", which is true of a click
+  // that did not land, a panel that opened as a column, and a panel that opened
+  // and was closed again by something else.
   await waitFor(page, {
-    label: `${label} mobile inspector opens as a drawer`,
+    label: `${label} mobile inspector reports itself open`,
     predicate: `(() => {
       const toggle = document.querySelector(${JSON.stringify(opener)});
       if (!toggle) { return false; }
-      if (toggle.getAttribute('aria-expanded') !== 'true') {
-        toggle.focus();
-        toggle.click();
-        return false;
-      }
-      return Boolean(document.querySelector('[data-hud-region="drawer"]'));
+      if (toggle.getAttribute('aria-expanded') === 'true') { return true; }
+      toggle.focus();
+      toggle.click();
+      return false;
     })()`,
   });
+
+  const panelForm = await page.evaluate(`(() => {
+    const inspector = document.querySelector('[data-hud-panel="inspector"]');
+
+    return {
+      ariaExpanded: document
+        .querySelector(${JSON.stringify(opener)})
+        ?.getAttribute('aria-expanded'),
+      form: inspector ? inspector.dataset.hudRegion : 'absent',
+      innerWidth: window.innerWidth,
+      // The collapsed seat bar is the shell's own report of the drawer layout,
+      // so it separates "React thinks it is wide" from "the panel chose wrong".
+      seatBarCollapsed: Boolean(document.querySelector('header details')),
+    };
+  })()`);
+
+  if (panelForm.form !== 'drawer') {
+    fail(
+      `${label}: at 430px the inspector rendered as "${panelForm.form}" rather than a drawer. ` +
+        `aria-expanded=${panelForm.ariaExpanded}, innerWidth=${panelForm.innerWidth}, seatBarCollapsed=${panelForm.seatBarCollapsed}.`,
+    );
+  }
 
   await assertNoOverflow(page, `${label} mobile drawer open`);
 

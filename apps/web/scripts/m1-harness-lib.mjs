@@ -1374,6 +1374,24 @@ export async function setViewport(page, { height, width }) {
     mobile: width < 700,
     width,
   });
+
+  // Tell the page its viewport changed.
+  //
+  // A device-metrics override changes what CSS and `window.innerWidth` see, but
+  // in a headed window it notifies the page of nothing - no `resize`, no
+  // `matchMedia` change, no `ResizeObserver` callback. A person resizing a real
+  // window always produces a `resize`, so a harness that skips it is testing a
+  // situation the product will never meet: CSS at one width and every JS
+  // listener still believing another.
+  //
+  // This is restoring fidelity, not compensating for a product defect. The
+  // structural half of the layout - whether a side panel is a column or a modal
+  // drawer, which decides `role="dialog"`, focus trapping and Escape - cannot
+  // be a media query, so it legitimately depends on the event.
+  await page.evaluate(
+    `(() => { window.dispatchEvent(new Event('resize')); return true; })()`,
+  );
+
   await waitFor(page, {
     label: `viewport ${width}x${height}`,
     predicate: `window.innerWidth === ${width}`,
