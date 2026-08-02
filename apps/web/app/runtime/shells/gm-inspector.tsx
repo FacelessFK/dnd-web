@@ -102,8 +102,14 @@ export function GmInspector({
             </div>
 
             <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+              {/*
+                A distinct label, not `runtime.combatants.hpCurrent`. That one
+                names the create-combatant field in the tool region, and with
+                both regions on screen a duplicate label is ambiguous to a
+                screen reader and to anything driving the page by label.
+              */}
               <LabeledInput
-                label={t('runtime.combatants.hpCurrent')}
+                label={t('runtime.gmInspector.selectedHp')}
                 onChange={onHpDraftChange}
                 testId="gm-inspector-hp"
                 value={hpDraft}

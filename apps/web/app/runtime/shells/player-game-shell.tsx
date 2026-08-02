@@ -28,6 +28,7 @@ import { getLocalizedPlayerNextStepTitle } from '../../../lib/runtime-localizati
 import { M1FeedbackLayer } from '../m1-feedback-layer';
 import { M1PlayerPanel } from '../m1-player-panel';
 import { LatestEventFeed } from '../hud/action-economy-feedback';
+import { EncounterStatusFeedback } from '../hud/encounter-feedback';
 import { Notice } from '../hud/hud-primitives';
 import { HudDrawer } from '../hud/hud-drawer';
 import { CharacterOnboardingPanel } from '../panels/character-onboarding-panel';
@@ -225,6 +226,15 @@ export function PlayerGameShell({
             resource={player.character}
             title={seats.playerDisplayName}
             variant="hero"
+          />
+
+          {/*
+            Round, turn and the last combat result, from the player's own
+            projection. `showEncounterId` is deliberately not passed.
+          */}
+          <EncounterStatusFeedback
+            summary={table.encounterStatusSummary}
+            t={t}
           />
 
           <LatestEventFeed entries={hud.feedEntries} t={t} />

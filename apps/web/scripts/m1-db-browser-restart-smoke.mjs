@@ -311,7 +311,9 @@ async function main() {
     const sessionId = await waitForStoredSessionId(gmPage);
     console.log(`[m1-db-restart]   session ${sessionId}`);
 
-    await openGameMasterTool(gmPage, 'scene');
+    // 'Create Scene' is the scenario shortcut on the Table tools, not the
+    // Scene Builder's 'Create Custom Scene'.
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
     await waitForParticipantCredential(gmPage, sessionId, 'GM');

@@ -96,7 +96,7 @@ export function GameMasterGameShell({
           gridTemplateColumns: panels.inspectorAsDrawer
             ? 'minmax(0, 1fr)'
             : panels.inspectorOpen
-              ? 'minmax(0, 1fr) minmax(300px, 400px)'
+              ? 'minmax(0, 1fr) minmax(300px, 380px)'
               : 'minmax(0, 1fr)',
         }}
       >
@@ -238,7 +238,11 @@ export function GameMasterGameShell({
         className="grid gap-3 lg:grid-cols-2"
         data-hud-region="gm-feedback"
       >
-        <EncounterStatusFeedback summary={table.encounterStatusSummary} t={t} />
+        <EncounterStatusFeedback
+          showEncounterId
+          summary={table.encounterStatusSummary}
+          t={t}
+        />
         <LatestEventFeed entries={hud.feedEntries} t={t} />
       </section>
 

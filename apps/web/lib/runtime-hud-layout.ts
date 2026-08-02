@@ -13,8 +13,16 @@
  * are made here so they can be tested without a browser.
  */
 
-/** Below this the side panels become drawers rather than columns. */
-export const drawerBreakpointPx = 1024;
+/**
+ * Below this the side panels become drawers rather than columns.
+ *
+ * 900 rather than a round 1024 because of what sits just above it: a 950px
+ * window - half of a 1920 desktop, and what a two-profile playtest actually
+ * uses - still has room for the map and one 300-380px inspector, leaving the
+ * map about 60% of the row. Pushing that case into drawers would hide the
+ * inspector on a screen wide enough to show it.
+ */
+export const drawerBreakpointPx = 900;
 
 /** The narrowest supported viewport. Every layout must fit inside it. */
 export const minimumSupportedWidthPx = 430;

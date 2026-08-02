@@ -75,6 +75,22 @@ export function RuntimeCockpit() {
     setPanelRequest((current) => ({ ...current, inspector: !isNarrow }));
   }, [isNarrow]);
 
+  /**
+   * A player with no assigned character lands on the thing they have to do.
+   *
+   * Their character panel is not a tool they go looking for, it is the next
+   * step - so it opens itself until the GM has assigned the runtime copy, and
+   * gets out of the way for good once that has happened. Keyed on the
+   * transition rather than the value, so a player who closes it mid-onboarding
+   * does not have it reopened under them on the next frame.
+   */
+  const needsCharacter =
+    hud.mode === 'player' && !hud.player.isCharacterAssigned;
+
+  useEffect(() => {
+    setPanelRequest((current) => ({ ...current, tools: needsCharacter }));
+  }, [needsCharacter]);
+
   const shared = {
     hud,
     onTogglePanel: (panel: keyof RuntimePanelRequest) =>

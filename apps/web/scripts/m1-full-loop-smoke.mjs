@@ -353,7 +353,9 @@ async function main() {
     console.log(`[m1-full-loop] session ${sessionId}`);
 
     step('GM activates a map through the UI');
-    await openGameMasterTool(gmPage, 'scene');
+    // 'Create Scene' is the scenario shortcut on the Table tools, not the
+    // Scene Builder's 'Create Custom Scene'.
+    await openGameMasterTool(gmPage, 'table');
     await clickButton(gmPage, ['Create Scene']);
     await waitForText(gmPage, ['Tactical Grid'], 'GM tactical grid');
     await waitFor(gmPage, {

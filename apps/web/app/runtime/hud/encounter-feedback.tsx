@@ -99,9 +99,16 @@ export function MovementFeedback({
 }
 
 export function EncounterStatusFeedback({
+  showEncounterId = false,
   summary,
   t,
 }: {
+  /**
+   * GM surfaces only. The encounter ID is a record handle the GM's tools are
+   * built out of; on a player's screen it is an identifier they could not have
+   * invented, which is exactly what the role projection exists to withhold.
+   */
+  showEncounterId?: boolean;
   summary: EncounterStatusSummary;
   t: RuntimeTranslator;
 }) {
@@ -151,7 +158,7 @@ export function EncounterStatusFeedback({
       </div>
       <div className="flex flex-wrap gap-2">
         <StatusBadge label={progressLabel} tone="info" />
-        {summary.encounterId ? (
+        {showEncounterId && summary.encounterId ? (
           <StatusBadge
             label={t('runtime.encounterStatus.id', {
               id: summary.encounterId,

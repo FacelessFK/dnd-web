@@ -485,6 +485,7 @@ export const messages = {
     'runtime.gmInspector.emptyDetail':
       'Select a token or an entity on the map to act on it, or pick an empty cell to place something.',
     'runtime.gmInspector.emptyTitle': 'Nothing selected',
+    'runtime.gmInspector.selectedHp': 'Selected creature HP',
     'runtime.gmInspector.eyebrow': 'Selection',
     'runtime.gmInspector.title': 'Inspector',
     'runtime.gmInspector.visible': 'Visible',
@@ -1800,6 +1801,7 @@ export const messages = {
     'runtime.gmInspector.emptyDetail':
       'یک توکن یا موجودیت را روی نقشه انتخاب کنید تا روی آن کنش انجام دهید، یا یک خانه خالی را برای قرار دادن چیزی برگزینید.',
     'runtime.gmInspector.emptyTitle': 'چیزی انتخاب نشده',
+    'runtime.gmInspector.selectedHp': 'امتیاز ضربه موجود انتخاب‌شده',
     'runtime.gmInspector.eyebrow': 'انتخاب',
     'runtime.gmInspector.title': 'بازرس',
     'runtime.gmInspector.visible': 'آشکار',
