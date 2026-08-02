@@ -290,6 +290,7 @@ test('an event for another session is dropped rather than painted over this one'
     type: 'stream_event',
     event: {
       type: 'scene_state',
+      view: 'authoritative',
       reason: 'entity_placed',
       sessionId: 'OTHER1',
       scene: createScene({
@@ -309,6 +310,7 @@ test('a newer scene frame replaces the map live', () => {
     type: 'stream_event',
     event: {
       type: 'scene_state',
+      view: 'authoritative',
       reason: 'entity_placed',
       sessionId: 'ABC123',
       scene: createScene({
@@ -346,6 +348,7 @@ test('an out-of-order scene frame for the same map is dropped', () => {
     type: 'stream_event',
     event: {
       type: 'scene_state',
+      view: 'authoritative',
       reason: 'entity_placed',
       sessionId: 'ABC123',
       scene: createScene({
@@ -377,6 +380,7 @@ test('a repeated scene frame is suppressed rather than reapplied', () => {
     type: 'stream_event',
     event: {
       type: 'scene_state',
+      view: 'authoritative',
       reason: 'initial_sync',
       sessionId: 'ABC123',
       scene: createScene(),
@@ -399,6 +403,7 @@ test('switching to a different map wins even when its timestamp is older', () =>
     type: 'stream_event',
     event: {
       type: 'scene_state',
+      view: 'authoritative',
       reason: 'scene_activated',
       sessionId: 'ABC123',
       scene: createScene({

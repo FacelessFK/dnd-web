@@ -16,8 +16,6 @@
  */
 import { useEffect, useState } from 'react';
 
-import type { Scene } from '@dnd/protocol';
-
 import {
   getActingParticipantId,
   getAttackableCombatantEntities,
@@ -28,6 +26,7 @@ import {
   type Cell,
   type RuntimeMode,
 } from './runtime-cockpit-helpers';
+import type { RuntimeScene } from './runtime-scene-view';
 
 export type RuntimeSelection = {
   actorParticipantId: string;
@@ -43,7 +42,7 @@ type UseRuntimeSelectionParams = {
   mode: RuntimeMode;
   playerParticipantId: string;
   playerParticipantIds: string[];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 };
 
 export function useRuntimeSelection(params: UseRuntimeSelectionParams) {

@@ -16,7 +16,6 @@ import type {
   PlayerIntentStatus,
   ResolutionRequest,
   RollStance,
-  SceneEntity,
 } from '@dnd/protocol';
 import { skillIds } from '@dnd/protocol';
 
@@ -28,6 +27,8 @@ import {
 import type { M1TableState } from '../../lib/m1-table-state';
 import { findResolutionForRequest } from '../../lib/m1-table-state';
 import { M1DiceResult } from './m1-dice-result';
+import { isSceneEntityHidden } from '../../lib/runtime-scene-view';
+import type { RuntimeSceneEntity } from '../../lib/runtime-scene-view';
 
 const ABILITIES: AbilityKey[] = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
 const STANCES: RollStance[] = ['normal', 'advantage', 'disadvantage'];
@@ -41,7 +42,7 @@ export type M1ResolutionTarget = {
 
 type M1GmPanelProps = {
   busyLabel: string | null;
-  combatants: SceneEntity[];
+  combatants: RuntimeSceneEntity[];
   errorKey: string | null;
   onCancelRequest: (request: ResolutionRequest) => void;
   onRequestResolution: (input: {
@@ -372,11 +373,13 @@ export function M1GmPanel({
               <li
                 key={entity.id}
                 className="flex items-center gap-2"
-                data-combatant-hidden={entity.hidden ? 'true' : 'false'}
+                data-combatant-hidden={
+                  isSceneEntityHidden(entity) ? 'true' : 'false'
+                }
               >
                 <span className="text-amber-50">{entity.name}</span>
                 <span className="text-amber-200/70">
-                  {entity.hidden
+                  {isSceneEntityHidden(entity)
                     ? t('runtime.m1.gm.concealed')
                     : t('runtime.m1.gm.visible')}
                 </span>
@@ -385,10 +388,13 @@ export function M1GmPanel({
                   className="rounded-lg border border-amber-400/50 px-2 py-0.5 text-amber-100 disabled:opacity-50"
                   disabled={busyLabel !== null}
                   onClick={() =>
-                    onSetCombatantHidden(entity.id, !entity.hidden)
+                    onSetCombatantHidden(
+                      entity.id,
+                      !isSceneEntityHidden(entity),
+                    )
                   }
                 >
-                  {entity.hidden
+                  {isSceneEntityHidden(entity)
                     ? t('runtime.m1.gm.reveal')
                     : t('runtime.m1.gm.conceal')}
                 </button>

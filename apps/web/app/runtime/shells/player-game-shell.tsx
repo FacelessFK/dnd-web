@@ -37,6 +37,7 @@ import { PlayerActionRail } from './player-action-rail';
 import { PlayerStatusBar } from './player-status-bar';
 import { RuntimeMapStage } from './runtime-map-stage';
 import { RuntimeShellFrame } from './runtime-shell-frame';
+import { isProjectedScene } from '../../../lib/runtime-scene-view';
 
 export type PlayerGameShellProps = {
   hud: RuntimeHudModel;
@@ -69,6 +70,13 @@ export function PlayerGameShell({
     hud.session.stream.status,
     Boolean(runtime.session),
   );
+  // Deliberately says what the character can see, not "your payload was
+  // projected". Fog is a fact about the character standing in a dark corridor;
+  // the machinery that enforces it is not the player's business.
+  const sightNote =
+    runtime.scene && isProjectedScene(runtime.scene)
+      ? t('runtime.playerShell.sightNote')
+      : null;
 
   return (
     <RuntimeShellFrame
@@ -185,6 +193,9 @@ export function PlayerGameShell({
           openerRef={inspectorOpenerRef}
           title={t('runtime.playerShell.details')}
         >
+          {sightNote ? (
+            <p className="mb-3 text-xs text-slate-400">{sightNote}</p>
+          ) : null}
           <PlayerActionRail
             actionEconomy={table.actionEconomyFeedbackSummary}
             attackDisabledReason={table.playerAttackDisabledReason}

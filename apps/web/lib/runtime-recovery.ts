@@ -23,7 +23,6 @@ import type {
   ActiveSceneState,
   CharacterResource,
   Encounter,
-  Scene,
 } from '@dnd/protocol';
 
 import {
@@ -42,6 +41,7 @@ import {
   sendSceneCommand,
   sendSessionCommand,
 } from './runtime-api';
+import type { RuntimeScene } from './runtime-scene-view';
 
 /** The command senders recovery needs, injectable for tests. */
 export type RecoveryTransport = {
@@ -78,7 +78,7 @@ export type RecoveryOutcome = {
    * had everything.
    */
   notes: string[];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   session: SessionSnapshot;
 };
 
@@ -136,7 +136,7 @@ async function recoverScene(
   transport: RecoveryTransport,
   sceneId: string,
   notes: string[],
-): Promise<Scene | null> {
+): Promise<RuntimeScene | null> {
   const result = await transport.sendSceneCommand({
     actor: { participantId: request.participantId },
     commandId: createCommandId('get-scene'),

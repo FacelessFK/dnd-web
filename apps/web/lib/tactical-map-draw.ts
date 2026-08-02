@@ -1,4 +1,8 @@
-import type { GridDefinition, SceneTerrainTile } from '@dnd/protocol';
+import type {
+  GridDefinition,
+  SceneCellIllumination,
+  SceneTerrainTile,
+} from '@dnd/protocol';
 
 import {
   getTileStyle,
@@ -15,12 +19,34 @@ import {
 export type TerrainDrawState = {
   camera: MapCamera;
   grid: GridDefinition;
-  /** Flat row-major tiles, as returned by `decodeSceneTerrain`. */
-  terrainTiles: SceneTerrainTile[];
+  /**
+   * Flat row-major tiles. `null` is a cell this viewer does not know about -
+   * produced only by a projected scene omitting it - and is drawn as fog.
+   */
+  terrainTiles: (SceneTerrainTile | null)[];
+  /**
+   * Flat row-major illumination, parallel to `terrainTiles`. Omitted by callers
+   * that have no lighting to express, such as the map builder, and then treated
+   * as uniformly bright.
+   */
+  terrainIllumination?: SceneCellIllumination[];
   /** Milliseconds, used for liquid shimmer. */
   timestamp: number;
   viewport: ViewportSize;
 };
+
+/**
+ * Unknown ground: one flat, opaque, deliberately unremarkable colour.
+ *
+ * Opaque matters. Anything translucent would let a viewer read the difference
+ * between two kinds of nothing, and there is nothing underneath to read - the
+ * cell was never in the payload. The final fog treatment is ROADMAP M3's later
+ * wave; this is the honest minimum.
+ */
+const UNKNOWN_CELL_FILL = '#0b0b0e';
+
+/** How much darker a dimly lit cell is drawn than a brightly lit one. */
+const DIM_CELL_SHADE = 'rgba(4, 6, 14, 0.45)';
 
 export type CellProjection = {
   cellScreenX: (x: number) => number;
@@ -62,8 +88,22 @@ function tileAt(
   state: TerrainDrawState,
   x: number,
   y: number,
-): SceneTerrainTile {
-  return state.terrainTiles[y * state.grid.width + x] ?? 'stone';
+): SceneTerrainTile | null {
+  return state.terrainTiles[y * state.grid.width + x] ?? null;
+}
+
+function isRaisedAt(state: TerrainDrawState, x: number, y: number): boolean {
+  const tile = tileAt(state, x, y);
+
+  return tile !== null && getTileStyle(tile).raised;
+}
+
+function illuminationAt(
+  state: TerrainDrawState,
+  x: number,
+  y: number,
+): SceneCellIllumination {
+  return state.terrainIllumination?.[y * state.grid.width + x] ?? 'bright';
 }
 
 export function drawTerrain(
@@ -78,9 +118,16 @@ export function drawTerrain(
   for (let y = range.startY; y <= range.endY; y += 1) {
     for (let x = range.startX; x <= range.endX; x += 1) {
       const tile = tileAt(state, x, y);
-      const style = getTileStyle(tile);
       const left = projection.cellScreenX(x);
       const top = projection.cellScreenY(y);
+
+      if (!tile) {
+        context.fillStyle = UNKNOWN_CELL_FILL;
+        context.fillRect(left, top, scale + 1, scale + 1);
+        continue;
+      }
+
+      const style = getTileStyle(tile);
 
       if (style.raised) {
         // Block side, then an inset top face lifted upward for a top-down
@@ -159,6 +206,14 @@ export function drawTerrain(
       } else if (scale > 18) {
         drawSpeckles(context, left, top, scale, style.speckle, x, y, 4);
       }
+
+      // Dimly lit ground is drawn as itself, shaded. It is known - the viewer
+      // can see it - just not well lit, which is a different thing from the fog
+      // above and has to look different.
+      if (illuminationAt(state, x, y) === 'dim') {
+        context.fillStyle = DIM_CELL_SHADE;
+        context.fillRect(left, top, scale + 1, scale + 1);
+      }
     }
   }
 }
@@ -174,15 +229,19 @@ export function drawWallShadows(
 
   for (let y = range.startY; y <= range.endY; y += 1) {
     for (let x = range.startX; x <= range.endX; x += 1) {
-      if (!getTileStyle(tileAt(state, x, y)).raised) {
+      if (!isRaisedAt(state, x, y)) {
         continue;
       }
 
       const below = y + 1;
 
+      // An unknown cell casts no shadow and receives none. A shadow falling
+      // onto fog would be the client inferring that there is floor down there
+      // to fall on, which is exactly what it has not been told.
       if (
         below >= state.grid.height ||
-        getTileStyle(tileAt(state, x, below)).raised
+        !tileAt(state, x, below) ||
+        isRaisedAt(state, x, below)
       ) {
         continue;
       }

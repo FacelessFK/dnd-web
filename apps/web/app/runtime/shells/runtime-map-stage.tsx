@@ -13,7 +13,7 @@
  * and below it - which is what keeps ROADMAP M4's option to swap the drawing
  * layer open.
  */
-import type { ActiveSceneState, Scene } from '@dnd/protocol';
+import type { ActiveSceneState } from '@dnd/protocol';
 
 import type {
   Cell,
@@ -27,6 +27,7 @@ import { NumberInput, SelectField } from '../hud/hud-fields';
 import { CurrentTurnRail } from '../hud/action-economy-feedback';
 import { MovementFeedback } from '../hud/encounter-feedback';
 import { TacticalMap } from '../tactical-map';
+import type { RuntimeScene } from '../../../lib/runtime-scene-view';
 
 export type RuntimeMapStageProps = {
   actingParticipantId: string;
@@ -51,7 +52,7 @@ export type RuntimeMapStageProps = {
   onUpdateCell: (update: (current: Cell) => Cell) => void;
   ownParticipantId: string;
   repositionDisabledReason: string | null;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   sceneLabel: string;
   selectedCell: Cell;
   selectedCombatantId: string;

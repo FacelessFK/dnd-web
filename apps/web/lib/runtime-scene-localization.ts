@@ -6,7 +6,6 @@
  * scene guidance lives here too: it is the sentence that tells either role why
  * the board is empty.
  */
-import type { Scene } from '@dnd/protocol';
 
 import type {
   RuntimeEventSummary,
@@ -17,6 +16,8 @@ import type {
   sceneTransitionKindOptions,
 } from './runtime-cockpit-helpers';
 import type { RuntimeTranslator } from './runtime-localization';
+import { isSceneEntityHidden } from './runtime-scene-view';
+import type { RuntimeScene, RuntimeSceneEntity } from './runtime-scene-view';
 
 export function getLocalizedSceneEntityTypeLabel(
   type: (typeof sceneEntityTypeOptions)[number],
@@ -129,7 +130,7 @@ export function getLocalizedSceneTransitionPresetDescription(
 }
 
 export function getLocalizedSceneEntityLabel(
-  entity: Scene['entities'][number],
+  entity: RuntimeSceneEntity,
   t: RuntimeTranslator,
 ): string {
   const flags = [
@@ -148,7 +149,9 @@ export function getLocalizedSceneEntityLabel(
     entity.blocksVision
       ? t('runtime.sceneBuilder.entityFlag.blocksVision')
       : null,
-    entity.hidden ? t('runtime.sceneBuilder.entityFlag.hidden') : null,
+    isSceneEntityHidden(entity)
+      ? t('runtime.sceneBuilder.entityFlag.hidden')
+      : null,
   ].filter(Boolean);
 
   return `${entity.name} (${getLocalizedSceneEntityTypeLabel(entity.type, t)}${
@@ -157,7 +160,7 @@ export function getLocalizedSceneEntityLabel(
 }
 
 export function getLocalizedSceneEntityPositionLabel(
-  entity: Scene['entities'][number],
+  entity: RuntimeSceneEntity,
   t: RuntimeTranslator,
 ): string {
   return t('runtime.sceneBuilder.entityAt', {
@@ -174,7 +177,7 @@ export function getLocalizedActiveSceneGuidance({
 }: {
   activeSceneId: string | null;
   mode: RuntimeMode;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   t: RuntimeTranslator;
 }): RuntimeEventSummary {
   if (scene) {

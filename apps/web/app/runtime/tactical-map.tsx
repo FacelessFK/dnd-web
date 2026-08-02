@@ -11,8 +11,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from 'react';
 
-import { decodeSceneTerrain } from '@dnd/rules';
-import type { ActiveSceneState, Scene, ScenePosition } from '@dnd/protocol';
+import type { ActiveSceneState, ScenePosition } from '@dnd/protocol';
 
 import { useI18n } from '../../lib/i18n';
 import {
@@ -39,6 +38,8 @@ import {
   type MapToken,
   type ViewportSize,
 } from '../../lib/tactical-map-render';
+import { buildRenderedTerrain } from '../../lib/runtime-scene-view';
+import type { RuntimeScene } from '../../lib/runtime-scene-view';
 
 export type TacticalMapProps = {
   activeScene: ActiveSceneState | null;
@@ -58,7 +59,7 @@ export type TacticalMapProps = {
   onSelectSceneEntity: (entityId: string) => void;
   onSelectParticipant: (participantId: string) => void;
   ownParticipantId: string | null;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   selectedCell: ScenePosition;
   selectedCombatantId: string;
   selectedSceneEntityId: string;
@@ -123,11 +124,8 @@ export function TacticalMap(props: TacticalMapProps) {
     [props.mode, props.scene],
   );
 
-  const terrainTiles = useMemo(
-    () =>
-      props.scene
-        ? decodeSceneTerrain(props.scene.grid, props.scene.terrain)
-        : [],
+  const terrain = useMemo(
+    () => buildRenderedTerrain(props.scene),
     [props.scene],
   );
 
@@ -472,7 +470,7 @@ export function TacticalMap(props: TacticalMapProps) {
         reachableCellKeys,
         selectedCell: props.selectedCell,
         selectedSceneEntityId: props.selectedSceneEntityId,
-        terrainTiles,
+        terrain,
         timestamp,
         tokens,
         viewport,
@@ -491,7 +489,7 @@ export function TacticalMap(props: TacticalMapProps) {
     props.selectedCell,
     props.selectedSceneEntityId,
     reachableCellKeys,
-    terrainTiles,
+    terrain,
     tokens,
     viewport,
   ]);
@@ -703,7 +701,7 @@ type DrawState = {
   reachableCellKeys: ReadonlySet<string>;
   selectedCell: ScenePosition;
   selectedSceneEntityId: string;
-  terrainTiles: ReturnType<typeof decodeSceneTerrain>;
+  terrain: ReturnType<typeof buildRenderedTerrain>;
   timestamp: number;
   tokens: MapToken[];
   viewport: ViewportSize;
@@ -724,7 +722,8 @@ function drawMap(context: CanvasRenderingContext2D, state: DrawState): void {
   drawTerrainLayers(context, {
     camera,
     grid,
-    terrainTiles: state.terrainTiles,
+    terrainIllumination: state.terrain.illumination,
+    terrainTiles: state.terrain.tiles,
     timestamp: state.timestamp,
     viewport,
   });

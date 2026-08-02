@@ -20,7 +20,6 @@ import { useEffect, useState } from 'react';
 import type {
   CharacterResource,
   Encounter,
-  Scene,
   SceneEntityInput,
   SceneTransitionInput,
 } from '@dnd/protocol';
@@ -48,6 +47,7 @@ import {
   type SceneTransitionDraftForm,
   type SceneTransitionPresetId,
 } from './runtime-cockpit-helpers';
+import type { RuntimeScene } from './runtime-scene-view';
 
 export type TurnUsageDraft = Encounter['currentTurnUsage'];
 
@@ -109,7 +109,7 @@ type UseRuntimeDraftsParams = {
   defaultPlayerDisplayName: string;
   encounter: Encounter | null;
   playerParticipantId: string;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   sceneId: string;
   selectedSceneEntityId: string;
   selectedTransitionId: string;

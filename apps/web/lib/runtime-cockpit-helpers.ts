@@ -10,7 +10,6 @@ import type {
   GridDefinition,
   OutboxStatusSuccess,
   RuntimeErrorCode,
-  Scene,
   SceneEntity,
   SceneEntityInput,
   SceneEntityUpdateInput,
@@ -27,6 +26,8 @@ import {
 
 import type { MessageKey } from './i18n';
 import type { RuntimeApiFailure } from './runtime-api';
+import { isSceneEntityHidden } from './runtime-scene-view';
+import type { RuntimeScene, RuntimeSceneEntity } from './runtime-scene-view';
 import { buildTrainingRoomLayout } from './scene-terrain-presets';
 
 const trainingRoomLayout = buildTrainingRoomLayout();
@@ -274,7 +275,7 @@ export type CombatantDraftForm = {
 };
 
 export type SceneEntityDisplayCell = {
-  entity: SceneEntity;
+  entity: RuntimeSceneEntity;
   isOrigin: boolean;
   label: string;
   x: number;
@@ -282,7 +283,9 @@ export type SceneEntityDisplayCell = {
 };
 
 export type CombatantDisplayCell = SceneEntityDisplayCell & {
-  entity: SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> };
+  entity: RuntimeSceneEntity & {
+    combatant: NonNullable<SceneEntity['combatant']>;
+  };
 };
 
 export type StoredCockpitState = {
@@ -834,7 +837,9 @@ export function createDefaultSceneDraftForm(): SceneDraftForm {
   };
 }
 
-export function createSceneDraftFormFromScene(scene: Scene): SceneDraftForm {
+export function createSceneDraftFormFromScene(
+  scene: RuntimeScene,
+): SceneDraftForm {
   return {
     cellSizeFeet: String(scene.grid.cellSizeFeet),
     height: String(scene.grid.height),
@@ -921,28 +926,28 @@ export function createSceneTransitionDraftFormFromPreset(
 }
 
 export function createSceneEntityDraftFormFromEntity(
-  entity: SceneEntity,
+  entity: RuntimeSceneEntity,
 ): SceneEntityDraftForm {
   return {
     blocksMovement: entity.blocksMovement,
     blocksVision: entity.blocksVision,
     footprintHeight: String(entity.footprint.height),
     footprintWidth: String(entity.footprint.width),
-    hidden: entity.hidden,
+    hidden: isSceneEntityHidden(entity),
     name: entity.name,
     type: entity.type,
   };
 }
 
 export function createSceneTransitionDraftFormFromEntity(
-  entity: SceneEntity,
+  entity: RuntimeSceneEntity,
 ): SceneTransitionDraftForm {
   return {
     blocksMovement: entity.blocksMovement,
     blocksVision: entity.blocksVision,
     footprintHeight: String(entity.footprint.height),
     footprintWidth: String(entity.footprint.width),
-    hidden: entity.hidden,
+    hidden: isSceneEntityHidden(entity),
     kind: entity.transition?.kind ?? 'door',
     name: entity.name,
     notes: entity.transition?.notes ?? '',
@@ -1250,7 +1255,7 @@ export function getActiveSceneGuidance({
 }: {
   activeSceneId: string | null;
   mode: RuntimeMode;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 }): PlayerNextStep {
   if (scene) {
     return {
@@ -1285,13 +1290,13 @@ export function getActiveSceneGuidance({
 }
 
 export function getSceneEntityDisplayCells(
-  scene: Scene | null,
+  scene: RuntimeScene | null,
 ): SceneEntityDisplayCell[] {
   if (!scene) {
     return [];
   }
 
-  return scene.entities.flatMap((entity) => {
+  return (scene.entities as RuntimeSceneEntity[]).flatMap((entity) => {
     const cells: SceneEntityDisplayCell[] = [];
 
     for (let y = 0; y < entity.footprint.height; y += 1) {
@@ -1311,29 +1316,35 @@ export function getSceneEntityDisplayCells(
 }
 
 export function getCombatantEntities(
-  scene: Scene | null,
-): Array<SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }> {
-  return (scene?.entities ?? []).filter(
+  scene: RuntimeScene | null,
+): Array<
+  RuntimeSceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }
+> {
+  return (scene?.entities ?? ([] as RuntimeSceneEntity[])).filter(
     (
       entity,
-    ): entity is SceneEntity & {
+    ): entity is RuntimeSceneEntity & {
       combatant: NonNullable<SceneEntity['combatant']>;
     } => Boolean(entity.combatant),
   );
 }
 
-export function getPassiveSceneEntities(scene: Scene | null): SceneEntity[] {
-  return (scene?.entities ?? []).filter(
+export function getPassiveSceneEntities(
+  scene: RuntimeScene | null,
+): RuntimeSceneEntity[] {
+  return (scene?.entities ?? ([] as RuntimeSceneEntity[])).filter(
     (entity) => !entity.combatant && !entity.transition,
   );
 }
 
-export function isPassiveSceneEntity(entity: SceneEntity): boolean {
+export function isPassiveSceneEntity(entity: RuntimeSceneEntity): boolean {
   return !entity.combatant && !entity.transition;
 }
 
-export function getTransitionSceneEntities(scene: Scene | null): SceneEntity[] {
-  return (scene?.entities ?? []).filter(
+export function getTransitionSceneEntities(
+  scene: RuntimeScene | null,
+): RuntimeSceneEntity[] {
+  return (scene?.entities ?? ([] as RuntimeSceneEntity[])).filter(
     (entity) => !entity.combatant && Boolean(entity.transition),
   );
 }
@@ -1343,21 +1354,21 @@ export function getVisibleTransitionSceneEntities({
   scene,
 }: {
   mode: RuntimeMode;
-  scene: Scene | null;
-}): SceneEntity[] {
+  scene: RuntimeScene | null;
+}): RuntimeSceneEntity[] {
   const transitions = getTransitionSceneEntities(scene);
 
   return mode === 'player'
-    ? transitions.filter((entity) => !entity.hidden)
+    ? transitions.filter((entity) => !isSceneEntityHidden(entity))
     : transitions;
 }
 
-export function isTransitionSceneEntity(entity: SceneEntity): boolean {
+export function isTransitionSceneEntity(entity: RuntimeSceneEntity): boolean {
   return !entity.combatant && Boolean(entity.transition);
 }
 
 export function getKnownSceneOptions(
-  scenesById: Record<string, Scene>,
+  scenesById: Record<string, RuntimeScene>,
 ): Array<{ label: string; value: string }> {
   return Object.values(scenesById)
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -1368,42 +1379,39 @@ export function getKnownSceneOptions(
 }
 
 export function isCombatantEntityDefeated(
-  entity: SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> },
+  entity: RuntimeSceneEntity & {
+    combatant: NonNullable<SceneEntity['combatant']>;
+  },
 ): boolean {
   return entity.combatant.hp.current === 0;
 }
 
 export function getAttackableCombatantEntities(
-  scene: Scene | null,
-): Array<SceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }> {
+  scene: RuntimeScene | null,
+): Array<
+  RuntimeSceneEntity & { combatant: NonNullable<SceneEntity['combatant']> }
+> {
   return getCombatantEntities(scene).filter(
     (entity) => !isCombatantEntityDefeated(entity),
   );
 }
 
 export function getCombatantDisplayCells(
-  scene: Scene | null,
+  scene: RuntimeScene | null,
 ): CombatantDisplayCell[] {
+  if (!scene) {
+    return [];
+  }
+
+  // Only the combatants, on the same grid. Rebuilt in whichever shape the scene
+  // arrived in rather than converted into the other one.
   return getSceneEntityDisplayCells({
-    ...(scene ?? {
-      createdAt: '',
-      entities: [],
-      grid: {
-        cellSizeFeet: 5,
-        height: 1,
-        width: 1,
-      },
-      id: '',
-      name: '',
-      sessionId: '',
-      terrain: null,
-      updatedAt: '',
-    }),
+    ...scene,
     entities: getCombatantEntities(scene),
-  }).map((cell) => cell as CombatantDisplayCell);
+  } as RuntimeScene).map((cell) => cell as CombatantDisplayCell);
 }
 
-export function getSceneEntityLabel(entity: SceneEntity): string {
+export function getSceneEntityLabel(entity: RuntimeSceneEntity): string {
   const flags = [
     entity.combatant ? `${entity.combatant.kind} combatant` : null,
     entity.transition
@@ -1411,7 +1419,7 @@ export function getSceneEntityLabel(entity: SceneEntity): string {
       : null,
     entity.blocksMovement ? 'blocks movement' : null,
     entity.blocksVision ? 'blocks vision' : null,
-    entity.hidden ? 'hidden' : null,
+    isSceneEntityHidden(entity) ? 'hidden' : null,
   ].filter(Boolean);
 
   return `${entity.name} (${entity.type}${flags.length ? `, ${flags.join(', ')}` : ''})`;
@@ -1424,7 +1432,7 @@ export function getCurrentTurnLabel({
 }: {
   encounter: Encounter | null;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 }): string {
   const current = encounter?.participants[encounter.currentTurnIndex];
 
@@ -1475,7 +1483,7 @@ export function getCurrentTurnRailSummary({
   charactersByParticipant: Record<string, CharacterResource | undefined>;
   encounter: Encounter | null;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 }): CurrentTurnRailSummary | null {
   const current = encounter?.participants[encounter.currentTurnIndex];
 
@@ -1553,7 +1561,7 @@ export function getEncounterStatusSummary({
     { type: 'encounter_state' }
   > | null;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 }): EncounterStatusSummary {
   const sourceEncounter = encounter ?? lastEncounterEvent?.encounter ?? null;
   const turnCount = sourceEncounter?.participants.length ?? 0;
@@ -1636,7 +1644,7 @@ export function getActionTargetFeedbackSummary({
   charactersByParticipant: Record<string, CharacterResource | undefined>;
   lastCombatEvent: CombatEvent | null;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
 }): ActionTargetFeedbackSummary {
@@ -1881,7 +1889,7 @@ function getSelectedAttackTargetFeedback({
 }: {
   charactersByParticipant: Record<string, CharacterResource | undefined>;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   selectedTargetCombatantId: string;
   selectedTargetParticipantId: string;
 }): ActionTargetFeedbackTarget | null {
@@ -1933,7 +1941,7 @@ function getCombatEventActorLabel({
   combatantId?: string;
   participantId: string;
   participants: SessionSnapshot['participants'];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
 }): string {
   if (combatantId) {
     const combatant = getCombatantEntities(scene).find(
@@ -1947,7 +1955,7 @@ function getCombatEventActorLabel({
 }
 
 function getCombatantName(
-  combatant: SceneEntity & {
+  combatant: RuntimeSceneEntity & {
     combatant: NonNullable<SceneEntity['combatant']>;
   },
 ): string {
@@ -1966,7 +1974,7 @@ export function getDmCombatantActionDisabledReason({
   busyLabel: string | null;
   currentTurnCombatantId: string | null;
   mode: RuntimeMode;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   selectedCombatantId: string;
   sessionId: string;
   targetParticipantId: string;

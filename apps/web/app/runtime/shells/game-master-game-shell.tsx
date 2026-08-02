@@ -43,6 +43,7 @@ import { GmTablePanel } from './gm-table-panel';
 import { GmToolRegion } from './gm-tool-region';
 import { RuntimeMapStage } from './runtime-map-stage';
 import { RuntimeShellFrame } from './runtime-shell-frame';
+import { isAuthoritativeScene } from '../../../lib/runtime-scene-view';
 
 export type GameMasterGameShellProps = {
   activeTab: GameMasterToolTab;
@@ -66,6 +67,13 @@ export function GameMasterGameShell({
   viewportWidthPx,
 }: GameMasterGameShellProps) {
   const { drafts, m1, runtime, scene, seats, selection, t, table } = hud;
+  // The builder authors the stored map, so it is handed the authoritative
+  // scene or nothing. A projected view can legitimately be in state here - one
+  // browser can hold a player seat and a GM seat in turn - and drawing a
+  // player's sparse map on an authoring surface would show the GM holes in
+  // their own scene.
+  const authoritativeScene =
+    runtime.scene && isAuthoritativeScene(runtime.scene) ? runtime.scene : null;
   const inspectorOpenerRef = useRef<HTMLButtonElement | null>(null);
   const toolsOpenerRef = useRef<HTMLButtonElement | null>(null);
   const panels = selectPanelPresentation({
@@ -305,7 +313,7 @@ export function GameMasterGameShell({
                 repositionEntityDisabledReason={
                   scene.reasons.repositionSceneEntity
                 }
-                scene={runtime.scene}
+                scene={authoritativeScene}
                 sceneDraft={drafts.scene}
                 sceneDraftErrors={scene.sceneDraftErrors}
                 selectedCell={selection.cell}

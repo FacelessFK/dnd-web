@@ -19,6 +19,13 @@
  */
 import type { Encounter, Scene } from '@dnd/protocol';
 
+import {
+  countKnownCells,
+  isAuthoritativeScene,
+  isProjectedScene,
+  type RuntimeScene,
+} from './runtime-scene-view';
+
 import type { MessageKey } from './i18n';
 import type { RuntimeSessionState } from './runtime-session-state';
 
@@ -53,8 +60,15 @@ export type PlayerCharacterPresentation = {
 export type PlayerShellView = {
   connection: ConnectionPresentation;
   /** The map to draw, already projected by the server. */
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   sceneName: string | null;
+  /**
+   * Whether this map arrived as a per-viewer projection, so the shell can say
+   * that unlit and unseen ground is simply not known yet.
+   */
+  fogged: boolean;
+  /** Cells this seat currently perceives. Counts what arrived, never what did not. */
+  knownCellCount: number;
   /** Visible entities the player may interact with. Never includes hidden ones. */
   visibleTokenCount: number;
   character: PlayerCharacterPresentation | null;
@@ -66,6 +80,12 @@ export type PlayerShellView = {
 
 export type GameMasterShellView = {
   connection: ConnectionPresentation;
+  /**
+   * Always the authoritative scene. A projected view is discarded rather than
+   * rendered here: switching seats inside one browser leaves the previous
+   * role's map in state, and drawing a player's sparse view on the GM surface
+   * would quietly tell the GM their own map had holes in it.
+   */
   scene: Scene | null;
   sceneName: string | null;
   sceneId: string | null;
@@ -144,6 +164,8 @@ export function selectPlayerShellView(
     connection: selectConnectionPresentation(state),
     scene,
     sceneName: scene?.name ?? null,
+    fogged: scene ? isProjectedScene(scene) : false,
+    knownCellCount: countKnownCells(scene),
     // The scene is already projected, so every entity in it is one the player
     // is allowed to see. Counting here does not need - and must not apply - a
     // second visibility rule.
@@ -197,7 +219,8 @@ function selectPlayerTurn(state: RuntimeSessionState): PlayerTurnPresentation {
 export function selectGameMasterShellView(
   state: RuntimeSessionState,
 ): GameMasterShellView {
-  const scene = state.scene;
+  const scene =
+    state.scene && isAuthoritativeScene(state.scene) ? state.scene : null;
   const participants = state.session?.participants ?? [];
 
   return {

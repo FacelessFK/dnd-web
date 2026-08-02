@@ -13,7 +13,6 @@
  * No protocol command names appear. `set_combatant_hp` is a wire detail; the
  * button says what it does to the creature.
  */
-import type { Scene } from '@dnd/protocol';
 
 import type { Cell } from '../../../lib/runtime-cockpit-helpers';
 import type { RuntimeTranslator } from '../../../lib/runtime-localization';
@@ -26,6 +25,8 @@ import {
   StatusRow,
 } from '../hud/hud-primitives';
 import { LabeledInput } from '../hud/hud-fields';
+import { isSceneEntityHidden } from '../../../lib/runtime-scene-view';
+import type { RuntimeSceneEntity } from '../../../lib/runtime-scene-view';
 
 export type GmInspectorProps = {
   hpDraft: string;
@@ -42,8 +43,8 @@ export type GmInspectorProps = {
     selectedCombatant: string | null;
   };
   selectedCell: Cell;
-  selectedCombatant?: Scene['entities'][number];
-  selectedEntity?: Scene['entities'][number];
+  selectedCombatant?: RuntimeSceneEntity;
+  selectedEntity?: RuntimeSceneEntity;
   t: RuntimeTranslator;
 };
 
@@ -93,11 +94,13 @@ export function GmInspector({
               </div>
               <StatusBadge
                 label={
-                  selectedCombatant.hidden
+                  isSceneEntityHidden(selectedCombatant)
                     ? t('runtime.gmInspector.concealed')
                     : t('runtime.gmInspector.visible')
                 }
-                tone={selectedCombatant.hidden ? 'warning' : 'success'}
+                tone={
+                  isSceneEntityHidden(selectedCombatant) ? 'warning' : 'success'
+                }
               />
             </div>
 
@@ -128,14 +131,14 @@ export function GmInspector({
                 disabled={Boolean(reasons.selectedCombatant)}
                 disabledReason={reasons.selectedCombatant ?? undefined}
                 label={
-                  selectedCombatant.hidden
+                  isSceneEntityHidden(selectedCombatant)
                     ? t('runtime.combatants.reveal')
                     : t('runtime.combatants.conceal')
                 }
                 onClick={() =>
                   onSetCombatantHidden(
                     selectedCombatant.id,
-                    !selectedCombatant.hidden,
+                    !isSceneEntityHidden(selectedCombatant),
                   )
                 }
                 variant="secondary"

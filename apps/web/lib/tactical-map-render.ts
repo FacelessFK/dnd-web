@@ -1,17 +1,19 @@
 import {
   DEFAULT_SCENE_TERRAIN_TILE,
   calculateGridDistance,
-  decodeSceneTerrain,
   doesSceneTerrainTileBlockMovement,
 } from '@dnd/rules';
 import type {
   ActiveSceneState,
   GridDefinition,
-  Scene,
-  SceneEntity,
   SceneTerrainTile,
   ScenePosition,
 } from '@dnd/protocol';
+import {
+  buildRenderedTerrain,
+  type RuntimeScene,
+  type RuntimeSceneEntity,
+} from './runtime-scene-view';
 
 // Pure geometry, palette, and derivation helpers for the tactical map canvas.
 // The canvas component stays a thin drawing/eventing shell so all of the map
@@ -447,7 +449,7 @@ export function buildMapTokens(params: {
   currentTurnCombatantId: string | null;
   currentTurnParticipantId: string | null;
   ownParticipantId: string | null;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   selectedCombatantId: string | null;
   selectedParticipantId: string | null;
   targetCombatantId: string | null;
@@ -524,19 +526,26 @@ export type MapDecor = {
 
 /** Non-combatant scene entities: props, spawns, and transitions. */
 export function buildMapDecor(
-  scene: Scene | null,
+  scene: RuntimeScene | null,
   options: { includeHidden: boolean },
 ): MapDecor[] {
+  // A projected entity carries no `hidden` flag, because a concealed entity is
+  // absent from a player's payload entirely. Absence therefore reads as "not
+  // concealed": everything that survived the server's projection is something
+  // this seat is allowed to see.
+  const isHidden = (entity: RuntimeSceneEntity): boolean =>
+    'hidden' in entity && entity.hidden;
+
   return (scene?.entities ?? [])
     .filter((entity) => !entity.combatant)
-    .filter((entity) => options.includeHidden || !entity.hidden)
+    .filter((entity) => options.includeHidden || !isHidden(entity))
     .map((entity) => ({
       blocksVision: entity.blocksVision,
       footprint: {
         width: entity.footprint.width,
         height: entity.footprint.height,
       },
-      hidden: entity.hidden,
+      hidden: isHidden(entity),
       id: entity.id,
       kind: resolveDecorKind(entity),
       name: entity.name,
@@ -544,7 +553,7 @@ export function buildMapDecor(
     }));
 }
 
-function resolveDecorKind(entity: SceneEntity): MapDecorKind {
+function resolveDecorKind(entity: RuntimeSceneEntity): MapDecorKind {
   if (entity.transition) {
     return 'transition';
   }
@@ -620,17 +629,23 @@ export function toCellKey(position: ScenePosition): string {
  * keys. Used to grey out illegal movement targets.
  */
 export function buildBlockedCellKeys(params: {
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   tokens: MapToken[];
   excludeTokenId: string | null;
 }): Set<string> {
   const blocked = new Set<string>();
 
   if (params.scene) {
-    const tiles = decodeSceneTerrain(params.scene.grid, params.scene.terrain);
+    // Built from the rendered terrain rather than the raw layer, so a projected
+    // view contributes only the cells the server named. An unknown cell is left
+    // out of the blocked set entirely: the client does not get to guess what is
+    // there, and the server rejects an illegal move regardless.
+    const { tiles } = buildRenderedTerrain(params.scene);
 
     for (let index = 0; index < tiles.length; index += 1) {
-      if (doesSceneTerrainTileBlockMovement(tiles[index]!)) {
+      const tile = tiles[index] ?? null;
+
+      if (tile && doesSceneTerrainTileBlockMovement(tile)) {
         blocked.add(
           `${index % params.scene.grid.width},${Math.floor(index / params.scene.grid.width)}`,
         );

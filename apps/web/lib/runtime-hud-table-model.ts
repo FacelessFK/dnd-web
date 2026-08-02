@@ -17,7 +17,6 @@ import type {
   CharacterResource,
   CombatEvent,
   Encounter,
-  Scene,
   SessionStreamEvent,
 } from '@dnd/protocol';
 
@@ -47,6 +46,7 @@ import {
 } from './runtime-localization';
 import type { RuntimeLogEntry } from './runtime-hud-diagnostics';
 import type { RuntimePlayerModel } from './runtime-hud-player-model';
+import type { RuntimeScene, RuntimeSceneEntity } from './runtime-scene-view';
 
 /** The default board the map falls back to before a scene is loaded. */
 const fallbackGrid = { cellSizeFeet: 5, height: 8, width: 8 };
@@ -54,7 +54,7 @@ const fallbackGrid = { cellSizeFeet: 5, height: 8, width: 8 };
 export type RuntimeTableModelInput = {
   actingParticipantId: string;
   activeScene: ActiveSceneState | null;
-  attackableCombatants: Scene['entities'];
+  attackableCombatants: RuntimeSceneEntity[];
   busyLabel: string | null;
   busyReason: string | null;
   charactersByParticipant: Record<string, CharacterResource | undefined>;
@@ -71,7 +71,7 @@ export type RuntimeTableModelInput = {
   playerParticipantId: string;
   playerParticipantIds: string[];
   recoveryNotes: string[];
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   sceneId: string;
   selection: {
     actorParticipantId: string;

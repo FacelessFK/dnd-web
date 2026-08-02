@@ -12,7 +12,6 @@
  * That ordering is the product decision; keeping it in one place is what stops
  * two buttons in the same panel from disagreeing about which excuse to give.
  */
-import type { Scene } from '@dnd/protocol';
 
 import {
   getAttackableCombatantEntities,
@@ -35,14 +34,15 @@ import {
 } from './runtime-localization';
 import type { RuntimeDrafts } from './runtime-hud-drafts';
 import type { RuntimeSelection } from './runtime-hud-selection';
+import type { RuntimeScene } from './runtime-scene-view';
 
 export type RuntimeSceneModelInput = {
   busyLabel: string | null;
   currentTurnCombatantId: string | null;
   drafts: RuntimeDrafts;
-  knownScenesById: Record<string, Scene>;
+  knownScenesById: Record<string, RuntimeScene>;
   mode: RuntimeMode;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   sceneId: string;
   selection: RuntimeSelection;
   sessionId: string;

@@ -525,6 +525,8 @@ export const messages = {
     'runtime.playerActions.waiting': 'Waiting for your turn',
     'runtime.playerActions.yourTurn': 'Your turn',
     'runtime.playerShell.character': 'Your character',
+    'runtime.playerShell.sightNote':
+      'You see only what your character can see right now. Unlit and unseen ground stays dark.',
     'runtime.playerShell.details': 'Your turn and rolls',
     'runtime.playerStatus.atTable': 'At table {code}',
     'runtime.playerStatus.noEncounter': 'No encounter',
@@ -1867,6 +1869,8 @@ export const messages = {
     'runtime.playerActions.waiting': 'در انتظار نوبت شما',
     'runtime.playerActions.yourTurn': 'نوبت شما',
     'runtime.playerShell.character': 'شخصیت شما',
+    'runtime.playerShell.sightNote':
+      'شما فقط چیزی را می‌بینید که شخصیتتان هم‌اکنون می‌بیند. زمینِ بی‌نور و دیده‌نشده تاریک می‌ماند.',
     'runtime.playerShell.details': 'نوبت و پرتاب‌های شما',
     'runtime.playerStatus.atTable': 'سر میز {code}',
     'runtime.playerStatus.noEncounter': 'بدون برخورد',

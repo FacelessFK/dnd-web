@@ -26,6 +26,7 @@ import {
 } from '../hud/hud-primitives';
 import { CheckboxField, LabeledInput, SelectField } from '../hud/hud-fields';
 import type { RuntimeTranslator } from '../../../lib/runtime-localization';
+import type { RuntimeSceneEntity } from '../../../lib/runtime-scene-view';
 
 export function SceneBuilderPanel({
   activateDisabledReason,
@@ -74,7 +75,7 @@ export function SceneBuilderPanel({
   entityEditDraft: SceneEntityDraftForm;
   entityEditDraftErrors: string[];
   entityPresets: readonly SceneEntityPreset[];
-  passiveEntities: Scene['entities'];
+  passiveEntities: RuntimeSceneEntity[];
   onActivateScene: () => void | Promise<void>;
   onActivationSceneIdChange: (value: string) => void;
   onCreateScene: () => void | Promise<void>;
@@ -103,11 +104,15 @@ export function SceneBuilderPanel({
   onUpdateEntity: () => void | Promise<void>;
   placeEntityDisabledReason: string | null;
   repositionEntityDisabledReason: string | null;
+  /**
+   * The authoritative scene. This is a GM authoring surface, so it is handed
+   * the map as stored, never a per-viewer projection.
+   */
   scene: Scene | null;
   sceneDraft: SceneDraftForm;
   sceneDraftErrors: string[];
   selectedCell: Cell;
-  selectedEntity?: Scene['entities'][number];
+  selectedEntity?: RuntimeSceneEntity;
   selectedEntityId: string;
   t: RuntimeTranslator;
   updateEntityDisabledReason: string | null;

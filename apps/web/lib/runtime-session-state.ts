@@ -31,9 +31,10 @@ import type {
   ActiveSceneState,
   CharacterResource,
   Encounter,
-  Scene,
   SessionStreamEvent,
 } from '@dnd/protocol';
+
+import type { RuntimeScene } from './runtime-scene-view';
 
 import type { RuntimeMode, SessionSnapshot } from './runtime-cockpit-helpers';
 import {
@@ -82,11 +83,11 @@ export type RuntimeSessionState = {
    */
   hasCredential: boolean;
   session: SessionSnapshot | null;
-  scene: Scene | null;
+  scene: RuntimeScene | null;
   /** The active scene's ID, or '' when the table has no active scene. */
   sceneId: string;
   /** Every scene this client has read, so the GM can switch between them. */
-  knownScenesById: Record<string, Scene>;
+  knownScenesById: Record<string, RuntimeScene>;
   activeScene: ActiveSceneState | null;
   encounter: Encounter | null;
   charactersByParticipant: Record<string, CharacterResource | undefined>;
@@ -118,8 +119,8 @@ export type RuntimeSessionAction =
   | { type: 'credential_present'; hasCredential: boolean }
   | { type: 'stream_event'; event: SessionStreamEvent }
   | { type: 'session_snapshot_received'; snapshot: SessionSnapshot }
-  | { type: 'scene_received'; scene: Scene }
-  | { type: 'scene_remembered'; scene: Scene }
+  | { type: 'scene_received'; scene: RuntimeScene }
+  | { type: 'scene_remembered'; scene: RuntimeScene }
   | { type: 'scene_cleared' }
   | { type: 'active_scene_received'; activeScene: ActiveSceneState | null }
   | { type: 'encounter_received'; encounter: Encounter | null }

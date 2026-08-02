@@ -1,7 +1,5 @@
 'use client';
 
-import type { Scene } from '@dnd/protocol';
-
 import {
   sceneTransitionKindOptions,
   type Cell,
@@ -28,6 +26,7 @@ import {
   TextAreaField,
 } from '../hud/hud-fields';
 import type { RuntimeTranslator } from '../../../lib/runtime-localization';
+import type { RuntimeSceneEntity } from '../../../lib/runtime-scene-view';
 
 export function SceneTransitionPanel({
   activateDisabledReason,
@@ -101,11 +100,11 @@ export function SceneTransitionPanel({
   onUpdate: () => void | Promise<void>;
   sceneOptions: Array<{ label: string; value: string }>;
   selectedCell: Cell;
-  selectedTransition?: Scene['entities'][number];
+  selectedTransition?: RuntimeSceneEntity;
   selectedTransitionId: string;
   t: RuntimeTranslator;
   transitionPresets: readonly SceneTransitionPreset[];
-  transitions: Scene['entities'];
+  transitions: RuntimeSceneEntity[];
   updateDisabledReason: string | null;
 }) {
   const targetOptions = [

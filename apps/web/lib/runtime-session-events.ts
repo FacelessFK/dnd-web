@@ -13,10 +13,14 @@ import type {
   ActiveSceneState,
   CharacterResource,
   Encounter,
-  Scene,
   SessionStreamEvent,
 } from '@dnd/protocol';
 
+import {
+  shouldReplaceRuntimeScene,
+  type RuntimeScene,
+  type RuntimeSceneEntity,
+} from './runtime-scene-view';
 import type {
   RuntimeSessionState,
   SessionSnapshot,
@@ -107,7 +111,7 @@ export function applySessionSnapshot(
  */
 export function applyScene(
   state: RuntimeSessionState,
-  scene: Scene,
+  scene: RuntimeScene,
 ): RuntimeSessionState {
   if (!shouldReplaceScene(state.scene, scene)) {
     return state;
@@ -130,7 +134,7 @@ export function applyScene(
  */
 export function rememberScene(
   state: RuntimeSessionState,
-  scene: Scene,
+  scene: RuntimeScene,
 ): RuntimeSessionState {
   return {
     ...state,
@@ -143,20 +147,16 @@ export function rememberScene(
 /**
  * Whether an arriving scene should replace the one already held.
  *
- * The timestamp comparison is per scene ID: activating a different scene is not
- * "older data" even when the new scene's `updatedAt` predates the old one's,
- * which happens whenever the GM switches back to a map they prepared earlier.
+ * The comparison is per scene ID: activating a different scene is not "older
+ * data" even when its timestamp predates the current one's, which happens
+ * whenever the GM switches back to a map they prepared earlier.
+ *
+ * The ordering itself - `updatedAt` for an authoritative scene, `projectedAt`
+ * for a projected view - lives in `runtime-scene-view.ts`, next to the union it
+ * orders. This re-export keeps the existing call sites and the M2 tests naming
+ * the same function.
  */
-export function shouldReplaceScene(
-  current: Scene | null,
-  next: Scene,
-): boolean {
-  if (!current || current.id !== next.id) {
-    return true;
-  }
-
-  return Date.parse(next.updatedAt) > Date.parse(current.updatedAt);
-}
+export const shouldReplaceScene = shouldReplaceRuntimeScene;
 
 export function applyEncounter(
   state: RuntimeSessionState,
@@ -317,22 +317,26 @@ function applyCombatDamage(
 
   const combatantId = event.targetCombatantId;
 
+  const scene = state.scene;
+  // Rebuilt in the shape it arrived in - a projected view stays projected and an
+  // authoritative scene stays authoritative - with one combatant's HP changed.
+  // The assertion puts the shape back where it came from; it is not a
+  // conversion between the two, and it never turns a view into a `Scene`.
+  const entities = (scene.entities as RuntimeSceneEntity[]).map((entity) =>
+    entity.id === combatantId && entity.combatant
+      ? {
+          ...entity,
+          combatant: {
+            ...entity.combatant,
+            hp: { ...entity.combatant.hp, current: targetHp.current },
+          },
+        }
+      : entity,
+  );
+
   return {
     ...state,
-    scene: {
-      ...state.scene,
-      entities: state.scene.entities.map((entity: Scene['entities'][number]) =>
-        entity.id === combatantId && entity.combatant
-          ? {
-              ...entity,
-              combatant: {
-                ...entity.combatant,
-                hp: { ...entity.combatant.hp, current: targetHp.current },
-              },
-            }
-          : entity,
-      ),
-    },
+    scene: { ...scene, entities } as RuntimeScene,
   };
 }
 

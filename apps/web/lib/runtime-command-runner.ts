@@ -24,6 +24,7 @@ import {
   type SessionSnapshot,
 } from './runtime-cockpit-helpers';
 import type { RuntimeSessionAction } from './runtime-session-state';
+import type { RuntimeScene } from './runtime-scene-view';
 
 /** Who a command may act as. Read fresh per command, never captured. */
 export type RuntimeCommandActors = {
@@ -51,7 +52,7 @@ export type RuntimeCommandStore = {
   clearReadModels: (options?: { clearKnownCharacterIds?: boolean }) => void;
   noteKnownCharacterId: (participantId: string, characterId: string) => void;
   rememberCharacter: (resource: CharacterResource) => void;
-  rememberScene: (scene: Scene) => void;
+  rememberScene: (scene: RuntimeScene) => void;
 };
 
 export type RuntimeCommandContext = {
