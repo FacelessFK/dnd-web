@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { Scene, SceneView } from '@dnd/shared';
+
 import { InMemoryCharacterStore } from './character-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
 
@@ -70,7 +72,69 @@ function createTable() {
     payload: { sessionId: session.sessionId, sceneId: scene.id },
   });
 
+  // The player needs a placed character or fog of war leaves them with nothing
+  // to see, and every concealment assertion below would pass for the wrong
+  // reason. The corridor is open and brightly lit, so their line of sight
+  // covers the whole map and `hidden` is the only thing withholding anything.
+  assignAndPlacePlayer(runtime, session.sessionId);
+
   return { runtime, scene, sessionId: session.sessionId };
+}
+
+function assignAndPlacePlayer(
+  runtime: InMemoryGameRuntime<InMemoryCharacterStore>,
+  sessionId: string,
+  position = { x: 0, y: 0 },
+) {
+  const character = runtime.createCharacter({
+    commandId: 'create-character-visibility',
+    type: 'create_character',
+    actor: { participantId: 'player-001' },
+    payload: {
+      sessionId,
+      ownerParticipantId: 'player-001',
+      character: {
+        name: 'Aria',
+        level: 1,
+        className: 'Fighter',
+        speciesOrRace: 'Human',
+        background: 'Soldier',
+        abilities: { str: 14, dex: 12, con: 13, int: 10, wis: 11, cha: 9 },
+        hp: { max: 12, current: 12, temp: 0 },
+        armorClass: 15,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+
+  runtime.finalizeCharacter({
+    commandId: 'finalize-character-visibility',
+    type: 'finalize_character',
+    actor: { participantId: 'player-001' },
+    payload: { sessionId, characterId: character.character.id },
+  });
+
+  runtime.assignCharacterToParticipant({
+    commandId: 'assign-character-visibility',
+    type: 'assign_character_to_participant',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      participantId: 'player-001',
+      characterId: character.character.id,
+    },
+  });
+
+  runtime.placeCharacterInActiveScene({
+    commandId: 'place-character-visibility',
+    type: 'place_character_in_active_scene',
+    actor: { participantId: 'player-001' },
+    payload: { sessionId, participantId: 'player-001', position },
+  });
+
+  return character;
 }
 
 function placeEntity(
@@ -107,7 +171,7 @@ function placeEntity(
 }
 
 function getSceneAs(
-  runtime: InMemoryGameRuntime,
+  runtime: InMemoryGameRuntime<InMemoryCharacterStore>,
   sessionId: string,
   sceneId: string,
   participantId: string,
@@ -118,6 +182,40 @@ function getSceneAs(
     actor: { participantId },
     payload: { sessionId, sceneId },
   });
+}
+
+/** The DM's read, asserted to be the authoritative scene rather than a view. */
+function getAuthoritativeSceneAs(
+  runtime: InMemoryGameRuntime<InMemoryCharacterStore>,
+  sessionId: string,
+  sceneId: string,
+  participantId: string,
+): Scene {
+  const scene = getSceneAs(runtime, sessionId, sceneId, participantId);
+
+  assert.equal(scene instanceof Promise, false);
+  assert.equal('terrain' in (scene as Scene), true);
+
+  return scene as Scene;
+}
+
+/**
+ * A player's read, asserted to be a projected view. The assertion is the point:
+ * if `get_scene` ever handed a player an authoritative `Scene` again, every
+ * concealment test in this file would still pass and only this would fail.
+ */
+function getProjectedSceneAs(
+  runtime: InMemoryGameRuntime<InMemoryCharacterStore>,
+  sessionId: string,
+  sceneId: string,
+  participantId: string,
+): SceneView {
+  const scene = getSceneAs(runtime, sessionId, sceneId, participantId);
+
+  assert.equal(scene instanceof Promise, false);
+  assert.equal((scene as SceneView).view, 'player_projection');
+
+  return scene as SceneView;
 }
 
 test('get_scene hides hidden entities from a player but not from the DM', () => {
@@ -134,8 +232,18 @@ test('get_scene hides hidden entities from a player but not from the DM', () => 
     position: { x: 4, y: 3 },
   });
 
-  const dmScene = getSceneAs(runtime, sessionId, scene.id, 'dm-001');
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const dmScene = getAuthoritativeSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'dm-001',
+  );
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
 
   assert.deepEqual(
     dmScene.entities.map((entity) => entity.name),
@@ -160,7 +268,12 @@ test('nothing about a hidden entity reaches a player over the wire', () => {
     meta: { secretNote: 'springs at initiative 12' },
   });
 
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
   const serialized = JSON.stringify(playerScene);
 
   assert.equal(playerScene.entities.length, 0);
@@ -181,7 +294,12 @@ test('a hidden blocking entity does not leak its position to a player', () => {
     position: { x: 2, y: 2 },
   });
 
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
 
   // Dropping the whole entity - rather than blanking its fields - is what stops
   // the client's reachable-cell overlay from outlining an undrawn blocker.
@@ -226,8 +344,18 @@ test('a hidden transition does not reveal its target scene to a player', () => {
     },
   });
 
-  const dmScene = getSceneAs(runtime, sessionId, scene.id, 'dm-001');
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const dmScene = getAuthoritativeSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'dm-001',
+  );
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
   const serialized = JSON.stringify(playerScene);
 
   assert.equal(dmScene.entities.length, 1);
@@ -247,7 +375,8 @@ test('revealing a hidden entity makes it visible to a player', () => {
   const entityId = withEntity.entities[0]!.id;
 
   assert.equal(
-    getSceneAs(runtime, sessionId, scene.id, 'player-001').entities.length,
+    getProjectedSceneAs(runtime, sessionId, scene.id, 'player-001').entities
+      .length,
     0,
   );
 
@@ -263,7 +392,12 @@ test('revealing a hidden entity makes it visible to a player', () => {
     },
   });
 
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
 
   assert.deepEqual(
     playerScene.entities.map((entity) => entity.name),
@@ -303,7 +437,7 @@ test('concealing a revealed entity again hides it from the player', () => {
     });
   };
   const playerEntityNames = () =>
-    getSceneAs(runtime, sessionId, scene.id, 'player-001')
+    getProjectedSceneAs(runtime, sessionId, scene.id, 'player-001')
       .entities.map((entity) => entity.name)
       .sort();
 
@@ -323,12 +457,22 @@ test('concealing a revealed entity again hides it from the player', () => {
   );
 
   // Nothing about it may survive anywhere in the player payload.
-  const playerScene = getSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const playerScene = getProjectedSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'player-001',
+  );
   assert.equal(JSON.stringify(playerScene).includes(entityId), false);
   assert.equal(JSON.stringify(playerScene).includes('Lurking Ambusher'), false);
 
   // The DM keeps the authoritative view across the whole round trip.
-  const dmScene = getSceneAs(runtime, sessionId, scene.id, 'dm-001');
+  const dmScene = getAuthoritativeSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'dm-001',
+  );
   assert.deepEqual(dmScene.entities.map((entity) => entity.name).sort(), [
     'Corridor Brazier',
     'Lurking Ambusher',
@@ -348,8 +492,13 @@ test('the player projection leaves the stored scene untouched for the DM', () =>
     position: { x: 4, y: 3 },
   });
 
-  getSceneAs(runtime, sessionId, scene.id, 'player-001');
-  const dmScene = getSceneAs(runtime, sessionId, scene.id, 'dm-001');
+  getProjectedSceneAs(runtime, sessionId, scene.id, 'player-001');
+  const dmScene = getAuthoritativeSceneAs(
+    runtime,
+    sessionId,
+    scene.id,
+    'dm-001',
+  );
 
   assert.equal(dmScene.entities.length, 1);
   assert.equal(dmScene.entities[0]!.hidden, true);

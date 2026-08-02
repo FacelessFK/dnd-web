@@ -26,7 +26,7 @@ import type {
   CommandEventOutboxRow,
 } from '@dnd/db';
 import type { SceneStateUpdate, SessionStreamEvent } from '@dnd/protocol';
-import type { Scene } from '@dnd/shared';
+import type { Scene, SceneView } from '@dnd/shared';
 
 import { InMemoryCharacterStore } from './character-store.js';
 import { CommandEventOutboxDispatcher } from './command-event-outbox-dispatcher.js';
@@ -57,15 +57,37 @@ function sceneFrames(events: SessionStreamEvent[]): SceneStateUpdate[] {
   );
 }
 
-function latestScene(events: SessionStreamEvent[]): Scene {
+/**
+ * The newest scene frame a DM socket received, asserted to be authoritative.
+ *
+ * The assertion is load-bearing rather than decorative: if the fan-out ever
+ * started projecting the GM, every entity assertion below would still pass and
+ * only this would notice.
+ */
+function latestAuthoritativeScene(events: SessionStreamEvent[]): Scene {
   const frame = sceneFrames(events).at(-1);
 
   assert.ok(frame, 'expected at least one scene frame');
+  assert.equal(frame.view, 'authoritative');
 
-  return frame.scene;
+  return frame.scene as Scene;
 }
 
-function entityNamed(scene: Scene, name: string) {
+/** The newest scene frame a player socket received, asserted to be projected. */
+function latestProjectedScene(events: SessionStreamEvent[]): SceneView {
+  const frame = sceneFrames(events).at(-1);
+
+  assert.ok(frame, 'expected at least one scene frame');
+  assert.equal(
+    frame.view,
+    'player_projection',
+    'a player must never receive the authoritative scene',
+  );
+
+  return frame.scene as SceneView;
+}
+
+function entityNamed(scene: Scene | SceneView, name: string) {
   return scene.entities.find((entity) => entity.name === name);
 }
 
@@ -123,6 +145,16 @@ function createTable(): Table {
     payload: { sessionId, sceneId: scene.id },
   });
 
+  // Both players get a placed character. Without one, fog of war leaves them
+  // with an empty view and every concealment assertion in this file would pass
+  // because the player can see nothing at all rather than because the entity
+  // was concealed. The chapel is open and brightly lit, so their line of sight
+  // covers the whole map and `hidden` remains the only thing withholding
+  // anything. Done before any subscription, so no placement frame lands in a
+  // recorded event list.
+  assignAndPlacePlayer(runtime, sessionId, 'player-001', { x: 0, y: 0 });
+  assignAndPlacePlayer(runtime, sessionId, 'player-002', { x: 0, y: 9 });
+
   return {
     credentials,
     idempotency: new InMemoryCommandIdempotencyStore(),
@@ -135,6 +167,63 @@ function createTable(): Table {
       'player-002': credentials.issue(sessionId, 'player-002'),
     },
   };
+}
+
+function assignAndPlacePlayer(
+  runtime: InMemoryGameRuntime<InMemoryCharacterStore>,
+  sessionId: string,
+  participantId: Seat,
+  position: { x: number; y: number },
+) {
+  const character = runtime.createCharacter({
+    commandId: `create-character-${participantId}`,
+    type: 'create_character',
+    actor: { participantId },
+    payload: {
+      sessionId,
+      ownerParticipantId: participantId,
+      character: {
+        name: `Scout ${participantId}`,
+        level: 1,
+        className: 'Fighter',
+        speciesOrRace: 'Human',
+        background: 'Soldier',
+        abilities: { str: 14, dex: 12, con: 13, int: 10, wis: 11, cha: 9 },
+        hp: { max: 12, current: 12, temp: 0 },
+        armorClass: 15,
+        speed: 30,
+        notes: null,
+        meta: {},
+      },
+    },
+  });
+
+  runtime.finalizeCharacter({
+    commandId: `finalize-character-${participantId}`,
+    type: 'finalize_character',
+    actor: { participantId },
+    payload: { sessionId, characterId: character.character.id },
+  });
+
+  runtime.assignCharacterToParticipant({
+    commandId: `assign-character-${participantId}`,
+    type: 'assign_character_to_participant',
+    actor: { participantId: 'dm-001' },
+    payload: {
+      sessionId,
+      participantId,
+      characterId: character.character.id,
+    },
+  });
+
+  runtime.placeCharacterInActiveScene({
+    commandId: `place-character-${participantId}`,
+    type: 'place_character_in_active_scene',
+    actor: { participantId },
+    payload: { sessionId, participantId, position },
+  });
+
+  return character;
 }
 
 function subscribe(table: Table, participantId: Seat): SessionStreamEvent[] {
@@ -220,8 +309,8 @@ test('the GM receives the whole map and a player receives only what is visible',
   placeEntity(table, { name: 'Altar', hidden: false, x: 2, y: 2 });
   placeEntity(table, { name: 'Trapdoor', hidden: true, x: 5, y: 5 });
 
-  const dmScene = latestScene(dmEvents);
-  const playerScene = latestScene(playerEvents);
+  const dmScene = latestAuthoritativeScene(dmEvents);
+  const playerScene = latestProjectedScene(playerEvents);
 
   assert.ok(entityNamed(dmScene, 'Altar'));
   assert.ok(entityNamed(dmScene, 'Trapdoor'));
@@ -243,7 +332,7 @@ test('a hidden entity is dropped whole, leaving no blocking footprint behind', (
     y: 5,
   });
   const hiddenId = entityNamed(scene, 'Trapdoor')!.id;
-  const playerScene = latestScene(playerEvents);
+  const playerScene = latestProjectedScene(playerEvents);
 
   // Blanking the fields instead of removing the entity would leave a
   // `blocksMovement` hole that outlines the secret on the movement overlay.
@@ -276,7 +365,7 @@ test('placing, moving and removing a visible entity each reach a player live', (
 
   assert.equal(sceneFrames(playerEvents).at(-1)?.reason, 'entity_placed');
   assert.deepEqual(
-    entityNamed(latestScene(playerEvents), 'Brazier')?.position,
+    entityNamed(latestProjectedScene(playerEvents), 'Brazier')?.position,
     { x: 1, y: 1 },
   );
 
@@ -294,7 +383,7 @@ test('placing, moving and removing a visible entity each reach a player live', (
 
   assert.equal(sceneFrames(playerEvents).at(-1)?.reason, 'entity_moved');
   assert.deepEqual(
-    entityNamed(latestScene(playerEvents), 'Brazier')?.position,
+    entityNamed(latestProjectedScene(playerEvents), 'Brazier')?.position,
     { x: 4, y: 3 },
   );
 
@@ -310,7 +399,10 @@ test('placing, moving and removing a visible entity each reach a player live', (
   });
 
   assert.equal(sceneFrames(playerEvents).at(-1)?.reason, 'entity_removed');
-  assert.equal(entityNamed(latestScene(playerEvents), 'Brazier'), undefined);
+  assert.equal(
+    entityNamed(latestProjectedScene(playerEvents), 'Brazier'),
+    undefined,
+  );
 });
 
 test('revealing a concealed combatant is the first a player hears of it', () => {
@@ -325,7 +417,7 @@ test('revealing a concealed combatant is the first a player hears of it', () => 
   const playerEvents = subscribe(table, 'player-001');
 
   assert.equal(
-    entityNamed(latestScene(playerEvents), 'Bog Lurker'),
+    entityNamed(latestProjectedScene(playerEvents), 'Bog Lurker'),
     undefined,
     'the lurker was not in the initial sync',
   );
@@ -350,7 +442,7 @@ test('re-concealing a revealed combatant takes it back off the player map', () =
   const playerEvents = subscribe(table, 'player-001');
 
   setCombatantHidden(table, combatantId, false, 'reveal-lurker');
-  assert.ok(entityNamed(latestScene(playerEvents), 'Bog Lurker'));
+  assert.ok(entityNamed(latestProjectedScene(playerEvents), 'Bog Lurker'));
 
   setCombatantHidden(table, combatantId, true, 'reconceal-lurker');
 
@@ -361,7 +453,7 @@ test('re-concealing a revealed combatant takes it back off the player map', () =
   // The GM's own view is unaffected by concealing something from someone else.
   const dmEvents = subscribe(table, 'dm-001');
 
-  assert.ok(entityNamed(latestScene(dmEvents), 'Bog Lurker'));
+  assert.ok(entityNamed(latestAuthoritativeScene(dmEvents), 'Bog Lurker'));
 });
 
 test('a concealed combatant leaks neither its identity nor its health to a player', () => {
@@ -390,7 +482,11 @@ test('a concealed combatant leaks neither its identity nor its health to a playe
   );
 });
 
-test('every player at the table gets the same projection, not just the one being acted on', () => {
+// Concealment applies to every player, not only the one whose action caused the
+// frame. Fog, by contrast, is per viewer: the two players stand in different
+// corners, so their payloads legitimately differ, and asserting they are
+// identical would now be asserting that fog is not being computed.
+test('every player at the table is projected, not just the one being acted on', () => {
   const table = createTable();
   const firstPlayerEvents = subscribe(table, 'player-001');
   const secondPlayerEvents = subscribe(table, 'player-002');
@@ -398,12 +494,25 @@ test('every player at the table gets the same projection, not just the one being
   placeEntity(table, { name: 'Altar', hidden: false, x: 2, y: 2 });
   placeEntity(table, { name: 'Trapdoor', hidden: true, x: 5, y: 5 });
 
-  const firstScene = latestScene(firstPlayerEvents);
-  const secondScene = latestScene(secondPlayerEvents);
+  const firstScene = latestProjectedScene(firstPlayerEvents);
+  const secondScene = latestProjectedScene(secondPlayerEvents);
 
-  assert.deepEqual(firstScene, secondScene);
-  assert.ok(entityNamed(secondScene, 'Altar'));
-  assert.equal(entityNamed(secondScene, 'Trapdoor'), undefined);
+  for (const scene of [firstScene, secondScene]) {
+    assert.ok(entityNamed(scene, 'Altar'), 'both see the revealed altar');
+    assert.equal(entityNamed(scene, 'Trapdoor'), undefined);
+  }
+
+  assert.equal(
+    JSON.stringify([firstPlayerEvents, secondPlayerEvents]).includes(
+      'Trapdoor',
+    ),
+    false,
+  );
+
+  // Both stand at x=0 and the altar blocks vision, so the corner each is
+  // standing in decides which cells behind it they lose. Different payloads
+  // here are the projection working, not a defect.
+  assert.notDeepEqual(firstScene.cells, secondScene.cells);
 });
 
 test('connecting hands a subscriber the current map, projected, as initial_sync', () => {
@@ -572,13 +681,29 @@ test('a scene row replayed from the outbox is projected per role, not broadcast 
   }
 
   const outbox = new RecordingOutboxDatabase();
-  const dispatcher = new CommandEventOutboxDispatcher(outbox, sessions);
+  // The dispatcher has no character access of its own, so the observers each
+  // seat sees through are injected exactly as they are in the real server.
+  const dispatcher = new CommandEventOutboxDispatcher(
+    outbox,
+    sessions,
+    undefined,
+    (_sessionId, projectedAt) => ({
+      projectedAt,
+      observersByParticipant: new Map([
+        [
+          'player-001',
+          [{ position: { x: 0, y: 0 }, footprint: { width: 1, height: 1 } }],
+        ],
+      ]),
+    }),
+  );
   const now = new Date().toISOString();
   // The stored payload is the authoritative scene, which is right for a durable
   // record. Concealment is a delivery-time decision, so the row keeps the
   // secret and the store is what withholds it.
   const authoritative: SceneStateUpdate = {
     type: 'scene_state',
+    view: 'authoritative',
     reason: 'entity_placed',
     sessionId: session.sessionId,
     scene: {
@@ -629,8 +754,8 @@ test('a scene row replayed from the outbox is projected per role, not broadcast 
 
   await dispatcher.drainAllUnpublished();
 
-  const dmScene = latestScene(dmEvents);
-  const playerScene = latestScene(playerEvents);
+  const dmScene = latestAuthoritativeScene(dmEvents);
+  const playerScene = latestProjectedScene(playerEvents);
 
   assert.equal(dmScene.entities.length, 2);
   assert.equal(playerScene.entities.length, 1);

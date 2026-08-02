@@ -18,12 +18,13 @@ import {
   isWithinBaselineMeleeReach,
   collectConcealedCombatantIds,
   projectEncounterForRole,
-  projectSceneForRole,
+  projectSceneViewForObservers,
   resolveAttackRoll,
   rollAttackDamage,
   rollD20,
   rollD20WithStance,
   rollInitiative,
+  type OccupancyShape,
 } from '@dnd/rules';
 import type {
   ActiveSceneState,
@@ -88,7 +89,7 @@ import type {
   ActivateSceneTransitionCommand,
   UpdateSceneTransitionCommand,
   SceneActivationSuccess,
-  SceneStateUpdate,
+  AuthoritativeSceneStateUpdate,
   SceneStateUpdateReason,
   StartEncounterCommand,
   SubmitCharacterForAssignmentCommand,
@@ -117,6 +118,7 @@ import type {
   SceneId,
   ScenePosition,
   SceneTerrain,
+  SceneView,
   SessionSnapshot,
   SessionId,
 } from '@dnd/shared';
@@ -216,6 +218,7 @@ import {
 import type {
   PlayerIntentStateFanout,
   ResolutionStateFanout,
+  SceneVisibilityContext,
 } from './session-event-fanout.js';
 
 export { createConnectionId };
@@ -374,7 +377,9 @@ export class InMemoryGameRuntime<
     // scene event becomes an outbox row inside the same transaction as the
     // scene write it describes. Kept last so existing positional call sites
     // stay valid.
-    private readonly sceneStateUpdateSink?: (update: SceneStateUpdate) => void,
+    private readonly sceneStateUpdateSink?: (
+      update: AuthoritativeSceneStateUpdate,
+    ) => void,
   ) {}
 
   /**
@@ -514,12 +519,43 @@ export class InMemoryGameRuntime<
       return;
     }
 
-    subscriber.send({
-      type: 'scene_state',
-      reason: 'initial_sync',
+    if (role === 'dm') {
+      subscriber.send({
+        type: 'scene_state',
+        view: 'authoritative',
+        reason: 'initial_sync',
+        sessionId,
+        scene,
+      });
+      return;
+    }
+
+    // A player's initial sync is a projection, and resolving their observers is
+    // a promise in DB mode. The subscription is already open, so the frame is
+    // sent when the lookup settles; a failure sends nothing rather than falling
+    // back to the authoritative scene.
+    const projected = this.projectSceneForParticipant(
       sessionId,
-      scene: projectSceneForRole(scene, role),
-    });
+      scene,
+      participantId,
+    );
+
+    const send = (view: SceneView): void => {
+      subscriber.send({
+        type: 'scene_state',
+        view: 'player_projection',
+        reason: 'initial_sync',
+        sessionId,
+        scene: view,
+      });
+    };
+
+    if (this.isPromiseLike(projected)) {
+      void projected.then(send, () => undefined);
+      return;
+    }
+
+    send(projected);
   }
 
   private sendTableStateSnapshot(
@@ -629,6 +665,11 @@ export class InMemoryGameRuntime<
     options: {
       characterStateUpdateSink?: (update: CharacterStateUpdate) => void;
       movementStateUpdateSink?: (update: MovementStateUpdate) => void;
+      // Movement re-announces the scene so every player's fog is recomputed
+      // against the new position. That announcement describes a move that has
+      // not committed yet, so in DB mode it has to go into the same transaction
+      // as the move rather than straight to the room.
+      sceneStateUpdateSink?: (update: AuthoritativeSceneStateUpdate) => void;
     } = {},
   ): InMemoryGameRuntime<TNextCharacters, TSessions> {
     return new InMemoryGameRuntime(
@@ -646,7 +687,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
-      this.sceneStateUpdateSink,
+      options.sceneStateUpdateSink ?? this.sceneStateUpdateSink,
     );
   }
 
@@ -654,7 +695,7 @@ export class InMemoryGameRuntime<
     scenes: SceneRepository,
     options: {
       encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
-      sceneStateUpdateSink?: (update: SceneStateUpdate) => void;
+      sceneStateUpdateSink?: (update: AuthoritativeSceneStateUpdate) => void;
     } = {},
   ): InMemoryGameRuntime<TCharacters, TSessions> {
     return new InMemoryGameRuntime(
@@ -709,6 +750,9 @@ export class InMemoryGameRuntime<
       combatEventSink?: (update: CombatEvent) => void;
       encounterStateUpdateSink?: (update: EncounterStateUpdate) => void;
       movementStateUpdateSink?: (update: MovementStateUpdate) => void;
+      // Combat moves tokens too, so the same fog announcement has to commit
+      // with the combat transaction rather than reach the room ahead of it.
+      sceneStateUpdateSink?: (update: AuthoritativeSceneStateUpdate) => void;
       scenes?: SceneRepository;
     } = {},
   ): InMemoryGameRuntime<TNextCharacters, TSessions> {
@@ -727,7 +771,7 @@ export class InMemoryGameRuntime<
       this.initiativeRoller,
       this.tableStates,
       this.tableStateUpdateSink,
-      this.sceneStateUpdateSink,
+      options.sceneStateUpdateSink ?? this.sceneStateUpdateSink,
     );
   }
 
@@ -1867,9 +1911,11 @@ export class InMemoryGameRuntime<
   }
 
   // `get_scene` is the only scene read a player can issue - every other command
-  // that returns a Scene is DM-gated - so it is also the only place concealment
-  // has to be enforced on the way out.
-  getScene(command: GetSceneCommand): Scene {
+  // that returns a Scene is DM-gated - so it is also the only place fog and
+  // concealment have to be enforced on a read. A player gets a projected view,
+  // computed exactly as the stream computes it, so a read and a live frame can
+  // never disagree about what that seat may know.
+  getScene(command: GetSceneCommand): Scene | SceneView | Promise<SceneView> {
     const snapshot = this.sessions.getSessionSnapshotForParticipant(
       command.payload.sessionId,
       command.actor.participantId,
@@ -1882,7 +1928,40 @@ export class InMemoryGameRuntime<
 
     assertSceneBelongsToSession(snapshot, scene);
 
-    return projectSceneForRole(scene, actor.role);
+    if (actor.role === 'dm') {
+      return scene;
+    }
+
+    return this.projectSceneForParticipant(
+      snapshot.session.id,
+      scene,
+      actor.id,
+    );
+  }
+
+  /**
+   * One seat's view of one scene, resolved through the same observer lookup the
+   * live path uses.
+   *
+   * Reads the seat from the authenticated participant the caller already
+   * resolved. Nothing here consults a participant ID from a payload.
+   */
+  private projectSceneForParticipant(
+    sessionId: SessionId,
+    scene: Scene,
+    participantId: ParticipantId,
+  ): SceneView | Promise<SceneView> {
+    const projectedAt = new Date().toISOString();
+    const context = this.resolveSceneVisibilityContext(sessionId, projectedAt);
+
+    const toView = (resolved: SceneVisibilityContext): SceneView =>
+      projectSceneViewForObservers({
+        scene,
+        observers: resolved.observersByParticipant.get(participantId) ?? [],
+        projectedAt: resolved.projectedAt,
+      });
+
+    return this.isPromiseLike(context) ? context.then(toView) : toView(context);
   }
 
   activateSceneForSession(
@@ -4649,10 +4728,47 @@ export class InMemoryGameRuntime<
 
     if (this.movementStateUpdateSink) {
       this.movementStateUpdateSink(structuredClone(update));
+    } else {
+      this.sessions.publishMovementStateUpdate(update);
+    }
+
+    this.announceObserverMovement(params.sessionId, params.activeSceneId);
+  }
+
+  /**
+   * Re-announce the active scene because a token moved.
+   *
+   * `movement_state` carries a position and nothing about visibility, so
+   * without this a player who walks around a corner keeps the fog they had when
+   * they were standing still. The map itself did not change - the DM's frame is
+   * byte-identical to the last one, and the client's own staleness check drops
+   * it as a no-op - but every player's projection is recomputed against their
+   * new position.
+   *
+   * Deliberately re-read from the store rather than reusing a scene the caller
+   * happened to have: movement can be one step of a longer command, and the
+   * scene that goes out has to be the one that is actually persisted.
+   */
+  private announceObserverMovement(
+    sessionId: SessionId,
+    activeSceneId: SceneId,
+  ): void {
+    let scene: Scene;
+
+    try {
+      scene = this.scenes.getScene(activeSceneId);
+    } catch {
+      // The movement already committed. A scene the store cannot produce is a
+      // repository inconsistency for a read to surface, not a reason to fail a
+      // move that has happened.
       return;
     }
 
-    this.sessions.publishMovementStateUpdate(update);
+    this.publishSceneStateUpdate({
+      sessionId,
+      scene,
+      reason: 'observer_moved',
+    });
   }
 
   private publishEncounterStateUpdate(params: {
@@ -4681,18 +4797,25 @@ export class InMemoryGameRuntime<
   /**
    * Announce the active scene to the room.
    *
-   * The authoritative scene goes in; the store decides what each role gets out.
+   * The authoritative scene goes in; the store decides what each seat gets out.
    * Nothing is filtered here, deliberately - projection belongs at the one
    * boundary that knows who is listening, and a second filter upstream would be
    * a second thing to keep correct.
+   *
+   * What *is* resolved here is which cells each player's characters occupy,
+   * because that read is a promise in DB mode and the fan-out has to stay
+   * synchronous. In DB mode most scene events divert into the command's
+   * transaction instead and reach the room through the outbox dispatcher, which
+   * resolves the same context the same way.
    */
   private publishSceneStateUpdate(params: {
     sessionId: SessionId;
     scene: Scene;
     reason: SceneStateUpdateReason;
   }): void {
-    const update: SceneStateUpdate = {
+    const update: AuthoritativeSceneStateUpdate = {
       type: 'scene_state',
+      view: 'authoritative',
       reason: params.reason,
       sessionId: params.sessionId,
       scene: params.scene,
@@ -4703,7 +4826,160 @@ export class InMemoryGameRuntime<
       return;
     }
 
-    this.sessions.publishSceneStateUpdate(update);
+    // Stamped before the observer lookup, not after: two updates whose lookups
+    // settle out of order must still carry stamps in the order they were
+    // raised, or a client would keep the older map.
+    const projectedAt = new Date().toISOString();
+
+    // Nobody to project for means nothing to look up. Worth the check because
+    // resolving observers is a database read per assigned character, and it is
+    // what keeps a room the players have not joined yet - or one only the DM is
+    // watching - on a fully synchronous publish. Getting this wrong costs a
+    // player detail, never secrecy: the fan-out then projects an empty view.
+    if (!this.sessions.hasProjectedSubscribers(params.sessionId)) {
+      this.sessions.publishSceneStateUpdate(update, {
+        projectedAt,
+        observersByParticipant: new Map(),
+      });
+      return;
+    }
+
+    const context = this.resolveSceneVisibilityContext(
+      params.sessionId,
+      projectedAt,
+    );
+
+    if (this.isPromiseLike(context)) {
+      void context.then((resolved) =>
+        this.sessions.publishSceneStateUpdate(update, resolved),
+      );
+      return;
+    }
+
+    this.sessions.publishSceneStateUpdate(update, context);
+  }
+
+  /**
+   * Which cells each player's assigned characters occupy in this session.
+   *
+   * This is the only input the scene projector takes beyond the scene itself,
+   * and it is derived from the authoritative session snapshot and the
+   * authoritative character records - never from anything a client sent. A
+   * participant ID arriving in a payload is not consulted here at all.
+   *
+   * Fails closed per seat. A player whose character cannot be resolved, is not
+   * placed, or is standing in a different scene simply has no observers, and a
+   * viewer with no observers is projected an empty view rather than the map.
+   *
+   * The DM is absent from the map on purpose: their payload is the
+   * authoritative scene and never goes through this.
+   */
+  private resolveSceneVisibilityContext(
+    sessionId: SessionId,
+    projectedAt: string,
+  ): RuntimeRepositoryResult<SceneVisibilityContext> {
+    let snapshot: SessionSnapshot;
+
+    try {
+      snapshot = this.sessions.getSessionSnapshot(sessionId);
+    } catch {
+      return { projectedAt, observersByParticipant: new Map() };
+    }
+
+    const activeSceneId = snapshot.session.activeSceneId;
+    const seats = snapshot.participants.flatMap((participant) => {
+      if (participant.role !== 'player' || !participant.characterId) {
+        return [];
+      }
+
+      // In memory mode a missing record throws here; in DB mode the promise
+      // rejects. Both mean the same thing for this seat - no observers - and
+      // neither may abort the announcement to the rest of the room.
+      let record: RuntimeRepositoryResult<StoredCharacterRecord | null>;
+
+      try {
+        record = this.settleOrNull(
+          this.characters.getCharacter(participant.characterId),
+        );
+      } catch {
+        record = null;
+      }
+
+      return [{ participantId: participant.id, record }];
+    });
+
+    return this.resolveRepositoryResults(
+      seats.map((seat) => seat.record),
+      (records) => {
+        const observersByParticipant = new Map<
+          ParticipantId,
+          readonly OccupancyShape[]
+        >();
+
+        records.forEach((record, index) => {
+          const seat = seats[index]!;
+
+          if (!record) {
+            return;
+          }
+
+          const position = record.overlay.position;
+
+          if (
+            !position ||
+            !activeSceneId ||
+            position.sceneId !== activeSceneId
+          ) {
+            return;
+          }
+
+          const observers =
+            observersByParticipant.get(seat.participantId) ?? [];
+
+          observersByParticipant.set(seat.participantId, [
+            ...observers,
+            {
+              position: { x: position.x, y: position.y },
+              footprint: { ...record.overlay.footprint },
+            },
+          ]);
+        });
+
+        return { projectedAt, observersByParticipant };
+      },
+    );
+  }
+
+  /**
+   * Public so the outbox dispatcher can project rows it replays. Those rows
+   * hold the authoritative scene and the dispatcher has no character access of
+   * its own, so without this the DB delivery path would fan out unprojected
+   * maps - which is the whole failure this milestone exists to prevent.
+   */
+  resolveSceneVisibilityContextForSession(
+    sessionId: SessionId,
+    projectedAt: string,
+  ): RuntimeRepositoryResult<SceneVisibilityContext> {
+    return this.resolveSceneVisibilityContext(sessionId, projectedAt);
+  }
+
+  /**
+   * Settle a repository read to its value, or to `null` when it fails.
+   *
+   * A seat whose character record has gone missing must cost that seat its
+   * view, not take down the announcement for the whole room.
+   */
+  private settleOrNull<T>(
+    result: RuntimeRepositoryResult<T>,
+  ): RuntimeRepositoryResult<T | null> {
+    if (this.isPromiseLike(result)) {
+      return Promise.resolve(result).then(
+        (value) => value,
+        () => null,
+      );
+    }
+
+    return result;
   }
 
   /**

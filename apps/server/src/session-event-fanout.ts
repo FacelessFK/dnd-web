@@ -13,6 +13,7 @@
  * "who is allowed to see which payload" is made.
  */
 import type {
+  AuthoritativeSceneStateUpdate,
   CombatEvent,
   DiceResolution,
   EncounterStateUpdate,
@@ -20,9 +21,13 @@ import type {
   PlayerIntentStateUpdateReason,
   ResolutionRequest,
   ResolutionStateUpdateReason,
-  SceneStateUpdate,
 } from '@dnd/protocol';
-import { projectEncounterForRole, projectSceneForRole } from '@dnd/rules';
+import {
+  buildSceneVisibilityIndex,
+  projectEncounterForRole,
+  projectSceneViewForObservers,
+  type OccupancyShape,
+} from '@dnd/rules';
 import type {
   ParticipantId,
   ParticipantRole,
@@ -92,24 +97,92 @@ export function publishEncounterStateUpdateToRoom(
 }
 
 /**
- * Fan out the active scene, projected per role before serialization.
+ * Everything the scene fan-out needs to answer "what may this seat see".
  *
- * Always projected, with no "nothing is hidden" fast path. The equivalent
- * shortcut on the encounter is safe because concealment there is a set the
- * caller has already computed; here the answer lives on each entity, so a fast
- * path would mean deciding whether anything is hidden in a second place and
- * getting to broadcast the authoritative scene when that decision was wrong.
- * `projectSceneForRole` returns the same object for the DM anyway, so the cost
- * of always asking is one array filter per player payload.
+ * Observers are handed in rather than looked up here because resolving them
+ * means reading character records, which is a promise in DB mode and a value in
+ * memory, and this module has to stay synchronous - it runs inside a loop over
+ * live subscribers. The caller that already knows how to settle a repository
+ * result does that work and passes the answer down.
+ *
+ * `projectedAt` is stamped once, by whoever raised the update, and shared by
+ * every viewer's payload. Stamping per-viewer here would be wrong on the live
+ * path: two updates whose observer lookups settle out of order would be
+ * time-stamped in the order they *finished*, so the older scene would carry the
+ * newer stamp and a client would keep it.
+ */
+export type SceneVisibilityContext = {
+  projectedAt: string;
+  observersByParticipant: ReadonlyMap<ParticipantId, readonly OccupancyShape[]>;
+};
+
+/**
+ * Whether anyone listening to this room needs a projected payload.
+ *
+ * Resolving observers is a database read, and a room with no player subscribed
+ * has nobody to resolve them for. Answering `false` never risks a leak: the
+ * caller then publishes with no observers, which projects an empty view, so the
+ * worst case of getting this wrong is a player who is told less than they could
+ * have been - and the next frame corrects it.
+ */
+export function roomHasProjectedSubscribers(
+  room: SessionEventFanoutRoom,
+): boolean {
+  for (const [participantId] of room.subscribers) {
+    if (resolveSubscriberRole(room, participantId) !== 'dm') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Fan out the active scene, projected per subscriber before serialization.
+ *
+ * The DM gets the authoritative scene. Every other seat gets a `SceneView`
+ * containing only the cells and entities that seat's characters can currently
+ * perceive - a different payload per seat, because two players standing in
+ * different rooms are entitled to different maps. That is why this cannot cache
+ * one payload per role the way the encounter fan-out does.
+ *
+ * A seat with no entry in `observersByParticipant`, and every seat when no
+ * context was supplied at all, is projected with no observers: an empty view.
+ * Failing closed here is the whole point. A caller that forgot to resolve
+ * observers must under-inform a player, never hand them the map.
  */
 export function publishSceneStateUpdateToRoom(
   room: SessionEventFanoutRoom,
-  update: SceneStateUpdate,
+  update: AuthoritativeSceneStateUpdate,
+  visibility?: SceneVisibilityContext,
 ): void {
-  broadcastByRole(room, (role) => ({
-    ...update,
-    scene: projectSceneForRole(update.scene, role),
-  }));
+  // Built lazily and shared across every player in the room: the blocker grid
+  // and decoded terrain are the same for all of them, and only the observer set
+  // differs.
+  let index: ReturnType<typeof buildSceneVisibilityIndex> | null = null;
+  const projectedAt = visibility?.projectedAt ?? new Date().toISOString();
+
+  for (const [participantId, subscriber] of room.subscribers) {
+    if (resolveSubscriberRole(room, participantId) === 'dm') {
+      subscriber.send(structuredClone(update));
+      continue;
+    }
+
+    index ??= buildSceneVisibilityIndex(update.scene);
+
+    subscriber.send({
+      type: 'scene_state',
+      view: 'player_projection',
+      reason: update.reason,
+      sessionId: update.sessionId,
+      scene: projectSceneViewForObservers({
+        scene: update.scene,
+        observers: visibility?.observersByParticipant.get(participantId) ?? [],
+        projectedAt,
+        index,
+      }),
+    });
+  }
 }
 
 export function publishCombatEventToRoom(

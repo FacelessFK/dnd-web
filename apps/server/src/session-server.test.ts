@@ -1154,6 +1154,19 @@ function createMockResponse() {
   };
 }
 
+/**
+ * A player's `initial_sync` scene frame is projected, and projecting it means
+ * reading that seat's character record - a promise in DB mode. So it arrives on
+ * a later microtask than the `connectParticipant` call that caused it, and can
+ * land after a test has already started measuring.
+ *
+ * It describes the connection, not the command under test, so the commit-marker
+ * probes below ignore it. Every other frame those probes see is still asserted.
+ */
+function isSceneInitialSyncFrame(update: SessionStreamEvent): boolean {
+  return update.type === 'scene_state' && update.reason === 'initial_sync';
+}
+
 function subscribeToSessionEvents(
   runtime: InMemoryGameRuntime<RuntimeCharacterRepository, RuntimeSessionStore>,
   sessionId: string,
@@ -5526,7 +5539,7 @@ test('db-backed missed realtime delivery is recovered through read models withou
   assert.equal(movedWhileNoSubscriber.body.ok, true);
   assert.equal(attackedWhileNoSubscriber.status, 200);
   assert.equal(attackedWhileNoSubscriber.body.ok, true);
-  assert.equal(outboxDatabase.recordCount, 4);
+  assert.equal(outboxDatabase.recordCount, 5);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -5641,6 +5654,14 @@ test('db-backed missed realtime delivery is recovered through read models withou
     send: (update) => {
       lateStreamUpdates.push(update);
     },
+  });
+
+  // A player's `initial_sync` map is projected, and projecting it reads that
+  // seat's character record - a promise against this suite's database double.
+  // So the frame lands on a later turn than `connectParticipant`, and this
+  // yields the loop once rather than waiting a fixed time.
+  await new Promise((resolve) => {
+    setImmediate(resolve);
   });
 
   assert.equal(sceneRead.status, 200);
@@ -7940,7 +7961,11 @@ test('db-backed encounter transaction boundary writes one outbox row, dispatches
   runtime.connectParticipant(sessionId, 'player-001', {
     connectionId: 'transactional-advance-turn-marker',
     close: () => undefined,
-    send: () => {
+    send: (update) => {
+      if (isSceneInitialSyncFrame(update)) {
+        return;
+      }
+
       commitMarkers.push(unitOfWork.committedCount);
     },
   });
@@ -8226,7 +8251,11 @@ test('transactional DM encounter end routes the final ended snapshot through one
   runtime.connectParticipant(sessionId, 'player-001', {
     connectionId: 'transactional-dm-end-encounter-marker',
     close: () => undefined,
-    send: () => {
+    send: (update) => {
+      if (isSceneInitialSyncFrame(update)) {
+        return;
+      }
+
       commitMarkers.push(unitOfWork.committedCount);
     },
   });
@@ -8330,7 +8359,11 @@ test('db-backed combat transaction boundary commits attack damage, encounter usa
   runtime.connectParticipant(sessionId, 'player-001', {
     connectionId: 'transactional-attack-marker',
     close: () => undefined,
-    send: () => {
+    send: (update) => {
+      if (isSceneInitialSyncFrame(update)) {
+        return;
+      }
+
       commitMarkers.push(unitOfWork.committedCount);
     },
   });
@@ -8548,7 +8581,7 @@ test('db-backed combat transaction boundary commits combatant target damage, enc
   assert.equal(attack.body.ok, true);
   assert.equal(retry.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
   assert.equal(rollCount, 1);
   assert.equal(updatedCombatant?.combatant?.hp.current, 3);
   assert.equal(encounter.currentTurnUsage.actionUsed, true);
@@ -8938,12 +8971,15 @@ test('db-backed character transaction boundary writes one movement_state outbox 
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 0);
   assert.equal(movementUpdates.length, 1);
   assert.equal(movementUpdates[0]?.reason, 'character_placed');
-  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
+  assert.deepEqual(commitMarkers, [
+    commitCountBefore + 1,
+    commitCountBefore + 1,
+  ]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -8983,7 +9019,11 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   runtime.connectParticipant(sessionId, 'player-001', {
     connectionId: 'transactional-movement-marker',
     close: () => undefined,
-    send: () => {
+    send: (update) => {
+      if (isSceneInitialSyncFrame(update)) {
+        return;
+      }
+
       commitMarkers.push(unitOfWork.committedCount);
     },
   });
@@ -9028,17 +9068,20 @@ test('db-backed combat transaction boundary commits encounter-aware movement ato
   assert.equal(moved.status, 200);
   assert.equal(moved.body.ok, true);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
   assert.equal(updatedRecord.overlay.position?.x, 1);
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.deepEqual(
     updates.slice(updateCountBefore).map((update) => update.type),
-    ['encounter_state', 'movement_state'],
+    // The scene frame is the fog recompute a move triggers: the map is
+    // unchanged, but every player's view of it is not.
+    ['encounter_state', 'movement_state', 'scene_state'],
   );
   assert.equal(getEncounterUpdates(updates).at(-1)?.reason, 'movement_used');
   assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
   assert.deepEqual(commitMarkers.slice(markerCountBefore), [
+    unitOfWork.committedCount,
     unitOfWork.committedCount,
     unitOfWork.committedCount,
   ]);
@@ -9144,7 +9187,7 @@ test('transactional encounter-aware movement duplicate retry returns cached dura
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
   assert.equal(
@@ -9333,7 +9376,7 @@ test('transactional encounter-aware movement command ID conflicts still reject c
     movementUpdatesBeforeConflict,
   );
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
 
   if (!conflict.body.ok) {
     assert.equal(conflict.body.error.code, 'command_id_conflict');
@@ -9443,14 +9486,14 @@ test('zero-cost encounter movement writes one movement_state outbox row, dispatc
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 0);
   assert.equal(encounter.currentTurnUsage.movementUsed, 0);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 0);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
-  assert.equal(commitMarkers.length, 1);
+  assert.equal(commitMarkers.length, 2);
   assert.ok((commitMarkers[0] ?? 0) > commitCountBefore);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
@@ -9562,13 +9605,13 @@ test('no-active-encounter movement writes one movement_state outbox row, dispatc
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).at(-1)?.reason, 'character_moved');
-  assert.equal(commitMarkers.length, 1);
+  assert.equal(commitMarkers.length, 2);
   assert.ok((commitMarkers[0] ?? 0) > commitCountBefore);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
@@ -9666,12 +9709,15 @@ test('move_character_in_active_scene falls back to the character transaction bou
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(runtime.encounters.findEncounterBySession(sessionId), null);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
-  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
+  assert.deepEqual(commitMarkers, [
+    commitCountBefore + 1,
+    commitCountBefore + 1,
+  ]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -9794,11 +9840,11 @@ test('movement fallback retries through the combat boundary if an active encount
 
   assert.equal(moved.status, 200);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
   assert.equal(encounter.currentTurnUsage.movementUsed, 5);
   assert.deepEqual(
     updates.slice(updateCountBefore).map((update) => update.type),
-    ['encounter_state', 'encounter_state', 'movement_state'],
+    ['encounter_state', 'encounter_state', 'movement_state', 'scene_state'],
   );
   assert.equal(
     getEncounterUpdates(updates).at(-2)?.reason,
@@ -9933,12 +9979,15 @@ test('db-backed character transaction boundary writes one movement_state outbox 
   assert.equal(second.status, 200);
   assert.deepEqual(second.body, first.body);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 1);
+  assert.equal(outboxDatabase.recordCount, 2);
   assert.equal(updatedRecord.overlay.position?.x, 0);
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(movementUpdates.length, 1);
   assert.equal(movementUpdates[0]?.reason, 'dm_character_repositioned');
-  assert.deepEqual(commitMarkers, [commitCountBefore + 1]);
+  assert.deepEqual(commitMarkers, [
+    commitCountBefore + 1,
+    commitCountBefore + 1,
+  ]);
   assert.equal(
     (await outboxDatabase.listUnpublishedCommandEventOutboxRecords()).length,
     0,
@@ -9991,7 +10040,9 @@ test('default in-memory movement behavior remains unchanged without the DB-backe
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.deepEqual(
     updates.slice(updateCountBefore).map((update) => update.type),
-    ['encounter_state', 'movement_state'],
+    // The scene frame is the fog recompute a move triggers: the map is
+    // unchanged, but every player's view of it is not.
+    ['encounter_state', 'movement_state', 'scene_state'],
   );
 });
 
@@ -10080,7 +10131,7 @@ test('concurrent duplicate transactional encounter-aware movement retries do not
   assert.equal(updatedRecord.overlay.position?.y, 1);
   assert.equal(encounter.currentTurnUsage.movementUsed, 10);
   assert.equal(idempotencyDatabase.recordCount, 1);
-  assert.equal(outboxDatabase.recordCount, 2);
+  assert.equal(outboxDatabase.recordCount, 3);
   assert.equal(getEncounterUpdates(updates).length - encounterUpdatesBefore, 1);
   assert.equal(getMovementUpdates(updates).length - movementUpdatesBefore, 1);
   assert.equal(

@@ -9,7 +9,7 @@ import type {
   MovementStateUpdate,
   MovementStateUpdateReason,
   ReconnectSessionCommand,
-  SceneStateUpdate,
+  AuthoritativeSceneStateUpdate,
   SessionStateUpdate,
   SessionStateUpdateReason,
   SessionStreamEvent,
@@ -38,6 +38,8 @@ import {
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
   publishSceneStateUpdateToRoom,
+  roomHasProjectedSubscribers,
+  type SceneVisibilityContext,
   type PlayerIntentStateFanout,
   type ResolutionStateFanout,
 } from './session-event-fanout.js';
@@ -426,8 +428,21 @@ export class DbBackedSessionStore implements RuntimeSessionStore {
     );
   }
 
-  publishSceneStateUpdate(update: SceneStateUpdate): void {
-    publishSceneStateUpdateToRoom(this.requireRoom(update.sessionId), update);
+  hasProjectedSubscribers(sessionId: SessionId): boolean {
+    const room = this.rooms.get(sessionId);
+
+    return room ? roomHasProjectedSubscribers(room) : false;
+  }
+
+  publishSceneStateUpdate(
+    update: AuthoritativeSceneStateUpdate,
+    visibility?: SceneVisibilityContext,
+  ): void {
+    publishSceneStateUpdateToRoom(
+      this.requireRoom(update.sessionId),
+      update,
+      visibility,
+    );
   }
 
   publishResolutionStateUpdate(params: ResolutionStateFanout): void {

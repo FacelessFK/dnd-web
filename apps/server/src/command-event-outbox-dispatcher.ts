@@ -3,6 +3,7 @@ import type {
   CommandEventOutboxRow,
 } from '@dnd/db';
 import type {
+  AuthoritativeSceneStateUpdate,
   CharacterStateUpdate,
   CombatEvent,
   EncounterStateUpdate,
@@ -11,12 +12,12 @@ import type {
   OutboxStatusSuccess,
   PlayerIntentStateUpdate,
   ResolutionStateUpdate,
-  SceneStateUpdate,
   SessionStateUpdate,
 } from '@dnd/protocol';
 
 import type { SceneEntityId, SessionId } from '@dnd/shared';
 
+import type { SceneVisibilityContext } from './session-event-fanout.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
 export interface CommandEventOutboxDispatcherLike {
@@ -52,6 +53,25 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     private readonly resolveConcealedCombatantIds: (
       sessionId: SessionId,
     ) => ReadonlySet<SceneEntityId> = () => new Set<SceneEntityId>(),
+    /**
+     * Resolves which cells each player's characters occupy, so a replayed scene
+     * row is fogged per viewer exactly like a live publish.
+     *
+     * Async because reading character records is a database round trip in the
+     * mode this dispatcher exists for. The default resolves no observers, which
+     * projects every player an empty view - the fail-closed direction, and the
+     * right answer for a caller with no character access, such as a test.
+     */
+    private readonly resolveSceneVisibility: (
+      sessionId: SessionId,
+      projectedAt: string,
+    ) => SceneVisibilityContext | Promise<SceneVisibilityContext> = (
+      _sessionId,
+      projectedAt,
+    ) => ({
+      projectedAt,
+      observersByParticipant: new Map(),
+    }),
   ) {}
 
   async drainAllUnpublished(): Promise<void> {
@@ -136,7 +156,7 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
 
   private async publishRows(rows: CommandEventOutboxRow[]): Promise<void> {
     for (const row of rows) {
-      this.publishRow(row);
+      await this.publishRow(row);
       const published = await this.outbox.markCommandEventOutboxRecordPublished(
         row.outboxId,
       );
@@ -151,7 +171,7 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     }
   }
 
-  private publishRow(row: CommandEventOutboxRow): void {
+  private async publishRow(row: CommandEventOutboxRow): Promise<void> {
     if (row.eventType === 'session_state') {
       this.sessions.publishSessionStateUpdate(
         this.clone(row.payload as SessionStateUpdate),
@@ -177,11 +197,23 @@ export class CommandEventOutboxDispatcher implements CommandEventOutboxDispatche
     }
 
     // The stored payload is the authoritative scene, which is correct for a
-    // durable record. Concealment is applied by the store on the way to each
-    // subscriber, exactly as it is on the live path.
+    // durable record: the row describes what happened, not what any particular
+    // seat was allowed to see. Fog and concealment are applied by the store on
+    // the way to each subscriber, exactly as they are on the live path.
+    //
+    // A row written before `view` existed carries no discriminant. It is still
+    // an authoritative scene - that is the only kind of scene the outbox has
+    // ever stored - so it is stamped rather than trusted.
     if (row.eventType === 'scene_state') {
+      const update: AuthoritativeSceneStateUpdate = {
+        ...this.clone(row.payload as AuthoritativeSceneStateUpdate),
+        view: 'authoritative',
+      };
+      const projectedAt = new Date().toISOString();
+
       this.sessions.publishSceneStateUpdate(
-        this.clone(row.payload as SceneStateUpdate),
+        update,
+        await this.resolveSceneVisibility(update.sessionId, projectedAt),
       );
       return;
     }

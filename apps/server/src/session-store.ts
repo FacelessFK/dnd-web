@@ -9,7 +9,7 @@ import type {
   MovementStateUpdate,
   MovementStateUpdateReason,
   ReconnectSessionCommand,
-  SceneStateUpdate,
+  AuthoritativeSceneStateUpdate,
   SessionErrorCode,
   SessionStreamEvent,
   SessionStateUpdate,
@@ -35,6 +35,8 @@ import {
   publishPlayerIntentStateUpdateToRoom,
   publishResolutionStateUpdateToRoom,
   publishSceneStateUpdateToRoom,
+  roomHasProjectedSubscribers,
+  type SceneVisibilityContext,
   type PlayerIntentStateFanout,
   type ResolutionStateFanout,
 } from './session-event-fanout.js';
@@ -122,12 +124,27 @@ export interface RuntimeSessionStore {
     concealedCombatantIds?: ReadonlySet<SceneEntityId>,
   ): void;
   /**
-   * Takes the authoritative scene and projects it per role on the way out.
-   * There is deliberately no pre-filtered variant of this call: a caller that
-   * could hand in a player view could also hand the DM one by mistake, and the
-   * failure would be silent in exactly the direction that matters.
+   * Whether any seat currently listening needs a projected scene payload.
+   *
+   * Lets a caller skip resolving observers - a database read per assigned
+   * character - for a room nobody is watching, or one where only the DM is.
+   * Answering `false` costs a player detail, never secrecy.
    */
-  publishSceneStateUpdate(update: SceneStateUpdate): void;
+  hasProjectedSubscribers(sessionId: SessionId): boolean;
+  /**
+   * Takes the authoritative scene and projects it per subscriber on the way
+   * out. There is deliberately no pre-filtered variant of this call: a caller
+   * that could hand in a player view could also hand the DM one by mistake, and
+   * the failure would be silent in exactly the direction that matters.
+   *
+   * `visibility` carries the observers each seat is entitled to see through.
+   * Omitting it does not disable fog - it projects every player as having no
+   * observers at all, which is the fail-closed direction.
+   */
+  publishSceneStateUpdate(
+    update: AuthoritativeSceneStateUpdate,
+    visibility?: SceneVisibilityContext,
+  ): void;
   publishCharacterStateUpdate(update: CharacterStateUpdate): void;
   /**
    * The whole table state goes in and a per-participant projection comes out.
@@ -438,8 +455,21 @@ export class InMemorySessionStore implements RuntimeSessionStore {
     );
   }
 
-  publishSceneStateUpdate(update: SceneStateUpdate): void {
-    publishSceneStateUpdateToRoom(this.requireRoom(update.sessionId), update);
+  hasProjectedSubscribers(sessionId: SessionId): boolean {
+    const room = this.rooms.get(sessionId);
+
+    return room ? roomHasProjectedSubscribers(room) : false;
+  }
+
+  publishSceneStateUpdate(
+    update: AuthoritativeSceneStateUpdate,
+    visibility?: SceneVisibilityContext,
+  ): void {
+    publishSceneStateUpdateToRoom(
+      this.requireRoom(update.sessionId),
+      update,
+      visibility,
+    );
   }
 
   publishResolutionStateUpdate(params: ResolutionStateFanout): void {

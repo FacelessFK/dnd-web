@@ -5,6 +5,7 @@ import type {
 } from '@dnd/db';
 import { calculateMovementDistanceFeet } from '@dnd/rules';
 import type {
+  AuthoritativeSceneStateUpdate,
   CombatEvent,
   EncounterStateUpdate,
   MovementStateUpdate,
@@ -43,6 +44,7 @@ type TransactionalCommandParams = {
 };
 
 type CombatTransactionalPublication =
+  | AuthoritativeSceneStateUpdate
   | CombatEvent
   | EncounterStateUpdate
   | MovementStateUpdate;
@@ -338,6 +340,11 @@ export class DbBackedCombatCommandTransactionBoundary {
           publications.push(this.clone(update));
         },
         movementStateUpdateSink: (update) => {
+          publications.push(this.clone(update));
+        },
+        // See the character boundary: the fog announcement a move triggers has
+        // to commit with the move.
+        sceneStateUpdateSink: (update) => {
           publications.push(this.clone(update));
         },
         scenes: scenes ?? undefined,

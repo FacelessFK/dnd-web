@@ -6,6 +6,7 @@ import {
   decodeSceneTerrain,
   getSceneTerrainTileAt,
 } from '@dnd/rules';
+import type { Scene, SceneView } from '@dnd/shared';
 
 import { InMemoryCharacterStore } from './character-store.js';
 import { InMemoryGameRuntime } from './game-runtime.js';
@@ -97,6 +98,23 @@ function paintTerrain(
     actor: { participantId: actorParticipantId },
     payload: { sessionId, sceneId, cells },
   });
+}
+
+/**
+ * A `get_scene` result narrowed to the authoritative scene.
+ *
+ * `get_scene` answers a player with a projected `SceneView`, and with a promise
+ * in DB mode, so the union has to be narrowed somewhere. Narrowing through an
+ * assertion rather than a cast means a read that ever started coming back
+ * projected fails loudly here instead of silently satisfying the shape.
+ */
+function asAuthoritativeScene(
+  result: Scene | SceneView | Promise<SceneView>,
+): Scene {
+  assert.equal(result instanceof Promise, false);
+  assert.equal('terrain' in (result as Scene), true);
+
+  return result as Scene;
 }
 
 function assignAndPlacePlayer(
@@ -231,12 +249,14 @@ test('the DM can paint terrain and the layer persists on the scene', () => {
     DEFAULT_SCENE_TERRAIN_TILE,
   );
 
-  const reread = runtime.getScene({
-    commandId: 'get-scene-terrain',
-    type: 'get_scene',
-    actor: { participantId: 'dm-001' },
-    payload: { sessionId, sceneId: scene.id },
-  });
+  const reread = asAuthoritativeScene(
+    runtime.getScene({
+      commandId: 'get-scene-terrain',
+      type: 'get_scene',
+      actor: { participantId: 'dm-001' },
+      payload: { sessionId, sceneId: scene.id },
+    }),
+  );
 
   assert.equal(
     getSceneTerrainTileAt(reread.grid, reread.terrain, { x: 1, y: 1 }),
@@ -261,12 +281,14 @@ test('painting terrain is DM-gated server-side', () => {
       error.code === 'invalid_role_assumption',
   );
 
-  const reread = runtime.getScene({
-    commandId: 'get-scene-after-player-paint',
-    type: 'get_scene',
-    actor: { participantId: 'dm-001' },
-    payload: { sessionId, sceneId: scene.id },
-  });
+  const reread = asAuthoritativeScene(
+    runtime.getScene({
+      commandId: 'get-scene-after-player-paint',
+      type: 'get_scene',
+      actor: { participantId: 'dm-001' },
+      payload: { sessionId, sceneId: scene.id },
+    }),
+  );
 
   assert.equal(
     getSceneTerrainTileAt(reread.grid, reread.terrain, { x: 0, y: 0 }),
@@ -313,12 +335,14 @@ test('painting a blocking tile under a placed character is rejected', () => {
       error.code === 'scene_terrain_blocks_occupant',
   );
 
-  const reread = runtime.getScene({
-    commandId: 'get-scene-after-trap-paint',
-    type: 'get_scene',
-    actor: { participantId: 'dm-001' },
-    payload: { sessionId, sceneId: scene.id },
-  });
+  const reread = asAuthoritativeScene(
+    runtime.getScene({
+      commandId: 'get-scene-after-trap-paint',
+      type: 'get_scene',
+      actor: { participantId: 'dm-001' },
+      payload: { sessionId, sceneId: scene.id },
+    }),
+  );
 
   assert.equal(
     getSceneTerrainTileAt(reread.grid, reread.terrain, { x: 3, y: 2 }),

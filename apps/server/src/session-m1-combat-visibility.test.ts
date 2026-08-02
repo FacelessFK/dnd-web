@@ -23,7 +23,7 @@ import type {
   EncounterStateUpdate,
   SessionStreamEvent,
 } from '@dnd/protocol';
-import type { Encounter } from '@dnd/shared';
+import type { Encounter, Scene, SceneView } from '@dnd/shared';
 
 import { InMemoryCharacterStore } from './character-store.js';
 import {
@@ -463,13 +463,37 @@ function setHiddenCommand(
   };
 }
 
-function getSceneAs(table: Table, participantId: Seat) {
-  return table.runtime.getScene({
+/**
+ * One seat's `get_scene`, narrowed by role.
+ *
+ * `get_scene` answers the DM with the authoritative `Scene` and a player with a
+ * projected `SceneView`. Both carry `entities`, which is all this file asserts
+ * on, so they share a return type here - but the narrowing asserts the shape
+ * each role is entitled to, so a DM read that started coming back projected, or
+ * a player read that stopped being projected, fails loudly.
+ */
+function getSceneAs(table: Table, participantId: Seat): Scene | SceneView {
+  const result = table.runtime.getScene({
     commandId: `get-scene-${participantId}`,
     type: 'get_scene',
     actor: { participantId },
     payload: { sessionId: table.sessionId, sceneId: table.sceneId },
   });
+
+  assert.equal(result instanceof Promise, false);
+
+  if (participantId === 'dm-001') {
+    assert.equal('terrain' in (result as Scene), true);
+  } else {
+    assert.equal((result as SceneView).view, 'player_projection');
+  }
+
+  return result as Scene | SceneView;
+}
+
+/** The DM's read, narrowed to the authoritative scene it always is. */
+function getAuthoritativeSceneAs(table: Table): Scene {
+  return getSceneAs(table, 'dm-001') as Scene;
 }
 
 function getEncounterAs(table: Table, participantId: Seat): Encounter {
@@ -527,7 +551,7 @@ test('the GM conceals a combatant and the player scene loses it', async () => {
 
   assert.equal(response.status, 200);
 
-  const dmScene = getSceneAs(table, 'dm-001');
+  const dmScene = getAuthoritativeSceneAs(table);
   const playerScene = getSceneAs(table, 'player-001');
 
   assert.equal(dmScene.entities.length, 1, 'the DM still sees the creature');
@@ -607,7 +631,7 @@ test('setting the value it already has publishes nothing new', async () => {
   );
 
   assert.deepEqual(encounterUpdates(events), []);
-  assert.equal(getSceneAs(table, 'dm-001').entities[0]?.hidden, true);
+  assert.equal(getAuthoritativeSceneAs(table).entities[0]?.hidden, true);
 });
 
 test('replaying the conceal command returns the cached scene', async () => {

@@ -4,6 +4,7 @@ import type {
   DndDatabaseUnitOfWorkContext,
 } from '@dnd/db';
 import type {
+  AuthoritativeSceneStateUpdate,
   CharacterStateUpdate,
   MoveCharacterInActiveSceneCommand,
   MovementStateUpdate,
@@ -40,6 +41,7 @@ const DURABLE_CHARACTER_MOVEMENT_COMMAND_TYPES = [
 type DurableCharacterMovementCommandType =
   (typeof DURABLE_CHARACTER_MOVEMENT_COMMAND_TYPES)[number];
 type CharacterTransactionalPublication =
+  | AuthoritativeSceneStateUpdate
   | CharacterStateUpdate
   | MovementStateUpdate;
 
@@ -169,6 +171,13 @@ export class DbBackedCharacterCommandTransactionBoundary {
           publications.push(clonedUpdate);
         },
         movementStateUpdateSink: (update) => {
+          publications.push(this.clone(update));
+        },
+        // Moving a token changes what every player may see. That fog
+        // announcement belongs in the same transaction as the move: delivered
+        // ahead of the commit it would describe a position the database does
+        // not hold yet, and on a rollback it would never be taken back.
+        sceneStateUpdateSink: (update) => {
           publications.push(this.clone(update));
         },
       },

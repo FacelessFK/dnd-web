@@ -53,6 +53,7 @@ import { InMemoryGameRuntime } from './game-runtime.js';
 import { createSessionServer } from './session-server.js';
 import type { SceneEntityId, SessionId } from '@dnd/shared';
 
+import type { SceneVisibilityContext } from './session-event-fanout.js';
 import type { RuntimeSessionStore } from './session-store.js';
 
 export type ServerPersistenceMode = 'db' | 'in-memory';
@@ -88,6 +89,10 @@ export type ServerBootstrapDependencies = {
     resolveConcealedCombatantIds: (
       sessionId: SessionId,
     ) => ReadonlySet<SceneEntityId>,
+    resolveSceneVisibility: (
+      sessionId: SessionId,
+      projectedAt: string,
+    ) => SceneVisibilityContext | Promise<SceneVisibilityContext>,
   ) => CommandEventOutboxDispatcherLike;
   createPersistenceConnection: (databaseUrl: string) => PersistenceConnection;
   createSceneRecordDatabase: (db: DndDatabase) => SceneRecordDatabase;
@@ -117,11 +122,13 @@ const defaultDependencies: ServerBootstrapDependencies = {
     database,
     sessions,
     resolveConcealedCombatantIds,
+    resolveSceneVisibility,
   ) =>
     new CommandEventOutboxDispatcher(
       database,
       sessions,
       resolveConcealedCombatantIds,
+      resolveSceneVisibility,
     ),
   createPersistenceConnection: (databaseUrl) =>
     createNodePostgresDndDatabaseConnection(databaseUrl),
@@ -243,6 +250,11 @@ export async function createBootstrappedSessionServer(
         runtime.sessions,
         (sessionId) =>
           runtime.resolveConcealedCombatantIdsForSession(sessionId),
+        (sessionId, projectedAt) =>
+          runtime.resolveSceneVisibilityContextForSession(
+            sessionId,
+            projectedAt,
+          ),
       );
     const characterCommandTransaction =
       new DbBackedCharacterCommandTransactionBoundary(

@@ -14,6 +14,7 @@ import {
   calculatePassivePerception,
   calculateProficiencyBonus,
 } from '@dnd/rules';
+import type { Scene, SceneView } from '@dnd/shared';
 
 import {
   CharacterStoreError,
@@ -716,8 +717,8 @@ function getSceneTransitionCount(
   sessionId: string,
   sceneId: string,
 ): number {
-  return runtime
-    .getScene({
+  return asAuthoritativeScene(
+    runtime.getScene({
       commandId: `get-scene-transition-count-${sceneId}`,
       type: 'get_scene',
       actor: {
@@ -727,8 +728,25 @@ function getSceneTransitionCount(
         sessionId,
         sceneId,
       },
-    })
-    .entities.filter((entity) => entity.transition).length;
+    }),
+  ).entities.filter((entity) => entity.transition).length;
+}
+
+/**
+ * A `get_scene` result narrowed to the authoritative scene.
+ *
+ * `get_scene` answers a player with a projected `SceneView`, and with a promise
+ * in DB mode, so the union has to be narrowed somewhere. Narrowing through an
+ * assertion rather than a cast means a read that ever started coming back
+ * projected fails loudly here instead of silently satisfying the shape.
+ */
+function asAuthoritativeScene(
+  result: Scene | SceneView | Promise<SceneView>,
+): Scene {
+  assert.equal(result instanceof Promise, false);
+  assert.equal('terrain' in (result as Scene), true);
+
+  return result as Scene;
 }
 
 function getMovementUpdates(
@@ -3020,17 +3038,19 @@ test('scene creation returns an empty scene that session participants can retrie
   joinPlayer(runtime, session.sessionId);
 
   const scene = createScene(runtime, session.sessionId);
-  const fetchedScene = runtime.getScene({
-    commandId: 'get-scene-1',
-    type: 'get_scene',
-    actor: {
-      participantId: 'player-001',
-    },
-    payload: {
-      sessionId: session.sessionId,
-      sceneId: scene.id,
-    },
-  });
+  const fetchedScene = asAuthoritativeScene(
+    runtime.getScene({
+      commandId: 'get-scene-1',
+      type: 'get_scene',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId: session.sessionId,
+        sceneId: scene.id,
+      },
+    }),
+  );
 
   assert.match(scene.id, /^scene_[a-f0-9-]{36}$/);
   assert.equal(scene.sessionId, session.sessionId);
@@ -3113,17 +3133,19 @@ test('placing an entity stores it on the authoritative scene', () => {
   const scene = createScene(runtime, session.sessionId);
 
   const updatedScene = placeEntity(runtime, session.sessionId, scene.id);
-  const fetchedScene = runtime.getScene({
-    commandId: 'get-scene-after-place-1',
-    type: 'get_scene',
-    actor: {
-      participantId: 'dm-001',
-    },
-    payload: {
-      sessionId: session.sessionId,
-      sceneId: scene.id,
-    },
-  });
+  const fetchedScene = asAuthoritativeScene(
+    runtime.getScene({
+      commandId: 'get-scene-after-place-1',
+      type: 'get_scene',
+      actor: {
+        participantId: 'dm-001',
+      },
+      payload: {
+        sessionId: session.sessionId,
+        sceneId: scene.id,
+      },
+    }),
+  );
 
   assert.equal(updatedScene.entities.length, 1);
   assert.match(updatedScene.entities[0]!.id, /^scene_entity_[a-f0-9-]{36}$/);
@@ -3300,8 +3322,8 @@ test('dm can update reposition and delete passive scene entities', () => {
     false,
   );
   assert.equal(
-    runtime
-      .getScene({
+    asAuthoritativeScene(
+      runtime.getScene({
         commandId: 'get-scene-after-delete-entity',
         type: 'get_scene',
         actor: {
@@ -3311,8 +3333,8 @@ test('dm can update reposition and delete passive scene entities', () => {
           sessionId: session.sessionId,
           sceneId: scene.id,
         },
-      })
-      .entities.some((entity) => entity.id === entityId),
+      }),
+    ).entities.some((entity) => entity.id === entityId),
     false,
   );
 });
