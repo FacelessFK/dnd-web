@@ -250,8 +250,17 @@ milestone brings it under the limit.
 `test:smoke:m2-game-hud` is the acceptance harness. Map dominance is measured
 rather than judged: 70% of its row at 1366, 77% at 1920, 100% on mobile. It runs
 in Persian and English at 1920, 1366 and 430px, checks the Player surface for
-UUIDs, record IDs, participant IDs and protocol command names, opens and closes
-a mobile drawer and confirms focus returned to its opener.
+UUIDs, record IDs, participant IDs, protocol command names, read command names,
+raw HTTP statuses and protocol error codes, opens and closes a mobile drawer and
+confirms focus returned to its opener.
+
+The last defect it caught is worth recording, because it was invisible to every
+headless run: the column split came from React's observed viewport width, so the
+shell kept the desktop template whenever a `resize` never arrived and a 380px
+inspector squeezed the map to 26px. The split is a media query now - the map's
+share cannot depend on an event arriving - while the structural half, whether a
+side panel is an `<aside>` or a modal `role="dialog"`, stays measured because
+focus trapping and Escape cannot be expressed in CSS.
 
 Nine defects were found by these harnesses and fixed rather than worked around.
 The ones worth naming: a subscription opened without a credential stayed dead
@@ -263,12 +272,15 @@ and character IDs and was entirely untranslated; and headless Chrome had been
 running every harness at 800x600, so no layout assertion described the viewport
 it claimed.
 
-**Layout limitation carried forward.** At 1366x768 the shell is about one and a
-half page heights, so reading the event feed scrolls the map off screen. The map
-is the dominant region and every common Player and GM action is reachable beside
-it without scrolling; only the optional event feed is below the fold. A
-viewport-locked layout was attempted and reverted - it collapsed the map to
-34px, which the acceptance harness caught. Polish, not a blocker.
+**Layout limitation carried forward.** At 1366x768 the page is about one and a
+half viewport heights when the event feed or a GM tool group is open, so reading
+either scrolls the map off screen. What is asserted, at every desktop viewport
+and on every run, is that the map and the role's primary action region - the
+Player's action rail, the GM's inspector - each begin inside the first viewport
+height. Optional reading below the fold is the limitation; a required action
+below the fold would be a defect, and is tested for. A viewport-locked layout
+was attempted and reverted after it collapsed the map to 34px. Polish, not a
+blocker.
 
 ---
 
