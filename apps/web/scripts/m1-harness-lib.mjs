@@ -1356,3 +1356,119 @@ export function closeGameMasterTools(page) {
     predicate: getCloseGameMasterToolExpression(),
   });
 }
+
+// --- M2 Game HUD acceptance helpers -----------------------------------------
+
+/**
+ * Drive the page at an exact viewport.
+ *
+ * `--window-size` sets the browser window; this sets what CSS and
+ * `window.innerWidth` see, which is what the shells actually branch on. The two
+ * are not the same number once chrome and scrollbars are involved, and the
+ * layout assertions are about the second.
+ */
+export async function setViewport(page, { height, width }) {
+  await page.send('Emulation.setDeviceMetricsOverride', {
+    deviceScaleFactor: 1,
+    height,
+    mobile: width < 700,
+    width,
+  });
+  await waitFor(page, {
+    label: `viewport ${width}x${height}`,
+    predicate: `window.innerWidth === ${width}`,
+  });
+}
+
+export async function clearViewport(page) {
+  await page.send('Emulation.clearDeviceMetricsOverride');
+}
+
+/**
+ * Emulate the reduced-motion preference.
+ *
+ * The product reads it through `matchMedia`, so emulating the media feature is
+ * the only way to exercise the real code path - setting a class or a prop would
+ * be testing the harness's opinion instead.
+ */
+export async function setReducedMotion(page, enabled) {
+  await page.send('Emulation.setEmulatedMedia', {
+    features: [
+      {
+        name: 'prefers-reduced-motion',
+        value: enabled ? 'reduce' : 'no-preference',
+      },
+    ],
+  });
+}
+
+/** `rtl` or `ltr`, from the element the i18n provider actually sets. */
+export function readDocumentDirection(page) {
+  return page.evaluate(`document.documentElement.dir`);
+}
+
+/**
+ * The map's share of the row it shares, measured rather than eyeballed.
+ *
+ * Returns `null` when the map is not on screen, so a caller can tell "the map
+ * is small" apart from "there is no map", which are very different failures.
+ */
+export function measureMapShare(page) {
+  return page.evaluate(`(() => {
+    const map = document.querySelector('[data-hud-region="map"]');
+
+    if (!map) {
+      return null;
+    }
+
+    const row = map.parentElement;
+    const mapWidth = map.getBoundingClientRect().width;
+    const rowWidth = row ? row.getBoundingClientRect().width : 0;
+
+    return {
+      mapHeight: map.getBoundingClientRect().height,
+      mapWidth,
+      rowWidth,
+      share: rowWidth > 0 ? mapWidth / rowWidth : 0,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+    };
+  })()`);
+}
+
+/**
+ * Whether the page scrolls sideways.
+ *
+ * Compared against `documentElement` rather than `body` because the shells set
+ * their background on a fixed layer, so `body` can measure narrower than the
+ * content that actually overflows.
+ */
+export function readHorizontalOverflow(page) {
+  return page.evaluate(`(() => {
+    const root = document.documentElement;
+
+    return {
+      clientWidth: root.clientWidth,
+      overflows: root.scrollWidth > root.clientWidth + 1,
+      scrollWidth: root.scrollWidth,
+    };
+  })()`);
+}
+
+/** The element that currently has focus, described without reading its value. */
+export function readFocusedElement(page) {
+  return page.evaluate(`(() => {
+    const active = document.activeElement;
+
+    if (!active) {
+      return null;
+    }
+
+    return {
+      ariaExpanded: active.getAttribute('aria-expanded'),
+      tag: active.tagName.toLowerCase(),
+      testId: active.getAttribute('data-testid'),
+      text: (active.textContent ?? '').trim().slice(0, 60),
+    };
+  })()`);
+}
