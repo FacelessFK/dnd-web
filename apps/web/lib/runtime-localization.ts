@@ -18,6 +18,7 @@ import {
   type RuntimeEventDescriptor,
   type RuntimeEventSummary,
 } from './runtime-cockpit-helpers';
+import { localizeConditionList } from './runtime-condition-labels';
 import {
   EVENT_ACTOR_OTHER_ADVENTURER,
   EVENT_ACTOR_UNKNOWN,
@@ -88,6 +89,14 @@ export function localizeRuntimeEventDescriptor(
 
   if (reasonKey) {
     resolved.reason = t(reasonKey as MessageKey);
+  }
+
+  // Conditions arrive as canonical values and are turned into words here, for
+  // the same reason actor labels are: the describing module has no translator,
+  // and `.join(', ')` on protocol vocabulary is how `poisoned` reached a
+  // Persian screen.
+  if (descriptor.conditions) {
+    resolved.conditions = localizeConditionList(descriptor.conditions, t);
   }
 
   return {

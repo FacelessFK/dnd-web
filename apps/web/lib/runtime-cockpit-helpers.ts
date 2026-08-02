@@ -3658,6 +3658,15 @@ export function isSessionStreamEvent(
  * translate, and it keeps these functions unit-testable without a provider.
  */
 export type RuntimeEventDescriptor = {
+  /**
+   * Canonical condition values, carried separately from `detailValues`.
+   *
+   * They are protocol vocabulary, not finished text: joining them here is what
+   * put `poisoned` on a Persian screen. This module has no translator, so the
+   * raw values travel and `localizeRuntimeEventDescriptor` turns them into the
+   * `{conditions}` the sentence interpolates.
+   */
+  conditions?: readonly string[];
   detailKey: MessageKey;
   detailValues: Record<string, string>;
   titleKey: MessageKey;
@@ -3834,6 +3843,7 @@ export function describeSessionStreamEvent(
       const withConditions = Boolean(event.activeConditions?.length);
 
       return {
+        conditions: event.activeConditions ?? [],
         detailKey: own
           ? withConditions
             ? 'runtime.events.detail.characterOwnWithConditions'
@@ -3843,7 +3853,6 @@ export function describeSessionStreamEvent(
             : 'runtime.events.detail.character',
         detailValues: {
           character: resolveEventCharacterLabel(labels, event.characterId),
-          conditions: event.activeConditions?.join(', ') ?? '',
           currentHp: String(event.hp.current),
           maxHp: String(event.hp.max),
         },

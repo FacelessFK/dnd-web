@@ -11,6 +11,7 @@
  */
 import type { CharacterResource } from '@dnd/protocol';
 
+import { localizeConditionList } from '../../../lib/runtime-condition-labels';
 import { useI18n } from '../../../lib/i18n';
 import { getCharacterLibrarySourceProvenance } from '../../../lib/runtime-cockpit-helpers';
 import { localizeRuntimeCharacterStatus } from '../../../lib/runtime-localization';
@@ -107,7 +108,7 @@ export function CharacterSummary({
       <p className="mt-3 text-xs text-amber-100/60" dir="auto">
         {t('runtime.characterSummary.conditions')}:{' '}
         {resource.overlay.activeConditions.length
-          ? resource.overlay.activeConditions.join(', ')
+          ? localizeConditionList(resource.overlay.activeConditions, t)
           : t('common.none')}
       </p>
       {sourceProvenance ? (

@@ -139,6 +139,15 @@ const forbiddenPlayerPatterns = [
     pattern:
       /\b(?:no_active_encounter|no_active_scene|scene_not_found|character_not_found|invalid_scene_id|invalid_character_id|command_id_conflict|unauthenticated)\b/,
   },
+  // Canonical condition vocabulary. Free-form in the protocol but machine-shaped
+  // in practice, and it reached three surfaces untranslated - which inside the
+  // Persian default locale is an English word in an RTL layout. `localizeCondi-
+  // tionList` is the fix; this is what stops the next surface reintroducing it.
+  {
+    label: 'a raw condition value',
+    pattern:
+      /\b(?:blinded|charmed|deafened|exhaustion|frightened|grappled|incapacitated|invisible|paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious)\b/,
+  },
 ];
 
 setRunTag(runId);

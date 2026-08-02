@@ -20,6 +20,7 @@ import type {
 import { skillIds } from '@dnd/protocol';
 
 import { useI18n, type MessageKey } from '../../lib/i18n';
+import { localizeConditionList } from '../../lib/runtime-condition-labels';
 import {
   describePlayerIntent,
   describeResolutionRequest,
@@ -340,7 +341,7 @@ export function M1GmPanel({
           </h4>
           <p className="text-amber-200/80">
             {selectedTarget.activeConditions.length
-              ? selectedTarget.activeConditions.join(', ')
+              ? localizeConditionList(selectedTarget.activeConditions, t)
               : t('runtime.m1.gm.conditionNone')}
           </p>
           <button
